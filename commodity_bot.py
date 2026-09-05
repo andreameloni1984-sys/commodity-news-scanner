@@ -1,19 +1,25 @@
 import os
 import math
 import requests
-from datetime import datetime, timezone
-from statistics import mean
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+
 # ============================================================
-# 🏆 COMMODITY TRADING BOT v2
+# CONFIGURAZIONE
 # ============================================================
+
 API_KEY = os.getenv("TWELVE_DATA_API_KEY")
+
 if not API_KEY:
-    raise RuntimeError(
-        "TWELVE_DATA_API_KEY non configurata nei GitHub Secrets."
-    )
+    raise RuntimeError("TWELVE_DATA_API_KEY non configurata nei GitHub Secrets.")
+
+
 BASE_URL = "https://api.twelvedata.com"
+
 # Materie prime principali.
-# Se una non è disponibile sul tuo piano/API viene saltata.
+# Se una commodity non è disponibile sul tuo piano/account,
+# il bot la salta automaticamente.
 COMMODITIES = {
     "Oro": "XAU/USD",
     "Argento": "XAG/USD",
@@ -25,677 +31,1218 @@ COMMODITIES = {
     "Mais": "CORN/USD",
     "Caffè": "COFFEE/USD",
 }
-POSITIVE_WORDS = [
-    "surge", "rises", "rise", "higher", "gain", "gains",
-    "bullish", "strong", "demand", "shortage", "boost",
-    "record", "support", "optimism", "upside", "growth",
-    "cuts", "cut", "tight supply", "supply concern"
-]
-NEGATIVE_WORDS = [
-    "falls", "fall", "lower", "drop", "drops", "decline",
-    "bearish", "weak", "oversupply", "surplus", "slump",
-    "recession", "risk", "downside", "collapse", "selling",
-    "inventory build", "demand concern"
-]
+
+
 # ============================================================
-# API
+# FUNZIONI API
 # ============================================================
+
 def api_get(endpoint, params):
-    params = dict(params)
     params["apikey"] = API_KEY
+
     response = requests.get(
-        f"{BASE_URL}/{endpoint}",
+        BASE_URL + endpoint,
         params=params,
-        timeout=20
+        timeout=30
     )
+
     response.raise_for_status()
+
     data = response.json()
-    if isinstance(data, dict) and data.get("status") == "error":
-        raise RuntimeError(
-            data.get("message", "Errore Twelve Data")
-        )
+
+    if data.get("status") == "error":
+        raise RuntimeError(data.get("message", "Errore Twelve Data"))
+
     return data
-# ============================================================
-# PREZZI
-# ============================================================
-def get_prices(symbol, interval="1h", outputsize=100):
-    data = api_get(
-        "time_series",
-        {
-            "symbol": symbol,
-            "interval": interval,
-            "outputsize": outputsize
-        }
-    )
-    values = data.get("values", [])
-    if not values:
-        raise RuntimeError(
-            f"Nessun dato disponibile per {symbol}"
-        )
-    values = list(reversed(values))
-    result = []
-    for row in values:
-        try:
-            result.append({
-                "open": float(row["open"]),
-                "high": float(row["high"]),
-                "low": float(row["low"]),
-                "close": float(row["close"]),
-                "volume": float(row.get("volume") or 0)
-            })
-        except (KeyError, TypeError, ValueError):
-            continue
-    if len(result) < 30:
-        raise RuntimeError(
-            f"Dati insufficienti per {symbol}"
-        )
-    return result
-# ============================================================
-# NOTIZIE
-# ============================================================
-def get_news(query):
-    try:
-        import xml.etree.ElementTree as ET
-        response = requests.get(
-            "https://news.google.com/rss/search",
-            params={
-                "q": f"{query} commodity",
-                "hl": "en-US",
-                "gl": "US",
-                "ceid": "US:en"
-            },
-            headers={
-                "User-Agent": "Mozilla/5.0"
-            },
-            timeout=15
-        )
-        response.raise_for_status()
-        root = ET.fromstring(response.text)
-        headlines = []
-        for item in root.findall(".//item")[:15]:
-            title = item.findtext("title")
-            if title:
-                headlines.append(title)
-        return headlines
-    except Exception:
-        return []
-def analyze_news(headlines):
-    positive = 0
-    negative = 0
-    classified = []
-    for headline in headlines:
-        text = headline.lower()
-        pos = sum(
-            1 for word in POSITIVE_WORDS
-            if word in text
-        )
-        neg = sum(
-            1 for word in NEGATIVE_WORDS
-            if word in text
-        )
-        if pos > neg:
-            positive += 1
-            classified.append(
-                ("POSITIVA", headline)
-            )
-        elif neg > pos:
-            negative += 1
-            classified.append(
-                ("NEGATIVA", headline)
-            )
-    total = positive + negative
-    if total == 0:
-        score = 0
-    else:
-        score = (
-            (positive - negative) / total
-        ) * 100
-    return {
-        "score": score,
-        "positive": positive,
-        "negative": negative,
-        "classified": classified
+
+
+def get_time_series(symbol, interval="1day", outputsize=None,
+                    start_date=None, end_date=None):
+
+    params = {
+        "symbol": symbol,
+        "interval": interval
     }
+
+    if outputsize is not None:
+        params["outputsize"] = outputsize
+
+    if start_date:
+        params["start_date"] = start_date
+
+    if end_date:
+        params["end_date"] = end_date
+
+    data = api_get("/time_series", params)
+
+    values = data.get("values", [])
+
+    if not values:
+        raise RuntimeError(f"Nessun dato ricevuto per {symbol}")
+
+    # Twelve Data restituisce normalmente i dati dal più recente
+    # al più vecchio. Li riportiamo in ordine cronologico.
+    values = list(reversed(values))
+
+    candles = []
+
+    for x in values:
+        try:
+            candles.append({
+                "datetime": x.get("datetime"),
+                "open": float(x["open"]),
+                "high": float(x["high"]),
+                "low": float(x["low"]),
+                "close": float(x["close"]),
+                "volume": float(x.get("volume", 0) or 0)
+            })
+        except (ValueError, TypeError, KeyError):
+            continue
+
+    if len(candles) < 30:
+        raise RuntimeError(f"Dati insufficienti per {symbol}")
+
+    return candles
+
+
 # ============================================================
 # INDICATORI
 # ============================================================
+
 def sma(values, period):
     if len(values) < period:
         return None
-    return mean(values[-period:])
-def percentage_change(values, period):
-    if len(values) <= period:
+
+    return sum(values[-period:]) / period
+
+
+def momentum(values, periods):
+    if len(values) <= periods:
         return 0
-    old = values[-period - 1]
-    new = values[-1]
+
+    old = values[-periods - 1]
+
     if old == 0:
         return 0
-    return ((new / old) - 1) * 100
-def calculate_volatility(values, period=20):
+
+    return ((values[-1] / old) - 1) * 100
+
+
+def volatility(values, period=20):
     if len(values) < period + 1:
         return 0
+
     returns = []
-    for i in range(
-        len(values) - period,
-        len(values)
-    ):
+
+    start = len(values) - period
+
+    for i in range(start, len(values)):
         previous = values[i - 1]
+
         if previous != 0:
-            returns.append(
-                ((values[i] / previous) - 1) * 100
-            )
-    if not returns:
+            returns.append((values[i] / previous) - 1)
+
+    if len(returns) < 2:
         return 0
-    avg = mean(returns)
-    variance = mean(
-        [(x - avg) ** 2 for x in returns]
-    )
-    return math.sqrt(variance)
-def calculate_atr(candles, period=14):
+
+    mean = sum(returns) / len(returns)
+
+    variance = sum(
+        (x - mean) ** 2 for x in returns
+    ) / (len(returns) - 1)
+
+    return math.sqrt(variance) * 100
+
+
+def atr(candles, period=14):
     if len(candles) < period + 1:
         return 0
+
     true_ranges = []
-    for i in range(
-        len(candles) - period,
-        len(candles)
-    ):
-        current = candles[i]
-        previous = candles[i - 1]
-        high = current["high"]
-        low = current["low"]
-        previous_close = previous["close"]
+
+    for i in range(1, len(candles)):
+        high = candles[i]["high"]
+        low = candles[i]["low"]
+        previous_close = candles[i - 1]["close"]
+
         tr = max(
             high - low,
             abs(high - previous_close),
             abs(low - previous_close)
         )
+
         true_ranges.append(tr)
-    return mean(true_ranges)
-# ============================================================
-# ANALISI COMPLETA
-# ============================================================
-def analyze_commodity(name, symbol):
-    candles = get_prices(symbol)
-    closes = [
-        x["close"]
-        for x in candles
-    ]
+
+    if len(true_ranges) < period:
+        return 0
+
+    return sum(true_ranges[-period:]) / period
+
+
+def pressure(candles, period=20):
+    """
+    Misura dove il prezzo chiude rispetto al range della candela.
+
+    +100 = forte pressione compratrice
+    -100 = forte pressione venditrice
+    """
+
+    if len(candles) < period:
+        return 0
+
+    values = []
+
+    for candle in candles[-period:]:
+        high = candle["high"]
+        low = candle["low"]
+        close = candle["close"]
+
+        if high == low:
+            continue
+
+        location = ((close - low) / (high - low)) * 2 - 1
+        values.append(location)
+
+    if not values:
+        return 0
+
+    return (sum(values) / len(values)) * 100
+
+
+def volume_score(candles, period=20):
     volumes = [
         x["volume"]
-        for x in candles
+        for x in candles[-period:]
+        if x["volume"] > 0
     ]
-    current = closes[-1]
+
+    if len(volumes) < 5:
+        return 0
+
+    average = sum(volumes[:-1]) / max(1, len(volumes) - 1)
+    current = volumes[-1]
+
+    if average == 0:
+        return 0
+
+    ratio = current / average
+
+    if ratio >= 1.5:
+        return 15
+
+    if ratio >= 1.2:
+        return 8
+
+    if ratio >= 0.9:
+        return 3
+
+    return -3
+
+
+# ============================================================
+# CICLO STORICO
+# ============================================================
+
+def normalize_pattern(values):
+    """
+    Trasforma una sequenza di prezzi in variazioni percentuali
+    rispetto al primo valore.
+    """
+
+    if not values or values[0] == 0:
+        return []
+
+    first = values[0]
+
+    return [
+        (x / first) - 1
+        for x in values
+    ]
+
+
+def pattern_distance(a, b):
+    """
+    Distanza tra due configurazioni.
+    Più è bassa, più sono simili.
+    """
+
+    if len(a) != len(b) or not a:
+        return float("inf")
+
+    squared = [
+        (x - y) ** 2
+        for x, y in zip(a, b)
+    ]
+
+    return math.sqrt(sum(squared) / len(squared))
+
+
+def historical_cycle_analysis(symbol, years=10, pattern_days=20):
+    """
+    Cerca negli ultimi ~10 anni configurazioni simili a quella attuale.
+
+    Poi verifica cosa è successo dopo 1, 7 e 30 giorni.
+    """
+
+    end = datetime.utcnow().date()
+    start = end - timedelta(days=years * 365 + pattern_days + 60)
+
+    candles = get_time_series(
+        symbol,
+        interval="1day",
+        start_date=start.isoformat(),
+        end_date=end.isoformat()
+    )
+
+    closes = [x["close"] for x in candles]
+
+    minimum_needed = pattern_days + 35
+
+    if len(closes) < minimum_needed:
+        return {
+            "matches": 0,
+            "prob_1d": None,
+            "prob_7d": None,
+            "prob_30d": None,
+            "avg_1d": None,
+            "avg_7d": None,
+            "avg_30d": None,
+            "bias": "NEUTRALE",
+            "confidence": "BASSA"
+        }
+
+    current_pattern = normalize_pattern(
+        closes[-pattern_days:]
+    )
+
+    candidates = []
+
+    # Cerchiamo configurazioni passate.
+    # Lasciamo almeno 35 giorni dopo ogni configurazione
+    # per poter misurare il comportamento successivo.
+    last_possible = len(closes) - 30
+
+    for end_index in range(
+        pattern_days,
+        last_possible
+    ):
+
+        start_index = end_index - pattern_days
+
+        historical_values = closes[
+            start_index:end_index
+        ]
+
+        historical_pattern = normalize_pattern(
+            historical_values
+        )
+
+        distance = pattern_distance(
+            current_pattern,
+            historical_pattern
+        )
+
+        candidates.append({
+            "distance": distance,
+            "index": end_index
+        })
+
+    if not candidates:
+        return {
+            "matches": 0,
+            "prob_1d": None,
+            "prob_7d": None,
+            "prob_30d": None,
+            "avg_1d": None,
+            "avg_7d": None,
+            "avg_30d": None,
+            "bias": "NEUTRALE",
+            "confidence": "BASSA"
+        }
+
+    # Prendiamo le configurazioni più simili.
+    candidates.sort(key=lambda x: x["distance"])
+
+    # Evitiamo di usare un numero eccessivo di casi.
+    matches = candidates[:20]
+
+    results_1d = []
+    results_7d = []
+    results_30d = []
+
+    for match in matches:
+        idx = match["index"]
+
+        base = closes[idx - 1]
+
+        if base == 0:
+            continue
+
+        if idx < len(closes):
+            results_1d.append(
+                ((closes[idx] / base) - 1) * 100
+            )
+
+        if idx + 7 < len(closes):
+            results_7d.append(
+                ((closes[idx + 7] / base) - 1) * 100
+            )
+
+        if idx + 30 < len(closes):
+            results_30d.append(
+                ((closes[idx + 30] / base) - 1) * 100
+            )
+
+    def probability_positive(values):
+        if not values:
+            return None
+
+        return (
+            sum(1 for x in values if x > 0)
+            / len(values)
+        ) * 100
+
+    def average(values):
+        if not values:
+            return None
+
+        return sum(values) / len(values)
+
+    prob_1d = probability_positive(results_1d)
+    prob_7d = probability_positive(results_7d)
+    prob_30d = probability_positive(results_30d)
+
+    avg_1d = average(results_1d)
+    avg_7d = average(results_7d)
+    avg_30d = average(results_30d)
+
+    probabilities = [
+        x for x in [
+            prob_1d,
+            prob_7d,
+            prob_30d
+        ]
+        if x is not None
+    ]
+
+    if not probabilities:
+        bias = "NEUTRALE"
+    else:
+        average_probability = sum(probabilities) / len(probabilities)
+
+        if average_probability >= 60:
+            bias = "RIALZISTA"
+        elif average_probability <= 40:
+            bias = "RIBASSISTA"
+        else:
+            bias = "NEUTRALE"
+
+    if len(matches) >= 15:
+        confidence = "ALTA"
+    elif len(matches) >= 8:
+        confidence = "MEDIA"
+    else:
+        confidence = "BASSA"
+
+    return {
+        "matches": len(matches),
+        "prob_1d": prob_1d,
+        "prob_7d": prob_7d,
+        "prob_30d": prob_30d,
+        "avg_1d": avg_1d,
+        "avg_7d": avg_7d,
+        "avg_30d": avg_30d,
+        "bias": bias,
+        "confidence": confidence
+    }
+
+
+# ============================================================
+# NOTIZIE
+# ============================================================
+
+def get_news(symbol_name):
+    """
+    Usa Google News RSS come fonte di titoli.
+    Il sentiment è basato su parole chiave.
+    """
+
+    query_map = {
+        "Oro": "gold price gold market",
+        "Argento": "silver price silver market",
+        "Petrolio WTI": "WTI oil crude oil",
+        "Petrolio Brent": "Brent oil crude oil",
+        "Gas Naturale": "natural gas price",
+        "Rame": "copper price copper market",
+        "Grano": "wheat price wheat market",
+        "Mais": "corn price corn market",
+        "Caffè": "coffee price coffee market"
+    }
+
+    query = query_map.get(
+        symbol_name,
+        symbol_name
+    )
+
+    url = "https://news.google.com/rss/search"
+
+    try:
+        response = requests.get(
+            url,
+            params={
+                "q": query,
+                "hl": "en-US",
+                "gl": "US",
+                "ceid": "US:en"
+            },
+            timeout=20
+        )
+
+        response.raise_for_status()
+
+        text = response.text
+
+    except Exception:
+        return {
+            "score": 0,
+            "headlines": []
+        }
+
+    import xml.etree.ElementTree as ET
+
+    try:
+        root = ET.fromstring(text)
+    except Exception:
+        return {
+            "score": 0,
+            "headlines": []
+        }
+
+    positive_words = [
+        "surge",
+        "rally",
+        "rise",
+        "rises",
+        "higher",
+        "bullish",
+        "strong",
+        "demand",
+        "shortage",
+        "supply cut",
+        "support",
+        "gain",
+        "gains",
+        "record"
+    ]
+
+    negative_words = [
+        "fall",
+        "falls",
+        "drop",
+        "drops",
+        "lower",
+        "bearish",
+        "weak",
+        "weakness",
+        "oversupply",
+        "surplus",
+        "selloff",
+        "decline",
+        "declines",
+        "loss"
+    ]
+
+    score = 0
+    headlines = []
+
+    for item in root.findall(".//item")[:10]:
+
+        title_element = item.find("title")
+
+        if title_element is None:
+            continue
+
+        title = title_element.text or ""
+        lower = title.lower()
+
+        positive = sum(
+            1 for word in positive_words
+            if word in lower
+        )
+
+        negative = sum(
+            1 for word in negative_words
+            if word in lower
+        )
+
+        news_score = positive - negative
+
+        score += news_score
+
+        if news_score > 0:
+            label = "🟢"
+        elif news_score < 0:
+            label = "🔴"
+        else:
+            label = "🟡"
+
+        headlines.append(
+            f"{label} {title}"
+        )
+
+    score = max(-15, min(15, score))
+
+    return {
+        "score": score,
+        "headlines": headlines[:5]
+    }
+
+
+# ============================================================
+# ANALISI SINGOLA COMMODITY
+# ============================================================
+
+def analyze_commodity(name, symbol):
+
+    # Dati recenti intraday
+    candles = get_time_series(
+        symbol,
+        interval="1h",
+        outputsize=100
+    )
+
+    closes = [x["close"] for x in candles]
+
+    price = closes[-1]
+
     sma20 = sma(closes, 20)
     sma50 = sma(closes, 50)
-    momentum_6h = percentage_change(
-        closes, 6
-    )
-    momentum_24h = percentage_change(
-        closes, 24
-    )
-    volatility = calculate_volatility(
-        closes, 20
-    )
-    atr = calculate_atr(
-        candles, 14
-    )
-    # ========================================================
+
+    momentum_6h = momentum(closes, 6)
+    momentum_24h = momentum(closes, 24)
+
+    vol = volatility(closes, 20)
+    atr_value = atr(candles, 14)
+
+    pressure_value = pressure(candles, 20)
+
+    vol_score = volume_score(candles, 20)
+
+    # --------------------------------------------------------
     # TREND
-    # ========================================================
+    # --------------------------------------------------------
+
     trend_score = 0
-    if sma20 is not None:
-        if current > sma20:
-            trend_score += 20
+
+    if sma20 and sma50:
+
+        if price > sma20:
+            trend_score += 15
         else:
-            trend_score -= 20
-    if sma50 is not None:
-        if current > sma50:
-            trend_score += 20
-        else:
-            trend_score -= 20
-    if (
-        sma20 is not None
-        and sma50 is not None
-    ):
+            trend_score -= 15
+
         if sma20 > sma50:
-            trend_score += 20
+            trend_score += 15
         else:
-            trend_score -= 20
-    # ========================================================
+            trend_score -= 15
+
+    # --------------------------------------------------------
     # MOMENTUM
-    # ========================================================
+    # --------------------------------------------------------
+
     momentum_score = 0
+
     if momentum_6h > 0:
-        momentum_score += 15
+        momentum_score += 10
     else:
-        momentum_score -= 15
+        momentum_score -= 10
+
     if momentum_24h > 0:
-        momentum_score += 15
+        momentum_score += 10
     else:
-        momentum_score -= 15
-    # ========================================================
-    # PRESSIONE ACQUISTI / VENDITE
-    # ========================================================
-    buying_pressure = 0
-    selling_pressure = 0
-    for candle in candles[-20:]:
-        candle_range = (
-            candle["high"] - candle["low"]
-        )
-        if candle_range <= 0:
-            continue
-        position = (
-            candle["close"] - candle["low"]
-        ) / candle_range
-        if position >= 0.60:
-            buying_pressure += 1
-        elif position <= 0.40:
-            selling_pressure += 1
-    total_pressure = (
-        buying_pressure
-        + selling_pressure
-    )
-    if total_pressure > 0:
-        pressure_score = (
-            (
-                buying_pressure
-                - selling_pressure
-            )
-            / total_pressure
-        ) * 20
-    else:
-        pressure_score = 0
-    # ========================================================
-    # VOLUME
-    # ========================================================
-    volume_score = 0
-    valid_volumes = [
-        x for x in volumes[-20:]
-        if x > 0
-    ]
-    recent_volumes = [
-        x for x in volumes[-5:]
-        if x > 0
-    ]
-    if valid_volumes and recent_volumes:
-        avg_volume = mean(
-            valid_volumes
-        )
-        recent_average = mean(
-            recent_volumes
-        )
-        if recent_average > avg_volume * 1.20:
-            volume_score = 10
-        elif recent_average < avg_volume * 0.80:
-            volume_score = -5
-    # ========================================================
+        momentum_score -= 10
+
+    # --------------------------------------------------------
+    # PRESSIONE
+    # --------------------------------------------------------
+
+    pressure_score = pressure_value * 0.20
+
+    # --------------------------------------------------------
     # NOTIZIE
-    # ========================================================
-    headlines = get_news(name)
-    news = analyze_news(
-        headlines
-    )
-    news_points = max(
-        -15,
-        min(
-            15,
-            news["score"] * 0.15
+    # --------------------------------------------------------
+
+    news = get_news(name)
+
+    news_score = news["score"]
+
+    # --------------------------------------------------------
+    # CICLO STORICO
+    # --------------------------------------------------------
+
+    try:
+        history = historical_cycle_analysis(
+            symbol,
+            years=10,
+            pattern_days=20
         )
-    )
-    # ========================================================
-    # SCORE
-    # ========================================================
+    except Exception as e:
+        print(
+            f"⚠️ Storico non disponibile per {name}: {e}"
+        )
+
+        history = {
+            "matches": 0,
+            "prob_1d": None,
+            "prob_7d": None,
+            "prob_30d": None,
+            "avg_1d": None,
+            "avg_7d": None,
+            "avg_30d": None,
+            "bias": "NEUTRALE",
+            "confidence": "BASSA"
+        }
+
+    history_score = 0
+
+    if history["bias"] == "RIALZISTA":
+        history_score = 12
+
+    elif history["bias"] == "RIBASSISTA":
+        history_score = -12
+
+    # --------------------------------------------------------
+    # PUNTEGGIO TOTALE
+    # --------------------------------------------------------
+
     raw_score = (
-        trend_score
-        + momentum_score
+        50
+        + trend_score * 0.45
+        + momentum_score * 0.50
         + pressure_score
-        + volume_score
-        + news_points
+        + vol_score * 0.30
+        + news_score * 0.80
+        + history_score * 0.50
     )
-    final_score = 50 + raw_score
-    final_score = max(
-        0,
-        min(
-            100,
-            final_score
-        )
-    )
-    # ========================================================
+
+    score = max(0, min(100, raw_score))
+
+    # --------------------------------------------------------
     # DIREZIONE
-    # ========================================================
-    if final_score >= 65:
-        direction = "LONG"
-    elif final_score <= 35:
-        direction = "SHORT"
+    # --------------------------------------------------------
+
+    if score >= 65:
+        direction = "🟢 LONG"
+
+    elif score <= 35:
+        direction = "🔴 SHORT"
+
     else:
-        direction = "WAIT"
-    # ========================================================
-    # ENTRY / SL / TP
-    # ========================================================
-    if atr <= 0:
-        atr = current * 0.01
-    if direction == "LONG":
-        entry = current
-        stop_loss = current - (
-            atr * 1.5
-        )
-        risk = entry - stop_loss
-        take_profit_1 = entry + (
-            risk * 1.5
-        )
-        take_profit_2 = entry + (
-            risk * 2.5
-        )
-    elif direction == "SHORT":
-        entry = current
-        stop_loss = current + (
-            atr * 1.5
-        )
-        risk = stop_loss - entry
-        take_profit_1 = entry - (
-            risk * 1.5
-        )
-        take_profit_2 = entry - (
-            risk * 2.5
-        )
-    else:
-        entry = current
-        stop_loss = None
-        take_profit_1 = None
-        take_profit_2 = None
-        risk = None
-    # ========================================================
-    # FORZA SETUP
-    # ========================================================
-    if final_score >= 80 or final_score <= 20:
+        direction = "🟡 ASPETTARE"
+
+    # --------------------------------------------------------
+    # CONTROLLO CONFLITTI
+    # --------------------------------------------------------
+
+    bullish_components = 0
+    bearish_components = 0
+
+    if trend_score > 0:
+        bullish_components += 1
+    elif trend_score < 0:
+        bearish_components += 1
+
+    if momentum_score > 0:
+        bullish_components += 1
+    elif momentum_score < 0:
+        bearish_components += 1
+
+    if pressure_value > 10:
+        bullish_components += 1
+    elif pressure_value < -10:
+        bearish_components += 1
+
+    if news_score > 2:
+        bullish_components += 1
+    elif news_score < -2:
+        bearish_components += 1
+
+    if history["bias"] == "RIALZISTA":
+        bullish_components += 1
+    elif history["bias"] == "RIBASSISTA":
+        bearish_components += 1
+
+    conflict = (
+        bullish_components >= 2
+        and bearish_components >= 2
+    )
+
+    if conflict:
+        direction = "🟡 ASPETTARE"
+
+    # --------------------------------------------------------
+    # FORZA
+    # --------------------------------------------------------
+
+    if score >= 80 or score <= 20:
         strength = "🔥 MOLTO FORTE"
-    elif final_score >= 70 or final_score <= 30:
+
+    elif score >= 70 or score <= 30:
         strength = "💪 FORTE"
-    elif final_score >= 60 or final_score <= 40:
+
+    elif score >= 60 or score <= 40:
         strength = "⚠️ MODERATA"
+
     else:
         strength = "🟡 DEBOLE"
-    # Se la direzione è WAIT, non proponiamo operazione.
-    if direction == "WAIT":
-        signal = "🟡 ASPETTARE"
-    elif direction == "LONG":
-        signal = "🟢 LONG"
+
+    # --------------------------------------------------------
+    # FILTRO VOLATILITÀ
+    # --------------------------------------------------------
+
+    abnormal_volatility = vol > 3.5
+
+    if abnormal_volatility:
+        direction = "🟡 ASPETTARE"
+
+    # --------------------------------------------------------
+    # LIVELLI
+    # --------------------------------------------------------
+
+    entry = price
+
+    if atr_value <= 0:
+        sl = None
+        tp1 = None
+        tp2 = None
     else:
-        signal = "🔴 SHORT"
+
+        if direction == "🟢 LONG":
+
+            sl = entry - (1.5 * atr_value)
+
+            risk = entry - sl
+
+            tp1 = entry + (1.5 * risk)
+
+            tp2 = entry + (2.5 * risk)
+
+        elif direction == "🔴 SHORT":
+
+            sl = entry + (1.5 * atr_value)
+
+            risk = sl - entry
+
+            tp1 = entry - (1.5 * risk)
+
+            tp2 = entry - (2.5 * risk)
+
+        else:
+
+            sl = None
+            tp1 = None
+            tp2 = None
+
+    # --------------------------------------------------------
+    # RAGIONI
+    # --------------------------------------------------------
+
+    reasons = []
+
+    if trend_score > 0:
+        reasons.append("trend rialzista")
+
+    elif trend_score < 0:
+        reasons.append("trend ribassista")
+
+    if momentum_score > 0:
+        reasons.append("momentum positivo")
+
+    elif momentum_score < 0:
+        reasons.append("momentum negativo")
+
+    if pressure_value > 15:
+        reasons.append("pressione compratrice")
+
+    elif pressure_value < -15:
+        reasons.append("pressione venditrice")
+
+    if news_score > 3:
+        reasons.append("notizie favorevoli")
+
+    elif news_score < -3:
+        reasons.append("notizie sfavorevoli")
+
+    if history["bias"] == "RIALZISTA":
+        reasons.append("storico favorevole al rialzo")
+
+    elif history["bias"] == "RIBASSISTA":
+        reasons.append("storico favorevole al ribasso")
+
+    if abnormal_volatility:
+        reasons.append("volatilità anomala")
+
+    if conflict:
+        reasons.append("indicatori in conflitto")
+
     return {
         "name": name,
         "symbol": symbol,
-        "price": current,
-        "score": final_score,
+        "price": price,
+        "score": score,
         "direction": direction,
-        "signal": signal,
         "strength": strength,
-        "trend": trend_score,
-        "momentum": momentum_score,
-        "pressure": pressure_score,
-        "volume": volume_score,
-        "news_points": news_points,
-        "buying_pressure": buying_pressure,
-        "selling_pressure": selling_pressure,
+        "trend_score": trend_score,
+        "momentum_score": momentum_score,
+        "pressure": pressure_value,
+        "volume_score": vol_score,
+        "news_score": news_score,
         "momentum_6h": momentum_6h,
         "momentum_24h": momentum_24h,
-        "volatility": volatility,
-        "atr": atr,
+        "volatility": vol,
+        "atr": atr_value,
         "entry": entry,
-        "stop_loss": stop_loss,
-        "take_profit_1": take_profit_1,
-        "take_profit_2": take_profit_2,
-        "risk": risk,
-        "news_count": len(headlines),
-        "news_positive": news["positive"],
-        "news_negative": news["negative"],
-        "news_headlines": news["classified"]
+        "sl": sl,
+        "tp1": tp1,
+        "tp2": tp2,
+        "history": history,
+        "reasons": reasons,
+        "news_headlines": news["headlines"],
+        "conflict": conflict,
+        "abnormal_volatility": abnormal_volatility
     }
+
+
+# ============================================================
+# FORMATO PREZZI
+# ============================================================
+
+def fmt(value):
+
+    if value is None:
+        return "-"
+
+    if abs(value) >= 100:
+        return f"{value:.2f}"
+
+    if abs(value) >= 10:
+        return f"{value:.3f}"
+
+    return f"{value:.4f}"
+
+
+def fmt_percent(value):
+
+    if value is None:
+        return "-"
+
+    return f"{value:+.2f}%"
+
+
 # ============================================================
 # REPORT
 # ============================================================
+
 def print_report(results):
-    print()
-    print("=" * 75)
-    print("             🏆 COMMODITY TRADING BOT v2")
-    print("=" * 75)
+
+    print("\n")
+    print("=" * 70)
+    print("🥇 COMMODITY TRADING BOT v3")
+    print("=" * 70)
+
     now = datetime.now(
-        timezone.utc
-    ).strftime(
-        "%Y-%m-%d %H:%M UTC"
+        ZoneInfo("Europe/Rome")
     )
+
     print(
-        f"🕒 Aggiornamento: {now}"
+        f"🕒 Ora analisi: "
+        f"{now.strftime('%d/%m/%Y %H:%M')} "
+        f"Europe/Rome"
     )
-    print()
-    print("📊 CLASSIFICA")
-    print("-" * 75)
-    results.sort(
+
+    print(
+        "🔄 Storico utilizzato: circa 10 anni"
+    )
+
+    print("=" * 70)
+
+    results = sorted(
+        results,
         key=lambda x: x["score"],
         reverse=True
     )
-    for position, result in enumerate(
-        results,
-        1
-    ):
+
+    print("\n🏆 CLASSIFICA\n")
+
+    for i, r in enumerate(results, 1):
+
         print(
-            f"{position}. "
-            f"{result['name']:<18} "
-            f"{result['score']:>5.1f}/100 "
-            f"{result['signal']}"
+            f"{i}. {r['name']:<18} "
+            f"{r['direction']:<15} "
+            f"{r['score']:.0f}/100 "
+            f"{r['strength']}"
         )
-    # ========================================================
-    # MIGLIOR SETUP
-    # ========================================================
+
+    print("\n" + "=" * 70)
+
+    # --------------------------------------------------------
+    # MIGLIORE OPPORTUNITÀ
+    # --------------------------------------------------------
+
     tradable = [
         r for r in results
-        if r["direction"] != "WAIT"
+        if r["direction"] in [
+            "🟢 LONG",
+            "🔴 SHORT"
+        ]
+        and not r["conflict"]
+        and not r["abnormal_volatility"]
     ]
+
     if not tradable:
+
+        print("🛑 NESSUN TRADE")
         print()
-        print("=" * 75)
         print(
-            "🟡 NESSUNA OPPORTUNITÀ "
-            "ABBASTANZA FORTE"
+            "Nessuna materia prima presenta "
+            "un setup sufficientemente affidabile."
         )
-        print("=" * 75)
-        print(
-            "Il bot consiglia di aspettare."
-        )
+
+        print("=" * 70)
+
         return
+
     best = tradable[0]
-    print()
-    print("=" * 75)
-    print("🥇 MIGLIOR OPPORTUNITÀ")
-    print("=" * 75)
+
     print(
-        f"Materia prima : {best['name']}"
+        f"\n🎯 MIGLIORE OPPORTUNITÀ: "
+        f"{best['name']}"
     )
+
     print(
-        f"Simbolo       : {best['symbol']}"
+        f"📌 SEGNALE: {best['direction']}"
     )
+
     print(
-        f"Prezzo        : {best['price']:.4f}"
+        f"💪 FORZA: {best['strength']}"
     )
+
     print(
-        f"Segnale       : {best['signal']}"
+        f"📊 PUNTEGGIO: "
+        f"{best['score']:.0f}/100"
     )
+
     print(
-        f"Forza         : {best['score']:.1f}/100"
+        f"💰 PREZZO: "
+        f"{fmt(best['price'])}"
     )
+
+    print("\n--- ANALISI ---")
+
     print(
-        f"Setup         : {best['strength']}"
+        f"📈 Trend: "
+        f"{best['trend_score']:+.1f}"
     )
-    # ========================================================
-    # LIVELLI
-    # ========================================================
-    print()
-    print("🎯 LIVELLI OPERATIVI")
-    print("-" * 75)
+
     print(
-        f"Entry         : {best['entry']:.4f}"
+        f"🚀 Momentum 6h: "
+        f"{fmt_percent(best['momentum_6h'])}"
     )
+
     print(
-        f"Stop Loss     : {best['stop_loss']:.4f}"
+        f"🚀 Momentum 24h: "
+        f"{fmt_percent(best['momentum_24h'])}"
     )
+
     print(
-        f"Take Profit 1 : {best['take_profit_1']:.4f}"
-    )
-    print(
-        f"Take Profit 2 : {best['take_profit_2']:.4f}"
-    )
-    if best["risk"] and best["risk"] > 0:
-        rr1 = (
-            abs(
-                best["take_profit_1"]
-                - best["entry"]
-            )
-            / best["risk"]
-        )
-        rr2 = (
-            abs(
-                best["take_profit_2"]
-                - best["entry"]
-            )
-            / best["risk"]
-        )
-        print(
-            f"R/R TP1      : 1:{rr1:.1f}"
-        )
-        print(
-            f"R/R TP2      : 1:{rr2:.1f}"
-        )
-    # ========================================================
-    # ANALISI
-    # ========================================================
-    print()
-    print("📈 ANALISI")
-    print("-" * 75)
-    print(
-        f"Trend         : "
-        f"{best['trend']:+.1f}"
-    )
-    print(
-        f"Momentum      : "
-        f"{best['momentum']:+.1f}"
-    )
-    print(
-        f"Pressione     : "
+        f"💰 Pressione acquisti/vendite: "
         f"{best['pressure']:+.1f}"
     )
+
     print(
-        f"Volume        : "
-        f"{best['volume']:+.1f}"
+        f"📰 News score: "
+        f"{best['news_score']:+.1f}"
     )
+
     print(
-        f"Notizie       : "
-        f"{best['news_points']:+.1f}"
+        f"📊 Volatilità: "
+        f"{best['volatility']:.2f}%"
     )
-    print()
-    print("🐂 PRESSIONE")
+
     print(
-        f"Acquisti      : "
-        f"{best['buying_pressure']}"
+        f"📐 ATR: "
+        f"{fmt(best['atr'])}"
     )
+
+    # --------------------------------------------------------
+    # STORICO
+    # --------------------------------------------------------
+
+    history = best["history"]
+
+    print("\n--- 🔄 CICLO STORICO ---")
+
     print(
-        f"Vendite       : "
-        f"{best['selling_pressure']}"
+        f"📚 Configurazioni simili: "
+        f"{history['matches']}"
     )
-    print()
-    print("📊 MOMENTUM")
+
     print(
-        f"6 ore         : "
-        f"{best['momentum_6h']:+.2f}%"
+        f"📅 Probabilità positiva 1 giorno: "
+        f"{'-' if history['prob_1d'] is None else f'{history['prob_1d']:.0f}%'}"
     )
+
     print(
-        f"24 ore        : "
-        f"{best['momentum_24h']:+.2f}%"
+        f"📅 Probabilità positiva 7 giorni: "
+        f"{'-' if history['prob_7d'] is None else f'{history['prob_7d']:.0f}%'}"
     )
-    print()
-    print("🌪️ VOLATILITÀ")
+
     print(
-        f"Volatilità    : "
-        f"{best['volatility']:.3f}%"
+        f"📅 Probabilità positiva 30 giorni: "
+        f"{'-' if history['prob_30d'] is None else f'{history['prob_30d']:.0f}%'}"
     )
+
     print(
-        f"ATR           : "
-        f"{best['atr']:.4f}"
+        f"📈 Media 1 giorno: "
+        f"{fmt_percent(history['avg_1d'])}"
     )
-    # ========================================================
-    # NOTIZIE
-    # ========================================================
-    print()
-    print("📰 NOTIZIE")
-    print("-" * 75)
+
     print(
-        f"Totali        : "
-        f"{best['news_count']}"
+        f"📈 Media 7 giorni: "
+        f"{fmt_percent(history['avg_7d'])}"
     )
+
     print(
-        f"Positive      : "
-        f"{best['news_positive']}"
+        f"📈 Media 30 giorni: "
+        f"{fmt_percent(history['avg_30d'])}"
     )
+
     print(
-        f"Negative      : "
-        f"{best['news_negative']}"
+        f"🔄 Bias storico: "
+        f"{history['bias']}"
     )
-    if best["news_headlines"]:
-        for sentiment, headline in (
-            best["news_headlines"][:5]
-        ):
-            print(
-                f"- {sentiment}: "
-                f"{headline}"
-            )
+
+    print(
+        f"🎯 Affidabilità storico: "
+        f"{history['confidence']}"
+    )
+
+    # --------------------------------------------------------
+    # LIVELLI
+    # --------------------------------------------------------
+
+    print("\n--- 🎯 LIVELLI ---")
+
+    if best["entry"] is not None:
+
+        print(
+            f"ENTRY: {fmt(best['entry'])}"
+        )
+
+        print(
+            f"STOP LOSS: {fmt(best['sl'])}"
+        )
+
+        print(
+            f"TAKE PROFIT 1: {fmt(best['tp1'])}"
+        )
+
+        print(
+            f"TAKE PROFIT 2: {fmt(best['tp2'])}"
+        )
+
+    # --------------------------------------------------------
+    # PERCHÉ
+    # --------------------------------------------------------
+
+    print("\n--- 🧠 PERCHÉ QUESTA COMMODITY ---")
+
+    if best["reasons"]:
+
+        for reason in best["reasons"]:
+            print(f"• {reason}")
+
     else:
-        print(
-            "- Nessuna notizia "
-            "classificabile."
-        )
-    print()
-    print("=" * 75)
+        print("• Nessun fattore dominante.")
+
+    # --------------------------------------------------------
+    # NOTIZIE
+    # --------------------------------------------------------
+
+    print("\n--- 📰 NOTIZIE ---")
+
+    for headline in best["news_headlines"]:
+        print(headline)
+
+    # --------------------------------------------------------
+    # AVVERTIMENTO
+    # --------------------------------------------------------
+
+    print("\n" + "=" * 70)
+
     print(
-        "⚠️ I livelli sono calcolati "
-        "automaticamente sulla volatilità "
-        "e non garantiscono il risultato."
+        "⚠️ NOTA: il ciclo storico misura configurazioni "
+        "passate simili. Non garantisce il futuro."
     )
-    print("=" * 75)
+
+    print(
+        "⚠️ ENTRY, SL e TP sono calcoli automatici "
+        "basati principalmente sull'ATR."
+    )
+
+    print("=" * 70)
+
+
 # ============================================================
-# AVVIO
+# PROGRAMMA PRINCIPALE
 # ============================================================
+
 def main():
-    print()
+
+    print("\n")
+    print("🚀 Avvio Commodity Trading Bot v3...")
     print(
-        "🚀 Avvio Commodity Trading Bot v2..."
+        "🔎 Analisi tecnica + news + pressione + "
+        "storico/cicli"
     )
-    print()
+
     results = []
+
     for name, symbol in COMMODITIES.items():
+
         print(
-            f"🔎 Analizzo "
-            f"{name} ({symbol})..."
+            f"\n🔍 Analizzo {name} ({symbol})..."
         )
+
         try:
+
             result = analyze_commodity(
                 name,
                 symbol
             )
+
             results.append(result)
+
             print(
-                f"   ✅ "
-                f"{result['score']:.1f}/100 "
-                f"{result['signal']}"
+                f"✅ {name}: "
+                f"{result['score']:.0f}/100 "
+                f"{result['direction']}"
             )
-        except Exception as error:
+
+        except Exception as e:
+
             print(
-                f"   ⚠️ "
-                f"{name}: {error}"
+                f"⚠️ {name} saltata: {e}"
             )
+
     if not results:
+
         raise RuntimeError(
-            "Nessuna materia prima "
-            "è stata analizzata."
+            "Nessuna commodity è stata analizzata."
         )
+
     print_report(results)
+
+
 if __name__ == "__main__":
     main()
