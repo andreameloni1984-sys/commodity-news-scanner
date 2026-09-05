@@ -4,13 +4,7 @@ import requests
 from datetime import datetime, timezone
 from statistics import mean
 # ============================================================
-# 🏆 COMMODITY TRADING BOT
-# Analisi di:
-# - Trend
-# - Momentum
-# - Volatilità
-# - Volume
-# - Notizie
+# 🏆 COMMODITY TRADING BOT v2
 # ============================================================
 API_KEY = os.getenv("TWELVE_DATA_API_KEY")
 if not API_KEY:
@@ -18,9 +12,8 @@ if not API_KEY:
         "TWELVE_DATA_API_KEY non configurata nei GitHub Secrets."
     )
 BASE_URL = "https://api.twelvedata.com"
-# ============================================================
-# MATERIE PRIME
-# ============================================================
+# Materie prime principali.
+# Se una non è disponibile sul tuo piano/API viene saltata.
 COMMODITIES = {
     "Oro": "XAU/USD",
     "Argento": "XAG/USD",
@@ -32,50 +25,17 @@ COMMODITIES = {
     "Mais": "CORN/USD",
     "Caffè": "COFFEE/USD",
 }
-# ============================================================
-# PAROLE PER ANALISI NOTIZIE
-# ============================================================
 POSITIVE_WORDS = [
-    "surge",
-    "rises",
-    "rise",
-    "higher",
-    "gain",
-    "gains",
-    "bullish",
-    "strong",
-    "demand",
-    "shortage",
-    "boost",
-    "record",
-    "support",
-    "optimism",
-    "upside",
-    "growth",
-    "cuts",
-    "cut",
-    "tight supply",
-    "supply concern",
+    "surge", "rises", "rise", "higher", "gain", "gains",
+    "bullish", "strong", "demand", "shortage", "boost",
+    "record", "support", "optimism", "upside", "growth",
+    "cuts", "cut", "tight supply", "supply concern"
 ]
 NEGATIVE_WORDS = [
-    "falls",
-    "fall",
-    "lower",
-    "drop",
-    "drops",
-    "decline",
-    "bearish",
-    "weak",
-    "oversupply",
-    "surplus",
-    "slump",
-    "recession",
-    "risk",
-    "downside",
-    "collapse",
-    "selling",
-    "inventory build",
-    "demand concern",
+    "falls", "fall", "lower", "drop", "drops", "decline",
+    "bearish", "weak", "oversupply", "surplus", "slump",
+    "recession", "risk", "downside", "collapse", "selling",
+    "inventory build", "demand concern"
 ]
 # ============================================================
 # API
@@ -104,233 +64,195 @@ def get_prices(symbol, interval="1h", outputsize=100):
         {
             "symbol": symbol,
             "interval": interval,
-            "outputsize": outputsize,
+            "outputsize": outputsize
         }
     )
     values = data.get("values", [])
     if not values:
         raise RuntimeError(
-            f"Nessun dato ricevuto per {symbol}"
+            f"Nessun dato disponibile per {symbol}"
         )
     values = list(reversed(values))
-    cleaned = []
+    result = []
     for row in values:
         try:
-            cleaned.append(
-                {
-                    "open": float(row["open"]),
-                    "high": float(row["high"]),
-                    "low": float(row["low"]),
-                    "close": float(row["close"]),
-                    "volume": float(row.get("volume") or 0),
-                }
-            )
-        except (
-            KeyError,
-            TypeError,
-            ValueError,
-        ):
+            result.append({
+                "open": float(row["open"]),
+                "high": float(row["high"]),
+                "low": float(row["low"]),
+                "close": float(row["close"]),
+                "volume": float(row.get("volume") or 0)
+            })
+        except (KeyError, TypeError, ValueError):
             continue
-    if len(cleaned) < 30:
+    if len(result) < 30:
         raise RuntimeError(
-            f"Dati insufficienti per {symbol}: "
-            f"{len(cleaned)} candele"
+            f"Dati insufficienti per {symbol}"
         )
-    return cleaned
+    return result
 # ============================================================
 # NOTIZIE
 # ============================================================
 def get_news(query):
     try:
         import xml.etree.ElementTree as ET
-        url = "https://news.google.com/rss/search"
         response = requests.get(
-            url,
+            "https://news.google.com/rss/search",
             params={
                 "q": f"{query} commodity",
                 "hl": "en-US",
                 "gl": "US",
-                "ceid": "US:en",
+                "ceid": "US:en"
             },
-            timeout=15,
             headers={
                 "User-Agent": "Mozilla/5.0"
             },
+            timeout=15
         )
         response.raise_for_status()
-        root = ET.fromstring(
-            response.text
-        )
+        root = ET.fromstring(response.text)
         headlines = []
-        for item in root.findall(".//item")[:10]:
+        for item in root.findall(".//item")[:15]:
             title = item.findtext("title")
             if title:
                 headlines.append(title)
         return headlines
     except Exception:
         return []
-# ============================================================
-# SMA
-# ============================================================
-def sma(values, period):
-    if len(values) < period:
-        return None
-    return mean(values[-period:])
-# ============================================================
-# MOMENTUM
-# ============================================================
-def calculate_returns(
-    closes,
-    period
-):
-    if len(closes) <= period:
-        return 0
-    old_price = closes[-period - 1]
-    new_price = closes[-1]
-    if old_price == 0:
-        return 0
-    return (
-        (new_price / old_price) - 1
-    ) * 100
-# ============================================================
-# VOLATILITÀ
-# ============================================================
-def calculate_volatility(
-    closes,
-    period=20
-):
-    if len(closes) < period + 1:
-        return 0
-    returns = []
-    start = len(closes) - period
-    for i in range(
-        start,
-        len(closes)
-    ):
-        previous = closes[i - 1]
-        if previous != 0:
-            returns.append(
-                (
-                    closes[i] / previous - 1
-                ) * 100
-            )
-    if not returns:
-        return 0
-    average = mean(returns)
-    variance = mean(
-        [
-            (x - average) ** 2
-            for x in returns
-        ]
-    )
-    return math.sqrt(variance)
-# ============================================================
-# ANALISI NOTIZIE
-# ============================================================
 def analyze_news(headlines):
-    if not headlines:
-        return {
-            "score": 0,
-            "positive": 0,
-            "negative": 0,
-            "headlines": [],
-        }
     positive = 0
     negative = 0
     classified = []
     for headline in headlines:
         text = headline.lower()
-        positive_hits = sum(
-            1
-            for word in POSITIVE_WORDS
+        pos = sum(
+            1 for word in POSITIVE_WORDS
             if word in text
         )
-        negative_hits = sum(
-            1
-            for word in NEGATIVE_WORDS
+        neg = sum(
+            1 for word in NEGATIVE_WORDS
             if word in text
         )
-        if positive_hits > negative_hits:
+        if pos > neg:
             positive += 1
             classified.append(
-                (
-                    "POSITIVA",
-                    headline
-                )
+                ("POSITIVA", headline)
             )
-        elif negative_hits > positive_hits:
+        elif neg > pos:
             negative += 1
             classified.append(
-                (
-                    "NEGATIVA",
-                    headline
-                )
+                ("NEGATIVA", headline)
             )
     total = positive + negative
     if total == 0:
         score = 0
     else:
         score = (
-            (positive - negative)
-            / total
+            (positive - negative) / total
         ) * 100
     return {
         "score": score,
         "positive": positive,
         "negative": negative,
-        "headlines": classified,
+        "classified": classified
     }
 # ============================================================
-# ANALISI MATERIA PRIMA
+# INDICATORI
 # ============================================================
-def analyze_commodity(
-    name,
-    symbol
-):
-    prices = get_prices(symbol)
+def sma(values, period):
+    if len(values) < period:
+        return None
+    return mean(values[-period:])
+def percentage_change(values, period):
+    if len(values) <= period:
+        return 0
+    old = values[-period - 1]
+    new = values[-1]
+    if old == 0:
+        return 0
+    return ((new / old) - 1) * 100
+def calculate_volatility(values, period=20):
+    if len(values) < period + 1:
+        return 0
+    returns = []
+    for i in range(
+        len(values) - period,
+        len(values)
+    ):
+        previous = values[i - 1]
+        if previous != 0:
+            returns.append(
+                ((values[i] / previous) - 1) * 100
+            )
+    if not returns:
+        return 0
+    avg = mean(returns)
+    variance = mean(
+        [(x - avg) ** 2 for x in returns]
+    )
+    return math.sqrt(variance)
+def calculate_atr(candles, period=14):
+    if len(candles) < period + 1:
+        return 0
+    true_ranges = []
+    for i in range(
+        len(candles) - period,
+        len(candles)
+    ):
+        current = candles[i]
+        previous = candles[i - 1]
+        high = current["high"]
+        low = current["low"]
+        previous_close = previous["close"]
+        tr = max(
+            high - low,
+            abs(high - previous_close),
+            abs(low - previous_close)
+        )
+        true_ranges.append(tr)
+    return mean(true_ranges)
+# ============================================================
+# ANALISI COMPLETA
+# ============================================================
+def analyze_commodity(name, symbol):
+    candles = get_prices(symbol)
     closes = [
         x["close"]
-        for x in prices
+        for x in candles
     ]
     volumes = [
         x["volume"]
-        for x in prices
+        for x in candles
     ]
-    current_price = closes[-1]
-    sma20 = sma(
-        closes,
-        20
+    current = closes[-1]
+    sma20 = sma(closes, 20)
+    sma50 = sma(closes, 50)
+    momentum_6h = percentage_change(
+        closes, 6
     )
-    sma50 = sma(
-        closes,
-        50
-    )
-    momentum_6h = calculate_returns(
-        closes,
-        6
-    )
-    momentum_24h = calculate_returns(
-        closes,
-        24
+    momentum_24h = percentage_change(
+        closes, 24
     )
     volatility = calculate_volatility(
-        closes,
-        20
+        closes, 20
+    )
+    atr = calculate_atr(
+        candles, 14
     )
     # ========================================================
     # TREND
     # ========================================================
     trend_score = 0
     if sma20 is not None:
-        if current_price > sma20:
-            trend_score += 25
+        if current > sma20:
+            trend_score += 20
         else:
-            trend_score -= 25
+            trend_score -= 20
     if sma50 is not None:
-        if current_price > sma50:
-            trend_score += 25
+        if current > sma50:
+            trend_score += 20
         else:
-            trend_score -= 25
+            trend_score -= 20
     if (
         sma20 is not None
         and sma50 is not None
@@ -351,62 +273,82 @@ def analyze_commodity(
         momentum_score += 15
     else:
         momentum_score -= 15
-    momentum_score = max(
-        -30,
-        min(
-            30,
-            momentum_score
+    # ========================================================
+    # PRESSIONE ACQUISTI / VENDITE
+    # ========================================================
+    buying_pressure = 0
+    selling_pressure = 0
+    for candle in candles[-20:]:
+        candle_range = (
+            candle["high"] - candle["low"]
         )
+        if candle_range <= 0:
+            continue
+        position = (
+            candle["close"] - candle["low"]
+        ) / candle_range
+        if position >= 0.60:
+            buying_pressure += 1
+        elif position <= 0.40:
+            selling_pressure += 1
+    total_pressure = (
+        buying_pressure
+        + selling_pressure
     )
+    if total_pressure > 0:
+        pressure_score = (
+            (
+                buying_pressure
+                - selling_pressure
+            )
+            / total_pressure
+        ) * 20
+    else:
+        pressure_score = 0
     # ========================================================
     # VOLUME
     # ========================================================
     volume_score = 0
     valid_volumes = [
-        v
-        for v in volumes[-20:]
-        if v > 0
+        x for x in volumes[-20:]
+        if x > 0
     ]
     recent_volumes = [
-        v
-        for v in volumes[-5:]
-        if v > 0
+        x for x in volumes[-5:]
+        if x > 0
     ]
-    if (
-        valid_volumes
-        and recent_volumes
-    ):
-        average_volume = mean(
+    if valid_volumes and recent_volumes:
+        avg_volume = mean(
             valid_volumes
         )
         recent_average = mean(
             recent_volumes
         )
-        if recent_average > average_volume * 1.20:
+        if recent_average > avg_volume * 1.20:
             volume_score = 10
-        elif recent_average < average_volume * 0.80:
+        elif recent_average < avg_volume * 0.80:
             volume_score = -5
     # ========================================================
     # NOTIZIE
     # ========================================================
     headlines = get_news(name)
-    news_analysis = analyze_news(
+    news = analyze_news(
         headlines
     )
-    news_score = news_analysis["score"]
     news_points = max(
-        -20,
+        -15,
         min(
-            20,
-            news_score * 0.20
+            15,
+            news["score"] * 0.15
         )
     )
     # ========================================================
-    # PUNTEGGIO
+    # SCORE
     # ========================================================
     raw_score = (
         trend_score
         + momentum_score
+        + pressure_score
         + volume_score
         + news_points
     )
@@ -419,46 +361,104 @@ def analyze_commodity(
         )
     )
     # ========================================================
-    # SEGNALE
+    # DIREZIONE
     # ========================================================
-    if final_score >= 70:
-        signal = "🟢 LONG"
-    elif final_score <= 30:
-        signal = "🔴 SHORT"
+    if final_score >= 65:
+        direction = "LONG"
+    elif final_score <= 35:
+        direction = "SHORT"
     else:
+        direction = "WAIT"
+    # ========================================================
+    # ENTRY / SL / TP
+    # ========================================================
+    if atr <= 0:
+        atr = current * 0.01
+    if direction == "LONG":
+        entry = current
+        stop_loss = current - (
+            atr * 1.5
+        )
+        risk = entry - stop_loss
+        take_profit_1 = entry + (
+            risk * 1.5
+        )
+        take_profit_2 = entry + (
+            risk * 2.5
+        )
+    elif direction == "SHORT":
+        entry = current
+        stop_loss = current + (
+            atr * 1.5
+        )
+        risk = stop_loss - entry
+        take_profit_1 = entry - (
+            risk * 1.5
+        )
+        take_profit_2 = entry - (
+            risk * 2.5
+        )
+    else:
+        entry = current
+        stop_loss = None
+        take_profit_1 = None
+        take_profit_2 = None
+        risk = None
+    # ========================================================
+    # FORZA SETUP
+    # ========================================================
+    if final_score >= 80 or final_score <= 20:
+        strength = "🔥 MOLTO FORTE"
+    elif final_score >= 70 or final_score <= 30:
+        strength = "💪 FORTE"
+    elif final_score >= 60 or final_score <= 40:
+        strength = "⚠️ MODERATA"
+    else:
+        strength = "🟡 DEBOLE"
+    # Se la direzione è WAIT, non proponiamo operazione.
+    if direction == "WAIT":
         signal = "🟡 ASPETTARE"
+    elif direction == "LONG":
+        signal = "🟢 LONG"
+    else:
+        signal = "🔴 SHORT"
     return {
         "name": name,
         "symbol": symbol,
-        "price": current_price,
+        "price": current,
         "score": final_score,
+        "direction": direction,
         "signal": signal,
+        "strength": strength,
         "trend": trend_score,
         "momentum": momentum_score,
+        "pressure": pressure_score,
         "volume": volume_score,
         "news_points": news_points,
+        "buying_pressure": buying_pressure,
+        "selling_pressure": selling_pressure,
         "momentum_6h": momentum_6h,
         "momentum_24h": momentum_24h,
         "volatility": volatility,
+        "atr": atr,
+        "entry": entry,
+        "stop_loss": stop_loss,
+        "take_profit_1": take_profit_1,
+        "take_profit_2": take_profit_2,
+        "risk": risk,
         "news_count": len(headlines),
-        "news_positive": news_analysis[
-            "positive"
-        ],
-        "news_negative": news_analysis[
-            "negative"
-        ],
-        "news_headlines": news_analysis[
-            "headlines"
-        ],
+        "news_positive": news["positive"],
+        "news_negative": news["negative"],
+        "news_headlines": news["classified"]
     }
 # ============================================================
 # REPORT
 # ============================================================
 def print_report(results):
     print()
-    print("=" * 70)
-    print("          🏆 COMMODITY TRADING BOT")
-    print("=" * 70)
+    print("=" * 75)
+    print("             🏆 COMMODITY TRADING BOT v2")
+    print("=" * 75)
     now = datetime.now(
         timezone.utc
     ).strftime(
@@ -468,13 +468,12 @@ def print_report(results):
         f"🕒 Aggiornamento: {now}"
     )
     print()
-    # Classifica dal migliore al peggiore
+    print("📊 CLASSIFICA")
+    print("-" * 75)
     results.sort(
         key=lambda x: x["score"],
         reverse=True
     )
-    print("📊 CLASSIFICA")
-    print("-" * 70)
     for position, result in enumerate(
         results,
         1
@@ -485,12 +484,30 @@ def print_report(results):
             f"{result['score']:>5.1f}/100 "
             f"{result['signal']}"
         )
+    # ========================================================
+    # MIGLIOR SETUP
+    # ========================================================
+    tradable = [
+        r for r in results
+        if r["direction"] != "WAIT"
+    ]
+    if not tradable:
+        print()
+        print("=" * 75)
+        print(
+            "🟡 NESSUNA OPPORTUNITÀ "
+            "ABBASTANZA FORTE"
+        )
+        print("=" * 75)
+        print(
+            "Il bot consiglia di aspettare."
+        )
+        return
+    best = tradable[0]
     print()
-    # Migliore opportunità
-    best = results[0]
-    print("=" * 70)
-    print("🥇 MIGLIOR SETUP")
-    print("=" * 70)
+    print("=" * 75)
+    print("🥇 MIGLIOR OPPORTUNITÀ")
+    print("=" * 75)
     print(
         f"Materia prima : {best['name']}"
     )
@@ -506,8 +523,54 @@ def print_report(results):
     print(
         f"Forza         : {best['score']:.1f}/100"
     )
+    print(
+        f"Setup         : {best['strength']}"
+    )
+    # ========================================================
+    # LIVELLI
+    # ========================================================
     print()
-    print("📈 COMPONENTI")
+    print("🎯 LIVELLI OPERATIVI")
+    print("-" * 75)
+    print(
+        f"Entry         : {best['entry']:.4f}"
+    )
+    print(
+        f"Stop Loss     : {best['stop_loss']:.4f}"
+    )
+    print(
+        f"Take Profit 1 : {best['take_profit_1']:.4f}"
+    )
+    print(
+        f"Take Profit 2 : {best['take_profit_2']:.4f}"
+    )
+    if best["risk"] and best["risk"] > 0:
+        rr1 = (
+            abs(
+                best["take_profit_1"]
+                - best["entry"]
+            )
+            / best["risk"]
+        )
+        rr2 = (
+            abs(
+                best["take_profit_2"]
+                - best["entry"]
+            )
+            / best["risk"]
+        )
+        print(
+            f"R/R TP1      : 1:{rr1:.1f}"
+        )
+        print(
+            f"R/R TP2      : 1:{rr2:.1f}"
+        )
+    # ========================================================
+    # ANALISI
+    # ========================================================
+    print()
+    print("📈 ANALISI")
+    print("-" * 75)
     print(
         f"Trend         : "
         f"{best['trend']:+.1f}"
@@ -517,12 +580,26 @@ def print_report(results):
         f"{best['momentum']:+.1f}"
     )
     print(
+        f"Pressione     : "
+        f"{best['pressure']:+.1f}"
+    )
+    print(
         f"Volume        : "
         f"{best['volume']:+.1f}"
     )
     print(
         f"Notizie       : "
         f"{best['news_points']:+.1f}"
+    )
+    print()
+    print("🐂 PRESSIONE")
+    print(
+        f"Acquisti      : "
+        f"{best['buying_pressure']}"
+    )
+    print(
+        f"Vendite       : "
+        f"{best['selling_pressure']}"
     )
     print()
     print("📊 MOMENTUM")
@@ -537,11 +614,19 @@ def print_report(results):
     print()
     print("🌪️ VOLATILITÀ")
     print(
-        f"20 periodi    : "
+        f"Volatilità    : "
         f"{best['volatility']:.3f}%"
     )
+    print(
+        f"ATR           : "
+        f"{best['atr']:.4f}"
+    )
+    # ========================================================
+    # NOTIZIE
+    # ========================================================
     print()
     print("📰 NOTIZIE")
+    print("-" * 75)
     print(
         f"Totali        : "
         f"{best['news_count']}"
@@ -555,7 +640,6 @@ def print_report(results):
         f"{best['news_negative']}"
     )
     if best["news_headlines"]:
-        print()
         for sentiment, headline in (
             best["news_headlines"][:5]
         ):
@@ -569,40 +653,24 @@ def print_report(results):
             "classificabile."
         )
     print()
-    print("=" * 70)
-    if best["score"] >= 70:
-        print(
-            "🎯 CONCLUSIONE: "
-            "setup rialzista forte."
-        )
-    elif best["score"] <= 30:
-        print(
-            "🎯 CONCLUSIONE: "
-            "setup ribassista forte."
-        )
-    else:
-        print(
-            "🎯 CONCLUSIONE: "
-            "nessun setup abbastanza forte."
-        )
+    print("=" * 75)
     print(
-        "⚠️ Il punteggio è un indicatore "
-        "automatico e non garantisce profitti."
+        "⚠️ I livelli sono calcolati "
+        "automaticamente sulla volatilità "
+        "e non garantiscono il risultato."
     )
-    print("=" * 70)
+    print("=" * 75)
 # ============================================================
 # AVVIO
 # ============================================================
 def main():
-    results = []
     print()
     print(
-        "🚀 Avvio Commodity Trading Bot..."
+        "🚀 Avvio Commodity Trading Bot v2..."
     )
     print()
-    for name, symbol in (
-        COMMODITIES.items()
-    ):
+    results = []
+    for name, symbol in COMMODITIES.items():
         print(
             f"🔎 Analizzo "
             f"{name} ({symbol})..."
@@ -620,16 +688,14 @@ def main():
             )
         except Exception as error:
             print(
-                f"   ⚠️ {name}: "
-                f"{error}"
+                f"   ⚠️ "
+                f"{name}: {error}"
             )
     if not results:
         raise RuntimeError(
             "Nessuna materia prima "
             "è stata analizzata."
         )
-    print_report(
-        results
-    )
+    print_report(results)
 if __name__ == "__main__":
     main()
