@@ -1,14 +1,14 @@
 import os
+import json
 import math
-import statistics
 from datetime import datetime, timezone
 
 import requests
 
 
 # ============================================================
-# COMMODITY TRADING BOT v4
-# Adaptive Quantitative Model
+# COMMODITY TRADING BOT v4.1
+# QUANT MODEL + POSITION MANAGEMENT
 # ============================================================
 
 API_KEY = os.getenv("TWELVE_DATA_API_KEY")
@@ -18,8 +18,19 @@ if not API_KEY:
         "TWELVE_DATA_API_KEY non configurata nei GitHub Secrets."
     )
 
-
 BASE_URL = "https://api.twelvedata.com/time_series"
+
+POSITION_FILE = "position.json"
+
+HISTORY_SIZE = 4000
+HORIZON = 5
+
+STOP_ATR = 1.5
+TP1_ATR = 1.5
+TP2_ATR = 2.5
+
+LONG_THRESHOLD = 0.62
+SHORT_THRESHOLD = 0.38
 
 COMMODITIES = {
     "Oro": "XAU/USD",
@@ -33,15 +44,12 @@ COMMODITIES = {
     "Caffè": "COFFEE/USD",
 }
 
-HISTORY_SIZE = 4000
-HORIZON = 5
-
 FEATURE_NAMES = [
     "ret_1",
     "ret_5",
     "ret_20",
     "ret_60",
-    "trend_20_50",
+    "trend",
     "rsi",
     "macd",
     "atr_pct",
@@ -64,38 +72,109 @@ def safe_float(value):
 
 
 def mean(values):
-    values = [v for v in values if v is not None and math.isfinite(v)]
+    values = [
+        x for x in values
+        if x is not None and math.isfinite(x)
+    ]
+
     if not values:
         return 0.0
+
     return sum(values) / len(values)
 
 
 def std(values):
-    values = [v for v in values if v is not None and math.isfinite(v)]
+    values = [
+        x for x in values
+        if x is not None and math.isfinite(x)
+    ]
 
     if len(values) < 2:
         return 1.0
 
     m = mean(values)
-    variance = sum((x - m) ** 2 for x in values) / (len(values) - 1)
 
-    return max(math.sqrt(variance), 1e-8)
+    variance = sum(
+        (x - m) ** 2
+        for x in values
+    ) / (len(values) - 1)
+
+    return max(
+        math.sqrt(variance),
+        1e-8
+    )
 
 
 def sigmoid(x):
-    x = max(-30.0, min(30.0, x))
-    return 1.0 / (1.0 + math.exp(-x))
+    x = max(-30, min(30, x))
+    return 1 / (1 + math.exp(-x))
 
 
-def clamp(x, low, high):
-    return max(low, min(high, x))
+def clamp(value, low, high):
+    return max(low, min(high, value))
 
 
 # ============================================================
-# DATA
+# POSITION MEMORY
+# ============================================================
+
+def load_position():
+    if not os.path.exists(POSITION_FILE):
+        return None
+
+    try:
+        with open(
+            POSITION_FILE,
+            "r",
+            encoding="utf-8"
+        ) as file:
+
+            data = json.load(file)
+
+        if not data:
+            return None
+
+        return data
+
+    except Exception as error:
+
+        print(
+            f"⚠️ Impossibile leggere {POSITION_FILE}: "
+            f"{error}"
+        )
+
+        return None
+
+
+def save_position(position):
+
+    with open(
+        POSITION_FILE,
+        "w",
+        encoding="utf-8"
+    ) as file:
+
+        json.dump(
+            position,
+            file,
+            indent=2,
+            ensure_ascii=False
+        )
+
+
+def clear_position():
+
+    if os.path.exists(POSITION_FILE):
+
+        os.remove(POSITION_FILE)
+
+
+# ============================================================
+# MARKET DATA
 # ============================================================
 
 def get_daily_data(symbol):
+
     params = {
         "symbol": symbol,
         "interval": "1day",
@@ -107,19 +186,26 @@ def get_daily_data(symbol):
     response = requests.get(
         BASE_URL,
         params=params,
-        timeout=30,
+        timeout=30
     )
 
     response.raise_for_status()
 
     data = response.json()
 
-    if "status" in data and data["status"] == "error":
+    if data.get("status") == "error":
+
         raise RuntimeError(
-            data.get("message", "Errore Twelve Data")
+            data.get(
+                "message",
+                "Errore Twelve Data"
+            )
         )
 
-    values = data.get("values", [])
+    values = data.get(
+        "values",
+        []
+    )
 
     if not values:
         raise RuntimeError(
@@ -128,55 +214,79 @@ def get_daily_data(symbol):
 
     candles = []
 
-    for item in reversed(values):
-        close = safe_float(item.get("close"))
-        high = safe_float(item.get("high"))
-        low = safe_float(item.get("low"))
-        volume = safe_float(item.get("volume"))
+    for item in values:
+
+        close = safe_float(
+            item.get("close")
+        )
 
         if close is None:
             continue
 
         candles.append({
             "datetime": item.get("datetime"),
-            "open": safe_float(item.get("open")),
-            "high": high,
-            "low": low,
+            "open": safe_float(
+                item.get("open")
+            ),
+            "high": safe_float(
+                item.get("high")
+            ),
+            "low": safe_float(
+                item.get("low")
+            ),
             "close": close,
-            "volume": volume,
+            "volume": safe_float(
+                item.get("volume")
+            ),
         })
 
-    candles.sort(key=lambda x: x["datetime"] or "")
+    candles.sort(
+        key=lambda x: x["datetime"] or ""
+    )
 
     return candles
 
 
 # ============================================================
-# TECHNICAL INDICATORS
+# INDICATORS
 # ============================================================
 
 def sma(values, period):
+
     if len(values) < period:
         return None
 
-    return mean(values[-period:])
+    return mean(
+        values[-period:]
+    )
 
 
 def ema(values, period):
+
     if len(values) < period:
         return None
 
-    multiplier = 2.0 / (period + 1)
+    multiplier = 2 / (
+        period + 1
+    )
 
-    result = mean(values[:period])
+    result = mean(
+        values[:period]
+    )
 
     for value in values[period:]:
-        result = (value - result) * multiplier + result
+
+        result = (
+            (value - result)
+            * multiplier
+            + result
+        )
 
     return result
 
 
 def rsi(values, period=14):
+
     if len(values) < period + 1:
         return 50.0
 
@@ -184,56 +294,86 @@ def rsi(values, period=14):
     losses = []
 
     for i in range(1, len(values)):
-        change = values[i] - values[i - 1]
 
-        gains.append(max(change, 0.0))
-        losses.append(max(-change, 0.0))
+        change = (
+            values[i]
+            - values[i - 1]
+        )
 
-    avg_gain = mean(gains[-period:])
-    avg_loss = mean(losses[-period:])
+        gains.append(
+            max(change, 0)
+        )
+
+        losses.append(
+            max(-change, 0)
+        )
+
+    avg_gain = mean(
+        gains[-period:]
+    )
+
+    avg_loss = mean(
+        losses[-period:]
+    )
 
     if avg_loss == 0:
         return 100.0
 
     rs = avg_gain / avg_loss
 
-    return 100.0 - (100.0 / (1.0 + rs))
+    return 100 - (
+        100 / (1 + rs)
+    )
 
 
 def atr(candles, period=14):
+
     if len(candles) < period + 1:
         return None
 
-    true_ranges = []
+    ranges = []
 
     for i in range(1, len(candles)):
+
         high = candles[i]["high"]
         low = candles[i]["low"]
-        previous_close = candles[i - 1]["close"]
+        previous = candles[i - 1]["close"]
 
         if high is None or low is None:
             continue
 
-        tr = max(
+        true_range = max(
             high - low,
-            abs(high - previous_close),
-            abs(low - previous_close),
+            abs(high - previous),
+            abs(low - previous)
         )
 
-        true_ranges.append(tr)
+        ranges.append(
+            true_range
+        )
 
-    if len(true_ranges) < period:
+    if len(ranges) < period:
         return None
 
-    return mean(true_ranges[-period:])
+    return mean(
+        ranges[-period:]
+    )
 
 
 def macd(values):
+
     if len(values) < 35:
         return 0.0
 
-    fast = ema(values, 12)
-    slow = ema(values, 26)
+    fast = ema(
+        values,
+        12
+    )
+
+    slow = ema(
+        values,
+        26
+    )
 
     if fast is None or slow is None:
         return 0.0
@@ -241,11 +381,8 @@ def macd(values):
     return fast - slow
 
 
-# ============================================================
-# FEATURE ENGINEERING
-# ============================================================
-
 def return_pct(values, period):
+
     if len(values) <= period:
         return 0.0
 
@@ -255,15 +392,48 @@ def return_pct(values, period):
     if old == 0:
         return 0.0
 
-    return (current / old) - 1.0
+    return (
+        current / old
+    ) - 1
 
 
-def pressure_score(candles, period=10):
+def volatility(values, period=20):
+
+    if len(values) < period + 1:
+        return 0.0
+
+    returns = []
+
+    start = len(values) - period
+
+    for i in range(
+        start,
+        len(values)
+    ):
+
+        if i <= 0:
+            continue
+
+        previous = values[i - 1]
+
+        if previous == 0:
+            continue
+
+        returns.append(
+            (values[i] / previous) - 1
+        )
+
+    return std(returns)
+
+
+def pressure(candles, period=10):
+
     selected = candles[-period:]
 
     scores = []
 
     for candle in selected:
+
         high = candle["high"]
         low = candle["low"]
         close = candle["close"]
@@ -278,108 +448,98 @@ def pressure_score(candles, period=10):
         ):
             continue
 
-        body = close - open_price
-        range_size = high - low
-
-        scores.append(body / range_size)
+        scores.append(
+            (close - open_price)
+            / (high - low)
+        )
 
     return mean(scores)
 
 
-def volatility(values, period=20):
-    if len(values) < period + 1:
-        return 0.0
+def breakout(values, period=20):
 
-    returns = []
-
-    for i in range(len(values) - period, len(values)):
-        if i <= 0:
-            continue
-
-        previous = values[i - 1]
-
-        if previous == 0:
-            continue
-
-        returns.append(
-            (values[i] / previous) - 1.0
-        )
-
-    return std(returns)
-
-
-def breakout_score(values, period=20):
     if len(values) < period + 1:
         return 0.0
 
     current = values[-1]
 
-    previous = values[-period - 1:-1]
+    previous = values[
+        -period - 1:-1
+    ]
 
     highest = max(previous)
     lowest = min(previous)
 
-    distance = highest - lowest
+    distance = (
+        highest - lowest
+    )
 
-    if distance <= 0:
+    if distance == 0:
         return 0.0
 
     return (
-        (current - lowest) / distance
-    ) * 2.0 - 1.0
+        (
+            current - lowest
+        ) / distance
+    ) * 2 - 1
 
 
-def seasonality_score(candles):
-    """
-    Measures historical tendency of the current calendar month.
+def seasonality(candles):
 
-    Only previous years are used for the current month.
-    """
-
-    if len(candles) < 250:
+    if len(candles) < 300:
         return 0.0
 
-    latest_date = candles[-1]["datetime"]
-
     try:
-        month = int(latest_date.split("-")[1])
+        current_month = int(
+            candles[-1]["datetime"]
+            .split("-")[1]
+        )
     except Exception:
         return 0.0
 
-    monthly_returns = []
+    returns = []
 
-    for i in range(20, len(candles) - 5):
-        date_string = candles[i]["datetime"]
+    for i in range(
+        100,
+        len(candles) - 5
+    ):
 
         try:
-            candle_month = int(date_string.split("-")[1])
+            month = int(
+                candles[i]["datetime"]
+                .split("-")[1]
+            )
         except Exception:
             continue
 
-        if candle_month != month:
+        if month != current_month:
             continue
 
-        start = candles[i]["close"]
+        current = candles[i]["close"]
         future = candles[i + 5]["close"]
 
-        if start == 0:
+        if current == 0:
             continue
 
-        monthly_returns.append(
-            (future / start) - 1.0
+        returns.append(
+            (future / current) - 1
         )
 
-    if len(monthly_returns) < 5:
+    if len(returns) < 5:
         return 0.0
 
-    return mean(monthly_returns)
+    return mean(returns)
 
+
+# ============================================================
+# FEATURES
+# ============================================================
 
 def build_features(candles):
+
     closes = [
         c["close"]
         for c in candles
-        if c["close"] is not None
     ]
 
     if len(closes) < 100:
@@ -387,8 +547,15 @@ def build_features(candles):
 
     current = closes[-1]
 
-    sma20 = sma(closes, 20)
-    sma50 = sma(closes, 50)
+    sma20 = sma(
+        closes,
+        20
+    )
+
+    sma50 = sma(
+        closes,
+        50
+    )
 
     if sma20 is None:
         sma20 = current
@@ -396,39 +563,92 @@ def build_features(candles):
     if sma50 is None:
         sma50 = current
 
-    trend = (
-        (sma20 / sma50) - 1.0
-        if sma50 != 0
-        else 0.0
-    )
+    if sma50 != 0:
 
-    current_atr = atr(candles, 14)
+        trend = (
+            sma20 / sma50
+        ) - 1
+
+    else:
+        trend = 0.0
+
+    current_atr = atr(
+        candles,
+        14
+    )
 
     if current_atr is None:
         atr_pct = 0.0
     else:
-        atr_pct = current_atr / current
+        atr_pct = (
+            current_atr
+            / current
+        )
 
-    current_macd = macd(closes)
+    current_macd = macd(
+        closes
+    )
 
     if current != 0:
-        normalized_macd = current_macd / current
+        macd_normalized = (
+            current_macd
+            / current
+        )
     else:
-        normalized_macd = 0.0
+        macd_normalized = 0.0
 
     return [
-        return_pct(closes, 1),
-        return_pct(closes, 5),
-        return_pct(closes, 20),
-        return_pct(closes, 60),
+        return_pct(
+            closes,
+            1
+        ),
+
+        return_pct(
+            closes,
+            5
+        ),
+
+        return_pct(
+            closes,
+            20
+        ),
+
+        return_pct(
+            closes,
+            60
+        ),
+
         trend,
-        (rsi(closes, 14) - 50.0) / 50.0,
-        normalized_macd,
+
+        (
+            rsi(
+                closes,
+                14
+            ) - 50
+        ) / 50,
+
+        macd_normalized,
+
         atr_pct,
-        volatility(closes, 20),
-        pressure_score(candles, 10),
-        breakout_score(closes, 20),
-        seasonality_score(candles),
+
+        volatility(
+            closes,
+            20
+        ),
+
+        pressure(
+            candles,
+            10
+        ),
+
+        breakout(
+            closes,
+            20
+        ),
+
+        seasonality(
+            candles
+        ),
     ]
 
 
@@ -437,14 +657,6 @@ def build_features(candles):
 # ============================================================
 
 def build_dataset(candles):
-    """
-    Creates historical observations.
-
-    X(t) only uses information available at t.
-    y(t) uses the following HORIZON days.
-
-    This prevents look-ahead leakage.
-    """
 
     dataset = []
 
@@ -455,34 +667,43 @@ def build_dataset(candles):
         len(candles) - HORIZON
     ):
 
-        history = candles[:i + 1]
+        history = candles[
+            :i + 1
+        ]
 
-        features = build_features(history)
+        features = build_features(
+            history
+        )
 
         if features is None:
             continue
 
         current = candles[i]["close"]
-        future = candles[i + HORIZON]["close"]
+        future = candles[
+            i + HORIZON
+        ]["close"]
 
         if current == 0:
             continue
 
         future_return = (
             future / current
-        ) - 1.0
+        ) - 1
 
-        # Ignore extremely small movements.
-        # They contain little directional information.
+        # Ignora movimenti troppo piccoli.
         if abs(future_return) < 0.002:
             continue
 
-        label = 1 if future_return > 0 else 0
+        label = (
+            1
+            if future_return > 0
+            else 0
+        )
 
         dataset.append({
             "x": features,
             "y": label,
-            "future_return": future_return,
+            "return": future_return
         })
 
     return dataset
@@ -492,238 +713,301 @@ def build_dataset(candles):
 # STANDARDIZATION
 # ============================================================
 
-def standardize_train_test(train_x, test_x):
-    if not train_x:
-        return [], []
+def standardize(
+    train_x,
+    other_x
+):
 
-    columns = len(train_x[0])
+    if not train_x:
+        return [], [], [], []
+
+    count = len(
+        train_x[0]
+    )
 
     means = []
-    stds = []
+    deviations = []
 
-    for j in range(columns):
+    for j in range(count):
+
         values = [
             row[j]
             for row in train_x
-            if row[j] is not None
         ]
 
-        m = mean(values)
-        s = std(values)
+        means.append(
+            mean(values)
+        )
 
-        means.append(m)
-        stds.append(s)
+        deviations.append(
+            std(values)
+        )
 
     def transform(row):
+
         result = []
 
-        for j in range(columns):
-            value = row[j]
-
-            if value is None:
-                value = means[j]
+        for j in range(count):
 
             result.append(
-                (value - means[j]) / stds[j]
+                (
+                    row[j]
+                    - means[j]
+                )
+                / deviations[j]
             )
 
         return result
 
     return (
-        [transform(row) for row in train_x],
-        [transform(row) for row in test_x],
+        [
+            transform(row)
+            for row in train_x
+        ],
+        [
+            transform(row)
+            for row in other_x
+        ],
         means,
-        stds,
+        deviations
     )
 
 
 # ============================================================
-# LOGISTIC REGRESSION
+# LOGISTIC MODEL
 # ============================================================
 
-def fit_logistic(
+def fit_model(
     X,
     y,
     epochs=700,
     learning_rate=0.035,
-    regularization=0.08,
+    regularization=0.08
 ):
+
     if not X:
         return [], 0.0
 
-    feature_count = len(X[0])
+    feature_count = len(
+        X[0]
+    )
 
-    weights = [0.0] * feature_count
+    weights = [
+        0.0
+        for _ in range(
+            feature_count
+        )
+    ]
+
     bias = 0.0
 
     n = len(X)
 
     for _ in range(epochs):
 
-        gradients = [0.0] * feature_count
+        gradients = [
+            0.0
+            for _ in range(
+                feature_count
+            )
+        ]
+
         bias_gradient = 0.0
 
-        for row, target in zip(X, y):
+        for row, target in zip(
+            X,
+            y
+        ):
 
             z = bias
 
-            for j in range(feature_count):
-                z += weights[j] * row[j]
+            for j in range(
+                feature_count
+            ):
+
+                z += (
+                    weights[j]
+                    * row[j]
+                )
 
             prediction = sigmoid(z)
 
-            error = prediction - target
+            error = (
+                prediction
+                - target
+            )
 
             bias_gradient += error
 
-            for j in range(feature_count):
-                gradients[j] += error * row[j]
+            for j in range(
+                feature_count
+            ):
 
-        bias -= learning_rate * (
-            bias_gradient / n
+                gradients[j] += (
+                    error
+                    * row[j]
+                )
+
+        bias -= (
+            learning_rate
+            * bias_gradient
+            / n
         )
 
-        for j in range(feature_count):
+        for j in range(
+            feature_count
+        ):
 
             gradient = (
                 gradients[j] / n
             )
 
             gradient += (
-                regularization * weights[j]
+                regularization
+                * weights[j]
             )
 
             weights[j] -= (
-                learning_rate * gradient
+                learning_rate
+                * gradient
             )
 
     return weights, bias
 
 
-def predict_probability(
+def predict(
     row,
     weights,
-    bias,
+    bias
 ):
+
     z = bias
 
-    for i in range(len(weights)):
-        z += weights[i] * row[i]
+    for i in range(
+        len(weights)
+    ):
+
+        z += (
+            weights[i]
+            * row[i]
+        )
 
     return sigmoid(z)
 
 
 # ============================================================
-# WALK-FORWARD BACKTEST
+# WALK FORWARD BACKTEST
 # ============================================================
 
-def walk_forward_backtest(dataset):
+def backtest(dataset):
 
     if len(dataset) < 500:
+
         return {
-            "accuracy": 0.0,
-            "win_rate": 0.0,
-            "profit_factor": 0.0,
-            "max_drawdown": 0.0,
-            "trades": 0,
+            "accuracy": 0,
+            "win_rate": 0,
+            "profit_factor": 0,
+            "drawdown": 0,
+            "trades": 0
         }
 
-    # Reserve the most recent 30% as out-of-sample.
-    split = int(len(dataset) * 0.70)
+    split = int(
+        len(dataset)
+        * 0.70
+    )
 
-    train_initial = dataset[:split]
-    test_period = dataset[split:]
+    test = dataset[
+        split:
+    ]
 
     predictions = []
 
-    train_size = max(
-        350,
-        min(1000, len(train_initial))
-    )
+    train_size = 1000
 
     step = 20
 
     for start in range(
         0,
-        len(test_period),
+        len(test),
         step
     ):
 
+        end = split + start
+
         training_start = max(
             0,
-            split + start - train_size
+            end - train_size
         )
 
-        training_end = split + start
-
-        train = dataset[
-            training_start:training_end
+        training = dataset[
+            training_start:end
         ]
 
-        test = test_period[
+        testing = test[
             start:start + step
         ]
 
-        if len(train) < 250:
+        if len(training) < 300:
             continue
 
         X_train = [
-            item["x"]
-            for item in train
+            x["x"]
+            for x in training
         ]
 
         y_train = [
-            item["y"]
-            for item in train
+            x["y"]
+            for x in training
         ]
 
         X_test = [
-            item["x"]
-            for item in test
+            x["x"]
+            for x in testing
         ]
 
         (
             X_train_scaled,
             X_test_scaled,
             _,
-            _,
-        ) = standardize_train_test(
+            _
+        ) = standardize(
             X_train,
-            X_test,
+            X_test
         )
 
-        weights, bias = fit_logistic(
+        weights, bias = fit_model(
             X_train_scaled,
-            y_train,
+            y_train
         )
 
         for item, row in zip(
-            test,
-            X_test_scaled,
+            testing,
+            X_test_scaled
         ):
 
-            probability = predict_probability(
+            probability = predict(
                 row,
                 weights,
-                bias,
+                bias
             )
 
             predictions.append({
                 "probability": probability,
-                "actual": item["y"],
-                "return": item["future_return"],
+                "return": item["return"],
+                "actual": item["y"]
             })
 
     if not predictions:
+
         return {
-            "accuracy": 0.0,
-            "win_rate": 0.0,
-            "profit_factor": 0.0,
-            "max_drawdown": 0.0,
-            "trades": 0,
+            "accuracy": 0,
+            "win_rate": 0,
+            "profit_factor": 0,
+            "drawdown": 0,
+            "trades": 0
         }
 
-    directional_correct = 0
+    correct = 0
 
     trades = []
 
@@ -731,102 +1015,109 @@ def walk_forward_backtest(dataset):
     peak = 1.0
     max_drawdown = 0.0
 
-    for prediction in predictions:
+    for item in predictions:
 
-        probability = prediction["probability"]
+        p = item["probability"]
 
-        if probability >= 0.60:
+        predicted = (
+            1
+            if p >= 0.50
+            else 0
+        )
 
-            direction = 1
+        if predicted == item["actual"]:
+            correct += 1
 
-        elif probability <= 0.40:
+        if p >= LONG_THRESHOLD:
 
-            direction = -1
+            trade_return = (
+                item["return"]
+            )
+
+        elif p <= SHORT_THRESHOLD:
+
+            trade_return = (
+                -item["return"]
+            )
 
         else:
 
             continue
 
-        actual_return = prediction["return"]
-
-        trade_return = (
-            actual_return
-            if direction == 1
-            else -actual_return
+        trades.append(
+            trade_return
         )
 
-        trades.append(trade_return)
+        equity *= (
+            1 + trade_return
+        )
 
-        if (
-            (direction == 1 and actual_return > 0)
-            or
-            (direction == -1 and actual_return < 0)
-        ):
-            directional_correct += 1
-
-        equity *= (1.0 + trade_return)
-
-        peak = max(peak, equity)
+        peak = max(
+            peak,
+            equity
+        )
 
         drawdown = (
             equity / peak
-        ) - 1.0
+        ) - 1
 
         max_drawdown = min(
             max_drawdown,
-            drawdown,
+            drawdown
         )
-
-    total_predictions = len(predictions)
 
     accuracy = (
-        sum(
-            1
-            for p in predictions
-            if (
-                (p["probability"] >= 0.5 and p["actual"] == 1)
-                or
-                (p["probability"] < 0.5 and p["actual"] == 0)
-            )
-        )
-        / total_predictions
+        correct
+        / len(predictions)
     )
 
     if trades:
-        winning = [
+
+        winners = [
             x for x in trades
             if x > 0
         ]
 
-        losing = [
+        losers = [
             x for x in trades
             if x < 0
         ]
 
         win_rate = (
-            len(winning) / len(trades)
+            len(winners)
+            / len(trades)
         )
 
-        gross_profit = sum(winning)
-        gross_loss = abs(sum(losing))
+        gross_profit = sum(
+            winners
+        )
+
+        gross_loss = abs(
+            sum(losers)
+        )
 
         if gross_loss > 0:
+
             profit_factor = (
-                gross_profit / gross_loss
+                gross_profit
+                / gross_loss
             )
+
         else:
-            profit_factor = 99.0
+
+            profit_factor = 99
 
     else:
-        win_rate = 0.0
-        profit_factor = 0.0
+
+        win_rate = 0
+        profit_factor = 0
 
     return {
         "accuracy": accuracy,
         "win_rate": win_rate,
         "profit_factor": profit_factor,
-        "max_drawdown": max_drawdown,
-        "trades": len(trades),
+        "drawdown": max_drawdown,
+        "trades": len(trades)
     }
 
 
@@ -834,9 +1125,9 @@ def walk_forward_backtest(dataset):
 # FINAL MODEL
 # ============================================================
 
-def train_final_model(dataset):
+def train_final(dataset):
 
-    if len(dataset) < 250:
+    if len(dataset) < 300:
         return None
 
     X = [
@@ -853,41 +1144,52 @@ def train_final_model(dataset):
         X_scaled,
         _,
         means,
-        stds,
-    ) = standardize_train_test(
+        deviations
+    ) = standardize(
         X,
-        X[-1:],
+        X[-1:]
     )
 
-    weights, bias = fit_logistic(
+    weights, bias = fit_model(
         X_scaled,
         y,
         epochs=900,
         learning_rate=0.03,
-        regularization=0.10,
+        regularization=0.10
     )
 
     return {
         "weights": weights,
         "bias": bias,
         "means": means,
-        "stds": stds,
+        "deviations": deviations
     }
 
 
-def scale_features(features, model):
+def scale_current(
+    features,
+    model
+):
 
     result = []
 
-    for i, value in enumerate(features):
+    for i, value in enumerate(
+        features
+    ):
 
-        s = model["stds"][i]
+        deviation = (
+            model["deviations"][i]
+        )
 
-        if s == 0:
-            s = 1.0
+        if deviation == 0:
+            deviation = 1
 
         result.append(
-            (value - model["means"][i]) / s
+            (
+                value
+                - model["means"][i]
+            )
+            / deviation
         )
 
     return result
@@ -897,133 +1199,156 @@ def scale_features(features, model):
 # MODEL QUALITY
 # ============================================================
 
-def model_quality(backtest):
+def quality_score(bt):
 
-    score = 50.0
-
-    accuracy = backtest["accuracy"]
-    win_rate = backtest["win_rate"]
-    profit_factor = backtest["profit_factor"]
-    drawdown = abs(backtest["max_drawdown"])
+    score = 50
 
     score += (
-        accuracy - 0.50
+        bt["accuracy"]
+        - 0.50
     ) * 100
 
     score += (
-        win_rate - 0.50
+        bt["win_rate"]
+        - 0.50
     ) * 70
 
-    if profit_factor > 1:
+    if bt["profit_factor"] > 1:
+
         score += (
-            profit_factor - 1
+            bt["profit_factor"]
+            - 1
         ) * 12
 
-    score -= drawdown * 40
+    score -= (
+        abs(bt["drawdown"])
+        * 40
+    )
 
     return clamp(
         score,
         0,
-        100,
+        100
     )
 
 
 # ============================================================
-# CURRENT SIGNAL
+# SIGNAL
 # ============================================================
 
-def generate_signal(
+def analyze(
     candles,
     dataset,
     model,
-    backtest,
+    bt
 ):
 
-    features = build_features(candles)
+    features = build_features(
+        candles
+    )
 
-    if features is None or model is None:
+    if features is None:
         return None
 
-    scaled = scale_features(
+    scaled = scale_current(
         features,
-        model,
+        model
     )
 
-    probability = predict_probability(
+    probability = predict(
         scaled,
         model["weights"],
-        model["bias"],
+        model["bias"]
     )
 
-    quality = model_quality(
-        backtest
+    quality = quality_score(
+        bt
     )
 
-    # Model confidence combines:
-    # probability distance from 50%
-    # and historical robustness.
-    directional_strength = (
-        abs(probability - 0.50) * 200
+    strength = (
+        abs(
+            probability
+            - 0.50
+        )
+        * 200
     )
 
     confidence = (
-        directional_strength * 0.60
+        strength * 0.60
         + quality * 0.40
     )
 
-    # Weak model = no trade.
     if quality < 45:
+
         signal = "NO TRADE"
-    elif probability >= 0.62:
+
+    elif probability >= LONG_THRESHOLD:
+
         signal = "LONG"
-    elif probability <= 0.38:
+
+    elif probability <= SHORT_THRESHOLD:
+
         signal = "SHORT"
+
     else:
+
         signal = "WAIT"
 
-    current_price = candles[-1]["close"]
+    price = candles[-1]["close"]
 
     current_atr = atr(
         candles,
-        14,
+        14
     )
 
     if current_atr is None:
-        current_atr = current_price * 0.01
+
+        current_atr = (
+            price * 0.01
+        )
 
     if signal == "LONG":
 
-        entry = current_price
-        stop = entry - (
-            current_atr * 1.5
+        stop = (
+            price
+            - current_atr
+            * STOP_ATR
         )
 
-        tp1 = entry + (
-            current_atr * 1.5
+        tp1 = (
+            price
+            + current_atr
+            * TP1_ATR
         )
 
-        tp2 = entry + (
-            current_atr * 2.5
+        tp2 = (
+            price
+            + current_atr
+            * TP2_ATR
         )
 
     elif signal == "SHORT":
 
-        entry = current_price
-        stop = entry + (
-            current_atr * 1.5
+        stop = (
+            price
+            + current_atr
+            * STOP_ATR
         )
 
-        tp1 = entry - (
-            current_atr * 1.5
+        tp1 = (
+            price
+            - current_atr
+            * TP1_ATR
         )
 
-        tp2 = entry - (
-            current_atr * 2.5
+        tp2 = (
+            price
+            - current_atr
+            * TP2_ATR
         )
 
     else:
 
-        entry = current_price
         stop = None
         tp1 = None
         tp2 = None
@@ -1033,45 +1358,188 @@ def generate_signal(
         "probability": probability,
         "confidence": confidence,
         "quality": quality,
-        "entry": entry,
+        "price": price,
+        "atr": current_atr,
         "stop": stop,
         "tp1": tp1,
-        "tp2": tp2,
-        "features": features,
+        "tp2": tp2
     }
 
 
 # ============================================================
-# RANKING
+# POSITION MANAGEMENT
 # ============================================================
 
-def opportunity_score(result):
+def manage_position(
+    position,
+    current_analysis,
+    current_price
+):
 
-    if result is None:
-        return -999
+    direction = position["direction"]
 
-    signal = result["signal"]
+    entry = position["entry"]
 
-    if signal == "NO TRADE":
-        return -100
+    stop = position["stop"]
 
-    probability = result["probability"]
+    tp1 = position["tp1"]
 
-    directional_probability = max(
-        probability,
-        1.0 - probability,
+    tp2 = position["tp2"]
+
+    probability = (
+        current_analysis["probability"]
     )
 
-    score = (
-        directional_probability * 65
-        + result["quality"] * 0.25
-        + result["confidence"] * 0.10
+    signal = (
+        current_analysis["signal"]
     )
 
-    if signal == "WAIT":
-        score *= 0.70
+    # --------------------------------------------------------
+    # LONG
+    # --------------------------------------------------------
 
-    return score
+    if direction == "LONG":
+
+        if current_price <= stop:
+
+            return {
+                "action": "EXIT",
+                "reason": "STOP LOSS",
+                "new_stop": stop
+            }
+
+        if current_price >= tp2:
+
+            return {
+                "action": "EXIT",
+                "reason": "TAKE PROFIT 2",
+                "new_stop": stop
+            }
+
+        if (
+            probability <= 0.38
+            or signal == "SHORT"
+        ):
+
+            return {
+                "action": "EXIT",
+                "reason": "INVERSIONE CONFERMATA",
+                "new_stop": stop
+            }
+
+        if probability < 0.48:
+
+            return {
+                "action": "WARNING",
+                "reason": "LONG INDEBOLITO",
+                "new_stop": stop
+            }
+
+        # Trailing stop dopo TP1
+        if current_price >= tp1:
+
+            atr_value = (
+                current_analysis["atr"]
+            )
+
+            trailing_stop = (
+                current_price
+                - atr_value * 1.0
+            )
+
+            new_stop = max(
+                stop,
+                entry,
+                trailing_stop
+            )
+
+            return {
+                "action": "HOLD",
+                "reason": "TP1 RAGGIUNTO - TRAILING STOP",
+                "new_stop": new_stop
+            }
+
+        return {
+            "action": "HOLD",
+            "reason": "TREND LONG ANCORA VALIDO",
+            "new_stop": stop
+        }
+
+    # --------------------------------------------------------
+    # SHORT
+    # --------------------------------------------------------
+
+    if direction == "SHORT":
+
+        if current_price >= stop:
+
+            return {
+                "action": "EXIT",
+                "reason": "STOP LOSS",
+                "new_stop": stop
+            }
+
+        if current_price <= tp2:
+
+            return {
+                "action": "EXIT",
+                "reason": "TAKE PROFIT 2",
+                "new_stop": stop
+            }
+
+        if (
+            probability >= 0.62
+            or signal == "LONG"
+        ):
+
+            return {
+                "action": "EXIT",
+                "reason": "INVERSIONE CONFERMATA",
+                "new_stop": stop
+            }
+
+        if probability > 0.52:
+
+            return {
+                "action": "WARNING",
+                "reason": "SHORT INDEBOLITO",
+                "new_stop": stop
+            }
+
+        if current_price <= tp1:
+
+            atr_value = (
+                current_analysis["atr"]
+            )
+
+            trailing_stop = (
+                current_price
+                + atr_value
+            )
+
+            new_stop = min(
+                stop,
+                entry,
+                trailing_stop
+            )
+
+            return {
+                "action": "HOLD",
+                "reason": "TP1 RAGGIUNTO - TRAILING STOP",
+                "new_stop": new_stop
+            }
+
+        return {
+            "action": "HOLD",
+            "reason": "TREND SHORT ANCORA VALIDO",
+            "new_stop": stop
+        }
+
+    return {
+        "action": "EXIT",
+        "reason": "DIREZIONE NON RICONOSCIUTA",
+        "new_stop": stop
+    }
 
 
 # ============================================================
@@ -1082,31 +1550,36 @@ def main():
 
     print()
     print("=" * 70)
-    print("🧠 COMMODITY TRADING BOT v4")
-    print("ADAPTIVE QUANTITATIVE MODEL")
+    print("🧠 COMMODITY TRADING BOT v4.1")
+    print("QUANT MODEL + POSITION MANAGEMENT")
     print("=" * 70)
     print()
 
-    now = datetime.now(
-        timezone.utc
-    )
+    position = load_position()
 
-    print(
-        f"🕐 Aggiornamento UTC: "
-        f"{now.strftime('%Y-%m-%d %H:%M:%S')}"
-    )
+    if position:
 
-    print(
-        "📚 Modello: dati storici + "
-        "walk-forward validation"
-    )
+        print("📌 POSIZIONE MEMORIZZATA")
+        print(
+            f"Materia prima: "
+            f"{position['name']}"
+        )
+        print(
+            f"Direzione: "
+            f"{position['direction']}"
+        )
+        print(
+            f"Entrata: "
+            f"{position['entry']}"
+        )
+        print()
 
-    print(
-        "🎯 Orizzonte previsione: "
-        f"{HORIZON} giorni"
-    )
+    else:
 
-    print()
+        print(
+            "📭 Nessuna posizione aperta."
+        )
+        print()
 
     results = []
 
@@ -1125,8 +1598,7 @@ def main():
             if len(candles) < 500:
 
                 print(
-                    f"⚠️ {name}: "
-                    "dati insufficienti"
+                    "   ⚠️ Dati insufficienti"
                 )
 
                 continue
@@ -1138,117 +1610,250 @@ def main():
             if len(dataset) < 300:
 
                 print(
-                    f"⚠️ {name}: "
-                    "dataset insufficiente"
+                    "   ⚠️ Dataset insufficiente"
                 )
 
                 continue
 
-            backtest = walk_forward_backtest(
+            bt = backtest(
                 dataset
             )
 
-            model = train_final_model(
+            model = train_final(
                 dataset
             )
 
-            signal = generate_signal(
+            if model is None:
+                continue
+
+            analysis = analyze(
                 candles,
                 dataset,
                 model,
-                backtest,
+                bt
             )
 
-            if signal is None:
+            if analysis is None:
                 continue
 
-            item = {
+            results.append({
                 "name": name,
                 "symbol": symbol,
                 "candles": candles,
-                "dataset": dataset,
-                "backtest": backtest,
-                "signal": signal,
-            }
-
-            item["score"] = (
-                opportunity_score(signal)
-            )
-
-            results.append(item)
+                "analysis": analysis,
+                "backtest": bt
+            })
 
             print(
-                f"   → {signal['signal']} | "
-                f"Probabilità: "
-                f"{signal['probability'] * 100:.1f}% | "
-                f"Qualità modello: "
-                f"{signal['quality']:.1f}/100"
+                f"   → {analysis['signal']} | "
+                f"{analysis['probability'] * 100:.1f}%"
             )
 
         except Exception as error:
 
             print(
-                f"❌ Errore {name}: {error}"
+                f"   ❌ {error}"
             )
 
     if not results:
 
         raise RuntimeError(
-            "Nessuna materia prima analizzata correttamente."
+            "Nessuna materia prima analizzata."
         )
 
-    results.sort(
-        key=lambda x: x["score"],
-        reverse=True,
-    )
-
     # ========================================================
-    # REPORT
+    # SE C'È UNA POSIZIONE
     # ========================================================
 
-    print()
-    print("=" * 70)
-    print("📊 RANKING DELLE MATERIE PRIME")
-    print("=" * 70)
+    if position:
 
-    for index, item in enumerate(
-        results,
-        start=1,
-    ):
+        matching = [
+            x for x in results
+            if x["name"]
+            == position["name"]
+        ]
 
-        signal = item["signal"]
-        backtest = item["backtest"]
+        if matching:
+
+            current = matching[0]
+
+            current_price = (
+                current["analysis"]["price"]
+            )
+
+            management = manage_position(
+                position,
+                current["analysis"],
+                current_price
+            )
+
+            print()
+            print("=" * 70)
+            print("📌 GESTIONE POSIZIONE")
+            print("=" * 70)
+
+            print(
+                f"Materia prima: "
+                f"{position['name']}"
+            )
+
+            print(
+                f"Direzione: "
+                f"{position['direction']}"
+            )
+
+            print(
+                f"Entrata: "
+                f"{position['entry']:.4f}"
+            )
+
+            print(
+                f"Prezzo attuale: "
+                f"{current_price:.4f}"
+            )
+
+            print(
+                f"Probabilità modello: "
+                f"{current['analysis']['probability'] * 100:.1f}%"
+            )
+
+            print()
+
+            action = management["action"]
+
+            if action == "EXIT":
+
+                print(
+                    "🚨 USCITA"
+                )
+
+                print(
+                    f"Motivo: "
+                    f"{management['reason']}"
+                )
+
+                clear_position()
+
+                print(
+                    "🗑️ Posizione rimossa dalla memoria."
+                )
+
+            elif action == "WARNING":
+
+                print(
+                    "🟠 ATTENZIONE"
+                )
+
+                print(
+                    f"Motivo: "
+                    f"{management['reason']}"
+                )
+
+                position["stop"] = (
+                    management["new_stop"]
+                )
+
+                save_position(
+                    position
+                )
+
+            else:
+
+                print(
+                    "🟢 MANTIENI"
+                )
+
+                print(
+                    f"Motivo: "
+                    f"{management['reason']}"
+                )
+
+                if (
+                    management["new_stop"]
+                    != position["stop"]
+                ):
+
+                    position["stop"] = (
+                        management["new_stop"]
+                    )
+
+                    print(
+                        f"🔒 Nuovo trailing stop: "
+                        f"{position['stop']:.4f}"
+                    )
+
+                    save_position(
+                        position
+                    )
+
+        else:
+
+            print(
+                "⚠️ Impossibile aggiornare "
+                "la posizione."
+            )
+
+        return
+
+    # ========================================================
+    # NUOVA OPERAZIONE
+    # ========================================================
+
+    ranked = []
+
+    for item in results:
 
         probability = (
-            signal["probability"] * 100
+            item["analysis"]["probability"]
         )
 
-        if signal["signal"] == "LONG":
-            icon = "🟢"
-        elif signal["signal"] == "SHORT":
-            icon = "🔴"
-        elif signal["signal"] == "WAIT":
-            icon = "🟡"
+        quality = (
+            item["analysis"]["quality"]
+        )
+
+        confidence = (
+            item["analysis"]["confidence"]
+        )
+
+        if (
+            probability >= 0.50
+        ):
+
+            direction_strength = (
+                probability
+            )
+
         else:
-            icon = "⚪"
 
-        print(
-            f"{index}. {icon} "
-            f"{item['name']:<18} "
-            f"{signal['signal']:<9} "
-            f"Prob {probability:5.1f}% | "
-            f"Conf {signal['confidence']:5.1f} | "
-            f"BT {backtest['win_rate'] * 100:5.1f}%"
+            direction_strength = (
+                1 - probability
+            )
+
+        score = (
+            direction_strength * 60
+            + quality * 0.25
+            + confidence * 0.15
         )
 
-    # ========================================================
-    # BEST OPPORTUNITY
-    # ========================================================
+        if item["analysis"]["signal"] == "WAIT":
+            score *= 0.70
 
-    best = results[0]
+        if item["analysis"]["signal"] == "NO TRADE":
+            score = -1
 
-    signal = best["signal"]
-    backtest = best["backtest"]
+        item["score"] = score
+
+        ranked.append(item)
+
+    ranked.sort(
+        key=lambda x: x["score"],
+        reverse=True
+    )
+
+    best = ranked[0]
+
+    analysis = best["analysis"]
+    bt = best["backtest"]
 
     print()
     print("=" * 70)
@@ -1256,90 +1861,161 @@ def main():
     print("=" * 70)
 
     print(
-        f"Materia prima: {best['name']}"
+        f"Materia prima: "
+        f"{best['name']}"
     )
 
     print(
-        f"Simbolo: {best['symbol']}"
+        f"Segnale: "
+        f"{analysis['signal']}"
     )
 
     print(
-        f"Segnale: {signal['signal']}"
+        f"Probabilità: "
+        f"{analysis['probability'] * 100:.1f}%"
     )
 
     print(
-        f"Probabilità LONG: "
-        f"{signal['probability'] * 100:.1f}%"
-    )
-
-    print(
-        f"Confidenza modello: "
-        f"{signal['confidence']:.1f}/100"
+        f"Confidenza: "
+        f"{analysis['confidence']:.1f}/100"
     )
 
     print(
         f"Qualità modello: "
-        f"{signal['quality']:.1f}/100"
+        f"{analysis['quality']:.1f}/100"
     )
 
     print()
 
-    print("📈 BACKTEST OUT-OF-SAMPLE")
-
     print(
-        f"Accuratezza: "
-        f"{backtest['accuracy'] * 100:.1f}%"
-    )
-
-    print(
-        f"Win rate: "
-        f"{backtest['win_rate'] * 100:.1f}%"
+        f"Win rate backtest: "
+        f"{bt['win_rate'] * 100:.1f}%"
     )
 
     print(
         f"Profit factor: "
-        f"{backtest['profit_factor']:.2f}"
+        f"{bt['profit_factor']:.2f}"
     )
 
     print(
         f"Max drawdown: "
-        f"{backtest['max_drawdown'] * 100:.2f}%"
+        f"{bt['drawdown'] * 100:.2f}%"
     )
 
-    print(
-        f"Trade simulati: "
-        f"{backtest['trades']}"
-    )
+    # ========================================================
+    # APRI POSIZIONE SOLO CON SEGNALE FORTE
+    # ========================================================
 
-    print()
+    if analysis["signal"] in (
+        "LONG",
+        "SHORT"
+    ):
 
-    print("💰 LIVELLI")
+        direction = (
+            analysis["signal"]
+        )
 
-    print(
-        f"Prezzo: "
-        f"{signal['entry']:.4f}"
-    )
+        position = {
+            "name": best["name"],
+            "symbol": best["symbol"],
+            "direction": direction,
+            "entry": analysis["price"],
+            "stop": analysis["stop"],
+            "tp1": analysis["tp1"],
+            "tp2": analysis["tp2"],
+            "opened_at": datetime.now(
+                timezone.utc
+            ).isoformat()
+        }
 
-    if signal["stop"] is not None:
+        save_position(
+            position
+        )
+
+        print()
+        print("=" * 70)
+        print("🚨 NUOVA POSIZIONE")
+        print("=" * 70)
+
+        print(
+            f"Direzione: {direction}"
+        )
+
+        print(
+            f"Entrata: "
+            f"{analysis['price']:.4f}"
+        )
 
         print(
             f"Stop Loss: "
-            f"{signal['stop']:.4f}"
+            f"{analysis['stop']:.4f}"
         )
 
         print(
             f"Take Profit 1: "
-            f"{signal['tp1']:.4f}"
+            f"{analysis['tp1']:.4f}"
         )
 
         print(
             f"Take Profit 2: "
-            f"{signal['tp2']:.4f}"
+            f"{analysis['tp2']:.4f}"
+        )
+
+        print()
+        print(
+            "💾 Posizione salvata."
+        )
+
+    else:
+
+        print()
+        print(
+            "🟡 NESSUNA ENTRATA."
+        )
+
+        print(
+            "Il modello non vede "
+            "un vantaggio sufficiente."
+        )
+
+    # ========================================================
+    # RANKING
+    # ========================================================
+
+    print()
+    print("=" * 70)
+    print("📊 RANKING")
+    print("=" * 70)
+
+    for i, item in enumerate(
+        ranked,
+        1
+    ):
+
+        a = item["analysis"]
+
+        if a["signal"] == "LONG":
+            icon = "🟢"
+        elif a["signal"] == "SHORT":
+            icon = "🔴"
+        elif a["signal"] == "WAIT":
+            icon = "🟡"
+        else:
+            icon = "⚪"
+
+        print(
+            f"{i}. {icon} "
+            f"{item['name']} | "
+            f"{a['signal']} | "
+            f"{a['probability'] * 100:.1f}%"
         )
 
     print()
     print("=" * 70)
-    print("⚠️ Il segnale è un'analisi quantitativa, non una garanzia.")
+    print(
+        "⚠️ Analisi quantitativa, "
+        "non garanzia di profitto."
+    )
     print("=" * 70)
 
 
