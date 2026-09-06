@@ -1243,4 +1243,4 @@ def analyze_commodity(
         "SHORT"
     ):
 
-        grade = "🟡 IN FOR
+        grade = "🟡 IN FOR"
