@@ -7,43 +7,40 @@ import requests
 
 
 # ============================================================
-# COMMODITIES BOT v6.2
-# QUANT + MULTI-TIMEFRAME + NEWS + USD
-# + POLITICAL IMPACT + RANKING + POSITION MANAGEMENT
-# + TELEGRAM VERIFICATO
+# COMMODITY TRADING BOT v5.0
+# QUANT MODEL + MULTI-TIMEFRAME + NEWS + USD + SEASONALITY
+# + RANKING + POSITION MANAGEMENT
 #
-# ANALITICO / SIMULATO
-# NON ESEGUE ORDINI REALI
-# ============================================================
-
-
-# ============================================================
-# CONFIGURAZIONE
+# Analitico/simulato: NON esegue ordini reali.
 # ============================================================
 
 API_KEY = os.getenv("TWELVE_DATA_API_KEY")
 NEWS_API_KEY = os.getenv("NEWS_API_KEY")
-
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "8002086130")
 
+if not API_KEY:
+    raise RuntimeError("TWELVE_DATA_API_KEY non configurata nei GitHub Secrets.")
 
 BASE_URL = "https://api.twelvedata.com/time_series"
 NEWS_URL = "https://newsapi.org/v2/everything"
 
 POSITION_FILE = "position.json"
 
-
-LONG_THRESHOLD = 0.62
-SHORT_THRESHOLD = 0.38
-
-MIN_SCORE = 60
-MIN_CONFIDENCE = 55
+HISTORY_SIZE = 4000
+HORIZON = 5
 
 STOP_ATR = 1.5
 TP1_ATR = 1.5
 TP2_ATR = 2.5
 
+LONG_THRESHOLD = 0.62
+SHORT_THRESHOLD = 0.38
+
+MIN_QUALITY = 45
+MIN_CONFIDENCE = 58
+MIN_SCORE = 65
+MIN_RANK_MARGIN = 5
 
 COMMODITIES = {
     "Oro": "XAU/USD",
@@ -54,9 +51,8 @@ COMMODITIES = {
     "Rame": "COPPER/USD",
     "Grano": "WHEAT/USD",
     "Mais": "CORN/USD",
-    "Caffè": "COFFEE/USD",
+    "CaffÃ¨": "COFFEE/USD",
 }
-
 
 NEWS_TERMS = {
     "Oro": "gold OR bullion OR XAU",
@@ -67,51 +63,45 @@ NEWS_TERMS = {
     "Rame": "copper",
     "Grano": "wheat OR grain",
     "Mais": "corn OR maize",
-    "Caffè": "coffee",
+    "CaffÃ¨": "coffee",
 }
 
-
-# ============================================================
-# CONTROLLO CONFIGURAZIONE
-# ============================================================
-
-if not API_KEY:
-    raise RuntimeError(
-        "TWELVE_DATA_API_KEY non configurata nei GitHub Secrets."
-    )
-
-if not TELEGRAM_BOT_TOKEN:
-    raise RuntimeError(
-        "TELEGRAM_BOT_TOKEN non configurata nei GitHub Secrets."
-    )
-
-if not TELEGRAM_CHAT_ID:
-    raise RuntimeError(
-        "TELEGRAM_CHAT_ID non configurato nei GitHub Secrets."
-    )
+FEATURE_NAMES = [
+    "ret_1", "ret_5", "ret_20", "ret_60",
+    "trend", "rsi", "macd", "atr_pct",
+    "volatility", "pressure", "breakout",
+    "seasonality",
+]
 
 
 # ============================================================
 # UTILITY
 # ============================================================
 
-def safe_float(value, default=None):
+def safe_float(value):
     try:
         return float(value)
     except (TypeError, ValueError):
-        return default
+        return None
 
 
 def mean(values):
-    values = [
-        x for x in values
-        if x is not None and math.isfinite(x)
-    ]
+    values = [x for x in values if x is not None and math.isfinite(x)]
+    return sum(values) / len(values) if values else 0.0
 
-    if not values:
-        return 0.0
 
-    return sum(values) / len(values)
+def std(values):
+    values = [x for x in values if x is not None and math.isfinite(x)]
+    if len(values) < 2:
+        return 1.0
+    m = mean(values)
+    variance = sum((x - m) ** 2 for x in values) / (len(values) - 1)
+    return max(math.sqrt(variance), 1e-8)
+
+
+def sigmoid(x):
+    x = max(-30, min(30, x))
+    return 1 / (1 + math.exp(-x))
 
 
 def clamp(value, low, high):
@@ -122,30 +112,95 @@ def pct(value):
     return f"{value * 100:.1f}%"
 
 
-def fmt(value, decimals=2):
-    if value is None:
-        return "N/D"
+# ============================================================
+# POSITION MEMORY
+# ============================================================
 
-    return f"{value:.{decimals}f}"
+def load_position():
+    if not os.path.exists(POSITION_FILE):
+        return None
+    try:
+        with open(POSITION_FILE, "r", encoding="utf-8") as file:
+            data = json.load(file)
+        return data or None
+    except Exception as error:
+        print(f"â ï¸ Impossibile leggere {POSITION_FILE}: {error}")
+        return None
+
+
+def save_position(position):
+    with open(POSITION_FILE, "w", encoding="utf-8") as file:
+        json.dump(position, file, indent=2, ensure_ascii=False)
+
+
+def clear_position():
+    if os.path.exists(POSITION_FILE):
+        os.remove(POSITION_FILE)
 
 
 # ============================================================
-# INDICATORI
+# TWELVE DATA
 # ============================================================
+
+def get_data(symbol, interval="1day", outputsize=4000):
+    params = {
+        "symbol": symbol,
+        "interval": interval,
+        "outputsize": outputsize,
+        "apikey": API_KEY,
+        "order": "ASC",
+    }
+
+    response = requests.get(BASE_URL, params=params, timeout=30)
+    response.raise_for_status()
+    data = response.json()
+
+    if data.get("status") == "error":
+        raise RuntimeError(data.get("message", "Errore Twelve Data"))
+
+    candles = []
+
+    for item in data.get("values", []):
+        close = safe_float(item.get("close"))
+        if close is None:
+            continue
+
+        candles.append({
+            "datetime": item.get("datetime"),
+            "open": safe_float(item.get("open")),
+            "high": safe_float(item.get("high")),
+            "low": safe_float(item.get("low")),
+            "close": close,
+            "volume": safe_float(item.get("volume")),
+        })
+
+    candles.sort(key=lambda x: x["datetime"] or "")
+    return candles
+
+
+def get_daily_data(symbol):
+    return get_data(symbol, "1day", HISTORY_SIZE)
+
+
+# ============================================================
+# INDICATORS
+# ============================================================
+
+def sma(values, period):
+    if len(values) < period:
+        return None
+    return mean(values[-period:])
+
 
 def ema(values, period):
     if len(values) < period:
         return None
 
     multiplier = 2 / (period + 1)
+    result = mean(values[:period])
 
-    result = sum(values[:period]) / period
-
-    for price in values[period:]:
-        result = (
-            (price - result) * multiplier
-            + result
-        )
+    for value in values[period:]:
+        result = (value - result) * multiplier + result
 
     return result
 
@@ -159,201 +214,581 @@ def rsi(values, period=14):
 
     for i in range(1, len(values)):
         change = values[i] - values[i - 1]
-
         gains.append(max(change, 0))
         losses.append(max(-change, 0))
 
-    avg_gain = sum(gains[:period]) / period
-    avg_loss = sum(losses[:period]) / period
-
-    for i in range(period, len(gains)):
-        avg_gain = (
-            (avg_gain * (period - 1))
-            + gains[i]
-        ) / period
-
-        avg_loss = (
-            (avg_loss * (period - 1))
-            + losses[i]
-        ) / period
+    avg_gain = mean(gains[-period:])
+    avg_loss = mean(losses[-period:])
 
     if avg_loss == 0:
         return 100.0
 
-    return 100 - (
-        100 / (1 + avg_gain / avg_loss)
-    )
+    rs = avg_gain / avg_loss
+    return 100 - (100 / (1 + rs))
 
 
 def atr(candles, period=14):
     if len(candles) < period + 1:
-        return 0.0
+        return None
 
-    trs = []
+    ranges = []
 
     for i in range(1, len(candles)):
         high = candles[i]["high"]
         low = candles[i]["low"]
-        previous_close = candles[i - 1]["close"]
+        previous = candles[i - 1]["close"]
 
         if high is None or low is None:
             continue
 
-        tr = max(
+        ranges.append(max(
             high - low,
-            abs(high - previous_close),
-            abs(low - previous_close),
-        )
+            abs(high - previous),
+            abs(low - previous),
+        ))
 
-        trs.append(tr)
+    return mean(ranges[-period:]) if len(ranges) >= period else None
 
-    if not trs:
+
+def macd(values):
+    if len(values) < 35:
         return 0.0
 
-    return sum(trs[-period:]) / min(
-        period,
-        len(trs)
-    )
+    fast = ema(values, 12)
+    slow = ema(values, 26)
+
+    if fast is None or slow is None:
+        return 0.0
+
+    return fast - slow
 
 
-# ============================================================
-# TWELVE DATA
-# ============================================================
+def return_pct(values, period):
+    if len(values) <= period:
+        return 0.0
 
-def get_data(symbol, interval, outputsize=250):
-    params = {
-        "symbol": symbol,
-        "interval": interval,
-        "outputsize": outputsize,
-        "apikey": API_KEY,
-        "order": "ASC",
-    }
+    old = values[-period - 1]
+    current = values[-1]
 
-    response = requests.get(
-        BASE_URL,
-        params=params,
-        timeout=30,
-    )
+    if old == 0:
+        return 0.0
 
-    response.raise_for_status()
+    return current / old - 1
 
-    data = response.json()
 
-    if data.get("status") == "error":
-        raise RuntimeError(
-            data.get(
-                "message",
-                f"Errore Twelve Data per {symbol}"
-            )
-        )
+def volatility(values, period=20):
+    if len(values) < period + 1:
+        return 0.0
 
-    values = data.get("values", [])
+    returns = []
+    start = len(values) - period
 
-    candles = []
+    for i in range(start, len(values)):
+        previous = values[i - 1]
+        if previous:
+            returns.append(values[i] / previous - 1)
 
-    for item in values:
-        close = safe_float(item.get("close"))
+    return std(returns)
 
-        if close is None:
+
+def pressure(candles, period=10):
+    scores = []
+
+    for candle in candles[-period:]:
+        high = candle["high"]
+        low = candle["low"]
+        close = candle["close"]
+        open_price = candle["open"]
+
+        if None in (high, low, close, open_price) or high == low:
             continue
 
-        candles.append(
-            {
-                "datetime": item.get("datetime"),
-                "open": safe_float(item.get("open")),
-                "high": safe_float(item.get("high")),
-                "low": safe_float(item.get("low")),
-                "close": close,
-                "volume": safe_float(item.get("volume")),
-            }
-        )
+        scores.append((close - open_price) / (high - low))
 
-    candles.sort(
-        key=lambda x: x.get("datetime") or ""
-    )
+    return mean(scores)
 
-    # Evita di usare l'ultima candela ancora in formazione.
-    if len(candles) > 2:
-        candles = candles[:-1]
 
-    return candles
+def breakout(values, period=20):
+    if len(values) < period + 1:
+        return 0.0
+
+    current = values[-1]
+    previous = values[-period - 1:-1]
+    highest = max(previous)
+    lowest = min(previous)
+    distance = highest - lowest
+
+    if distance == 0:
+        return 0.0
+
+    return ((current - lowest) / distance) * 2 - 1
 
 
 # ============================================================
-# ANALISI TIMEFRAME
+# STAGIONALITÃ / RIPETIZIONE NEGLI ANNI
 # ============================================================
 
-def analyze_timeframe(candles):
-    if len(candles) < 60:
+def historical_repetition(candles):
+    """
+    Cerca la ricorrenza del movimento a 5 giorni nello stesso
+    periodo dell'anno. Usa tutta la storia disponibile.
+    Restituisce direzione, frequenza, rendimento medio e campioni.
+    """
+    if len(candles) < 300:
         return {
-            "direction": "NONE",
-            "score": 0,
-            "price": None,
-            "ema20": None,
-            "ema50": None,
-            "rsi": 50.0,
-            "atr": 0.0,
+            "score": 0.0,
+            "frequency": 0.0,
+            "avg_return": 0.0,
+            "samples": 0,
+            "years": 0,
+            "direction": "NEUTRALE",
         }
 
-    closes = [
-        c["close"]
-        for c in candles
-    ]
+    try:
+        current_date = datetime.fromisoformat(
+            candles[-1]["datetime"].replace("Z", "+00:00")
+        )
+    except Exception:
+        return {
+            "score": 0.0,
+            "frequency": 0.0,
+            "avg_return": 0.0,
+            "samples": 0,
+            "years": 0,
+            "direction": "NEUTRALE",
+        }
 
-    price = closes[-1]
+    # Finestra di circa 45 giorni attorno alla data corrente,
+    # cosÃ¬ confrontiamo un periodo stagionale e non solo il mese.
+    target_day = current_date.timetuple().tm_yday
+    samples = []
 
-    ema20 = ema(closes, 20)
-    ema50 = ema(closes, 50)
+    for i in range(100, len(candles) - HORIZON):
+        try:
+            d = datetime.fromisoformat(
+                candles[i]["datetime"].replace("Z", "+00:00")
+            )
+            day = d.timetuple().tm_yday
+        except Exception:
+            continue
 
-    current_rsi = rsi(closes, 14)
-    current_atr = atr(candles, 14)
+        distance = abs(day - target_day)
+        distance = min(distance, 366 - distance)
 
-    score = 0
+        if distance <= 22:
+            current = candles[i]["close"]
+            future = candles[i + HORIZON]["close"]
 
-    if ema20 is not None and ema50 is not None:
+            if current:
+                samples.append((future / current) - 1)
 
-        if ema20 > ema50:
-            score += 2
-        elif ema20 < ema50:
-            score -= 2
+    if len(samples) < 5:
+        return {
+            "score": 0.0,
+            "frequency": 0.0,
+            "avg_return": 0.0,
+            "samples": len(samples),
+            "years": 0,
+            "direction": "NEUTRALE",
+        }
 
-        if price > ema20:
-            score += 1
-        elif price < ema20:
-            score -= 1
+    positive = sum(1 for x in samples if x > 0)
+    negative = sum(1 for x in samples if x < 0)
+    frequency = max(positive, negative) / len(samples)
+    avg_return = mean(samples)
 
-    if current_rsi > 55:
-        score += 1
-
-    elif current_rsi < 45:
-        score -= 1
-
-    if score >= 2:
+    if positive > negative:
         direction = "LONG"
-
-    elif score <= -2:
+        raw_score = frequency
+    elif negative > positive:
         direction = "SHORT"
-
+        raw_score = -frequency
     else:
-        direction = "NONE"
+        direction = "NEUTRALE"
+        raw_score = 0.0
+
+    # PiÃ¹ la media storica Ã¨ consistente, piÃ¹ il punteggio pesa.
+    magnitude_factor = clamp(abs(avg_return) / 0.01, 0.0, 1.0)
+    score = raw_score * magnitude_factor
+
+    years = len({
+        candles[i]["datetime"][:4]
+        for i in range(100, len(candles) - HORIZON)
+        if candles[i]["datetime"]
+    })
 
     return {
-        "direction": direction,
         "score": score,
-        "price": price,
-        "ema20": ema20,
-        "ema50": ema50,
-        "rsi": current_rsi,
-        "atr": current_atr,
+        "frequency": frequency,
+        "avg_return": avg_return,
+        "samples": len(samples),
+        "years": years,
+        "direction": direction,
     }
+
+
+def seasonality(candles):
+    return historical_repetition(candles)["score"]
+
+
+# ============================================================
+# FEATURES
+# ============================================================
+
+def build_features(candles):
+    closes = [c["close"] for c in candles]
+
+    if len(closes) < 100:
+        return None
+
+    current = closes[-1]
+
+    sma20 = sma(closes, 20) or current
+    sma50 = sma(closes, 50) or current
+
+    trend = (sma20 / sma50 - 1) if sma50 else 0.0
+
+    current_atr = atr(candles, 14)
+    atr_pct = current_atr / current if current_atr and current else 0.0
+
+    current_macd = macd(closes)
+    macd_normalized = current_macd / current if current else 0.0
+
+    return [
+        return_pct(closes, 1),
+        return_pct(closes, 5),
+        return_pct(closes, 20),
+        return_pct(closes, 60),
+        trend,
+        (rsi(closes, 14) - 50) / 50,
+        macd_normalized,
+        atr_pct,
+        volatility(closes, 20),
+        pressure(candles, 10),
+        breakout(closes, 20),
+        seasonality(candles),
+    ]
+
+
+# ============================================================
+# DATASET
+# ============================================================
+
+def build_dataset(candles):
+    dataset = []
+    minimum_history = 100
+
+    for i in range(minimum_history, len(candles) - HORIZON):
+        history = candles[:i + 1]
+        features = build_features(history)
+
+        if features is None:
+            continue
+
+        current = candles[i]["close"]
+        future = candles[i + HORIZON]["close"]
+
+        if not current:
+            continue
+
+        future_return = future / current - 1
+
+        if abs(future_return) < 0.002:
+            continue
+
+        dataset.append({
+            "x": features,
+            "y": 1 if future_return > 0 else 0,
+            "return": future_return,
+        })
+
+    return dataset
+
+
+# ============================================================
+# STANDARDIZATION
+# ============================================================
+
+def standardize(train_x, other_x):
+    if not train_x:
+        return [], [], [], []
+
+    count = len(train_x[0])
+    means = []
+    deviations = []
+
+    for j in range(count):
+        values = [row[j] for row in train_x]
+        means.append(mean(values))
+        deviations.append(std(values))
+
+    def transform(row):
+        return [
+            (row[j] - means[j]) / deviations[j]
+            for j in range(count)
+        ]
+
+    return (
+        [transform(row) for row in train_x],
+        [transform(row) for row in other_x],
+        means,
+        deviations,
+    )
+
+
+# ============================================================
+# LOGISTIC MODEL
+# ============================================================
+
+def fit_model(X, y, epochs=700, learning_rate=0.035, regularization=0.08):
+    if not X:
+        return [], 0.0
+
+    feature_count = len(X[0])
+    weights = [0.0] * feature_count
+    bias = 0.0
+    n = len(X)
+
+    for _ in range(epochs):
+        gradients = [0.0] * feature_count
+        bias_gradient = 0.0
+
+        for row, target in zip(X, y):
+            z = bias + sum(weights[j] * row[j] for j in range(feature_count))
+            prediction = sigmoid(z)
+            error = prediction - target
+
+            bias_gradient += error
+
+            for j in range(feature_count):
+                gradients[j] += error * row[j]
+
+        bias -= learning_rate * bias_gradient / n
+
+        for j in range(feature_count):
+            gradient = gradients[j] / n
+            gradient += regularization * weights[j]
+            weights[j] -= learning_rate * gradient
+
+    return weights, bias
+
+
+def predict(row, weights, bias):
+    return sigmoid(
+        bias + sum(weights[i] * row[i] for i in range(len(weights)))
+    )
+
+
+# ============================================================
+# WALK-FORWARD BACKTEST
+# ============================================================
+
+def backtest(dataset):
+    if len(dataset) < 500:
+        return {
+            "accuracy": 0,
+            "win_rate": 0,
+            "profit_factor": 0,
+            "drawdown": 0,
+            "trades": 0,
+        }
+
+    split = int(len(dataset) * 0.70)
+    test = dataset[split:]
+    predictions = []
+
+    train_size = 1000
+    step = 20
+
+    for start in range(0, len(test), step):
+        end = split + start
+        training_start = max(0, end - train_size)
+
+        training = dataset[training_start:end]
+        testing = test[start:start + step]
+
+        if len(training) < 300:
+            continue
+
+        X_train = [x["x"] for x in training]
+        y_train = [x["y"] for x in training]
+        X_test = [x["x"] for x in testing]
+
+        X_train_scaled, X_test_scaled, _, _ = standardize(
+            X_train, X_test
+        )
+
+        weights, bias = fit_model(X_train_scaled, y_train)
+
+        for item, row in zip(testing, X_test_scaled):
+            predictions.append({
+                "probability": predict(row, weights, bias),
+                "return": item["return"],
+                "actual": item["y"],
+            })
+
+    if not predictions:
+        return {
+            "accuracy": 0,
+            "win_rate": 0,
+            "profit_factor": 0,
+            "drawdown": 0,
+            "trades": 0,
+        }
+
+    correct = 0
+    trades = []
+    equity = 1.0
+    peak = 1.0
+    max_drawdown = 0.0
+
+    for item in predictions:
+        p = item["probability"]
+
+        predicted = 1 if p >= 0.50 else 0
+        if predicted == item["actual"]:
+            correct += 1
+
+        if p >= LONG_THRESHOLD:
+            trade_return = item["return"]
+        elif p <= SHORT_THRESHOLD:
+            trade_return = -item["return"]
+        else:
+            continue
+
+        trades.append(trade_return)
+        equity *= 1 + trade_return
+        peak = max(peak, equity)
+
+        drawdown = equity / peak - 1
+        max_drawdown = min(max_drawdown, drawdown)
+
+    accuracy = correct / len(predictions)
+
+    if trades:
+        winners = [x for x in trades if x > 0]
+        losers = [x for x in trades if x < 0]
+
+        win_rate = len(winners) / len(trades)
+
+        gross_profit = sum(winners)
+        gross_loss = abs(sum(losers))
+
+        profit_factor = (
+            gross_profit / gross_loss
+            if gross_loss > 0
+            else 99
+        )
+    else:
+        win_rate = 0
+        profit_factor = 0
+
+    return {
+        "accuracy": accuracy,
+        "win_rate": win_rate,
+        "profit_factor": profit_factor,
+        "drawdown": max_drawdown,
+        "trades": len(trades),
+    }
+
+
+# ============================================================
+# FINAL MODEL
+# ============================================================
+
+def train_final(dataset):
+    if len(dataset) < 300:
+        return None
+
+    X = [item["x"] for item in dataset]
+    y = [item["y"] for item in dataset]
+
+    X_scaled, _, means, deviations = standardize(X, X[-1:])
+
+    weights, bias = fit_model(
+        X_scaled,
+        y,
+        epochs=900,
+        learning_rate=0.03,
+        regularization=0.10,
+    )
+
+    return {
+        "weights": weights,
+        "bias": bias,
+        "means": means,
+        "deviations": deviations,
+    }
+
+
+def scale_current(features, model):
+    result = []
+
+    for i, value in enumerate(features):
+        deviation = model["deviations"][i] or 1
+        result.append((value - model["means"][i]) / deviation)
+
+    return result
+
+
+# ============================================================
+# MODEL QUALITY
+# ============================================================
+
+def quality_score(bt):
+    score = 50
+
+    score += (bt["accuracy"] - 0.50) * 100
+    score += (bt["win_rate"] - 0.50) * 70
+
+    if bt["profit_factor"] > 1:
+        score += (bt["profit_factor"] - 1) * 12
+
+    score -= abs(bt["drawdown"]) * 40
+
+    return clamp(score, 0, 100)
 
 
 # ============================================================
 # MULTI-TIMEFRAME
 # ============================================================
 
-def get_multitimeframe(symbol):
+def timeframe_direction(candles):
+    if not candles or len(candles) < 60:
+        return "NONE", 0
 
+    closes = [c["close"] for c in candles]
+    fast = ema(closes, 20)
+    slow = ema(closes, 50)
+    current = closes[-1]
+    current_rsi = rsi(closes, 14)
+
+    score = 0
+
+    if fast and slow:
+        if fast > slow:
+            score += 2
+        elif fast < slow:
+            score -= 2
+
+    if current > (fast or current):
+        score += 1
+    elif current < (fast or current):
+        score -= 1
+
+    if current_rsi > 55:
+        score += 1
+    elif current_rsi < 45:
+        score -= 1
+
+    if score >= 2:
+        return "LONG", score
+    if score <= -2:
+        return "SHORT", score
+    return "NONE", score
+
+
+def get_multitimeframe(symbol):
     intervals = {
         "4H": "4h",
         "1H": "1h",
@@ -365,107 +800,73 @@ def get_multitimeframe(symbol):
     result = {}
 
     for name, interval in intervals.items():
-
         try:
-            candles = get_data(
-                symbol,
-                interval,
-                150,
-            )
-
-            result[name] = analyze_timeframe(
-                candles
-            )
-
+            candles = get_data(symbol, interval, 120)
+            direction, score = timeframe_direction(candles)
+            result[name] = {
+                "direction": direction,
+                "score": score,
+            }
         except Exception as error:
-
-            print(
-                f"   ⚠️ {name}: {error}"
-            )
-
+            print(f"   â ï¸ {name}: {error}")
             result[name] = {
                 "direction": "NONE",
                 "score": 0,
-                "price": None,
-                "ema20": None,
-                "ema50": None,
-                "rsi": 50.0,
-                "atr": 0.0,
             }
 
     return result
 
 
 # ============================================================
-# USD
+# USD / UUP
 # ============================================================
 
 def analyze_usd():
-
     try:
-        candles = get_data(
-            "UUP:NYSE",
-            "1day",
-            120,
-        )
+        candles = get_data("UUP:NYSE", "1day", 120)
+        direction, score = timeframe_direction(candles)
 
-        analysis = analyze_timeframe(
-            candles
-        )
-
-        if analysis["direction"] == "LONG":
-
-            return {
-                "direction": "LONG",
-                "impact": -1,
-                "label": "FORTE / SFAVOREVOLE",
-            }
-
-        if analysis["direction"] == "SHORT":
-
-            return {
-                "direction": "SHORT",
-                "impact": 1,
-                "label": "DEBOLE / FAVOREVOLE",
-            }
+        # Per commodities quotate in USD:
+        # USD forte tende generalmente a essere un vento contrario.
+        if direction == "LONG":
+            impact = -1
+            label = "FORTE / SFAVOREVOLE"
+        elif direction == "SHORT":
+            impact = 1
+            label = "DEBOLE / FAVOREVOLE"
+        else:
+            impact = 0
+            label = "NEUTRO"
 
         return {
-            "direction": "NONE",
-            "impact": 0,
-            "label": "NEUTRO",
+            "direction": direction,
+            "score": score,
+            "impact": impact,
+            "label": label,
         }
-
     except Exception as error:
-
-        print(
-            f"⚠️ Dollaro non disponibile: {error}"
-        )
-
+        print(f"â ï¸ UUP non disponibile: {error}")
         return {
             "direction": "NONE",
+            "score": 0,
             "impact": 0,
             "label": "NON DISPONIBILE",
         }
 
 
 # ============================================================
-# NEWS COMMODITY
+# NEWS
 # ============================================================
 
 def analyze_news(name):
-
     if not NEWS_API_KEY:
-
         return {
             "score": 0,
             "label": "NON DISPONIBILI",
             "count": 0,
         }
 
-    query = NEWS_TERMS.get(
-        name,
-        name,
-    )
+    query = NEWS_TERMS.get(name, name)
 
     params = {
         "q": query,
@@ -476,24 +877,12 @@ def analyze_news(name):
     }
 
     try:
-
-        response = requests.get(
-            NEWS_URL,
-            params=params,
-            timeout=20,
-        )
-
+        response = requests.get(NEWS_URL, params=params, timeout=20)
         response.raise_for_status()
-
         data = response.json()
 
-        articles = data.get(
-            "articles",
-            [],
-        )
-
+        articles = data.get("articles", [])
         if not articles:
-
             return {
                 "score": 0,
                 "label": "NEUTRALI",
@@ -501,76 +890,40 @@ def analyze_news(name):
             }
 
         positive_words = {
-            "rise",
-            "rises",
-            "rising",
-            "gain",
-            "gains",
-            "bullish",
-            "surge",
-            "higher",
-            "increase",
-            "shortage",
-            "demand",
-            "support",
-            "strong",
-            "rally",
+            "rise", "rises", "rising", "gain", "gains", "bullish",
+            "surge", "surges", "strong", "higher", "increase",
+            "increases", "shortage", "demand", "support",
         }
 
         negative_words = {
-            "fall",
-            "falls",
-            "falling",
-            "drop",
-            "drops",
-            "bearish",
-            "weak",
-            "lower",
-            "decrease",
-            "oversupply",
-            "collapse",
-            "recession",
-            "concern",
+            "fall", "falls", "falling", "drop", "drops", "bearish",
+            "weak", "lower", "decrease", "decreases", "oversupply",
+            "collapse", "concern", "concerns", "recession",
         }
 
         total = 0
 
         for article in articles:
-
             text = (
-                (article.get("title") or "")
-                + " "
-                + (article.get("description") or "")
+                f"{article.get('title', '')} "
+                f"{article.get('description', '')}"
             ).lower()
 
             words = set(text.split())
+            pos = len(words & positive_words)
+            neg = len(words & negative_words)
 
-            positive = len(
-                words & positive_words
-            )
-
-            negative = len(
-                words & negative_words
-            )
-
-            if positive > negative:
+            if pos > neg:
                 total += 1
-
-            elif negative > positive:
+            elif neg > pos:
                 total -= 1
 
-        normalized = clamp(
-            total / max(len(articles), 1),
-            -1,
-            1,
-        )
+        normalized = clamp(total / max(len(articles), 1), -1, 1)
 
         if normalized >= 0.20:
             label = "POSITIVE"
-
         elif normalized <= -0.20:
             label = "NEGATIVE"
-
         else:
             label = "NEUTRALI"
 
@@ -581,11 +934,7 @@ def analyze_news(name):
         }
 
     except Exception as error:
-
-        print(
-            f"   ⚠️ News {name}: {error}"
-        )
-
+        print(f"   â ï¸ News {name}: {error}")
         return {
             "score": 0,
             "label": "ERRORE",
@@ -594,450 +943,243 @@ def analyze_news(name):
 
 
 # ============================================================
-# POLITICAL IMPACT
+# SIGNAL
 # ============================================================
 
-def analyze_political_impact(name):
+def analyze(candles, dataset, model, bt, usd, news, timeframes):
+    features = build_features(candles)
 
-    if not NEWS_API_KEY:
+    if features is None:
+        return None
 
-        return {
-            "score": 0,
-            "label": "NON DISPONIBILE",
-            "count": 0,
-        }
+    scaled = scale_current(features, model)
 
-    political_terms = {
-        "Oro": (
-            "Trump OR tariffs OR sanctions OR "
-            "Federal Reserve OR inflation OR "
-            "geopolitical OR war OR Iran OR Russia"
-        ),
-
-        "Argento": (
-            "Trump OR tariffs OR sanctions OR "
-            "Federal Reserve OR inflation OR "
-            "geopolitical OR war"
-        ),
-
-        "Petrolio WTI": (
-            "Trump OR tariffs OR sanctions OR "
-            "OPEC OR Iran OR Russia OR "
-            "Middle East OR war"
-        ),
-
-        "Petrolio Brent": (
-            "Trump OR tariffs OR sanctions OR "
-            "OPEC OR Iran OR Russia OR "
-            "Middle East OR war"
-        ),
-
-        "Gas Naturale": (
-            "Trump OR sanctions OR Russia OR "
-            "Europe OR LNG OR war OR tariffs"
-        ),
-
-        "Rame": (
-            "Trump OR tariffs OR China OR "
-            "trade war OR sanctions OR stimulus"
-        ),
-
-        "Grano": (
-            "Trump OR tariffs OR Russia OR Ukraine OR "
-            "sanctions OR exports OR war"
-        ),
-
-        "Mais": (
-            "Trump OR tariffs OR China OR "
-            "trade war OR exports OR sanctions"
-        ),
-
-        "Caffè": (
-            "Trump OR tariffs OR Brazil OR "
-            "trade OR exports OR sanctions"
-        ),
-    }
-
-    query = political_terms.get(
-        name,
-        "Trump OR tariffs OR sanctions OR geopolitics"
+    probability = predict(
+        scaled,
+        model["weights"],
+        model["bias"],
     )
 
-    params = {
-        "q": query,
-        "apiKey": NEWS_API_KEY,
-        "language": "en",
-        "sortBy": "publishedAt",
-        "pageSize": 20,
-    }
+    quality = quality_score(bt)
 
-    try:
+    strength = abs(probability - 0.50) * 200
+    confidence = strength * 0.60 + quality * 0.40
 
-        response = requests.get(
-            NEWS_URL,
-            params=params,
-            timeout=20,
-        )
-
-        response.raise_for_status()
-
-        data = response.json()
-
-        articles = data.get(
-            "articles",
-            [],
-        )
-
-        if not articles:
-
-            return {
-                "score": 0,
-                "label": "NEUTRO",
-                "count": 0,
-            }
-
-        positive_words = {
-            "deal",
-            "agreement",
-            "ceasefire",
-            "peace",
-            "stimulus",
-            "support",
-            "recovery",
-            "cooperation",
-            "easing",
-        }
-
-        negative_words = {
-            "tariff",
-            "tariffs",
-            "sanction",
-            "sanctions",
-            "war",
-            "conflict",
-            "escalation",
-            "tension",
-            "ban",
-            "embargo",
-            "trade war",
-            "attack",
-        }
-
-        total = 0
-
-        for article in articles:
-
-            text = (
-                (article.get("title") or "")
-                + " "
-                + (article.get("description") or "")
-            ).lower()
-
-            positive = 0
-            negative = 0
-
-            for word in positive_words:
-                if word in text:
-                    positive += 1
-
-            for word in negative_words:
-                if word in text:
-                    negative += 1
-
-            if positive > negative:
-                total += 1
-
-            elif negative > positive:
-                total -= 1
-
-        normalized = clamp(
-            total / max(len(articles), 1),
-            -1,
-            1,
-        )
-
-        if normalized >= 0.20:
-            label = "FAVOREVOLE"
-
-        elif normalized <= -0.20:
-            label = "SFAVOREVOLE"
-
-        else:
-            label = "NEUTRO"
-
-        return {
-            "score": normalized,
-            "label": label,
-            "count": len(articles),
-        }
-
-    except Exception as error:
-
-        print(
-            f"   ⚠️ Political Impact {name}: {error}"
-        )
-
-        return {
-            "score": 0,
-            "label": "ERRORE",
-            "count": 0,
-        }
-
-
-# ============================================================
-# DECISIONE
-# ============================================================
-
-def calculate_decision(
-    a4h,
-    a1h,
-    a15,
-    a5,
-    a1,
-    usd,
-    news,
-    political,
-):
-
-    scores = [
-        a4h["score"],
-        a1h["score"],
-        a15["score"],
-    ]
-
-    base = sum(scores)
-
-    # USD
-    base += usd["impact"] * 2
-
-    # News
-    base += news["score"] * 3
-
-    # Politica/geopolitica
-    base += political["score"] * 4
-
-    max_possible = 18
-
-    probability = (
-        0.50
-        + (base / max_possible) * 0.40
-    )
-
-    probability = clamp(
-        probability,
-        0.01,
-        0.99,
-    )
-
-    # Conferme veloci
-    fast_confirmation = 0
-
-    if a5["direction"] == (
-        "LONG" if probability >= 0.50 else "SHORT"
-    ):
-        fast_confirmation += 1
-
-    if a1["direction"] == (
-        "LONG" if probability >= 0.50 else "SHORT"
-    ):
-        fast_confirmation += 1
-
-    confidence = (
-        abs(probability - 0.50)
-        * 200
-    )
-
-    confidence += (
-        fast_confirmation * 10
-    )
-
-    confidence = clamp(
-        confidence,
-        0,
-        100,
-    )
-
-    if probability >= LONG_THRESHOLD:
-
-        signal = "LONG"
-
+    if quality < MIN_QUALITY:
+        model_signal = "NO TRADE"
+    elif probability >= LONG_THRESHOLD:
+        model_signal = "LONG"
     elif probability <= SHORT_THRESHOLD:
-
-        signal = "SHORT"
-
+        model_signal = "SHORT"
     else:
+        model_signal = "WAIT"
 
-        signal = "WAIT"
-
-    # Penalizza conflitto forte
     main_direction = (
-        "LONG"
-        if probability >= 0.50
+        "LONG" if probability >= 0.50
         else "SHORT"
     )
 
-    opposite = (
-        "SHORT"
-        if main_direction == "LONG"
-        else "LONG"
-    )
+    tf_score = 0
+    for tf in ("4H", "1H", "15m"):
+        direction = timeframes[tf]["direction"]
+        if direction == main_direction:
+            tf_score += 1
+        elif direction not in ("NONE", main_direction):
+            tf_score -= 1
 
-    conflicts = 0
+    fast_confirmations = 0
+    fast_conflicts = 0
 
-    for tf in (a4h, a1h, a15):
+    for tf in ("5m", "1m"):
+        direction = timeframes[tf]["direction"]
+        if direction == main_direction:
+            fast_confirmations += 1
+        elif direction not in ("NONE", main_direction):
+            fast_conflicts += 1
 
-        if tf["direction"] == opposite:
-            conflicts += 1
+    # Fattore storico: positivo se concorda col modello,
+    # negativo se va contro.
+    repetition = historical_repetition(candles)
 
-    if conflicts >= 2:
+    repetition_impact = 0
+    if repetition["direction"] == main_direction:
+        repetition_impact = repetition["frequency"] * 8
+    elif repetition["direction"] not in ("NEUTRALE", main_direction):
+        repetition_impact = -repetition["frequency"] * 8
 
-        signal = "WAIT"
-        confidence = min(
-            confidence,
-            45,
-        )
+    # Score 0-100.
+    direction_score = abs(probability - 0.50) * 200
 
-    # Score 0-100
     score = (
-        abs(probability - 0.50)
-        * 200
+        direction_score * 0.40
+        + quality * 0.20
+        + confidence * 0.15
+        + max(tf_score, -3) * 5
+        + fast_confirmations * 5
+        + repetition_impact
+        + news["score"] * 6
+        + usd["impact"] * 3
     )
 
-    score += confidence * 0.30
-    score += fast_confirmation * 8
-    score += news["score"] * 5
-    score += political["score"] * 8
-    score += usd["impact"] * 3
+    score = clamp(score, 0, 100)
 
-    score -= conflicts * 8
+    # Non permettiamo un LONG/SHORT operativo se i timeframe
+    # principali sono completamente contrari o i veloci mostrano
+    # un conflitto netto.
+    operational_signal = model_signal
 
-    score = clamp(
-        score,
-        0,
-        100,
-    )
+    if model_signal in ("LONG", "SHORT"):
+        if tf_score <= -2:
+            operational_signal = "WAIT"
+        elif fast_conflicts == 2:
+            operational_signal = "WAIT"
 
-    if signal == "LONG" and score >= MIN_SCORE:
-        grade = "🟢 FORTE"
-
-    elif signal == "SHORT" and score >= MIN_SCORE:
-        grade = "🔴 FORTE"
-
-    elif signal in ("LONG", "SHORT"):
-        grade = "🟡 DEBOLE"
-
+    # Grado del setup.
+    if operational_signal in ("LONG", "SHORT"):
+        if (
+            confidence >= 70
+            and fast_confirmations == 2
+            and tf_score >= 1
+            and score >= 75
+        ):
+            grade = "FORTE"
+        elif confidence >= 58 and score >= 65:
+            grade = "IN FORMAZIONE"
+        else:
+            grade = "DEBOLE"
+    elif model_signal in ("LONG", "SHORT"):
+        grade = "CONFLITTO" if fast_conflicts else "IN FORMAZIONE"
     else:
-        grade = "⚪ ATTENDERE"
+        grade = "NEUTRALE"
+
+    price = candles[-1]["close"]
+    current_atr = atr(candles, 14) or price * 0.01
+
+    if operational_signal == "LONG":
+        stop = price - current_atr * STOP_ATR
+        tp1 = price + current_atr * TP1_ATR
+        tp2 = price + current_atr * TP2_ATR
+    elif operational_signal == "SHORT":
+        stop = price + current_atr * STOP_ATR
+        tp1 = price - current_atr * TP1_ATR
+        tp2 = price - current_atr * TP2_ATR
+    else:
+        stop = tp1 = tp2 = None
 
     return {
-        "signal": signal,
+        "signal": operational_signal,
+        "model_signal": model_signal,
         "grade": grade,
-        "score": score,
         "probability": probability,
         "confidence": confidence,
-        "main_direction": main_direction,
-        "fast_confirmation": fast_confirmation,
-        "conflicts": conflicts,
+        "quality": quality,
+        "score": score,
+        "price": price,
+        "atr": current_atr,
+        "stop": stop,
+        "tp1": tp1,
+        "tp2": tp2,
+        "timeframes": timeframes,
+        "usd": usd,
+        "news": news,
+        "repetition": repetition,
+        "tf_score": tf_score,
+        "fast_confirmations": fast_confirmations,
+        "fast_conflicts": fast_conflicts,
     }
 
 
 # ============================================================
-# RISCHIO
+# POSITION MANAGEMENT
 # ============================================================
 
-def calculate_risk(
-    signal,
-    price,
-    atr_value,
-):
+def manage_position(position, current_analysis, current_price):
+    direction = position["direction"]
+    entry = position["entry"]
+    stop = position["stop"]
+    tp1 = position["tp1"]
+    tp2 = position["tp2"]
 
-    if price is None or atr_value <= 0:
-        return None
+    probability = current_analysis["probability"]
+    signal = current_analysis["signal"]
 
-    sl_distance = (
-        atr_value * STOP_ATR
-    )
+    if direction == "LONG":
+        if current_price <= stop:
+            return {"action": "EXIT", "reason": "STOP LOSS", "new_stop": stop}
 
-    tp1_distance = (
-        atr_value * TP1_ATR
-    )
+        if current_price >= tp2:
+            return {"action": "EXIT", "reason": "TAKE PROFIT 2", "new_stop": stop}
 
-    tp2_distance = (
-        atr_value * TP2_ATR
-    )
+        if probability <= 0.38 or signal == "SHORT":
+            return {
+                "action": "EXIT",
+                "reason": "INVERSIONE CONFERMATA",
+                "new_stop": stop,
+            }
 
-    if signal == "LONG":
+        if probability < 0.48:
+            return {
+                "action": "WARNING",
+                "reason": "LONG INDEBOLITO",
+                "new_stop": stop,
+            }
+
+        if current_price >= tp1:
+            trailing_stop = current_price - current_analysis["atr"]
+            new_stop = max(stop, entry, trailing_stop)
+            return {
+                "action": "HOLD",
+                "reason": "TP1 RAGGIUNTO - TRAILING STOP",
+                "new_stop": new_stop,
+            }
 
         return {
-            "entry": price,
-            "stop": price - sl_distance,
-            "tp1": price + tp1_distance,
-            "tp2": price + tp2_distance,
+            "action": "HOLD",
+            "reason": "TREND LONG ANCORA VALIDO",
+            "new_stop": stop,
+        }
+
+    if direction == "SHORT":
+        if current_price >= stop:
+            return {"action": "EXIT", "reason": "STOP LOSS", "new_stop": stop}
+
+        if current_price <= tp2:
+            return {"action": "EXIT", "reason": "TAKE PROFIT 2", "new_stop": stop}
+
+        if probability >= 0.62 or signal == "LONG":
+            return {
+                "action": "EXIT",
+                "reason": "INVERSIONE CONFERMATA",
+                "new_stop": stop,
+            }
+
+        if probability > 0.52:
+            return {
+                "action": "WARNING",
+                "reason": "SHORT INDEBOLITO",
+                "new_stop": stop,
+            }
+
+        if current_price <= tp1:
+            trailing_stop = current_price + current_analysis["atr"]
+            new_stop = min(stop, entry, trailing_stop)
+            return {
+                "action": "HOLD",
+                "reason": "TP1 RAGGIUNTO - TRAILING STOP",
+                "new_stop": new_stop,
+            }
+
+        return {
+            "action": "HOLD",
+            "reason": "TREND SHORT ANCORA VALIDO",
+            "new_stop": stop,
         }
 
     return {
-        "entry": price,
-        "stop": price + sl_distance,
-        "tp1": price - tp1_distance,
-        "tp2": price - tp2_distance,
+        "action": "EXIT",
+        "reason": "DIREZIONE NON RICONOSCIUTA",
+        "new_stop": stop,
     }
-
-
-# ============================================================
-# POSITION MEMORY
-# ============================================================
-
-def load_position():
-
-    if not os.path.exists(
-        POSITION_FILE
-    ):
-        return None
-
-    try:
-
-        with open(
-            POSITION_FILE,
-            "r",
-            encoding="utf-8",
-        ) as file:
-
-            return json.load(file)
-
-    except Exception as error:
-
-        print(
-            f"⚠️ Errore posizione: {error}"
-        )
-
-        return None
-
-
-def save_position(position):
-
-    with open(
-        POSITION_FILE,
-        "w",
-        encoding="utf-8",
-    ) as file:
-
-        json.dump(
-            position,
-            file,
-            indent=2,
-            ensure_ascii=False,
-        )
-
-
-def clear_position():
-
-    if os.path.exists(
-        POSITION_FILE
-    ):
-
-        os.remove(
-            POSITION_FILE
-        )
 
 
 # ============================================================
@@ -1045,83 +1187,376 @@ def clear_position():
 # ============================================================
 
 def send_telegram(message):
-
     if not TELEGRAM_BOT_TOKEN:
         raise RuntimeError(
-            "TELEGRAM_BOT_TOKEN mancante."
+            "TELEGRAM_BOT_TOKEN non configurata nei GitHub Secrets."
         )
 
     if not TELEGRAM_CHAT_ID:
         raise RuntimeError(
-            "TELEGRAM_CHAT_ID mancante."
+            "TELEGRAM_CHAT_ID non configurata nei GitHub Secrets."
         )
 
-    url = (
-        "https://api.telegram.org/"
-        f"bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    )
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
 
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
         "text": message,
     }
 
-    print(
-        "📨 Invio messaggio Telegram..."
-    )
-
-    response = requests.post(
-        url,
-        json=payload,
-        timeout=30,
-    )
-
-    print(
-        f"📡 Telegram HTTP: "
-        f"{response.status_code}"
-    )
+    response = requests.post(url, json=payload, timeout=30)
 
     try:
         data = response.json()
-    except Exception:
+    except ValueError:
         data = {}
 
-    if response.status_code != 200:
-
+    if response.status_code != 200 or not data.get("ok", False):
+        description = data.get("description", response.text)
         raise RuntimeError(
-            "Telegram HTTP error "
-            f"{response.status_code}: "
-            f"{response.text}"
+            f"Errore Telegram ({response.status_code}): {description}"
         )
 
-    if not data.get("ok"):
-
-        raise RuntimeError(
-            "Telegram ha rifiutato il "
-            f"messaggio: {data}"
-        )
-
-    print(
-        "✅ TELEGRAM: messaggio inviato."
-    )
+    print("â Messaggio Telegram inviato correttamente.")
 
 
-# ============================================================
-# FORMAT TELEGRAM
-# ============================================================
-
-def signal_icon(signal):
-
+def icon_for_signal(signal):
     return {
-        "LONG": "🟢",
-        "SHORT": "🔴",
-        "WAIT": "🟡",
-    }.get(
-        signal,
-        "⚪",
+        "LONG": "ð¢",
+        "SHORT": "ð´",
+        "WAIT": "ð¡",
+        "NO TRADE": "âª",
+    }.get(signal, "âª")
+
+
+def compact_tf(timeframes):
+    return " | ".join(
+        f"{tf} {timeframes[tf]['direction']}"
+        for tf in ("4H", "1H", "15m", "5m", "1m")
     )
 
 
-def tf_text(timeframes):
+def confirmation_text(analysis):
+    signal = analysis["model_signal"]
+    tfs = analysis["timeframes"]
 
-   
+    if signal not in ("LONG", "SHORT"):
+        return "ð Nessun setup principale sufficientemente forte."
+
+    opposite = "SHORT" if signal == "LONG" else "LONG"
+
+    if (
+        tfs["5m"]["direction"] == signal
+        and tfs["1m"]["direction"] == signal
+    ):
+        return f"ð â 5m + 1m CONFERMANO {signal}"
+
+    if (
+        tfs["5m"]["direction"] == opposite
+        or tfs["1m"]["direction"] == opposite
+    ):
+        return f"ð â ï¸ CONFLITTO CONTRO {signal}"
+
+    if tfs["5m"]["direction"] == signal:
+        return f"ð â³ ATTENDERE CONFERMA 1m {signal}"
+
+    if tfs["1m"]["direction"] == signal:
+        return f"ð â³ ATTENDERE CONFERMA 5m {signal}"
+
+    return f"ð â³ ATTENDERE CONFERMA {signal}"
+
+
+def build_telegram(ranked, best, position_message=None):
+    a = best["analysis"]
+
+    lines = [
+        "ð COMMODITIES BOT",
+        "",
+        f"ð MIGLIOR SETUP",
+        f"{icon_for_signal(a['signal'])} {best['name']}",
+        f"ð¯ {a['signal']} | {a['grade']}",
+        f"ð Score: {a['score']:.0f}/100",
+        "",
+        f"ð° Prezzo: {a['price']:.4f}",
+        f"ð§  Modello: {pct(a['probability'])}",
+        f"ð {compact_tf(a['timeframes'])}",
+        confirmation_text(a),
+        "",
+        f"ð° News: {a['news']['label']}",
+        f"ðµ Dollaro: {a['usd']['label']}",
+        f"ð Storico: {a['repetition']['direction']} "
+        f"({a['repetition']['frequency'] * 100:.0f}% "
+        f"su {a['repetition']['samples']} casi)",
+        "",
+    ]
+
+    if a["signal"] in ("LONG", "SHORT"):
+        lines.extend([
+            f"ð ENTRY: {a['price']:.4f}",
+            f"ð SL: {a['stop']:.4f}",
+            f"ð¯ TP1: {a['tp1']:.4f}",
+            f"ð¯ TP2: {a['tp2']:.4f}",
+            "",
+        ])
+
+    for i, item in enumerate(ranked[:3], 1):
+        if item["name"] == best["name"]:
+            continue
+
+        x = item["analysis"]
+        lines.append(
+            f"{'ð¥' if i == 2 else 'ð¥'} {item['name']} â "
+            f"{x['signal']} | {x['score']:.0f}/100"
+        )
+
+    if position_message:
+        lines.extend(["", position_message])
+
+    lines.extend([
+        "",
+        f"ð FOCUS: {best['name']}",
+        "",
+        "â ï¸ Segnale algoritmico, non garanzia di profitto.",
+    ])
+
+    return "\n".join(lines)
+
+
+# ============================================================
+# MAIN
+# ============================================================
+
+def main():
+    print()
+    print("=" * 70)
+    print("ð COMMODITY TRADING BOT v5.0")
+    print("QUANT + MTF + NEWS + USD + RIPETIZIONE STORICA")
+    print("=" * 70)
+    print()
+
+    position = load_position()
+    usd = analyze_usd()
+
+    results = []
+
+    for name, symbol in COMMODITIES.items():
+        print(f"ð Analizzo {name}...")
+
+        try:
+            candles = get_daily_data(symbol)
+
+            if len(candles) < 500:
+                print("   â ï¸ Dati insufficienti")
+                continue
+
+            dataset = build_dataset(candles)
+
+            if len(dataset) < 300:
+                print("   â ï¸ Dataset insufficiente")
+                continue
+
+            bt = backtest(dataset)
+            model = train_final(dataset)
+
+            if model is None:
+                continue
+
+            timeframes = get_multitimeframe(symbol)
+            news = analyze_news(name)
+
+            analysis = analyze(
+                candles,
+                dataset,
+                model,
+                bt,
+                usd,
+                news,
+                timeframes,
+            )
+
+            if analysis is None:
+                continue
+
+            results.append({
+                "name": name,
+                "symbol": symbol,
+                "candles": candles,
+                "analysis": analysis,
+                "backtest": bt,
+            })
+
+            print(
+                f"   â MODELLO {analysis['model_signal']} | "
+                f"OPERATIVO {analysis['signal']} | "
+                f"Score {analysis['score']:.0f}"
+            )
+
+        except Exception as error:
+            print(f"   â {error}")
+
+    if not results:
+        raise RuntimeError("Nessuna materia prima analizzata.")
+
+    # ========================================================
+    # RANKING
+    # ========================================================
+
+    ranked = sorted(
+        results,
+        key=lambda x: x["analysis"]["score"],
+        reverse=True,
+    )
+
+    best = ranked[0]
+
+    # ========================================================
+    # GESTIONE POSIZIONE ESISTENTE
+    # ========================================================
+
+    position_message = None
+
+    if position:
+        matching = [
+            x for x in results
+            if x["name"] == position["name"]
+        ]
+
+        if matching:
+            current = matching[0]
+            current_price = current["analysis"]["price"]
+
+            management = manage_position(
+                position,
+                current["analysis"],
+                current_price,
+            )
+
+            if management["action"] == "EXIT":
+                position_message = (
+                    f"ð¨ POSIZIONE {position['direction']} â USCITA\n"
+                    f"Motivo: {management['reason']}"
+                )
+                clear_position()
+
+            elif management["action"] == "WARNING":
+                position["stop"] = management["new_stop"]
+                save_position(position)
+                position_message = (
+                    f"ð  POSIZIONE {position['direction']} â ATTENZIONE\n"
+                    f"{management['reason']}"
+                )
+
+            else:
+                if management["new_stop"] != position["stop"]:
+                    position["stop"] = management["new_stop"]
+                    save_position(position)
+
+                position_message = (
+                    f"ð¢ POSIZIONE {position['direction']} â MANTIENI\n"
+                    f"{management['reason']}"
+                )
+
+    # ========================================================
+    # NUOVA POSIZIONE
+    # ========================================================
+
+    if not position and best["analysis"]["signal"] in ("LONG", "SHORT"):
+        second_score = ranked[1]["analysis"]["score"] if len(ranked) > 1 else 0
+        a = best["analysis"]
+
+        # Apertura solo se:
+        # - score alto
+        # - qualitÃ /confidenza sufficienti
+        # - margine sul secondo setup
+        # - nessun conflitto rapido
+        if (
+            a["score"] >= MIN_SCORE
+            and a["quality"] >= MIN_QUALITY
+            and a["confidence"] >= MIN_CONFIDENCE
+            and a["score"] - second_score >= MIN_RANK_MARGIN
+            and a["fast_conflicts"] == 0
+        ):
+            position = {
+                "name": best["name"],
+                "symbol": best["symbol"],
+                "direction": a["signal"],
+                "entry": a["price"],
+                "stop": a["stop"],
+                "tp1": a["tp1"],
+                "tp2": a["tp2"],
+                "opened_at": datetime.now(timezone.utc).isoformat(),
+            }
+
+            save_position(position)
+
+            position_message = (
+                f"ð¨ NUOVA POSIZIONE {a['signal']}\n"
+                f"Entry {a['price']:.4f} | "
+                f"SL {a['stop']:.4f} | "
+                f"TP1 {a['tp1']:.4f} | "
+                f"TP2 {a['tp2']:.4f}"
+            )
+        else:
+            position_message = (
+                "ð¡ NESSUNA APERTURA AUTOMATICA â "
+                "setup non abbastanza selettivo."
+            )
+    elif not position:
+        position_message = "ð¡ NESSUNA ENTRATA."
+
+    # ========================================================
+    # OUTPUT
+    # ========================================================
+
+    print()
+    print("=" * 70)
+    print("ð MIGLIORE OPPORTUNITÃ")
+    print("=" * 70)
+
+    a = best["analysis"]
+
+    print(f"Materia prima: {best['name']}")
+    print(f"Segnale modello: {a['model_signal']}")
+    print(f"Segnale operativo: {a['signal']}")
+    print(f"Score: {a['score']:.1f}/100")
+    print(f"ProbabilitÃ : {a['probability'] * 100:.1f}%")
+    print(f"Confidenza: {a['confidence']:.1f}/100")
+    print(f"QualitÃ : {a['quality']:.1f}/100")
+    print(
+        f"Ricorrenza storica: "
+        f"{a['repetition']['direction']} | "
+        f"{a['repetition']['frequency'] * 100:.1f}%"
+    )
+
+    print()
+    print("=" * 70)
+    print("ð RANKING")
+    print("=" * 70)
+
+    for i, item in enumerate(ranked, 1):
+        x = item["analysis"]
+        print(
+            f"{i}. {icon_for_signal(x['signal'])} "
+            f"{item['name']} | "
+            f"{x['signal']} | "
+            f"{x['score']:.0f}/100 | "
+            f"model {x['probability'] * 100:.1f}% | "
+            f"storico {x['repetition']['direction']}"
+        )
+
+    message = build_telegram(
+        ranked,
+        best,
+        position_message,
+    )
+
+    send_telegram(message)
+
+    print()
+    print("=" * 70)
+    print("â ï¸ Analisi quantitativa, non garanzia di profitto.")
+    print("=" * 70)
+
+
+if __name__ == "__main__":
+    main()
