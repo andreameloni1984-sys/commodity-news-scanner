@@ -12,15 +12,12 @@ import requests
 # QUANT MODEL + MULTI-TIMEFRAME + WEB NEWS + USD
 # + SEASONALITY + RANKING + POSITION MANAGEMENT
 #
-# Analitico/simulato: NON esegue ordini reali.
+# ANALITICO/SIMULATO - NON ESEGUE ORDINI REALI
 # ============================================================
 
 API_KEY = os.getenv("TWELVE_DATA_API_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv(
-    "TELEGRAM_CHAT_ID",
-    "8002086130"
-)
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "8002086130")
 
 if not API_KEY:
     raise RuntimeError(
@@ -29,8 +26,12 @@ if not API_KEY:
 
 BASE_URL = "https://api.twelvedata.com/time_series"
 
-# GDELT: notizie dal web senza API key
+# GDELT DOC 2.0
 GDELT_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
+
+REQUEST_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (compatible; CommoditiesBot/6.1)"
+}
 
 POSITION_FILE = "position.json"
 
@@ -68,7 +69,7 @@ COMMODITIES = {
 
 
 # ============================================================
-# TERMINI DI RICERCA WEB
+# NEWS
 # ============================================================
 
 NEWS_TERMS = {
@@ -76,65 +77,46 @@ NEWS_TERMS = {
         'gold OR bullion OR XAU OR "gold price" OR '
         '"gold market" OR "precious metals"'
     ),
-
     "Argento": (
         'silver OR XAG OR "silver price" OR '
         '"silver market"'
     ),
-
     "Petrolio WTI": (
         'oil OR crude OR WTI OR "oil price" OR '
         '"crude oil" OR OPEC'
     ),
-
     "Petrolio Brent": (
         'oil OR crude OR Brent OR "Brent crude" OR '
         '"oil price" OR OPEC'
     ),
-
     "Gas Naturale": (
         '"natural gas" OR LNG OR "gas prices" OR '
         '"gas market"'
     ),
-
     "Rame": (
         'copper OR "copper price" OR '
         '"copper market" OR China'
     ),
-
     "Grano": (
         'wheat OR grain OR "wheat price" OR '
         '"wheat market" OR crops'
     ),
-
     "Mais": (
         'corn OR maize OR "corn price" OR '
         '"corn market" OR crops'
     ),
-
     "Caffè": (
         'coffee OR "coffee price" OR '
         '"coffee market" OR arabica OR robusta'
     ),
 }
 
-
-# ============================================================
-# EVENTI MACRO
-# ============================================================
-
 MACRO_TERMS = (
-    'Federal Reserve OR Fed OR interest rates OR '
-    'inflation OR CPI OR PPI OR NFP OR jobs OR '
-    'Treasury yields OR dollar OR USD OR '
-    'geopolitical OR sanctions OR tariffs OR '
-    'China OR OPEC'
+    'Federal Reserve OR Fed OR inflation OR CPI OR PPI OR '
+    'NFP OR jobs OR "interest rates" OR "Treasury yields" OR '
+    'dollar OR USD OR OPEC OR China'
 )
 
-
-# ============================================================
-# PAROLE POSITIVE / NEGATIVE
-# ============================================================
 
 POSITIVE_WORDS = {
     "rise",
@@ -193,8 +175,6 @@ NEGATIVE_WORDS = {
     "slump",
     "slumps",
     "crash",
-    "cuts",
-    "cut",
 }
 
 
@@ -203,95 +183,49 @@ NEGATIVE_WORDS = {
 # ============================================================
 
 def safe_float(value):
-
     try:
         return float(value)
-
-    except (
-        TypeError,
-        ValueError
-    ):
-
+    except Exception:
         return None
 
 
 def mean(values):
-
-    values = [
-        x
-        for x in values
-        if x is not None
-        and math.isfinite(x)
-    ]
-
-    return (
-        sum(values) / len(values)
-        if values
-        else 0.0
-    )
+    values = [x for x in values if x is not None]
+    if not values:
+        return 0.0
+    return sum(values) / len(values)
 
 
 def std(values):
-
-    values = [
-        x
-        for x in values
-        if x is not None
-        and math.isfinite(x)
-    ]
-
+    values = [x for x in values if x is not None]
     if len(values) < 2:
-        return 1.0
+        return 0.0
 
     m = mean(values)
+    variance = sum((x - m) ** 2 for x in values) / len(values)
 
-    variance = sum(
-        (x - m) ** 2
-        for x in values
-    ) / (len(values) - 1)
-
-    return max(
-        math.sqrt(variance),
-        1e-8
-    )
+    return math.sqrt(variance)
 
 
 def sigmoid(x):
-
-    x = max(
-        -30,
-        min(30, x)
-    )
-
-    return 1 / (
-        1 + math.exp(-x)
-    )
+    x = max(-60, min(60, x))
+    return 1.0 / (1.0 + math.exp(-x))
 
 
-def clamp(
-    value,
-    low,
-    high
-):
-
-    return max(
-        low,
-        min(high, value)
-    )
+def clamp(value, low, high):
+    return max(low, min(high, value))
 
 
-def pct(value):
-
-    return f"{value * 100:.1f}%"
+def pct(a, b):
+    if b in (None, 0):
+        return 0.0
+    return ((a - b) / b) * 100.0
 
 
 def clean_words(text):
-
-    return set(
-        re.findall(
-            r"[a-zA-Z]+",
-            text.lower()
-        )
+    return re.findall(
+        r"[a-zA-ZÀ-ÿ]+",
+        str(text).lower()
     )
 
 
@@ -300,70 +234,34 @@ def clean_words(text):
 # ============================================================
 
 def load_position():
-
-    if not os.path.exists(
-        POSITION_FILE
-    ):
+    if not os.path.exists(POSITION_FILE):
         return None
 
     try:
-
-        with open(
-            POSITION_FILE,
-            "r",
-            encoding="utf-8"
-        ) as file:
-
-            data = json.load(file)
-
-        return data or None
-
-    except Exception as error:
-
-        print(
-            f"⚠️ Impossibile leggere "
-            f"{POSITION_FILE}: {error}"
-        )
-
+        with open(POSITION_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
         return None
 
 
 def save_position(position):
-
-    with open(
-        POSITION_FILE,
-        "w",
-        encoding="utf-8"
-    ) as file:
-
-        json.dump(
-            position,
-            file,
-            indent=2,
-            ensure_ascii=False
-        )
+    with open(POSITION_FILE, "w", encoding="utf-8") as f:
+        json.dump(position, f, indent=2)
 
 
 def clear_position():
-
-    if os.path.exists(
-        POSITION_FILE
-    ):
-
-        os.remove(
-            POSITION_FILE
-        )
+    if os.path.exists(POSITION_FILE):
+        try:
+            os.remove(POSITION_FILE)
+        except Exception:
+            pass
 
 
 # ============================================================
 # TWELVE DATA
 # ============================================================
 
-def get_data(
-    symbol,
-    interval="1day",
-    outputsize=4000
-):
+def get_data(symbol, interval="1day", outputsize=4000):
 
     params = {
         "symbol": symbol,
@@ -384,67 +282,38 @@ def get_data(
     data = response.json()
 
     if data.get("status") == "error":
-
         raise RuntimeError(
-            data.get(
-                "message",
-                "Errore Twelve Data"
-            )
+            data.get("message", "Errore Twelve Data")
         )
+
+    values = data.get("values", [])
 
     candles = []
 
-    for item in data.get(
-        "values",
-        []
-    ):
+    for item in values:
 
-        close = safe_float(
-            item.get("close")
-        )
+        close = safe_float(item.get("close"))
 
         if close is None:
             continue
 
         candles.append({
-
-            "datetime":
-                item.get("datetime"),
-
-            "open":
-                safe_float(
-                    item.get("open")
-                ),
-
-            "high":
-                safe_float(
-                    item.get("high")
-                ),
-
-            "low":
-                safe_float(
-                    item.get("low")
-                ),
-
-            "close":
-                close,
-
-            "volume":
-                safe_float(
-                    item.get("volume")
-                ),
+            "datetime": item.get("datetime"),
+            "open": safe_float(item.get("open")),
+            "high": safe_float(item.get("high")),
+            "low": safe_float(item.get("low")),
+            "close": close,
+            "volume": safe_float(item.get("volume")),
         })
 
     candles.sort(
-        key=lambda x:
-            x["datetime"] or ""
+        key=lambda x: x["datetime"] or ""
     )
 
     return candles
 
 
 def get_daily_data(symbol):
-
     return get_data(
         symbol,
         "1day",
@@ -456,634 +325,428 @@ def get_daily_data(symbol):
 # INDICATORS
 # ============================================================
 
-def sma(
-    values,
-    period
-):
+def sma(values, period):
 
     if len(values) < period:
         return None
 
-    return mean(
-        values[-period:]
-    )
+    return mean(values[-period:])
 
 
-def ema(
-    values,
-    period
-):
+def ema(values, period):
 
     if len(values) < period:
         return None
 
-    multiplier = (
-        2 / (period + 1)
-    )
+    multiplier = 2 / (period + 1)
 
-    result = mean(
-        values[:period]
-    )
+    value = mean(values[:period])
 
-    for value in values[period:]:
+    for price in values[period:]:
+        value = (
+            price - value
+        ) * multiplier + value
 
-        result = (
-            (value - result)
-            * multiplier
-            + result
-        )
-
-    return result
+    return value
 
 
-def rsi(
-    values,
-    period=14
-):
+def rsi(values, period=14):
 
-    if len(values) < period + 1:
-        return 50.0
+    if len(values) <= period:
+        return None
 
     gains = []
     losses = []
 
-    for i in range(
-        1,
-        len(values)
-    ):
+    for i in range(1, len(values)):
+        change = values[i] - values[i - 1]
 
-        change = (
-            values[i]
-            - values[i - 1]
-        )
+        gains.append(max(change, 0))
+        losses.append(max(-change, 0))
 
-        gains.append(
-            max(change, 0)
-        )
+    avg_gain = mean(gains[:period])
+    avg_loss = mean(losses[:period])
 
-        losses.append(
-            max(-change, 0)
-        )
+    for i in range(period, len(gains)):
+        avg_gain = (
+            avg_gain * (period - 1)
+            + gains[i]
+        ) / period
 
-    avg_gain = mean(
-        gains[-period:]
-    )
-
-    avg_loss = mean(
-        losses[-period:]
-    )
+        avg_loss = (
+            avg_loss * (period - 1)
+            + losses[i]
+        ) / period
 
     if avg_loss == 0:
         return 100.0
 
-    rs = (
-        avg_gain
-        / avg_loss
-    )
+    rs = avg_gain / avg_loss
 
-    return 100 - (
-        100 / (1 + rs)
-    )
+    return 100 - (100 / (1 + rs))
 
 
-def atr(
-    candles,
-    period=14
-):
+def atr(candles, period=14):
 
-    if len(candles) < period + 1:
+    if len(candles) <= period:
         return None
 
-    ranges = []
+    trs = []
 
-    for i in range(
-        1,
-        len(candles)
-    ):
+    for i in range(1, len(candles)):
 
         high = candles[i]["high"]
         low = candles[i]["low"]
-        previous = (
-            candles[i - 1]["close"]
-        )
+        previous_close = candles[i - 1]["close"]
 
-        if (
-            high is None
-            or low is None
-        ):
+        if high is None or low is None:
             continue
 
-        ranges.append(
-            max(
-                high - low,
-                abs(
-                    high - previous
-                ),
-                abs(
-                    low - previous
-                )
-            )
+        tr = max(
+            high - low,
+            abs(high - previous_close),
+            abs(low - previous_close),
         )
 
-    return (
-        mean(
-            ranges[-period:]
-        )
-        if len(ranges) >= period
-        else None
-    )
+        trs.append(tr)
+
+    if len(trs) < period:
+        return None
+
+    return mean(trs[-period:])
 
 
 def macd(values):
 
-    if len(values) < 35:
+    ema12 = ema(values, 12)
+    ema26 = ema(values, 26)
+
+    if ema12 is None or ema26 is None:
         return 0.0
 
-    fast = ema(
-        values,
-        12
-    )
-
-    slow = ema(
-        values,
-        26
-    )
-
-    if (
-        fast is None
-        or slow is None
-    ):
-        return 0.0
-
-    return fast - slow
+    return ema12 - ema26
 
 
-def return_pct(
-    values,
-    period
-):
+def return_pct(values, period):
 
     if len(values) <= period:
         return 0.0
 
-    old = values[
-        -period - 1
-    ]
-
-    current = values[-1]
+    old = values[-period - 1]
 
     if old == 0:
         return 0.0
 
     return (
-        current / old - 1
+        (values[-1] - old)
+        / old
+        * 100
     )
 
 
-def volatility(
-    values,
-    period=20
-):
+def volatility(values, period=20):
 
     if len(values) < period + 1:
         return 0.0
 
     returns = []
 
-    start = (
-        len(values)
-        - period
-    )
-
     for i in range(
-        start,
+        len(values) - period,
         len(values)
     ):
+        old = values[i - 1]
 
-        previous = (
-            values[i - 1]
-        )
-
-        if previous:
-
+        if old != 0:
             returns.append(
-                values[i]
-                / previous
-                - 1
+                (values[i] - old) / old
             )
 
-    return std(
-        returns
-    )
+    return std(returns)
 
 
-def pressure(
-    candles,
-    period=10
-):
+def pressure(candles, period=10):
+
+    if len(candles) < period:
+        return 0.0
+
+    recent = candles[-period:]
 
     scores = []
 
-    for candle in candles[
-        -period:
-    ]:
+    for candle in recent:
 
         high = candle["high"]
         low = candle["low"]
         close = candle["close"]
-        open_price = candle["open"]
 
-        if None in (
-            high,
-            low,
-            close,
-            open_price
+        if (
+            high is None
+            or low is None
+            or close is None
+            or high == low
         ):
             continue
 
-        if high == low:
-            continue
+        position = (
+            (close - low)
+            / (high - low)
+        )
 
         scores.append(
-            (
-                close
-                - open_price
-            )
-            / (
-                high - low
-            )
+            (position - 0.5) * 2
         )
 
-    return mean(
-        scores
-    )
+    return mean(scores)
 
 
-def breakout(
-    values,
-    period=20
-):
+def breakout(candles, period=20):
 
-    if len(values) < period + 1:
+    if len(candles) <= period:
         return 0.0
 
-    current = values[-1]
+    recent = candles[-period - 1:-1]
 
-    previous = values[
-        -period - 1:-1
-    ]
-
-    highest = max(
-        previous
+    high = max(
+        c["high"]
+        for c in recent
+        if c["high"] is not None
     )
 
-    lowest = min(
-        previous
+    low = min(
+        c["low"]
+        for c in recent
+        if c["low"] is not None
     )
 
-    distance = (
-        highest - lowest
-    )
+    close = candles[-1]["close"]
 
-    if distance == 0:
-        return 0.0
+    if close > high:
+        return 1.0
 
-    return (
-        (
-            current - lowest
-        )
-        / distance
-    ) * 2 - 1
+    if close < low:
+        return -1.0
+
+    return 0.0
 
 
 # ============================================================
-# STAGIONALITÀ
+# SEASONALITY
 # ============================================================
 
-def historical_repetition(
-    candles
-):
+def historical_repetition(candles):
 
     if len(candles) < 300:
-
         return {
             "score": 0.0,
             "frequency": 0.0,
             "avg_return": 0.0,
             "samples": 0,
             "years": 0,
-            "direction":
-                "NEUTRALE",
+            "direction": "NONE",
         }
 
     try:
-
-        current_date = (
-            datetime.fromisoformat(
-                candles[-1][
-                    "datetime"
-                ].replace(
-                    "Z",
-                    "+00:00"
-                )
-            )
+        current_date = datetime.fromisoformat(
+            candles[-1]["datetime"]
         )
-
     except Exception:
-
         return {
             "score": 0.0,
             "frequency": 0.0,
             "avg_return": 0.0,
             "samples": 0,
             "years": 0,
-            "direction":
-                "NEUTRALE",
+            "direction": "NONE",
         }
 
-    target_day = (
-        current_date
-        .timetuple()
-        .tm_yday
-    )
+    current_doy = current_date.timetuple().tm_yday
 
-    samples = []
+    matches = []
 
     for i in range(
-        100,
+        20,
         len(candles) - HORIZON
     ):
 
+        dt_string = candles[i]["datetime"]
+
         try:
-
-            d = (
-                datetime.fromisoformat(
-                    candles[i][
-                        "datetime"
-                    ].replace(
-                        "Z",
-                        "+00:00"
-                    )
-                )
-            )
-
-            day = (
-                d.timetuple()
-                .tm_yday
-            )
-
+            dt = datetime.fromisoformat(dt_string)
         except Exception:
             continue
 
-        distance = abs(
-            day - target_day
-        )
+        doy = dt.timetuple().tm_yday
+
+        distance = abs(doy - current_doy)
 
         distance = min(
             distance,
-            366 - distance
+            365 - distance
         )
 
         if distance <= 22:
 
-            current = (
-                candles[i]["close"]
-            )
+            start = candles[i]["close"]
+            future = candles[i + HORIZON]["close"]
 
-            future = (
-                candles[
-                    i + HORIZON
-                ]["close"]
-            )
+            if start:
+                future_return = (
+                    future - start
+                ) / start
 
-            if current:
-
-                samples.append(
-                    future
-                    / current
-                    - 1
+                matches.append(
+                    future_return
                 )
 
-    if len(samples) < 5:
-
+    if len(matches) < 5:
         return {
             "score": 0.0,
             "frequency": 0.0,
             "avg_return": 0.0,
-            "samples":
-                len(samples),
+            "samples": len(matches),
             "years": 0,
-            "direction":
-                "NEUTRALE",
+            "direction": "NONE",
         }
 
-    positive = sum(
-        1
-        for x in samples
+    positives = sum(
+        1 for x in matches
         if x > 0
     )
 
-    negative = sum(
+    frequency = positives / len(matches)
+
+    avg_return = mean(matches)
+
+    score = clamp(
+        (frequency - 0.5) * 2,
+        -1,
         1
-        for x in samples
-        if x < 0
     )
 
-    frequency = (
-        max(
-            positive,
-            negative
-        )
-        / len(samples)
-    )
-
-    avg_return = mean(
-        samples
-    )
-
-    if positive > negative:
-
+    if score > 0.15:
         direction = "LONG"
-        raw_score = frequency
-
-    elif negative > positive:
-
+    elif score < -0.15:
         direction = "SHORT"
-        raw_score = -frequency
-
     else:
-
         direction = "NEUTRALE"
-        raw_score = 0.0
 
-    magnitude_factor = clamp(
-        abs(avg_return)
-        / 0.01,
-        0.0,
-        1.0
-    )
-
-    score = (
-        raw_score
-        * magnitude_factor
-    )
-
-    years = len({
-        candles[i][
-            "datetime"
-        ][:4]
-        for i in range(
-            100,
-            len(candles)
-            - HORIZON
+    years = len(
+        set(
+            candles[i]["datetime"][:4]
+            for i in range(
+                max(0, len(candles) - 1000),
+                len(candles)
+            )
+            if candles[i].get("datetime")
         )
-        if candles[i][
-            "datetime"
-        ]
-    })
+    )
 
     return {
-        "score":
-            score,
-        "frequency":
-            frequency,
-        "avg_return":
-            avg_return,
-        "samples":
-            len(samples),
-        "years":
-            years,
-        "direction":
-            direction,
+        "score": score,
+        "frequency": frequency,
+        "avg_return": avg_return,
+        "samples": len(matches),
+        "years": years,
+        "direction": direction,
     }
 
 
-def seasonality(
-    candles
-):
+def seasonality(candles):
 
-    return historical_repetition(
+    result = historical_repetition(
         candles
-    )["score"]
+    )
+
+    return result["score"]
 
 
 # ============================================================
 # FEATURES
 # ============================================================
 
-def build_features(
-    candles
-):
+def build_features(candles):
 
     closes = [
         c["close"]
         for c in candles
+        if c["close"] is not None
     ]
 
     if len(closes) < 100:
         return None
 
+    ema20 = ema(closes, 20)
+    ema50 = ema(closes, 50)
+    ema100 = ema(closes, 100)
+
     current = closes[-1]
 
-    sma20 = (
-        sma(
-            closes,
-            20
-        )
-        or current
-    )
-
-    sma50 = (
-        sma(
-            closes,
-            50
-        )
-        or current
-    )
-
-    trend = (
-        sma20 / sma50 - 1
-        if sma50
-        else 0.0
-    )
-
-    current_atr = atr(
-        candles,
-        14
-    )
-
-    atr_pct = (
-        current_atr / current
-        if (
-            current_atr
-            and current
-        )
-        else 0.0
-    )
-
-    current_macd = macd(
-        closes
-    )
-
-    macd_normalized = (
-        current_macd / current
-        if current
-        else 0.0
-    )
-
     return [
-
-        return_pct(
-            closes,
-            1
-        ),
-
-        return_pct(
-            closes,
-            5
-        ),
-
-        return_pct(
-            closes,
-            20
-        ),
-
-        return_pct(
-            closes,
-            60
-        ),
-
-        trend,
-
-        (
-            rsi(
-                closes,
-                14
-            )
-            - 50
-        ) / 50,
-
-        macd_normalized,
-
-        atr_pct,
-
-        volatility(
-            closes,
-            20
-        ),
-
-        pressure(
-            candles,
+        clamp(
+            (current - ema20)
+            / current
+            * 100,
+            -10,
             10
         ),
 
-        breakout(
-            closes,
+        clamp(
+            (current - ema50)
+            / current
+            * 100,
+            -10,
+            10
+        ),
+
+        clamp(
+            (current - ema100)
+            / current
+            * 100,
+            -10,
+            10
+        ),
+
+        clamp(
+            (rsi(closes) - 50) / 50,
+            -1,
+            1
+        ),
+
+        clamp(
+            macd(closes) / current * 100,
+            -10,
+            10
+        ),
+
+        clamp(
+            return_pct(closes, 5),
+            -10,
+            10
+        ),
+
+        clamp(
+            return_pct(closes, 20),
+            -20,
             20
         ),
 
-        seasonality(
-            candles
+        clamp(
+            volatility(closes) * 100,
+            0,
+            10
+        ),
+
+        pressure(candles),
+
+        breakout(candles),
+
+        seasonality(candles),
+
+        clamp(
+            return_pct(closes, 60),
+            -30,
+            30
         ),
     ]
 
@@ -1092,71 +755,44 @@ def build_features(
 # DATASET
 # ============================================================
 
-def build_dataset(
-    candles
-):
+def build_dataset(candles):
 
     dataset = []
 
-    minimum_history = 100
-
     for i in range(
-        minimum_history,
-        len(candles)
-        - HORIZON
+        120,
+        len(candles) - HORIZON
     ):
 
-        history = candles[
-            :i + 1
-        ]
+        subset = candles[:i + 1]
 
-        features = (
-            build_features(
-                history
-            )
+        features = build_features(
+            subset
         )
 
         if features is None:
             continue
 
-        current = (
-            candles[i]["close"]
-        )
+        current = candles[i]["close"]
+        future = candles[
+            i + HORIZON
+        ]["close"]
 
-        future = (
-            candles[
-                i + HORIZON
-            ]["close"]
-        )
-
-        if not current:
+        if current == 0:
             continue
 
         future_return = (
-            future / current - 1
-        )
+            future - current
+        ) / current
 
-        if (
-            abs(future_return)
-            < 0.002
-        ):
+        if abs(future_return) < 0.002:
             continue
 
-        dataset.append({
+        label = 1 if future_return > 0 else 0
 
-            "x":
-                features,
-
-            "y":
-                (
-                    1
-                    if future_return > 0
-                    else 0
-                ),
-
-            "return":
-                future_return,
-        })
+        dataset.append(
+            (features, label)
+        )
 
     return dataset
 
@@ -1165,148 +801,114 @@ def build_dataset(
 # STANDARDIZATION
 # ============================================================
 
-def standardize(
-    train_x,
-    other_x
-):
+def standardize(X, current=None):
 
-    if not train_x:
-        return [], [], [], []
+    if not X:
+        return [], None
 
-    count = len(
-        train_x[0]
-    )
+    cols = list(zip(*X))
 
-    means = []
-    deviations = []
+    means = [
+        mean(col)
+        for col in cols
+    ]
 
-    for j in range(
-        count
-    ):
+    stds = [
+        std(col) or 1.0
+        for col in cols
+    ]
 
-        values = [
-            row[j]
-            for row in train_x
-        ]
+    scaled = []
 
-        means.append(
-            mean(values)
-        )
+    for row in X:
 
-        deviations.append(
-            std(values)
-        )
+        scaled.append([
+            (value - m) / s
+            for value, m, s
+            in zip(row, means, stds)
+        ])
 
-    def transform(row):
+    current_scaled = None
 
-        return [
+    if current is not None:
 
-            (
-                row[j]
-                - means[j]
-            )
-            / deviations[j]
-
-            for j in range(
-                count
+        current_scaled = [
+            (value - m) / s
+            for value, m, s
+            in zip(
+                current,
+                means,
+                stds
             )
         ]
 
-    return (
-
-        [
-            transform(row)
-            for row in train_x
-        ],
-
-        [
-            transform(row)
-            for row in other_x
-        ],
-
-        means,
-
-        deviations,
-    )
+    return scaled, current_scaled
 
 
 # ============================================================
 # LOGISTIC MODEL
 # ============================================================
 
-def fit_model(
-    X,
-    y,
-    epochs=700,
-    learning_rate=0.035,
-    regularization=0.08
-):
+def fit_model(X, y):
 
     if not X:
-        return [], 0.0
-
-    feature_count = len(
-        X[0]
-    )
+        return None
 
     weights = [
         0.0
-        for _ in range(
-            feature_count
-        )
+        for _ in X[0]
     ]
 
     bias = 0.0
-    n = len(X)
 
-    for _ in range(
-        epochs
-    ):
+    learning_rate = 0.03
+
+    epochs = 120
+
+    for _ in range(epochs):
 
         gradients = [
             0.0
-            for _ in range(
-                feature_count
-            )
+            for _ in weights
         ]
 
         bias_gradient = 0.0
 
-        for row, target in zip(
-            X,
-            y
-        ):
+        for row, target in zip(X, y):
 
-            z = (
-                bias
-                + sum(
-                    weights[j]
-                    * row[j]
-                    for j in range(
-                        feature_count
-                    )
-                )
-            )
+            z = bias
 
-            prediction = sigmoid(
-                z
-            )
+            for w, value in zip(
+                weights,
+                row
+            ):
+                z += w * value
+
+            prediction = sigmoid(z)
 
             error = (
-                prediction
-                - target
+                prediction - target
             )
+
+            for j in range(
+                len(weights)
+            ):
+                gradients[j] += (
+                    error * row[j]
+                )
 
             bias_gradient += error
 
-            for j in range(
-                feature_count
-            ):
+        n = len(X)
 
-                gradients[j] += (
-                    error
-                    * row[j]
-                )
+        for j in range(
+            len(weights)
+        ):
+            weights[j] -= (
+                learning_rate
+                * gradients[j]
+                / n
+            )
 
         bias -= (
             learning_rate
@@ -1314,291 +916,165 @@ def fit_model(
             / n
         )
 
-        for j in range(
-            feature_count
-        ):
-
-            gradient = (
-                gradients[j]
-                / n
-            )
-
-            gradient += (
-                regularization
-                * weights[j]
-            )
-
-            weights[j] -= (
-                learning_rate
-                * gradient
-            )
-
-    return weights, bias
+    return {
+        "weights": weights,
+        "bias": bias,
+    }
 
 
-def predict(
-    row,
-    weights,
-    bias
-):
+def predict(model, row):
 
-    return sigmoid(
-        bias
-        + sum(
-            weights[i]
-            * row[i]
-            for i in range(
-                len(weights)
-            )
-        )
-    )
+    if model is None:
+        return 0.5
+
+    z = model["bias"]
+
+    for w, value in zip(
+        model["weights"],
+        row
+    ):
+        z += w * value
+
+    return sigmoid(z)
 
 
 # ============================================================
-# WALK-FORWARD BACKTEST
+# BACKTEST
 # ============================================================
 
-def backtest(
-    dataset
-):
+def backtest(dataset):
 
     if len(dataset) < 500:
-
         return {
-            "accuracy": 0,
-            "win_rate": 0,
-            "profit_factor": 0,
-            "drawdown": 0,
+            "accuracy": 0.5,
+            "win_rate": 0.5,
+            "profit_factor": 1.0,
+            "drawdown": 0.0,
             "trades": 0,
         }
 
     split = int(
-        len(dataset)
-        * 0.70
+        len(dataset) * 0.70
     )
 
-    test = dataset[
-        split:
-    ]
+    wins = 0
+    losses = 0
 
-    predictions = []
-
-    train_size = 1000
-    step = 20
-
-    for start in range(
-        0,
-        len(test),
-        step
-    ):
-
-        end = (
-            split
-            + start
-        )
-
-        training_start = max(
-            0,
-            end - train_size
-        )
-
-        training = dataset[
-            training_start:end
-        ]
-
-        testing = test[
-            start:
-            start + step
-        ]
-
-        if len(training) < 300:
-            continue
-
-        X_train = [
-            x["x"]
-            for x in training
-        ]
-
-        y_train = [
-            x["y"]
-            for x in training
-        ]
-
-        X_test = [
-            x["x"]
-            for x in testing
-        ]
-
-        (
-            X_train_scaled,
-            X_test_scaled,
-            _,
-            _,
-        ) = standardize(
-            X_train,
-            X_test
-        )
-
-        weights, bias = fit_model(
-            X_train_scaled,
-            y_train
-        )
-
-        for item, row in zip(
-            testing,
-            X_test_scaled
-        ):
-
-            predictions.append({
-
-                "probability":
-                    predict(
-                        row,
-                        weights,
-                        bias
-                    ),
-
-                "return":
-                    item["return"],
-
-                "actual":
-                    item["y"],
-            })
-
-    if not predictions:
-
-        return {
-            "accuracy": 0,
-            "win_rate": 0,
-            "profit_factor": 0,
-            "drawdown": 0,
-            "trades": 0,
-        }
-
-    correct = 0
-    trades = []
+    gross_profit = 0.0
+    gross_loss = 0.0
 
     equity = 1.0
     peak = 1.0
     max_drawdown = 0.0
 
-    for item in predictions:
+    trades = 0
 
-        p = item[
-            "probability"
+    for i in range(
+        split,
+        len(dataset),
+        20
+    ):
+
+        train_start = max(
+            0,
+            i - 1000
+        )
+
+        train = dataset[
+            train_start:i
         ]
 
-        predicted = (
-            1
-            if p >= 0.50
-            else 0
-        )
-
-        if predicted == item[
-            "actual"
-        ]:
-
-            correct += 1
-
-        if p >= LONG_THRESHOLD:
-
-            trade_return = item[
-                "return"
-            ]
-
-        elif p <= SHORT_THRESHOLD:
-
-            trade_return = -item[
-                "return"
-            ]
-
-        else:
-
+        if len(train) < 100:
             continue
 
-        trades.append(
-            trade_return
+        X = [
+            x[0]
+            for x in train
+        ]
+
+        y = [
+            x[1]
+            for x in train
+        ]
+
+        X_scaled, _ = standardize(X)
+
+        model = fit_model(
+            X_scaled,
+            y
         )
 
-        equity *= (
-            1 + trade_return
+        test_features = dataset[i][0]
+
+        _, test_scaled = standardize(
+            X + [test_features]
         )
+
+        probability = predict(
+            model,
+            test_scaled
+        )
+
+        actual = dataset[i][1]
+
+        if probability >= 0.62:
+
+            trades += 1
+
+            if actual == 1:
+                wins += 1
+                gross_profit += 1.0
+                equity *= 1.01
+            else:
+                losses += 1
+                gross_loss += 1.0
+                equity *= 0.99
+
+        elif probability <= 0.38:
+
+            trades += 1
+
+            if actual == 0:
+                wins += 1
+                gross_profit += 1.0
+                equity *= 1.01
+            else:
+                losses += 1
+                gross_loss += 1.0
+                equity *= 0.99
 
         peak = max(
             peak,
             equity
         )
 
-        drawdown = (
-            equity / peak
-            - 1
-        )
+        dd = (
+            peak - equity
+        ) / peak
 
-        max_drawdown = min(
+        max_drawdown = max(
             max_drawdown,
-            drawdown
+            dd
         )
 
     accuracy = (
-        correct
-        / len(predictions)
+        wins / trades
+        if trades
+        else 0.5
     )
 
-    if trades:
-
-        winners = [
-            x
-            for x in trades
-            if x > 0
-        ]
-
-        losers = [
-            x
-            for x in trades
-            if x < 0
-        ]
-
-        win_rate = (
-            len(winners)
-            / len(trades)
-        )
-
-        gross_profit = sum(
-            winners
-        )
-
-        gross_loss = abs(
-            sum(losers)
-        )
-
-        profit_factor = (
-            gross_profit
-            / gross_loss
-            if gross_loss > 0
-            else 99
-        )
-
-    else:
-
-        win_rate = 0
-        profit_factor = 0
+    profit_factor = (
+        gross_profit / gross_loss
+        if gross_loss
+        else 1.0
+    )
 
     return {
-
-        "accuracy":
-            accuracy,
-
-        "win_rate":
-            win_rate,
-
-        "profit_factor":
-            profit_factor,
-
-        "drawdown":
-            max_drawdown,
-
-        "trades":
-            len(trades),
+        "accuracy": accuracy,
+        "win_rate": accuracy,
+        "profit_factor": profit_factor,
+        "drawdown": max_drawdown,
+        "trades": trades,
     }
 
 
@@ -1606,123 +1082,82 @@ def backtest(
 # FINAL MODEL
 # ============================================================
 
-def train_final(
-    dataset
-):
+def train_final(dataset):
 
-    if len(dataset) < 300:
-        return None
+    if len(dataset) < 100:
+        return None, None
 
     X = [
-        item["x"]
-        for item in dataset
+        x[0]
+        for x in dataset
     ]
 
     y = [
-        item["y"]
-        for item in dataset
+        x[1]
+        for x in dataset
     ]
 
-    (
-        X_scaled,
-        _,
-        means,
-        deviations,
-    ) = standardize(
+    X_scaled, scaler_current = standardize(
         X,
-        X[-1:]
+        X[-1]
     )
 
-    weights, bias = fit_model(
+    model = fit_model(
         X_scaled,
-        y,
-        epochs=900,
-        learning_rate=0.03,
-        regularization=0.10,
+        y
     )
 
-    return {
-
-        "weights":
-            weights,
-
-        "bias":
-            bias,
-
-        "means":
-            means,
-
-        "deviations":
-            deviations,
-    }
+    return model, scaler_current
 
 
-def scale_current(
-    features,
-    model
-):
+def scale_current(dataset, current):
 
-    result = []
+    X = [
+        x[0]
+        for x in dataset
+    ]
 
-    for i, value in enumerate(
-        features
-    ):
+    if not X:
+        return current
 
-        deviation = (
-            model[
-                "deviations"
-            ][i]
-            or 1
-        )
+    _, current_scaled = standardize(
+        X,
+        current
+    )
 
-        result.append(
-            (
-                value
-                - model[
-                    "means"
-                ][i]
-            )
-            / deviation
-        )
-
-    return result
+    return current_scaled
 
 
 # ============================================================
-# MODEL QUALITY
+# QUALITY
 # ============================================================
 
 def quality_score(
-    bt
+    probability,
+    backtest_result,
+    volatility_value
 ):
 
-    score = 50
+    model_quality = (
+        abs(probability - 0.5)
+        * 200
+    )
 
-    score += (
-        bt["accuracy"]
-        - 0.50
-    ) * 100
+    backtest_quality = (
+        backtest_result["win_rate"]
+        * 100
+    )
 
-    score += (
-        bt["win_rate"]
-        - 0.50
-    ) * 70
+    volatility_penalty = clamp(
+        volatility_value * 500,
+        0,
+        20
+    )
 
-    if bt[
-        "profit_factor"
-    ] > 1:
-
-        score += (
-            bt[
-                "profit_factor"
-            ] - 1
-        ) * 12
-
-    score -= (
-        abs(
-            bt["drawdown"]
-        )
-        * 40
+    score = (
+        model_quality * 0.45
+        + backtest_quality * 0.45
+        - volatility_penalty * 0.10
     )
 
     return clamp(
@@ -1733,157 +1168,118 @@ def quality_score(
 
 
 # ============================================================
-# MULTI-TIMEFRAME
+# MULTI TIMEFRAME
 # ============================================================
 
-def timeframe_direction(
-    candles
-):
+def timeframe_direction(candles):
 
-    if (
-        not candles
-        or len(candles) < 60
-    ):
-
-        return "NONE", 0
+    if len(candles) < 60:
+        return {
+            "direction": "NONE",
+            "score": 0,
+        }
 
     closes = [
         c["close"]
         for c in candles
     ]
 
-    fast = ema(
+    ema20 = ema(
         closes,
         20
     )
 
-    slow = ema(
+    ema50 = ema(
         closes,
         50
     )
 
     current = closes[-1]
 
-    current_rsi = rsi(
-        closes,
-        14
+    rsi_value = rsi(
+        closes
     )
 
     score = 0
 
-    if fast and slow:
-
-        if fast > slow:
-
-            score += 2
-
-        elif fast < slow:
-
-            score -= 2
-
-    if current > (
-        fast or current
-    ):
-
+    if current > ema20:
         score += 1
-
-    elif current < (
-        fast or current
-    ):
-
+    else:
         score -= 1
 
-    if current_rsi > 55:
-
+    if ema20 > ema50:
         score += 1
-
-    elif current_rsi < 45:
-
+    else:
         score -= 1
+
+    if rsi_value is not None:
+
+        if rsi_value > 55:
+            score += 1
+
+        elif rsi_value < 45:
+            score -= 1
 
     if score >= 2:
+        direction = "LONG"
 
-        return "LONG", score
+    elif score <= -2:
+        direction = "SHORT"
 
-    if score <= -2:
+    else:
+        direction = "NONE"
 
-        return "SHORT", score
+    return {
+        "direction": direction,
+        "score": score,
+    }
 
-    return "NONE", score
 
-
-def get_multitimeframe(
-    symbol
-):
+def get_multitimeframe(symbol):
 
     intervals = {
-
-        "4H":
-            "4h",
-
-        "1H":
-            "1h",
-
-        "15m":
-            "15min",
-
-        "5m":
-            "5min",
-
-        "1m":
-            "1min",
+        "4H": "4h",
+        "1H": "1h",
+        "15m": "15min",
+        "5m": "5min",
+        "1m": "1min",
     }
 
     result = {}
 
-    for name, interval in (
-        intervals.items()
-    ):
+    for name, interval in intervals.items():
 
         try:
 
             candles = get_data(
                 symbol,
                 interval,
-                120
+                250
             )
 
-            direction, score = (
+            result[name] = (
                 timeframe_direction(
                     candles
                 )
             )
 
-            result[name] = {
-
-                "direction":
-                    direction,
-
-                "score":
-                    score,
-            }
-
         except Exception as error:
 
             print(
-                f"   ⚠️ {name}: "
+                f"MTF {symbol} {name}: "
                 f"{error}"
             )
 
             result[name] = {
-
-                "direction":
-                    "NONE",
-
-                "score":
-                    0,
+                "direction": "NONE",
+                "score": 0,
             }
 
     return result
 
 
 # ============================================================
-# USD / UUP
+# USD
 # ============================================================
 
 def analyze_usd():
@@ -1896,76 +1292,101 @@ def analyze_usd():
             120
         )
 
-        direction, score = (
-            timeframe_direction(
-                candles
-            )
+        if len(candles) < 30:
+            return {
+                "direction": "NONE",
+                "score": 0,
+            }
+
+        closes = [
+            c["close"]
+            for c in candles
+        ]
+
+        ema20 = ema(
+            closes,
+            20
         )
 
-        if direction == "LONG":
+        current = closes[-1]
 
-            impact = -1
+        if current > ema20:
 
-            label = (
-                "FORTE / "
-                "SFAVOREVOLE"
-            )
-
-        elif direction == "SHORT":
-
-            impact = 1
-
-            label = (
-                "DEBOLE / "
-                "FAVOREVOLE"
-            )
-
-        else:
-
-            impact = 0
-            label = "NEUTRO"
+            return {
+                "direction": "LONG",
+                "score": -1,
+            }
 
         return {
-
-            "direction":
-                direction,
-
-            "score":
-                score,
-
-            "impact":
-                impact,
-
-            "label":
-                label,
+            "direction": "SHORT",
+            "score": 1,
         }
 
     except Exception as error:
 
         print(
-            f"⚠️ UUP non disponibile: "
-            f"{error}"
+            f"USD ERROR: {error}"
         )
 
         return {
-
-            "direction":
-                "NONE",
-
-            "score":
-                0,
-
-            "impact":
-                0,
-
-            "label":
-                "NON DISPONIBILE",
+            "direction": "NONE",
+            "score": 0,
         }
 
 
 # ============================================================
-# WEB NEWS — GDELT
+# GDELT
 # ============================================================
+
+def gdelt_query_candidates(query):
+
+    candidates = [
+        query
+    ]
+
+    simplified = query
+
+    simplified = simplified.replace(
+        "(",
+        " "
+    )
+
+    simplified = simplified.replace(
+        ")",
+        " "
+    )
+
+    simplified = re.sub(
+        r"\s+",
+        " ",
+        simplified
+    ).strip()
+
+    if simplified != query:
+        candidates.append(
+            simplified
+        )
+
+    if " AND " in simplified:
+
+        fallback = simplified.replace(
+            " AND ",
+            " "
+        )
+
+        candidates.append(
+            fallback
+        )
+
+    clean = []
+
+    for item in candidates:
+
+        if item and item not in clean:
+            clean.append(item)
+
+    return clean
+
 
 def gdelt_search(
     query,
@@ -1973,531 +1394,687 @@ def gdelt_search(
     timespan="72h"
 ):
 
-    params = {
+    last_error = None
 
-        "query":
-            query,
-
-        "mode":
-            "artlist",
-
-        "maxrecords":
-            max_records,
-
-        "format":
-            "json",
-
-        "sort":
-            "datedesc",
-
-        "timespan":
-            timespan,
-    }
-
-    try:
-
-        response = requests.get(
-
-            GDELT_URL,
-
-            params=params,
-
-            timeout=30,
-
-            headers={
-                "User-Agent":
-                    "Mozilla/5.0 "
-                    "CommoditiesBot/6.1"
-            }
-        )
-
-        response.raise_for_status()
-
-        data = response.json()
-
-        if not isinstance(
-            data,
-            dict
-        ):
-
-            raise RuntimeError(
-                "Risposta GDELT "
-                "non valida."
-            )
-
-        articles = data.get(
-            "articles",
-            []
-        )
-
-        if not isinstance(
-            articles,
-            list
-        ):
-
-            return []
-
-        return articles
-
-    except requests.exceptions.HTTPError as error:
-
-        status = (
-
-            error.response.status_code
-
-            if error.response
-
-            else "?"
-
-        )
-
-        raise RuntimeError(
-            f"GDELT HTTP {status}"
-        )
-
-    except requests.exceptions.RequestException as error:
-
-        raise RuntimeError(
-            f"GDELT connessione: "
-            f"{error}"
-        )
-
-    except ValueError:
-
-        raise RuntimeError(
-            "GDELT ha restituito "
-            "una risposta non JSON."
-        )
-
-
-def article_text(
-    article
-):
-
-    title = str(
-        article.get(
-            "title",
-            ""
-        )
-        or ""
-    )
-
-    description = str(
-        article.get(
-            "description",
-            ""
-        )
-        or ""
-    )
-
-    snippet = str(
-        article.get(
-            "snippet",
-            ""
-        )
-        or ""
-    )
-
-    return (
-        f"{title} "
-        f"{description} "
-        f"{snippet}"
-    ).strip()
-
-
-def article_sentiment(
-    article
-):
-
-    text = article_text(
-        article
-    )
-
-    words = clean_words(
-        text
-    )
-
-    positive = len(
-        words
-        & POSITIVE_WORDS
-    )
-
-    negative = len(
-        words
-        & NEGATIVE_WORDS
-    )
-
-    # --------------------------------------------------------
-    # SENTIMENT TESTUALE
-    # --------------------------------------------------------
-
-    if (
-        positive == 0
-        and negative == 0
+    for candidate in gdelt_query_candidates(
+        query
     ):
 
-        text_score = 0.0
+        params = {
+            "query": candidate,
+            "mode": "artlist",
+            "maxrecords": max_records,
+            "format": "json",
+            "sort": "datedesc",
+            "timespan": timespan,
+        }
 
-    else:
+        try:
 
-        text_score = (
-            positive
-            - negative
-        ) / max(
-            positive + negative,
-            1
-        )
+            response = requests.get(
+                GDELT_URL,
+                params=params,
+                headers=REQUEST_HEADERS,
+                timeout=30
+            )
 
-        text_score = clamp(
-            text_score,
-            -1,
-            1
-        )
+            response.raise_for_status()
+
+            try:
+                data = response.json()
+            except Exception:
+                data = {}
+
+            if not isinstance(
+                data,
+                dict
+            ):
+                continue
+
+            articles = data.get(
+                "articles",
+                []
+            )
+
+            if not isinstance(
+                articles,
+                list
+            ):
+                articles = []
+
+            articles = [
+                article
+                for article in articles
+                if isinstance(
+                    article,
+                    dict
+                )
+            ]
+
+            return articles, None
+
+        except requests.exceptions.HTTPError as error:
+
+            code = (
+                error.response.status_code
+                if error.response is not None
+                else "?"
+            )
+
+            last_error = (
+                f"GDELT HTTP {code}"
+            )
+
+            print(
+                f"{last_error} "
+                f"query={candidate}"
+            )
+
+        except Exception as error:
+
+            last_error = (
+                f"GDELT {type(error).__name__}: "
+                f"{error}"
+            )
+
+            print(
+                f"{last_error} "
+                f"query={candidate}"
+            )
+
+    return [], last_error
+
+
+def get_macro_news():
+
+    articles, error = gdelt_search(
+        MACRO_TERMS,
+        max_records=20,
+        timespan="72h"
+    )
+
+    if articles:
+        return articles, None
+
+    # Query molto semplice come fallback
+    fallback_query = (
+        'Fed OR inflation OR '
+        '"interest rates" OR dollar OR '
+        'OPEC OR China'
+    )
+
+    articles, fallback_error = gdelt_search(
+        fallback_query,
+        max_records=20,
+        timespan="72h"
+    )
+
+    if articles:
+        return articles, None
+
+    return [], fallback_error or error
+
+
+# ============================================================
+# NEWS SENTIMENT
+# ============================================================
+
+def article_sentiment(
+    commodity,
+    title,
+    description="",
+    tone=None
+):
+
+    text = (
+        f"{title} {description}"
+    ).lower()
+
+    score = 0.0
+
+    # --------------------------------------------------------
+    # Prezzo
+    # --------------------------------------------------------
+
+    positive_price = [
+        r"price.{0,20}(rise|rises|rising|higher|gain|gains|surge|rally|jump)",
+        r"prices.{0,20}(rise|rises|rising|higher|gain|gains|surge|rally|jump)",
+    ]
+
+    negative_price = [
+        r"price.{0,20}(fall|falls|falling|lower|drop|drops|decline|slump|crash)",
+        r"prices.{0,20}(fall|falls|falling|lower|drop|drops|decline|slump|crash)",
+    ]
+
+    for pattern in positive_price:
+
+        if re.search(pattern, text):
+            score += 1.0
+
+    for pattern in negative_price:
+
+        if re.search(pattern, text):
+            score -= 1.0
+
+    # --------------------------------------------------------
+    # Offerta / produzione
+    # --------------------------------------------------------
+
+    supply_positive = [
+        r"supply.{0,25}(cut|cuts|disruption|disrupted|shortage)",
+        r"production.{0,25}(cut|cuts|disruption|disrupted)",
+        r"output.{0,25}(cut|cuts|disruption|disrupted)",
+        r"tight supply",
+        r"supply shortage",
+    ]
+
+    supply_negative = [
+        r"supply.{0,25}(increase|increased|surplus|oversupply)",
+        r"production.{0,25}(increase|increased|surge)",
+        r"output.{0,25}(increase|increased|surge)",
+        r"oversupply",
+        r"supply surplus",
+    ]
+
+    for pattern in supply_positive:
+
+        if re.search(pattern, text):
+            score += 1.0
+
+    for pattern in supply_negative:
+
+        if re.search(pattern, text):
+            score -= 1.0
+
+    # --------------------------------------------------------
+    # Domanda
+    # --------------------------------------------------------
+
+    demand_positive = [
+        r"demand.{0,25}(strong|rises|rise|increase|increased|boost)",
+        r"strong demand",
+        r"rising demand",
+    ]
+
+    demand_negative = [
+        r"demand.{0,25}(weak|falls|fall|decline|decrease|decreased)",
+        r"weak demand",
+        r"falling demand",
+    ]
+
+    for pattern in demand_positive:
+
+        if re.search(pattern, text):
+            score += 1.0
+
+    for pattern in demand_negative:
+
+        if re.search(pattern, text):
+            score -= 1.0
+
+    # --------------------------------------------------------
+    # Parole generiche
+    # --------------------------------------------------------
+
+    words = clean_words(text)
+
+    positive_count = sum(
+        1
+        for word in words
+        if word in POSITIVE_WORDS
+    )
+
+    negative_count = sum(
+        1
+        for word in words
+        if word in NEGATIVE_WORDS
+    )
+
+    score += (
+        positive_count
+        - negative_count
+    ) * 0.15
 
     # --------------------------------------------------------
     # GDELT TONE
     # --------------------------------------------------------
 
-    tone = safe_float(
-        article.get(
-            "tone"
-        )
+    tone_value = safe_float(
+        tone
     )
 
-    if tone is not None:
+    if tone_value is not None:
 
-        tone_score = clamp(
-            tone / 10.0,
+        tone_component = clamp(
+            tone_value / 10.0,
             -1,
             1
         )
 
-        if (
-            text_score != 0
-            and tone_score != 0
-        ):
+        score = (
+            score * 0.75
+            + tone_component * 0.25
+        )
 
-            return clamp(
-
-                text_score * 0.60
-                + tone_score * 0.40,
-
-                -1,
-                1
-            )
-
-        return tone_score
-
-    return text_score
+    return clamp(
+        score / 2.0,
+        -1,
+        1
+    )
 
 
-def analyze_news(
-    name
+def macro_sentiment_for_commodity(
+    commodity,
+    title,
+    description=""
 ):
 
-    query = NEWS_TERMS.get(
+    text = (
+        f"{title} {description}"
+    ).lower()
+
+    score = 0.0
+
+    # --------------------------------------------------------
+    # ORO / ARGENTO
+    # --------------------------------------------------------
+
+    if commodity in (
+        "Oro",
+        "Argento"
+    ):
+
+        positive = [
+            "rate cut",
+            "rate cuts",
+            "lower rates",
+            "dovish",
+            "weaker dollar",
+            "dollar falls",
+            "dollar weak",
+            "safe haven",
+            "geopolitical tension",
+        ]
+
+        negative = [
+            "rate hike",
+            "rate hikes",
+            "higher rates",
+            "hawkish",
+            "strong dollar",
+            "dollar rises",
+            "yields rise",
+        ]
+
+        for phrase in positive:
+            if phrase in text:
+                score += 1
+
+        for phrase in negative:
+            if phrase in text:
+                score -= 1
+
+    # --------------------------------------------------------
+    # PETROLIO
+    # --------------------------------------------------------
+
+    elif commodity in (
+        "Petrolio WTI",
+        "Petrolio Brent"
+    ):
+
+        positive = [
+            "opec cut",
+            "production cut",
+            "output cut",
+            "supply disruption",
+            "strong demand",
+            "china demand",
+            "stimulus",
+        ]
+
+        negative = [
+            "opec increase",
+            "output increase",
+            "supply surplus",
+            "weak demand",
+            "recession",
+            "economic slowdown",
+        ]
+
+        for phrase in positive:
+            if phrase in text:
+                score += 1
+
+        for phrase in negative:
+            if phrase in text:
+                score -= 1
+
+    # --------------------------------------------------------
+    # RAME
+    # --------------------------------------------------------
+
+    elif commodity == "Rame":
+
+        positive = [
+            "china stimulus",
+            "strong demand",
+            "manufacturing growth",
+            "supply disruption",
+            "mine disruption",
+            "production cut",
+        ]
+
+        negative = [
+            "china slowdown",
+            "weak demand",
+            "recession",
+            "manufacturing contraction",
+            "supply surplus",
+        ]
+
+        for phrase in positive:
+            if phrase in text:
+                score += 1
+
+        for phrase in negative:
+            if phrase in text:
+                score -= 1
+
+    # --------------------------------------------------------
+    # GRANO / MAIS / CAFFÈ / GAS
+    # --------------------------------------------------------
+
+    else:
+
+        positive = [
+            "drought",
+            "frost",
+            "freeze",
+            "flood",
+            "crop damage",
+            "supply disruption",
+            "shortage",
+        ]
+
+        negative = [
+            "bumper crop",
+            "favorable weather",
+            "surplus",
+            "oversupply",
+            "harvest increase",
+        ]
+
+        for phrase in positive:
+            if phrase in text:
+                score += 1
+
+        for phrase in negative:
+            if phrase in text:
+                score -= 1
+
+    return clamp(
+        score / 3.0,
+        -1,
+        1
+    )
+
+
+# ============================================================
+# ANALISI NEWS
+# ============================================================
+
+def analyze_news(
+    name,
+    macro_articles=None
+):
+
+    if macro_articles is None:
+        macro_articles = []
+
+    commodity_query = NEWS_TERMS.get(
         name,
         name
     )
 
-    try:
+    commodity_articles, error = gdelt_search(
+        commodity_query,
+        max_records=20,
+        timespan="72h"
+    )
 
-        print(
-            f"   🌐 GDELT: "
-            f"ricerca {name}..."
+    # Fallback semplicissimo
+    if not commodity_articles:
+
+        fallback_map = {
+            "Oro": "gold",
+            "Argento": "silver",
+            "Petrolio WTI": "oil",
+            "Petrolio Brent": "Brent",
+            "Gas Naturale": '"natural gas"',
+            "Rame": "copper",
+            "Grano": "wheat",
+            "Mais": "corn",
+            "Caffè": "coffee",
+        }
+
+        fallback = fallback_map.get(
+            name,
+            name
         )
 
-        articles = gdelt_search(
-
-            query,
-
-            max_records=30,
-
+        fallback_articles, fallback_error = gdelt_search(
+            fallback,
+            max_records=20,
             timespan="72h"
         )
 
-        # ----------------------------------------------------
-        # NESSUNA NEWS
-        # ----------------------------------------------------
-
-        if not articles:
-
-            print(
-                f"   ℹ️ Nessuna news "
-                f"trovata per {name}"
+        if fallback_articles:
+            commodity_articles = (
+                fallback_articles
             )
+            error = None
+        elif fallback_error:
+            error = fallback_error
 
-            return {
+    # --------------------------------------------------------
+    # Deduplica
+    # --------------------------------------------------------
 
-                "score":
-                    0.0,
+    merged = {}
 
-                "label":
-                    "NESSUNA NEWS",
+    for article in commodity_articles:
 
-                "count":
-                    0,
-
-                "positive":
-                    0,
-
-                "negative":
-                    0,
-
-                "headline":
-                    "",
-
-                "source":
-                    "",
-            }
-
-        # ----------------------------------------------------
-        # DUPLICATI
-        # ----------------------------------------------------
-
-        unique_articles = []
-
-        seen = set()
-
-        for article in articles:
-
-            if not isinstance(
-                article,
-                dict
-            ):
-                continue
-
-            url = str(
-                article.get(
-                    "url",
-                    ""
-                )
-                or article.get(
-                    "url_mobile",
-                    ""
-                )
-                or ""
-            ).strip().lower()
-
-            title = str(
-                article.get(
-                    "title",
-                    ""
-                )
-                or ""
-            ).strip().lower()
-
-            key = (
-                url
-                or title
-            )
-
-            if not key:
-                continue
-
-            if key in seen:
-                continue
-
-            seen.add(
-                key
-            )
-
-            unique_articles.append(
-                article
-            )
-
-        if not unique_articles:
-
-            return {
-
-                "score":
-                    0.0,
-
-                "label":
-                    "NESSUNA NEWS",
-
-                "count":
-                    0,
-
-                "positive":
-                    0,
-
-                "negative":
-                    0,
-
-                "headline":
-                    "",
-
-                "source":
-                    "",
-            }
-
-        # ----------------------------------------------------
-        # SENTIMENT
-        # ----------------------------------------------------
-
-        scores = []
-
-        positive_count = 0
-        negative_count = 0
-
-        for article in (
-            unique_articles
-        ):
-
-            sentiment = (
-                article_sentiment(
-                    article
-                )
-            )
-
-            scores.append(
-                sentiment
-            )
-
-            if sentiment >= 0.15:
-
-                positive_count += 1
-
-            elif sentiment <= -0.15:
-
-                negative_count += 1
-
-        normalized = clamp(
-            mean(scores),
-            -1,
-            1
+        key = (
+            article.get("url")
+            or article.get("title")
+            or ""
         )
 
-        # ----------------------------------------------------
-        # LABEL
-        # ----------------------------------------------------
+        if key:
+            merged[key] = article
 
-        if normalized >= 0.20:
+    commodity_articles = list(
+        merged.values()
+    )
 
-            label = "POSITIVE"
+    # --------------------------------------------------------
+    # Sentiment commodity
+    # --------------------------------------------------------
 
-        elif normalized <= -0.20:
+    scores = []
 
-            label = "NEGATIVE"
+    positive_count = 0
+    negative_count = 0
+
+    for article in commodity_articles:
+
+        title = (
+            article.get("title")
+            or ""
+        )
+
+        description = (
+            article.get("description")
+            or article.get("snippet")
+            or ""
+        )
+
+        tone = article.get(
+            "tone"
+        )
+
+        sentiment = article_sentiment(
+            name,
+            title,
+            description,
+            tone
+        )
+
+        scores.append(
+            sentiment
+        )
+
+        if sentiment > 0.15:
+            positive_count += 1
+
+        elif sentiment < -0.15:
+            negative_count += 1
+
+    commodity_score = mean(
+        scores
+    )
+
+    # --------------------------------------------------------
+    # Macro news
+    # --------------------------------------------------------
+
+    macro_scores = []
+
+    for article in macro_articles:
+
+        title = (
+            article.get("title")
+            or ""
+        )
+
+        description = (
+            article.get("description")
+            or article.get("snippet")
+            or ""
+        )
+
+        macro_score = (
+            macro_sentiment_for_commodity(
+                name,
+                title,
+                description
+            )
+        )
+
+        if abs(macro_score) > 0:
+            macro_scores.append(
+                macro_score
+            )
+
+    macro_score = mean(
+        macro_scores
+    )
+
+    # --------------------------------------------------------
+    # Score finale news
+    # --------------------------------------------------------
+
+    if scores:
+
+        if macro_scores:
+
+            final_score = (
+                commodity_score * 0.75
+                + macro_score * 0.25
+            )
 
         else:
 
-            label = "NEUTRALI"
+            final_score = commodity_score
 
-        # ----------------------------------------------------
-        # ULTIMA NEWS
-        # ----------------------------------------------------
+    else:
 
-        headline = ""
-        source = ""
+        final_score = macro_score
 
-        first = (
-            unique_articles[0]
+    if final_score > 0.15:
+        label = "POSITIVE"
+
+    elif final_score < -0.15:
+        label = "NEGATIVE"
+
+    else:
+        label = "NEUTRALE"
+
+    # --------------------------------------------------------
+    # Ultima notizia
+    # --------------------------------------------------------
+
+    headline = ""
+
+    source = ""
+
+    if commodity_articles:
+
+        first = commodity_articles[0]
+
+        headline = (
+            first.get("title")
+            or ""
         )
 
-        headline = str(
-            first.get(
-                "title",
+        source = (
+            first.get("domain")
+            or ""
+        )
+
+        if not source:
+
+            url = first.get(
+                "url",
                 ""
             )
-            or ""
-        ).strip()
 
-        source = str(
-            first.get(
-                "domain",
-                ""
+            match = re.search(
+                r"https?://([^/]+)",
+                url
             )
-            or ""
-        ).strip()
 
-        print(
-            f"   📰 News trovate: "
-            f"{len(unique_articles)}"
-        )
+            if match:
+                source = match.group(1)
 
-        print(
-            f"   🟢 Positive: "
-            f"{positive_count}"
-        )
+    status = "OK"
 
-        print(
-            f"   🔴 Negative: "
-            f"{negative_count}"
-        )
+    if (
+        not commodity_articles
+        and not macro_scores
+    ):
 
-        print(
-            f"   📊 Sentiment: "
-            f"{normalized:.3f}"
-        )
+        if error:
+            status = "ERRORE"
+        else:
+            status = "NESSUNA"
 
-        return {
-
-            "score":
-                normalized,
-
-            "label":
-                label,
-
-            "count":
-                len(unique_articles),
-
-            "positive":
-                positive_count,
-
-            "negative":
-                negative_count,
-
-            "headline":
-                headline,
-
-            "source":
-                source,
-        }
-
-    except Exception as error:
-
-        error_text = str(
-            error
-        )
-
-        print(
-            f"   ❌ Web News "
-            f"{name}: "
-            f"{error_text}"
-        )
-
-        return {
-
-            "score":
-                0.0,
-
-            "label":
-                "ERRORE",
-
-            "count":
-                0,
-
-            "positive":
-                0,
-
-            "negative":
-                0,
-
-            "headline":
-                "",
-
-            "source":
-                "",
-
-            "error":
-                error_text,
-        }
+    return {
+        "label": label,
+        "score": final_score,
+        "positive": positive_count,
+        "negative": negative_count,
+        "count": len(commodity_articles),
+        "headline": headline,
+        "source": source,
+        "status": status,
+        "error": error,
+    }
 
 
 # ============================================================
-# SIGNAL
+# ANALISI PRINCIPALE
 # ============================================================
 
 def analyze(
@@ -2510,399 +2087,276 @@ def analyze(
     timeframes
 ):
 
-    features = build_features(
+    closes = [
+        c["close"]
+        for c in candles
+    ]
+
+    current_price = closes[-1]
+
+    current_features = build_features(
         candles
     )
 
-    if features is None:
-        return None
-
-    scaled = scale_current(
-        features,
-        model
+    current_scaled = scale_current(
+        dataset,
+        current_features
     )
 
     probability = predict(
-        scaled,
-        model["weights"],
-        model["bias"]
+        model,
+        current_scaled
     )
 
-    quality = quality_score(
-        bt
-    )
+    model_signal = "NEUTRALE"
 
-    strength = (
-        abs(
-            probability
-            - 0.50
-        )
-        * 200
-    )
-
-    confidence = (
-        strength * 0.60
-        + quality * 0.40
-    )
-
-    if quality < MIN_QUALITY:
-
-        model_signal = "NO TRADE"
-
-    elif (
-        probability
-        >= LONG_THRESHOLD
-    ):
-
+    if probability >= LONG_THRESHOLD:
         model_signal = "LONG"
 
-    elif (
-        probability
-        <= SHORT_THRESHOLD
-    ):
-
+    elif probability <= SHORT_THRESHOLD:
         model_signal = "SHORT"
 
-    else:
-
-        model_signal = "WAIT"
-
-    main_direction = (
-
-        "LONG"
-
-        if probability >= 0.50
-
-        else "SHORT"
-    )
-
     # --------------------------------------------------------
-    # TIMEFRAME PRINCIPALI
+    # Timeframe score
     # --------------------------------------------------------
 
     tf_score = 0
 
-    for tf in (
-        "4H",
-        "1H",
-        "15m"
-    ):
+    for value in timeframes.values():
 
-        direction = (
-            timeframes[
-                tf
-            ]["direction"]
-        )
+        direction = value["direction"]
 
-        if direction == main_direction:
-
+        if direction == "LONG":
             tf_score += 1
 
-        elif direction not in (
-            "NONE",
-            main_direction
-        ):
-
+        elif direction == "SHORT":
             tf_score -= 1
 
     # --------------------------------------------------------
-    # TIMEFRAME VELOCI
+    # Fast timeframe
     # --------------------------------------------------------
 
-    fast_confirmations = 0
-    fast_conflicts = 0
-
-    for tf in (
-        "5m",
-        "1m"
-    ):
-
-        direction = (
-            timeframes[
-                tf
-            ]["direction"]
-        )
-
-        if direction == main_direction:
-
-            fast_confirmations += 1
-
-        elif direction not in (
-            "NONE",
-            main_direction
-        ):
-
-            fast_conflicts += 1
-
-    # --------------------------------------------------------
-    # STORICO
-    # --------------------------------------------------------
-
-    repetition = (
-        historical_repetition(
-            candles
-        )
+    fast_score = (
+        timeframes["5m"]["score"]
+        + timeframes["1m"]["score"]
     )
 
-    repetition_impact = 0
-
-    if (
-        repetition["direction"]
-        == main_direction
-    ):
-
-        repetition_impact = (
-            repetition[
-                "frequency"
-            ] * 8
-        )
-
-    elif repetition[
-        "direction"
-    ] not in (
-        "NEUTRALE",
-        main_direction
-    ):
-
-        repetition_impact = (
-            -repetition[
-                "frequency"
-            ] * 8
-        )
+    fast_conflict = (
+        timeframes["5m"]["direction"]
+        not in ("NONE", "LONG")
+        and timeframes["1m"]["direction"]
+        == "LONG"
+    ) or (
+        timeframes["5m"]["direction"]
+        not in ("NONE", "SHORT")
+        and timeframes["1m"]["direction"]
+        == "SHORT"
+    )
 
     # --------------------------------------------------------
-    # SCORE
+    # Historical
+    # --------------------------------------------------------
+
+    repetition = historical_repetition(
+        candles
+    )
+
+    # --------------------------------------------------------
+    # News
+    # --------------------------------------------------------
+
+    news_score = news["score"]
+
+    # --------------------------------------------------------
+    # USD
+    # --------------------------------------------------------
+
+    usd_score = usd["score"]
+
+    # --------------------------------------------------------
+    # Probability score
+    # --------------------------------------------------------
+
+    probability_score = (
+        probability * 100
+    )
+
+    # --------------------------------------------------------
+    # Direction score
     # --------------------------------------------------------
 
     direction_score = (
-        abs(
-            probability
-            - 0.50
-        )
-        * 200
+        50
+        + tf_score * 7
+        + fast_score * 3
+        + usd_score * 4
+        + news_score * 10
+        + repetition["score"] * 5
     )
 
-    score = (
-
-        direction_score
-        * 0.40
-
-        + quality
-        * 0.20
-
-        + confidence
-        * 0.15
-
-        + max(
-            tf_score,
-            -3
-        ) * 5
-
-        + fast_confirmations
-        * 5
-
-        + repetition_impact
-
-        + news["score"]
-        * 6
-
-        + usd["impact"]
-        * 3
-    )
-
-    score = clamp(
-        score,
+    direction_score = clamp(
+        direction_score,
         0,
         100
     )
 
     # --------------------------------------------------------
-    # SEGNALE OPERATIVO
+    # Final score
     # --------------------------------------------------------
 
-    operational_signal = (
-        model_signal
+    final_score = (
+        probability_score * 0.45
+        + direction_score * 0.55
     )
 
-    if model_signal in (
-        "LONG",
-        "SHORT"
-    ):
-
-        if tf_score <= -2:
-
-            operational_signal = "WAIT"
-
-        elif fast_conflicts == 2:
-
-            operational_signal = "WAIT"
+    final_score = clamp(
+        final_score,
+        0,
+        100
+    )
 
     # --------------------------------------------------------
-    # GRADE
+    # Direction
     # --------------------------------------------------------
 
-    if operational_signal in (
-        "LONG",
-        "SHORT"
-    ):
+    if final_score >= 62:
 
-        if (
-            confidence >= 70
-            and fast_confirmations == 2
-            and tf_score >= 1
-            and score >= 75
-        ):
+        signal = "LONG"
 
-            grade = "FORTE"
+    elif final_score <= 38:
 
-        elif (
-            confidence >= 58
-            and score >= 65
-        ):
-
-            grade = "IN FORMAZIONE"
-
-        else:
-
-            grade = "DEBOLE"
-
-    elif model_signal in (
-        "LONG",
-        "SHORT"
-    ):
-
-        if fast_conflicts:
-
-            grade = "CONFLITTO"
-
-        else:
-
-            grade = "IN FORMAZIONE"
+        signal = "SHORT"
 
     else:
 
-        grade = "NEUTRALE"
+        signal = "NEUTRALE"
 
     # --------------------------------------------------------
-    # RISK
+    # Confidence
     # --------------------------------------------------------
 
-    price = candles[-1][
-        "close"
-    ]
-
-    current_atr = (
-        atr(
-            candles,
-            14
-        )
-        or price * 0.01
+    confidence = (
+        abs(final_score - 50)
+        * 2
     )
 
-    if operational_signal == "LONG":
+    confidence = clamp(
+        confidence,
+        0,
+        100
+    )
 
-        stop = (
-            price
-            - current_atr
-            * STOP_ATR
-        )
+    # --------------------------------------------------------
+    # Quality
+    # --------------------------------------------------------
 
-        tp1 = (
-            price
-            + current_atr
-            * TP1_ATR
-        )
+    vol = volatility(
+        closes
+    )
 
-        tp2 = (
-            price
-            + current_atr
-            * TP2_ATR
-        )
+    quality = quality_score(
+        probability,
+        bt,
+        vol
+    )
 
-    elif operational_signal == "SHORT":
+    # --------------------------------------------------------
+    # ATR
+    # --------------------------------------------------------
 
-        stop = (
-            price
-            + current_atr
-            * STOP_ATR
-        )
+    atr_value = atr(
+        candles
+    )
 
-        tp1 = (
-            price
-            - current_atr
-            * TP1_ATR
-        )
+    stop_loss = None
+    tp1 = None
+    tp2 = None
 
-        tp2 = (
-            price
-            - current_atr
-            * TP2_ATR
-        )
+    if atr_value:
+
+        if signal == "LONG":
+
+            stop_loss = (
+                current_price
+                - atr_value * STOP_ATR
+            )
+
+            tp1 = (
+                current_price
+                + atr_value * TP1_ATR
+            )
+
+            tp2 = (
+                current_price
+                + atr_value * TP2_ATR
+            )
+
+        elif signal == "SHORT":
+
+            stop_loss = (
+                current_price
+                + atr_value * STOP_ATR
+            )
+
+            tp1 = (
+                current_price
+                - atr_value * TP1_ATR
+            )
+
+            tp2 = (
+                current_price
+                - atr_value * TP2_ATR
+            )
+
+    # --------------------------------------------------------
+    # Grade
+    # --------------------------------------------------------
+
+    if final_score >= 75:
+        grade = "A"
+
+    elif final_score >= 65:
+        grade = "B"
+
+    elif final_score >= 55:
+        grade = "C"
 
     else:
+        grade = "D"
 
-        stop = None
-        tp1 = None
-        tp2 = None
+    # --------------------------------------------------------
+    # Operational signal
+    # --------------------------------------------------------
+
+    operational_signal = signal
+
+    if (
+        quality < MIN_QUALITY
+        or confidence < MIN_CONFIDENCE
+        or final_score < MIN_SCORE
+        or fast_conflict
+    ):
+
+        operational_signal = (
+            "NO TRADE"
+        )
 
     return {
-
-        "signal":
-            operational_signal,
-
-        "model_signal":
-            model_signal,
-
-        "grade":
-            grade,
-
-        "probability":
-            probability,
-
-        "confidence":
-            confidence,
-
-        "quality":
-            quality,
-
-        "score":
-            score,
-
-        "price":
-            price,
-
-        "atr":
-            current_atr,
-
-        "stop":
-            stop,
-
-        "tp1":
-            tp1,
-
-        "tp2":
-            tp2,
-
-        "timeframes":
-            timeframes,
-
-        "usd":
-            usd,
-
-        "news":
-            news,
-
-        "repetition":
-            repetition,
-
-        "tf_score":
-            tf_score,
-
-        "fast_confirmations":
-            fast_confirmations,
-
-        "fast_conflicts":
-            fast_conflicts,
+        "price": current_price,
+        "probability": probability,
+        "signal": signal,
+        "operational_signal": operational_signal,
+        "score": final_score,
+        "confidence": confidence,
+        "quality": quality,
+        "grade": grade,
+        "atr": atr_value,
+        "sl": stop_loss,
+        "tp1": tp1,
+        "tp2": tp2,
+        "timeframes": timeframes,
+        "repetition": repetition,
+        "fast_conflict": fast_conflict,
     }
 
 
@@ -2912,253 +2366,100 @@ def analyze(
 
 def manage_position(
     position,
-    current_analysis,
-    current_price
+    result
 ):
 
-    direction = position[
+    if not position:
+        return None
+
+    price = result["price"]
+
+    direction = position.get(
         "direction"
-    ]
-
-    entry = position[
-        "entry"
-    ]
-
-    stop = position[
-        "stop"
-    ]
-
-    tp1 = position[
-        "tp1"
-    ]
-
-    tp2 = position[
-        "tp2"
-    ]
-
-    probability = (
-        current_analysis[
-            "probability"
-        ]
     )
 
-    signal = (
-        current_analysis[
-            "signal"
-        ]
+    sl = position.get(
+        "sl"
+    )
+
+    tp1 = position.get(
+        "tp1"
+    )
+
+    tp2 = position.get(
+        "tp2"
     )
 
     if direction == "LONG":
 
-        if current_price <= stop:
+        if sl and price <= sl:
+            return "STOP"
 
-            return {
-                "action":
-                    "EXIT",
-                "reason":
-                    "STOP LOSS",
-                "new_stop":
-                    stop,
-            }
-
-        if current_price >= tp2:
-
-            return {
-                "action":
-                    "EXIT",
-                "reason":
-                    "TAKE PROFIT 2",
-                "new_stop":
-                    stop,
-            }
+        if tp2 and price >= tp2:
+            return "TP2"
 
         if (
-            probability <= 0.38
-            or signal == "SHORT"
+            tp1
+            and price >= tp1
+            and not position.get(
+                "tp1_hit"
+            )
         ):
+            position["tp1_hit"] = True
 
-            return {
-                "action":
-                    "EXIT",
-                "reason":
-                    "INVERSIONE CONFERMATA",
-                "new_stop":
-                    stop,
-            }
-
-        if probability < 0.48:
-
-            return {
-                "action":
-                    "WARNING",
-                "reason":
-                    "LONG INDEBOLITO",
-                "new_stop":
-                    stop,
-            }
-
-        if current_price >= tp1:
-
-            trailing_stop = (
-                current_price
-                - current_analysis[
-                    "atr"
-                ]
+            # Trailing stop
+            position["sl"] = (
+                position["entry"]
             )
 
-            new_stop = max(
-                stop,
-                entry,
-                trailing_stop
-            )
+            return "TP1"
 
-            return {
-                "action":
-                    "HOLD",
-                "reason":
-                    "TP1 RAGGIUNTO - "
-                    "TRAILING STOP",
-                "new_stop":
-                    new_stop,
-            }
+    elif direction == "SHORT":
 
-        return {
-            "action":
-                "HOLD",
-            "reason":
-                "TREND LONG "
-                "ANCORA VALIDO",
-            "new_stop":
-                stop,
-        }
+        if sl and price >= sl:
+            return "STOP"
 
-    if direction == "SHORT":
-
-        if current_price >= stop:
-
-            return {
-                "action":
-                    "EXIT",
-                "reason":
-                    "STOP LOSS",
-                "new_stop":
-                    stop,
-            }
-
-        if current_price <= tp2:
-
-            return {
-                "action":
-                    "EXIT",
-                "reason":
-                    "TAKE PROFIT 2",
-                "new_stop":
-                    stop,
-            }
+        if tp2 and price <= tp2:
+            return "TP2"
 
         if (
-            probability >= 0.62
-            or signal == "LONG"
+            tp1
+            and price <= tp1
+            and not position.get(
+                "tp1_hit"
+            )
         ):
+            position["tp1_hit"] = True
 
-            return {
-                "action":
-                    "EXIT",
-                "reason":
-                    "INVERSIONE CONFERMATA",
-                "new_stop":
-                    stop,
-            }
-
-        if probability > 0.52:
-
-            return {
-                "action":
-                    "WARNING",
-                "reason":
-                    "SHORT INDEBOLITO",
-                "new_stop":
-                    stop,
-            }
-
-        if current_price <= tp1:
-
-            trailing_stop = (
-                current_price
-                + current_analysis[
-                    "atr"
-                ]
+            position["sl"] = (
+                position["entry"]
             )
 
-            new_stop = min(
-                stop,
-                entry,
-                trailing_stop
-            )
+            return "TP1"
 
-            return {
-                "action":
-                    "HOLD",
-                "reason":
-                    "TP1 RAGGIUNTO - "
-                    "TRAILING STOP",
-                "new_stop":
-                    new_stop,
-            }
-
-        return {
-            "action":
-                "HOLD",
-            "reason":
-                "TREND SHORT "
-                "ANCORA VALIDO",
-            "new_stop":
-                stop,
-        }
-
-    return {
-        "action":
-            "EXIT",
-        "reason":
-            "DIREZIONE NON "
-            "RICONOSCIUTA",
-        "new_stop":
-            stop,
-    }
+    return None
 
 
 # ============================================================
 # TELEGRAM
 # ============================================================
 
-def send_telegram(
-    message
-):
+def send_telegram(message):
 
-    if (
-        not TELEGRAM_BOT_TOKEN
-        or not TELEGRAM_CHAT_ID
-    ):
-
+    if not TELEGRAM_BOT_TOKEN:
         print(
-            "⚠️ Telegram non configurato."
+            "TELEGRAM_BOT_TOKEN non configurato."
         )
-
         return
 
     url = (
-        "https://api.telegram.org/"
-        f"bot{TELEGRAM_BOT_TOKEN}/"
-        "sendMessage"
+        "https://api.telegram.org/bot"
+        f"{TELEGRAM_BOT_TOKEN}/sendMessage"
     )
 
     payload = {
-
-        "chat_id":
-            TELEGRAM_CHAT_ID,
-
-        "text":
-            message,
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message,
     }
 
     try:
@@ -3166,7 +2467,7 @@ def send_telegram(
         response = requests.post(
             url,
             json=payload,
-            timeout=20
+            timeout=30
         )
 
         response.raise_for_status()
@@ -3174,372 +2475,195 @@ def send_telegram(
     except Exception as error:
 
         print(
-            f"⚠️ Errore Telegram: "
-            f"{error}"
+            f"Telegram error: {error}"
         )
 
 
-def icon_for_signal(
-    signal
-):
+def icon_for_signal(signal):
 
-    return {
+    if signal == "LONG":
+        return "🟢"
 
-        "LONG":
-            "🟢",
+    if signal == "SHORT":
+        return "🔴"
 
-        "SHORT":
-            "🔴",
+    if signal == "NO TRADE":
+        return "🟡"
 
-        "WAIT":
-            "🟡",
-
-        "NO TRADE":
-            "⚪",
-
-    }.get(
-        signal,
-        "⚪"
-    )
+    return "⚪"
 
 
-def compact_tf(
-    timeframes
-):
+def compact_tf(timeframes):
 
-    return " | ".join(
+    values = []
 
-        f"{tf} "
-        f"{timeframes[tf]['direction']}"
+    for key in [
+        "4H",
+        "1H",
+        "15m",
+        "5m",
+        "1m"
+    ]:
 
-        for tf in (
-
-            "4H",
-            "1H",
-            "15m",
-            "5m",
-            "1m"
+        values.append(
+            f"{key} "
+            f"{timeframes[key]['direction']}"
         )
-    )
+
+    return " | ".join(values)
 
 
-def confirmation_text(
-    analysis
-):
+def confirmation_text(result):
 
-    signal = (
-        analysis[
-            "model_signal"
-        ]
-    )
-
-    tfs = (
-        analysis[
-            "timeframes"
-        ]
-    )
-
-    if signal not in (
-        "LONG",
-        "SHORT"
-    ):
+    if result["operational_signal"] == "LONG":
 
         return (
-            "👉 Nessun setup "
-            "principale "
-            "sufficientemente forte."
+            "👉 Setup LONG sufficientemente forte."
         )
 
-    opposite = (
-
-        "SHORT"
-
-        if signal == "LONG"
-
-        else "LONG"
-    )
-
-    if (
-        tfs["5m"]["direction"]
-        == signal
-
-        and
-
-        tfs["1m"]["direction"]
-        == signal
-    ):
+    if result["operational_signal"] == "SHORT":
 
         return (
-            f"👉 ✅ 5m + 1m "
-            f"CONFERMANO {signal}"
-        )
-
-    if (
-        tfs["5m"]["direction"]
-        == opposite
-
-        or
-
-        tfs["1m"]["direction"]
-        == opposite
-    ):
-
-        return (
-            f"👉 ⚠️ CONFLITTO "
-            f"CONTRO {signal}"
-        )
-
-    if (
-        tfs["5m"]["direction"]
-        == signal
-    ):
-
-        return (
-            f"👉 ⏳ ATTENDERE "
-            f"CONFERMA 1m {signal}"
-        )
-
-    if (
-        tfs["1m"]["direction"]
-        == signal
-    ):
-
-        return (
-            f"👉 ⏳ ATTENDERE "
-            f"CONFERMA 5m {signal}"
+            "👉 Setup SHORT sufficientemente forte."
         )
 
     return (
-        f"👉 ⏳ ATTENDERE "
-        f"CONFERMA {signal}"
+        "👉 Nessun setup principale "
+        "sufficientemente forte."
     )
 
 
 def build_telegram(
     ranked,
     best,
-    position_message=None
+    usd
 ):
 
-    a = best[
-        "analysis"
+    signal = best["result"][
+        "operational_signal"
     ]
 
-    news = a[
-        "news"
+    icon = icon_for_signal(
+        signal
+    )
+
+    result = best["result"]
+    news = best["news"]
+
+    repetition = result[
+        "repetition"
     ]
 
-    lines = [
+    timeframes = result[
+        "timeframes"
+    ]
 
-        "🌍 COMMODITIES BOT",
-
-        "",
-
-        "🏆 MIGLIOR SETUP",
-
-        f"{icon_for_signal(a['signal'])} "
-        f"{best['name']}",
-
-        f"🎯 {a['signal']} | "
-        f"{a['grade']}",
-
-        f"📊 Score: "
-        f"{a['score']:.0f}/100",
-
-        "",
-
+    message = (
+        "🌍 COMMODITIES BOT\n\n"
+        "🏆 MIGLIOR SETUP\n"
+        f"{icon} {best['name']}\n"
+        f"🎯 {signal} | "
+        f"Score: {result['score']:.0f}/100\n"
+        f"📊 Qualità: "
+        f"{result['quality']:.0f}/100\n\n"
         f"💰 Prezzo: "
-        f"{a['price']:.4f}",
-
+        f"{result['price']:.4f}\n"
         f"🧠 Modello: "
-        f"{pct(a['probability'])}",
-
-        f"📈 "
-        f"{compact_tf(a['timeframes'])}",
-
-        confirmation_text(a),
-
-        "",
-
+        f"{result['probability'] * 100:.1f}%\n"
+        f"📈 {compact_tf(timeframes)}\n"
+        f"{confirmation_text(result)}\n\n"
         f"📰 News: "
         f"{news['label']} "
-        f"({news['count']})",
-
+        f"({news['count']})\n"
         f"🟢 News positive: "
-        f"{news['positive']}",
-
+        f"{news['positive']}\n"
         f"🔴 News negative: "
-        f"{news['negative']}",
+        f"{news['negative']}\n"
+    )
 
-        f"💵 Dollaro: "
-        f"{a['usd']['label']}",
+    if news.get("headline"):
 
-        f"🔄 Storico: "
-        f"{a['repetition']['direction']} "
-        f"("
-        f"{a['repetition']['frequency'] * 100:.0f}% "
-        f"su "
-        f"{a['repetition']['samples']} "
-        f"casi)",
-
-        "",
-    ]
-
-    # --------------------------------------------------------
-    # ULTIMA NOTIZIA
-    # --------------------------------------------------------
-
-    if (
-        news.get("headline")
-        and news.get("label")
-        != "ERRORE"
-    ):
-
-        headline = news[
-            "headline"
-        ]
+        headline = (
+            news["headline"]
+            .replace("\n", " ")
+            .strip()
+        )
 
         if len(headline) > 180:
-
             headline = (
                 headline[:177]
                 + "..."
             )
 
-        lines.extend([
-
-            "🗞️ Ultima news:",
-
-            headline,
-
-            (
-                f"Fonte: "
-                f"{news.get('source', '')}"
-                if news.get("source")
-                else ""
-            ),
-
-            "",
-        ])
-
-    # --------------------------------------------------------
-    # ERRORE NEWS
-    # --------------------------------------------------------
-
-    if news.get(
-        "error"
-    ):
-
-        lines.extend([
-
-            "⚠️ Errore web:",
-
-            news[
-                "error"
-            ],
-
-            "",
-        ])
-
-    # --------------------------------------------------------
-    # RISK
-    # --------------------------------------------------------
-
-    if a["signal"] in (
-        "LONG",
-        "SHORT"
-    ):
-
-        lines.extend([
-
-            f"👉 ENTRY: "
-            f"{a['price']:.4f}",
-
-            f"🛑 SL: "
-            f"{a['stop']:.4f}",
-
-            f"🎯 TP1: "
-            f"{a['tp1']:.4f}",
-
-            f"🎯 TP2: "
-            f"{a['tp2']:.4f}",
-
-            "",
-        ])
-
-    # --------------------------------------------------------
-    # TOP 3
-    # --------------------------------------------------------
-
-    medals = [
-        "🥇",
-        "🥈",
-        "🥉",
-    ]
-
-    for i, item in enumerate(
-        ranked[:3]
-    ):
-
-        if (
-            item["name"]
-            == best["name"]
-        ):
-
-            continue
-
-        x = item[
-            "analysis"
-        ]
-
-        medal = (
-            medals[i]
-            if i < 3
-            else "•"
+        message += (
+            f"🗞️ {headline}\n"
         )
 
-        lines.append(
+        if news.get("source"):
 
-            f"{medal} "
-            f"{item['name']} — "
-            f"{x['signal']} | "
-            f"{x['score']:.0f}/100"
+            message += (
+                f"🌐 Fonte: "
+                f"{news['source']}\n"
+            )
+
+    if news.get("status") == "ERRORE":
+
+        message += (
+            "\n⚠️ Errore web:\n"
+            f"{news.get('error') or 'GDELT errore sconosciuto'}\n"
         )
 
-    # --------------------------------------------------------
-    # POSIZIONE
-    # --------------------------------------------------------
-
-    if position_message:
-
-        lines.extend([
-
-            "",
-
-            position_message
-        ])
-
-    lines.extend([
-
-        "",
-
-        f"👉 FOCUS: "
-        f"{best['name']}",
-
-        "",
-
-        "🌐 News analizzate "
-        "dal web nelle ultime 72h.",
-
-        "",
-
-        "⚠️ Segnale algoritmico, "
-        "non garanzia di profitto.",
-    ])
-
-    return "\n".join(
-        lines
+    message += (
+        f"\n💵 Dollaro: "
+        f"{'FORTE / SFAVOREVOLE' if usd['direction'] == 'LONG' else 'DEBOLE / FAVOREVOLE' if usd['direction'] == 'SHORT' else 'NEUTRALE'}\n"
+        f"🔄 Storico: "
+        f"{repetition['direction']} "
+        f"({repetition['frequency'] * 100:.0f}% "
+        f"su {repetition['samples']} casi)\n"
     )
+
+    if signal == "NO TRADE" or signal == "NEUTRALE":
+
+        message += (
+            "\n🟡 NESSUNA ENTRATA.\n"
+        )
+
+    else:
+
+        message += (
+            "\n🚨 SETUP OPERATIVO.\n"
+        )
+
+        if result["sl"] is not None:
+
+            message += (
+                f"🛡️ SL: "
+                f"{result['sl']:.4f}\n"
+            )
+
+        if result["tp1"] is not None:
+
+            message += (
+                f"🎯 TP1: "
+                f"{result['tp1']:.4f}\n"
+            )
+
+        if result["tp2"] is not None:
+
+            message += (
+                f"🎯 TP2: "
+                f"{result['tp2']:.4f}\n"
+            )
+
+    message += (
+        f"\n👉 FOCUS: {best['name']}\n\n"
+        "🌐 News analizzate dal web "
+        "nelle ultime 72h.\n\n"
+        "⚠️ Segnale algoritmico, "
+        "non garanzia di profitto."
+    )
+
+    return message
 
 
 # ============================================================
@@ -3548,619 +2672,353 @@ def build_telegram(
 
 def main():
 
-    print()
-
     print(
-        "=" * 70
+        "===================================="
     )
 
     print(
-        "🌍 COMMODITY TRADING BOT v6.1"
+        "COMMODITY BOT v6.1"
     )
 
     print(
-        "QUANT + MTF + WEB NEWS + "
-        "USD + RIPETIZIONE STORICA"
+        "Avvio..."
     )
 
     print(
-        "=" * 70
+        "===================================="
     )
-
-    print()
 
     position = load_position()
 
     usd = analyze_usd()
 
-    results = []
+    print(
+        f"USD: {usd}"
+    )
 
-    for name, symbol in (
-        COMMODITIES.items()
-    ):
+    # --------------------------------------------------------
+    # NEWS MACRO UNA SOLA VOLTA
+    # --------------------------------------------------------
+
+    macro_articles, macro_error = (
+        get_macro_news()
+    )
+
+    if macro_articles:
 
         print(
-            f"🔎 Analizzo {name}..."
+            f"Macro news: "
+            f"{len(macro_articles)}"
+        )
+
+    else:
+
+        print(
+            f"Macro news non disponibili: "
+            f"{macro_error}"
+        )
+
+    ranked = []
+
+    # --------------------------------------------------------
+    # ANALISI COMMODITIES
+    # --------------------------------------------------------
+
+    for name, symbol in COMMODITIES.items():
+
+        print(
+            f"\nAnalizzo {name} "
+            f"({symbol})..."
         )
 
         try:
-
-            # ------------------------------------------------
-            # DATI GIORNALIERI
-            # ------------------------------------------------
 
             candles = get_daily_data(
                 symbol
             )
 
-            if len(candles) < 500:
+            if len(candles) < 150:
 
                 print(
-                    "   ⚠️ Dati "
-                    "insufficienti"
+                    f"{name}: "
+                    "dati insufficienti"
                 )
 
                 continue
-
-            # ------------------------------------------------
-            # DATASET
-            # ------------------------------------------------
 
             dataset = build_dataset(
                 candles
             )
 
-            if len(dataset) < 300:
+            if len(dataset) < 100:
 
                 print(
-                    "   ⚠️ Dataset "
-                    "insufficiente"
+                    f"{name}: "
+                    "dataset insufficiente"
                 )
 
                 continue
-
-            # ------------------------------------------------
-            # BACKTEST
-            # ------------------------------------------------
 
             bt = backtest(
                 dataset
             )
 
-            # ------------------------------------------------
-            # MODELLO
-            # ------------------------------------------------
-
-            model = train_final(
+            model, _ = train_final(
                 dataset
             )
 
             if model is None:
+
+                print(
+                    f"{name}: "
+                    "modello non disponibile"
+                )
+
                 continue
 
-            # ------------------------------------------------
-            # MULTI TIMEFRAME
-            # ------------------------------------------------
+            current_features = (
+                build_features(
+                    candles
+                )
+            )
 
+            current_scaled = scale_current(
+                dataset,
+                current_features
+            )
+
+            # MTF
             timeframes = (
                 get_multitimeframe(
                     symbol
                 )
             )
 
-            # ------------------------------------------------
-            # NEWS WEB
-            # ------------------------------------------------
-
+            # NEWS
             news = analyze_news(
-                name
+                name,
+                macro_articles
             )
 
-            # ------------------------------------------------
-            # ANALISI
-            # ------------------------------------------------
-
-            analysis = analyze(
-
+            result = analyze(
                 candles,
-
                 dataset,
-
                 model,
-
                 bt,
-
                 usd,
-
                 news,
-
-                timeframes,
+                timeframes
             )
 
-            if analysis is None:
-                continue
-
-            results.append({
-
-                "name":
-                    name,
-
-                "symbol":
-                    symbol,
-
-                "candles":
-                    candles,
-
-                "analysis":
-                    analysis,
-
-                "backtest":
-                    bt,
+            ranked.append({
+                "name": name,
+                "symbol": symbol,
+                "result": result,
+                "news": news,
+                "backtest": bt,
             })
 
             print(
-
-                f"   → MODELLO "
-                f"{analysis['model_signal']} | "
-
-                f"OPERATIVO "
-                f"{analysis['signal']} | "
-
-                f"Score "
-                f"{analysis['score']:.0f} | "
-
-                f"News "
-                f"{analysis['news']['label']}"
-
+                f"{name}: "
+                f"{result['operational_signal']} "
+                f"score={result['score']:.1f} "
+                f"news={news['label']}"
             )
 
         except Exception as error:
 
             print(
-                f"   ❌ {error}"
+                f"❌ {name}: {error}"
             )
 
-    # ========================================================
-    # CONTROLLO
-    # ========================================================
+            continue
 
-    if not results:
+    # --------------------------------------------------------
+    # NESSUN RISULTATO
+    # --------------------------------------------------------
 
-        raise RuntimeError(
-            "Nessuna materia prima "
-            "analizzata."
+    if not ranked:
+
+        message = (
+            "🌍 COMMODITIES BOT\n\n"
+            "⚠️ Nessuna commodity "
+            "analizzabile in questo ciclo.\n\n"
+            "Controllare i simboli "
+            "Twelve Data e i dati disponibili.\n\n"
+            "⚠️ Segnale algoritmico, "
+            "non garanzia di profitto."
         )
 
-    # ========================================================
+        send_telegram(
+            message
+        )
+
+        print(message)
+
+        return
+
+    # --------------------------------------------------------
     # RANKING
-    # ========================================================
+    # --------------------------------------------------------
 
-    ranked = sorted(
-
-        results,
-
-        key=lambda x:
-            x["analysis"]["score"],
-
+    ranked.sort(
+        key=lambda x: x["result"]["score"],
         reverse=True
     )
 
     best = ranked[0]
 
-    # ========================================================
-    # GESTIONE POSIZIONE ESISTENTE
-    # ========================================================
-
-    position_message = None
+    # --------------------------------------------------------
+    # POSITION MANAGEMENT
+    # --------------------------------------------------------
 
     if position:
 
-        matching = [
+        position_result = manage_position(
+            position,
+            best["result"]
+        )
 
-            x
-            for x in results
+        if position_result:
 
-            if x["name"]
-            == position["name"]
-        ]
-
-        if matching:
-
-            current = matching[0]
-
-            current_price = (
-                current[
-                    "analysis"
-                ]["price"]
+            print(
+                f"POSITION EVENT: "
+                f"{position_result}"
             )
 
-            management = (
-                manage_position(
-
-                    position,
-
-                    current[
-                        "analysis"
-                    ],
-
-                    current_price
-                )
-            )
-
-            if (
-                management[
-                    "action"
-                ]
-                == "EXIT"
+            if position_result in (
+                "STOP",
+                "TP2"
             ):
-
-                position_message = (
-
-                    f"🚨 POSIZIONE "
-                    f"{position['direction']} "
-                    f"— USCITA\n"
-
-                    f"Motivo: "
-                    f"{management['reason']}"
-                )
 
                 clear_position()
 
                 position = None
 
-            elif (
-                management[
-                    "action"
-                ]
-                == "WARNING"
-            ):
-
-                position["stop"] = (
-                    management[
-                        "new_stop"
-                    ]
-                )
+            else:
 
                 save_position(
                     position
                 )
 
-                position_message = (
+    # --------------------------------------------------------
+    # NUOVA POSIZIONE SIMULATA
+    # --------------------------------------------------------
 
-                    f"🟠 POSIZIONE "
-                    f"{position['direction']} "
-                    f"— ATTENZIONE\n"
+    if position is None:
 
-                    f"{management['reason']}"
-                )
+        best_result = best["result"]
 
-            else:
-
-                if (
-                    management[
-                        "new_stop"
-                    ]
-                    != position[
-                        "stop"
-                    ]
-                ):
-
-                    position[
-                        "stop"
-                    ] = (
-                        management[
-                            "new_stop"
-                        ]
-                    )
-
-                    save_position(
-                        position
-                    )
-
-                position_message = (
-
-                    f"🟢 POSIZIONE "
-                    f"{position['direction']} "
-                    f"— MANTIENI\n"
-
-                    f"{management['reason']}"
-                )
-
-    # ========================================================
-    # NUOVA POSIZIONE
-    # ========================================================
-
-    if (
-        not position
-
-        and best[
-            "analysis"
-        ]["signal"]
-        in (
-            "LONG",
-            "SHORT"
-        )
-    ):
-
-        second_score = (
-
-            ranked[1][
-                "analysis"
-            ]["score"]
-
-            if len(ranked) > 1
-
-            else 0
-        )
-
-        a = best[
-            "analysis"
-        ]
-
-        if (
-
-            a["score"]
-            >= MIN_SCORE
-
-            and
-
-            a["quality"]
-            >= MIN_QUALITY
-
-            and
-
-            a["confidence"]
-            >= MIN_CONFIDENCE
-
-            and
-
-            a["score"]
-            - second_score
-            >= MIN_RANK_MARGIN
-
-            and
-
-            a["fast_conflicts"]
-            == 0
-
-        ):
-
-            position = {
-
-                "name":
-                    best["name"],
-
-                "symbol":
-                    best["symbol"],
-
-                "direction":
-                    a["signal"],
-
-                "entry":
-                    a["price"],
-
-                "stop":
-                    a["stop"],
-
-                "tp1":
-                    a["tp1"],
-
-                "tp2":
-                    a["tp2"],
-
-                "opened_at":
-                    datetime.now(
-                        timezone.utc
-                    ).isoformat(),
-            }
-
-            save_position(
-                position
+        eligible = (
+            best_result[
+                "operational_signal"
+            ]
+            in (
+                "LONG",
+                "SHORT"
             )
+            and best_result["score"]
+            >= MIN_SCORE
+            and best_result["quality"]
+            >= MIN_QUALITY
+            and best_result["confidence"]
+            >= MIN_CONFIDENCE
+            and not best_result[
+                "fast_conflict"
+            ]
+        )
 
-            position_message = (
+        if len(ranked) >= 2:
 
-                f"🚨 NUOVA POSIZIONE "
-                f"{a['signal']}\n"
-
-                f"Entry "
-                f"{a['price']:.4f} | "
-
-                f"SL "
-                f"{a['stop']:.4f} | "
-
-                f"TP1 "
-                f"{a['tp1']:.4f} | "
-
-                f"TP2 "
-                f"{a['tp2']:.4f}"
+            margin = (
+                ranked[0]["result"]["score"]
+                - ranked[1]["result"]["score"]
             )
 
         else:
 
-            position_message = (
+            margin = 999
 
-                "🟡 NESSUNA APERTURA "
-                "AUTOMATICA — "
-                "setup non abbastanza "
-                "selettivo."
+        eligible = (
+            eligible
+            and margin >= MIN_RANK_MARGIN
+        )
+
+        if eligible:
+
+            direction = (
+                best_result[
+                    "operational_signal"
+                ]
             )
 
-    elif not position:
+            new_position = {
+                "commodity": best["name"],
+                "symbol": best["symbol"],
+                "direction": direction,
+                "entry": best_result["price"],
+                "sl": best_result["sl"],
+                "tp1": best_result["tp1"],
+                "tp2": best_result["tp2"],
+                "tp1_hit": False,
+                "opened_at": datetime.now(
+                    timezone.utc
+                ).isoformat(),
+            }
 
-        position_message = (
-            "🟡 NESSUNA ENTRATA."
-        )
+            save_position(
+                new_position
+            )
 
-    # ========================================================
-    # OUTPUT
-    # ========================================================
+            print(
+                "NUOVA POSIZIONE SIMULATA:",
+                new_position
+            )
 
-    print()
-
-    print(
-        "=" * 70
-    )
-
-    print(
-        "🏆 MIGLIORE OPPORTUNITÀ"
-    )
-
-    print(
-        "=" * 70
-    )
-
-    a = best[
-        "analysis"
-    ]
-
-    print(
-        f"Materia prima: "
-        f"{best['name']}"
-    )
-
-    print(
-        f"Segnale modello: "
-        f"{a['model_signal']}"
-    )
-
-    print(
-        f"Segnale operativo: "
-        f"{a['signal']}"
-    )
-
-    print(
-        f"Score: "
-        f"{a['score']:.1f}/100"
-    )
-
-    print(
-        f"Probabilità: "
-        f"{a['probability'] * 100:.1f}%"
-    )
-
-    print(
-        f"Confidenza: "
-        f"{a['confidence']:.1f}/100"
-    )
-
-    print(
-        f"Qualità: "
-        f"{a['quality']:.1f}/100"
-    )
-
-    print(
-        f"News: "
-        f"{a['news']['label']} "
-        f"({a['news']['count']})"
-    )
-
-    print(
-        f"News positive: "
-        f"{a['news']['positive']}"
-    )
-
-    print(
-        f"News negative: "
-        f"{a['news']['negative']}"
-    )
-
-    print(
-        f"Ricorrenza storica: "
-        f"{a['repetition']['direction']} | "
-        f"{a['repetition']['frequency'] * 100:.1f}%"
-    )
-
-    if a["news"].get(
-        "error"
-    ):
-
-        print(
-            f"Errore News: "
-            f"{a['news']['error']}"
-        )
-
-    print()
-
-    print(
-        "=" * 70
-    )
-
-    print(
-        "📊 RANKING"
-    )
-
-    print(
-        "=" * 70
-    )
-
-    for i, item in enumerate(
-        ranked,
-        1
-    ):
-
-        x = item[
-            "analysis"
-        ]
-
-        print(
-
-            f"{i}. "
-            f"{icon_for_signal(x['signal'])} "
-
-            f"{item['name']} | "
-
-            f"{x['signal']} | "
-
-            f"{x['score']:.0f}/100 | "
-
-            f"model "
-            f"{x['probability'] * 100:.1f}% | "
-
-            f"news "
-            f"{x['news']['label']} | "
-
-            f"storico "
-            f"{x['repetition']['direction']}"
-
-        )
-
-    # ========================================================
+    # --------------------------------------------------------
     # TELEGRAM
-    # ========================================================
+    # --------------------------------------------------------
 
     message = build_telegram(
-
         ranked,
-
         best,
-
-        position_message
+        usd
     )
 
     send_telegram(
         message
     )
 
-    print()
+    # --------------------------------------------------------
+    # CONSOLE RANKING
+    # --------------------------------------------------------
 
     print(
-        "=" * 70
+        "\n===================================="
     )
 
     print(
-        "🌐 News web: GDELT "
-        "— ultime 72 ore"
+        "RANKING COMMODITIES"
     )
 
     print(
-        "⚠️ Analisi quantitativa, "
-        "non garanzia di profitto."
+        "===================================="
     )
 
-    print(
-        "=" * 70
-    )
+    for index, item in enumerate(
+        ranked,
+        start=1
+    ):
+
+        result = item["result"]
+
+        print(
+            f"{index}. "
+            f"{item['name']} | "
+            f"{result['operational_signal']} | "
+            f"score={result['score']:.1f} | "
+            f"news={item['news']['label']}"
+        )
 
 
 # ============================================================
@@ -4168,5 +3026,4 @@ def main():
 # ============================================================
 
 if __name__ == "__main__":
-
     main()
