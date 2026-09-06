@@ -8,7 +8,7 @@ import requests
 
 
 # ============================================================
-# COMMODITY TRADING BOT v6.0
+# COMMODITY TRADING BOT v6.1
 # QUANT MODEL + MULTI-TIMEFRAME + WEB NEWS + USD
 # + SEASONALITY + RANKING + POSITION MANAGEMENT
 #
@@ -17,7 +17,10 @@ import requests
 
 API_KEY = os.getenv("TWELVE_DATA_API_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "8002086130")
+TELEGRAM_CHAT_ID = os.getenv(
+    "TELEGRAM_CHAT_ID",
+    "8002086130"
+)
 
 if not API_KEY:
     raise RuntimeError(
@@ -26,7 +29,7 @@ if not API_KEY:
 
 BASE_URL = "https://api.twelvedata.com/time_series"
 
-# GDELT: ricerca notizie dal web senza API key
+# GDELT: notizie dal web senza API key
 GDELT_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
 
 POSITION_FILE = "position.json"
@@ -117,7 +120,7 @@ NEWS_TERMS = {
 
 
 # ============================================================
-# EVENTI MACRO CHE POSSONO INFLUENZARE LE COMMODITIES
+# EVENTI MACRO
 # ============================================================
 
 MACRO_TERMS = (
@@ -200,25 +203,41 @@ NEGATIVE_WORDS = {
 # ============================================================
 
 def safe_float(value):
+
     try:
         return float(value)
-    except (TypeError, ValueError):
+
+    except (
+        TypeError,
+        ValueError
+    ):
+
         return None
 
 
 def mean(values):
+
     values = [
-        x for x in values
-        if x is not None and math.isfinite(x)
+        x
+        for x in values
+        if x is not None
+        and math.isfinite(x)
     ]
 
-    return sum(values) / len(values) if values else 0.0
+    return (
+        sum(values) / len(values)
+        if values
+        else 0.0
+    )
 
 
 def std(values):
+
     values = [
-        x for x in values
-        if x is not None and math.isfinite(x)
+        x
+        for x in values
+        if x is not None
+        and math.isfinite(x)
     ]
 
     if len(values) < 2:
@@ -231,23 +250,43 @@ def std(values):
         for x in values
     ) / (len(values) - 1)
 
-    return max(math.sqrt(variance), 1e-8)
+    return max(
+        math.sqrt(variance),
+        1e-8
+    )
 
 
 def sigmoid(x):
-    x = max(-30, min(30, x))
-    return 1 / (1 + math.exp(-x))
+
+    x = max(
+        -30,
+        min(30, x)
+    )
+
+    return 1 / (
+        1 + math.exp(-x)
+    )
 
 
-def clamp(value, low, high):
-    return max(low, min(high, value))
+def clamp(
+    value,
+    low,
+    high
+):
+
+    return max(
+        low,
+        min(high, value)
+    )
 
 
 def pct(value):
+
     return f"{value * 100:.1f}%"
 
 
 def clean_words(text):
+
     return set(
         re.findall(
             r"[a-zA-Z]+",
@@ -262,10 +301,13 @@ def clean_words(text):
 
 def load_position():
 
-    if not os.path.exists(POSITION_FILE):
+    if not os.path.exists(
+        POSITION_FILE
+    ):
         return None
 
     try:
+
         with open(
             POSITION_FILE,
             "r",
@@ -304,8 +346,13 @@ def save_position(position):
 
 def clear_position():
 
-    if os.path.exists(POSITION_FILE):
-        os.remove(POSITION_FILE)
+    if os.path.exists(
+        POSITION_FILE
+    ):
+
+        os.remove(
+            POSITION_FILE
+        )
 
 
 # ============================================================
@@ -347,7 +394,10 @@ def get_data(
 
     candles = []
 
-    for item in data.get("values", []):
+    for item in data.get(
+        "values",
+        []
+    ):
 
         close = safe_float(
             item.get("close")
@@ -357,24 +407,37 @@ def get_data(
             continue
 
         candles.append({
-            "datetime": item.get("datetime"),
-            "open": safe_float(
-                item.get("open")
-            ),
-            "high": safe_float(
-                item.get("high")
-            ),
-            "low": safe_float(
-                item.get("low")
-            ),
-            "close": close,
-            "volume": safe_float(
-                item.get("volume")
-            ),
+
+            "datetime":
+                item.get("datetime"),
+
+            "open":
+                safe_float(
+                    item.get("open")
+                ),
+
+            "high":
+                safe_float(
+                    item.get("high")
+                ),
+
+            "low":
+                safe_float(
+                    item.get("low")
+                ),
+
+            "close":
+                close,
+
+            "volume":
+                safe_float(
+                    item.get("volume")
+                ),
         })
 
     candles.sort(
-        key=lambda x: x["datetime"] or ""
+        key=lambda x:
+            x["datetime"] or ""
     )
 
     return candles
@@ -393,20 +456,30 @@ def get_daily_data(symbol):
 # INDICATORS
 # ============================================================
 
-def sma(values, period):
+def sma(
+    values,
+    period
+):
 
     if len(values) < period:
         return None
 
-    return mean(values[-period:])
+    return mean(
+        values[-period:]
+    )
 
 
-def ema(values, period):
+def ema(
+    values,
+    period
+):
 
     if len(values) < period:
         return None
 
-    multiplier = 2 / (period + 1)
+    multiplier = (
+        2 / (period + 1)
+    )
 
     result = mean(
         values[:period]
@@ -415,14 +488,18 @@ def ema(values, period):
     for value in values[period:]:
 
         result = (
-            (value - result) * multiplier
+            (value - result)
+            * multiplier
             + result
         )
 
     return result
 
 
-def rsi(values, period=14):
+def rsi(
+    values,
+    period=14
+):
 
     if len(values) < period + 1:
         return 50.0
@@ -430,7 +507,10 @@ def rsi(values, period=14):
     gains = []
     losses = []
 
-    for i in range(1, len(values)):
+    for i in range(
+        1,
+        len(values)
+    ):
 
         change = (
             values[i]
@@ -456,39 +536,59 @@ def rsi(values, period=14):
     if avg_loss == 0:
         return 100.0
 
-    rs = avg_gain / avg_loss
+    rs = (
+        avg_gain
+        / avg_loss
+    )
 
     return 100 - (
         100 / (1 + rs)
     )
 
 
-def atr(candles, period=14):
+def atr(
+    candles,
+    period=14
+):
 
     if len(candles) < period + 1:
         return None
 
     ranges = []
 
-    for i in range(1, len(candles)):
+    for i in range(
+        1,
+        len(candles)
+    ):
 
         high = candles[i]["high"]
         low = candles[i]["low"]
-        previous = candles[i - 1]["close"]
+        previous = (
+            candles[i - 1]["close"]
+        )
 
-        if high is None or low is None:
+        if (
+            high is None
+            or low is None
+        ):
             continue
 
         ranges.append(
             max(
                 high - low,
-                abs(high - previous),
-                abs(low - previous)
+                abs(
+                    high - previous
+                ),
+                abs(
+                    low - previous
+                )
             )
         )
 
     return (
-        mean(ranges[-period:])
+        mean(
+            ranges[-period:]
+        )
         if len(ranges) >= period
         else None
     )
@@ -499,55 +599,94 @@ def macd(values):
     if len(values) < 35:
         return 0.0
 
-    fast = ema(values, 12)
-    slow = ema(values, 26)
+    fast = ema(
+        values,
+        12
+    )
 
-    if fast is None or slow is None:
+    slow = ema(
+        values,
+        26
+    )
+
+    if (
+        fast is None
+        or slow is None
+    ):
         return 0.0
 
     return fast - slow
 
 
-def return_pct(values, period):
+def return_pct(
+    values,
+    period
+):
 
     if len(values) <= period:
         return 0.0
 
-    old = values[-period - 1]
+    old = values[
+        -period - 1
+    ]
+
     current = values[-1]
 
     if old == 0:
         return 0.0
 
-    return current / old - 1
+    return (
+        current / old - 1
+    )
 
 
-def volatility(values, period=20):
+def volatility(
+    values,
+    period=20
+):
 
     if len(values) < period + 1:
         return 0.0
 
     returns = []
 
-    start = len(values) - period
+    start = (
+        len(values)
+        - period
+    )
 
-    for i in range(start, len(values)):
+    for i in range(
+        start,
+        len(values)
+    ):
 
-        previous = values[i - 1]
+        previous = (
+            values[i - 1]
+        )
 
         if previous:
+
             returns.append(
-                values[i] / previous - 1
+                values[i]
+                / previous
+                - 1
             )
 
-    return std(returns)
+    return std(
+        returns
+    )
 
 
-def pressure(candles, period=10):
+def pressure(
+    candles,
+    period=10
+):
 
     scores = []
 
-    for candle in candles[-period:]:
+    for candle in candles[
+        -period:
+    ]:
 
         high = candle["high"]
         low = candle["low"]
@@ -566,14 +705,24 @@ def pressure(candles, period=10):
             continue
 
         scores.append(
-            (close - open_price)
-            / (high - low)
+            (
+                close
+                - open_price
+            )
+            / (
+                high - low
+            )
         )
 
-    return mean(scores)
+    return mean(
+        scores
+    )
 
 
-def breakout(values, period=20):
+def breakout(
+    values,
+    period=20
+):
 
     if len(values) < period + 1:
         return 0.0
@@ -584,16 +733,25 @@ def breakout(values, period=20):
         -period - 1:-1
     ]
 
-    highest = max(previous)
-    lowest = min(previous)
+    highest = max(
+        previous
+    )
 
-    distance = highest - lowest
+    lowest = min(
+        previous
+    )
+
+    distance = (
+        highest - lowest
+    )
 
     if distance == 0:
         return 0.0
 
     return (
-        (current - lowest)
+        (
+            current - lowest
+        )
         / distance
     ) * 2 - 1
 
@@ -602,7 +760,9 @@ def breakout(values, period=20):
 # STAGIONALITÀ
 # ============================================================
 
-def historical_repetition(candles):
+def historical_repetition(
+    candles
+):
 
     if len(candles) < 300:
 
@@ -612,14 +772,21 @@ def historical_repetition(candles):
             "avg_return": 0.0,
             "samples": 0,
             "years": 0,
-            "direction": "NEUTRALE",
+            "direction":
+                "NEUTRALE",
         }
 
     try:
 
-        current_date = datetime.fromisoformat(
-            candles[-1]["datetime"]
-            .replace("Z", "+00:00")
+        current_date = (
+            datetime.fromisoformat(
+                candles[-1][
+                    "datetime"
+                ].replace(
+                    "Z",
+                    "+00:00"
+                )
+            )
         )
 
     except Exception:
@@ -630,11 +797,14 @@ def historical_repetition(candles):
             "avg_return": 0.0,
             "samples": 0,
             "years": 0,
-            "direction": "NEUTRALE",
+            "direction":
+                "NEUTRALE",
         }
 
     target_day = (
-        current_date.timetuple().tm_yday
+        current_date
+        .timetuple()
+        .tm_yday
     )
 
     samples = []
@@ -646,12 +816,21 @@ def historical_repetition(candles):
 
         try:
 
-            d = datetime.fromisoformat(
-                candles[i]["datetime"]
-                .replace("Z", "+00:00")
+            d = (
+                datetime.fromisoformat(
+                    candles[i][
+                        "datetime"
+                    ].replace(
+                        "Z",
+                        "+00:00"
+                    )
+                )
             )
 
-            day = d.timetuple().tm_yday
+            day = (
+                d.timetuple()
+                .tm_yday
+            )
 
         except Exception:
             continue
@@ -667,15 +846,22 @@ def historical_repetition(candles):
 
         if distance <= 22:
 
-            current = candles[i]["close"]
-            future = candles[
-                i + HORIZON
-            ]["close"]
+            current = (
+                candles[i]["close"]
+            )
+
+            future = (
+                candles[
+                    i + HORIZON
+                ]["close"]
+            )
 
             if current:
 
                 samples.append(
-                    future / current - 1
+                    future
+                    / current
+                    - 1
                 )
 
     if len(samples) < 5:
@@ -684,27 +870,36 @@ def historical_repetition(candles):
             "score": 0.0,
             "frequency": 0.0,
             "avg_return": 0.0,
-            "samples": len(samples),
+            "samples":
+                len(samples),
             "years": 0,
-            "direction": "NEUTRALE",
+            "direction":
+                "NEUTRALE",
         }
 
     positive = sum(
-        1 for x in samples
+        1
+        for x in samples
         if x > 0
     )
 
     negative = sum(
-        1 for x in samples
+        1
+        for x in samples
         if x < 0
     )
 
     frequency = (
-        max(positive, negative)
+        max(
+            positive,
+            negative
+        )
         / len(samples)
     )
 
-    avg_return = mean(samples)
+    avg_return = mean(
+        samples
+    )
 
     if positive > negative:
 
@@ -722,7 +917,8 @@ def historical_repetition(candles):
         raw_score = 0.0
 
     magnitude_factor = clamp(
-        abs(avg_return) / 0.01,
+        abs(avg_return)
+        / 0.01,
         0.0,
         1.0
     )
@@ -733,25 +929,38 @@ def historical_repetition(candles):
     )
 
     years = len({
-        candles[i]["datetime"][:4]
+        candles[i][
+            "datetime"
+        ][:4]
         for i in range(
             100,
-            len(candles) - HORIZON
+            len(candles)
+            - HORIZON
         )
-        if candles[i]["datetime"]
+        if candles[i][
+            "datetime"
+        ]
     })
 
     return {
-        "score": score,
-        "frequency": frequency,
-        "avg_return": avg_return,
-        "samples": len(samples),
-        "years": years,
-        "direction": direction,
+        "score":
+            score,
+        "frequency":
+            frequency,
+        "avg_return":
+            avg_return,
+        "samples":
+            len(samples),
+        "years":
+            years,
+        "direction":
+            direction,
     }
 
 
-def seasonality(candles):
+def seasonality(
+    candles
+):
 
     return historical_repetition(
         candles
@@ -762,7 +971,9 @@ def seasonality(candles):
 # FEATURES
 # ============================================================
 
-def build_features(candles):
+def build_features(
+    candles
+):
 
     closes = [
         c["close"]
@@ -775,12 +986,18 @@ def build_features(candles):
     current = closes[-1]
 
     sma20 = (
-        sma(closes, 20)
+        sma(
+            closes,
+            20
+        )
         or current
     )
 
     sma50 = (
-        sma(closes, 50)
+        sma(
+            closes,
+            50
+        )
         or current
     )
 
@@ -797,7 +1014,10 @@ def build_features(candles):
 
     atr_pct = (
         current_atr / current
-        if current_atr and current
+        if (
+            current_atr
+            and current
+        )
         else 0.0
     )
 
@@ -812,18 +1032,59 @@ def build_features(candles):
     )
 
     return [
-        return_pct(closes, 1),
-        return_pct(closes, 5),
-        return_pct(closes, 20),
-        return_pct(closes, 60),
+
+        return_pct(
+            closes,
+            1
+        ),
+
+        return_pct(
+            closes,
+            5
+        ),
+
+        return_pct(
+            closes,
+            20
+        ),
+
+        return_pct(
+            closes,
+            60
+        ),
+
         trend,
-        (rsi(closes, 14) - 50) / 50,
+
+        (
+            rsi(
+                closes,
+                14
+            )
+            - 50
+        ) / 50,
+
         macd_normalized,
+
         atr_pct,
-        volatility(closes, 20),
-        pressure(candles, 10),
-        breakout(closes, 20),
-        seasonality(candles),
+
+        volatility(
+            closes,
+            20
+        ),
+
+        pressure(
+            candles,
+            10
+        ),
+
+        breakout(
+            closes,
+            20
+        ),
+
+        seasonality(
+            candles
+        ),
     ]
 
 
@@ -831,7 +1092,9 @@ def build_features(candles):
 # DATASET
 # ============================================================
 
-def build_dataset(candles):
+def build_dataset(
+    candles
+):
 
     dataset = []
 
@@ -839,25 +1102,32 @@ def build_dataset(candles):
 
     for i in range(
         minimum_history,
-        len(candles) - HORIZON
+        len(candles)
+        - HORIZON
     ):
 
         history = candles[
             :i + 1
         ]
 
-        features = build_features(
-            history
+        features = (
+            build_features(
+                history
+            )
         )
 
         if features is None:
             continue
 
-        current = candles[i]["close"]
+        current = (
+            candles[i]["close"]
+        )
 
-        future = candles[
-            i + HORIZON
-        ]["close"]
+        future = (
+            candles[
+                i + HORIZON
+            ]["close"]
+        )
 
         if not current:
             continue
@@ -866,17 +1136,26 @@ def build_dataset(candles):
             future / current - 1
         )
 
-        if abs(future_return) < 0.002:
+        if (
+            abs(future_return)
+            < 0.002
+        ):
             continue
 
         dataset.append({
-            "x": features,
-            "y": (
-                1
-                if future_return > 0
-                else 0
-            ),
-            "return": future_return,
+
+            "x":
+                features,
+
+            "y":
+                (
+                    1
+                    if future_return > 0
+                    else 0
+                ),
+
+            "return":
+                future_return,
         })
 
     return dataset
@@ -901,7 +1180,9 @@ def standardize(
     means = []
     deviations = []
 
-    for j in range(count):
+    for j in range(
+        count
+    ):
 
         values = [
             row[j]
@@ -919,15 +1200,20 @@ def standardize(
     def transform(row):
 
         return [
+
             (
                 row[j]
                 - means[j]
             )
             / deviations[j]
-            for j in range(count)
+
+            for j in range(
+                count
+            )
         ]
 
     return (
+
         [
             transform(row)
             for row in train_x
@@ -939,6 +1225,7 @@ def standardize(
         ],
 
         means,
+
         deviations,
     )
 
@@ -964,17 +1251,23 @@ def fit_model(
 
     weights = [
         0.0
-        for _ in range(feature_count)
+        for _ in range(
+            feature_count
+        )
     ]
 
     bias = 0.0
     n = len(X)
 
-    for _ in range(epochs):
+    for _ in range(
+        epochs
+    ):
 
         gradients = [
             0.0
-            for _ in range(feature_count)
+            for _ in range(
+                feature_count
+            )
         ]
 
         bias_gradient = 0.0
@@ -995,7 +1288,9 @@ def fit_model(
                 )
             )
 
-            prediction = sigmoid(z)
+            prediction = sigmoid(
+                z
+            )
 
             error = (
                 prediction
@@ -1024,7 +1319,8 @@ def fit_model(
         ):
 
             gradient = (
-                gradients[j] / n
+                gradients[j]
+                / n
             )
 
             gradient += (
@@ -1062,7 +1358,9 @@ def predict(
 # WALK-FORWARD BACKTEST
 # ============================================================
 
-def backtest(dataset):
+def backtest(
+    dataset
+):
 
     if len(dataset) < 500:
 
@@ -1075,10 +1373,13 @@ def backtest(dataset):
         }
 
     split = int(
-        len(dataset) * 0.70
+        len(dataset)
+        * 0.70
     )
 
-    test = dataset[split:]
+    test = dataset[
+        split:
+    ]
 
     predictions = []
 
@@ -1091,7 +1392,10 @@ def backtest(dataset):
         step
     ):
 
-        end = split + start
+        end = (
+            split
+            + start
+        )
 
         training_start = max(
             0,
@@ -1103,7 +1407,8 @@ def backtest(dataset):
         ]
 
         testing = test[
-            start:start + step
+            start:
+            start + step
         ]
 
         if len(training) < 300:
@@ -1145,14 +1450,17 @@ def backtest(dataset):
         ):
 
             predictions.append({
+
                 "probability":
                     predict(
                         row,
                         weights,
                         bias
                     ),
+
                 "return":
                     item["return"],
+
                 "actual":
                     item["y"],
             })
@@ -1176,7 +1484,9 @@ def backtest(dataset):
 
     for item in predictions:
 
-        p = item["probability"]
+        p = item[
+            "probability"
+        ]
 
         predicted = (
             1
@@ -1184,7 +1494,10 @@ def backtest(dataset):
             else 0
         )
 
-        if predicted == item["actual"]:
+        if predicted == item[
+            "actual"
+        ]:
+
             correct += 1
 
         if p >= LONG_THRESHOLD:
@@ -1200,6 +1513,7 @@ def backtest(dataset):
             ]
 
         else:
+
             continue
 
         trades.append(
@@ -1216,7 +1530,8 @@ def backtest(dataset):
         )
 
         drawdown = (
-            equity / peak - 1
+            equity / peak
+            - 1
         )
 
         max_drawdown = min(
@@ -1269,11 +1584,21 @@ def backtest(dataset):
         profit_factor = 0
 
     return {
-        "accuracy": accuracy,
-        "win_rate": win_rate,
-        "profit_factor": profit_factor,
-        "drawdown": max_drawdown,
-        "trades": len(trades),
+
+        "accuracy":
+            accuracy,
+
+        "win_rate":
+            win_rate,
+
+        "profit_factor":
+            profit_factor,
+
+        "drawdown":
+            max_drawdown,
+
+        "trades":
+            len(trades),
     }
 
 
@@ -1281,7 +1606,9 @@ def backtest(dataset):
 # FINAL MODEL
 # ============================================================
 
-def train_final(dataset):
+def train_final(
+    dataset
+):
 
     if len(dataset) < 300:
         return None
@@ -1315,10 +1642,18 @@ def train_final(dataset):
     )
 
     return {
-        "weights": weights,
-        "bias": bias,
-        "means": means,
-        "deviations": deviations,
+
+        "weights":
+            weights,
+
+        "bias":
+            bias,
+
+        "means":
+            means,
+
+        "deviations":
+            deviations,
     }
 
 
@@ -1334,14 +1669,18 @@ def scale_current(
     ):
 
         deviation = (
-            model["deviations"][i]
+            model[
+                "deviations"
+            ][i]
             or 1
         )
 
         result.append(
             (
                 value
-                - model["means"][i]
+                - model[
+                    "means"
+                ][i]
             )
             / deviation
         )
@@ -1353,7 +1692,9 @@ def scale_current(
 # MODEL QUALITY
 # ============================================================
 
-def quality_score(bt):
+def quality_score(
+    bt
+):
 
     score = 50
 
@@ -1367,15 +1708,20 @@ def quality_score(bt):
         - 0.50
     ) * 70
 
-    if bt["profit_factor"] > 1:
+    if bt[
+        "profit_factor"
+    ] > 1:
 
         score += (
-            bt["profit_factor"]
-            - 1
+            bt[
+                "profit_factor"
+            ] - 1
         ) * 12
 
     score -= (
-        abs(bt["drawdown"])
+        abs(
+            bt["drawdown"]
+        )
         * 40
     )
 
@@ -1428,9 +1774,11 @@ def timeframe_direction(
     if fast and slow:
 
         if fast > slow:
+
             score += 2
 
         elif fast < slow:
+
             score -= 2
 
     if current > (
@@ -1446,15 +1794,19 @@ def timeframe_direction(
         score -= 1
 
     if current_rsi > 55:
+
         score += 1
 
     elif current_rsi < 45:
+
         score -= 1
 
     if score >= 2:
+
         return "LONG", score
 
     if score <= -2:
+
         return "SHORT", score
 
     return "NONE", score
@@ -1465,11 +1817,21 @@ def get_multitimeframe(
 ):
 
     intervals = {
-        "4H": "4h",
-        "1H": "1h",
-        "15m": "15min",
-        "5m": "5min",
-        "1m": "1min",
+
+        "4H":
+            "4h",
+
+        "1H":
+            "1h",
+
+        "15m":
+            "15min",
+
+        "5m":
+            "5min",
+
+        "1m":
+            "1min",
     }
 
     result = {}
@@ -1493,8 +1855,10 @@ def get_multitimeframe(
             )
 
             result[name] = {
+
                 "direction":
                     direction,
+
                 "score":
                     score,
             }
@@ -1502,12 +1866,17 @@ def get_multitimeframe(
         except Exception as error:
 
             print(
-                f"   ⚠️ {name}: {error}"
+                f"   ⚠️ {name}: "
+                f"{error}"
             )
 
             result[name] = {
-                "direction": "NONE",
-                "score": 0,
+
+                "direction":
+                    "NONE",
+
+                "score":
+                    0,
             }
 
     return result
@@ -1536,15 +1905,19 @@ def analyze_usd():
         if direction == "LONG":
 
             impact = -1
+
             label = (
-                "FORTE / SFAVOREVOLE"
+                "FORTE / "
+                "SFAVOREVOLE"
             )
 
         elif direction == "SHORT":
 
             impact = 1
+
             label = (
-                "DEBOLE / FAVOREVOLE"
+                "DEBOLE / "
+                "FAVOREVOLE"
             )
 
         else:
@@ -1553,12 +1926,16 @@ def analyze_usd():
             label = "NEUTRO"
 
         return {
+
             "direction":
                 direction,
+
             "score":
                 score,
+
             "impact":
                 impact,
+
             "label":
                 label,
         }
@@ -1571,9 +1948,16 @@ def analyze_usd():
         )
 
         return {
-            "direction": "NONE",
-            "score": 0,
-            "impact": 0,
+
+            "direction":
+                "NONE",
+
+            "score":
+                0,
+
+            "impact":
+                0,
+
             "label":
                 "NON DISPONIBILE",
         }
@@ -1590,38 +1974,143 @@ def gdelt_search(
 ):
 
     params = {
-        "query": query,
-        "mode": "artlist",
-        "maxrecords": max_records,
-        "format": "json",
-        "sort": "datedesc",
-        "timespan": timespan,
+
+        "query":
+            query,
+
+        "mode":
+            "artlist",
+
+        "maxrecords":
+            max_records,
+
+        "format":
+            "json",
+
+        "sort":
+            "datedesc",
+
+        "timespan":
+            timespan,
     }
 
-    response = requests.get(
-        GDELT_URL,
-        params=params,
-        timeout=30
+    try:
+
+        response = requests.get(
+
+            GDELT_URL,
+
+            params=params,
+
+            timeout=30,
+
+            headers={
+                "User-Agent":
+                    "Mozilla/5.0 "
+                    "CommoditiesBot/6.1"
+            }
+        )
+
+        response.raise_for_status()
+
+        data = response.json()
+
+        if not isinstance(
+            data,
+            dict
+        ):
+
+            raise RuntimeError(
+                "Risposta GDELT "
+                "non valida."
+            )
+
+        articles = data.get(
+            "articles",
+            []
+        )
+
+        if not isinstance(
+            articles,
+            list
+        ):
+
+            return []
+
+        return articles
+
+    except requests.exceptions.HTTPError as error:
+
+        status = (
+
+            error.response.status_code
+
+            if error.response
+
+            else "?"
+
+        )
+
+        raise RuntimeError(
+            f"GDELT HTTP {status}"
+        )
+
+    except requests.exceptions.RequestException as error:
+
+        raise RuntimeError(
+            f"GDELT connessione: "
+            f"{error}"
+        )
+
+    except ValueError:
+
+        raise RuntimeError(
+            "GDELT ha restituito "
+            "una risposta non JSON."
+        )
+
+
+def article_text(
+    article
+):
+
+    title = str(
+        article.get(
+            "title",
+            ""
+        )
+        or ""
     )
 
-    response.raise_for_status()
-
-    data = response.json()
-
-    return data.get(
-        "articles",
-        []
+    description = str(
+        article.get(
+            "description",
+            ""
+        )
+        or ""
     )
+
+    snippet = str(
+        article.get(
+            "snippet",
+            ""
+        )
+        or ""
+    )
+
+    return (
+        f"{title} "
+        f"{description} "
+        f"{snippet}"
+    ).strip()
 
 
 def article_sentiment(
-    title,
-    description=""
+    article
 ):
 
-    text = (
-        f"{title} "
-        f"{description}"
+    text = article_text(
+        article
     )
 
     words = clean_words(
@@ -1629,104 +2118,179 @@ def article_sentiment(
     )
 
     positive = len(
-        words & POSITIVE_WORDS
+        words
+        & POSITIVE_WORDS
     )
 
     negative = len(
-        words & NEGATIVE_WORDS
+        words
+        & NEGATIVE_WORDS
     )
 
-    if positive == 0 and negative == 0:
-        return 0.0
+    # --------------------------------------------------------
+    # SENTIMENT TESTUALE
+    # --------------------------------------------------------
 
-    raw = positive - negative
+    if (
+        positive == 0
+        and negative == 0
+    ):
 
-    denominator = (
-        positive
-        + negative
-    )
+        text_score = 0.0
 
-    return clamp(
-        raw / denominator,
-        -1,
-        1
-    )
+    else:
 
-
-def analyze_news(name):
-
-    commodity_query = (
-        NEWS_TERMS.get(
-            name,
-            name
+        text_score = (
+            positive
+            - negative
+        ) / max(
+            positive + negative,
+            1
         )
+
+        text_score = clamp(
+            text_score,
+            -1,
+            1
+        )
+
+    # --------------------------------------------------------
+    # GDELT TONE
+    # --------------------------------------------------------
+
+    tone = safe_float(
+        article.get(
+            "tone"
+        )
+    )
+
+    if tone is not None:
+
+        tone_score = clamp(
+            tone / 10.0,
+            -1,
+            1
+        )
+
+        if (
+            text_score != 0
+            and tone_score != 0
+        ):
+
+            return clamp(
+
+                text_score * 0.60
+                + tone_score * 0.40,
+
+                -1,
+                1
+            )
+
+        return tone_score
+
+    return text_score
+
+
+def analyze_news(
+    name
+):
+
+    query = NEWS_TERMS.get(
+        name,
+        name
     )
 
     try:
 
+        print(
+            f"   🌐 GDELT: "
+            f"ricerca {name}..."
+        )
+
+        articles = gdelt_search(
+
+            query,
+
+            max_records=30,
+
+            timespan="72h"
+        )
+
         # ----------------------------------------------------
-        # 1. Notizie specifiche sulla commodity
+        # NESSUNA NEWS
         # ----------------------------------------------------
 
-        commodity_articles = (
-            gdelt_search(
-                commodity_query,
-                max_records=20,
-                timespan="72h"
+        if not articles:
+
+            print(
+                f"   ℹ️ Nessuna news "
+                f"trovata per {name}"
             )
-        )
+
+            return {
+
+                "score":
+                    0.0,
+
+                "label":
+                    "NESSUNA NEWS",
+
+                "count":
+                    0,
+
+                "positive":
+                    0,
+
+                "negative":
+                    0,
+
+                "headline":
+                    "",
+
+                "source":
+                    "",
+            }
 
         # ----------------------------------------------------
-        # 2. Notizie macro
+        # DUPLICATI
         # ----------------------------------------------------
 
-        macro_query = (
-            f"({commodity_query}) AND "
-            f"({MACRO_TERMS})"
-        )
-
-        macro_articles = (
-            gdelt_search(
-                macro_query,
-                max_records=10,
-                timespan="72h"
-            )
-        )
-
-        # ----------------------------------------------------
-        # Uniamo gli articoli eliminando duplicati
-        # ----------------------------------------------------
-
-        articles = []
+        unique_articles = []
 
         seen = set()
 
-        for article in (
-            commodity_articles
-            + macro_articles
-        ):
+        for article in articles:
 
-            url = (
+            if not isinstance(
+                article,
+                dict
+            ):
+                continue
+
+            url = str(
                 article.get(
-                    "url"
+                    "url",
+                    ""
                 )
                 or article.get(
-                    "url_mobile"
+                    "url_mobile",
+                    ""
                 )
                 or ""
-            )
+            ).strip().lower()
 
-            title = (
+            title = str(
                 article.get(
-                    "title"
+                    "title",
+                    ""
                 )
                 or ""
-            )
+            ).strip().lower()
 
             key = (
                 url
                 or title
-            ).strip().lower()
+            )
 
             if not key:
                 continue
@@ -1734,24 +2298,42 @@ def analyze_news(name):
             if key in seen:
                 continue
 
-            seen.add(key)
+            seen.add(
+                key
+            )
 
-            articles.append(
+            unique_articles.append(
                 article
             )
 
-        if not articles:
+        if not unique_articles:
 
             return {
-                "score": 0,
-                "label": "NESSUNA NEWS",
-                "count": 0,
-                "positive": 0,
-                "negative": 0,
+
+                "score":
+                    0.0,
+
+                "label":
+                    "NESSUNA NEWS",
+
+                "count":
+                    0,
+
+                "positive":
+                    0,
+
+                "negative":
+                    0,
+
+                "headline":
+                    "",
+
+                "source":
+                    "",
             }
 
         # ----------------------------------------------------
-        # Analisi sentiment
+        # SENTIMENT
         # ----------------------------------------------------
 
         scores = []
@@ -1759,26 +2341,13 @@ def analyze_news(name):
         positive_count = 0
         negative_count = 0
 
-        for article in articles:
-
-            title = (
-                article.get(
-                    "title"
-                )
-                or ""
-            )
-
-            description = (
-                article.get(
-                    "seendate"
-                )
-                or ""
-            )
+        for article in (
+            unique_articles
+        ):
 
             sentiment = (
                 article_sentiment(
-                    title,
-                    description
+                    article
                 )
             )
 
@@ -1786,10 +2355,12 @@ def analyze_news(name):
                 sentiment
             )
 
-            if sentiment > 0:
+            if sentiment >= 0.15:
+
                 positive_count += 1
 
-            elif sentiment < 0:
+            elif sentiment <= -0.15:
+
                 negative_count += 1
 
         normalized = clamp(
@@ -1799,7 +2370,7 @@ def analyze_news(name):
         )
 
         # ----------------------------------------------------
-        # Etichetta
+        # LABEL
         # ----------------------------------------------------
 
         if normalized >= 0.20:
@@ -1814,32 +2385,114 @@ def analyze_news(name):
 
             label = "NEUTRALI"
 
+        # ----------------------------------------------------
+        # ULTIMA NEWS
+        # ----------------------------------------------------
+
+        headline = ""
+        source = ""
+
+        first = (
+            unique_articles[0]
+        )
+
+        headline = str(
+            first.get(
+                "title",
+                ""
+            )
+            or ""
+        ).strip()
+
+        source = str(
+            first.get(
+                "domain",
+                ""
+            )
+            or ""
+        ).strip()
+
+        print(
+            f"   📰 News trovate: "
+            f"{len(unique_articles)}"
+        )
+
+        print(
+            f"   🟢 Positive: "
+            f"{positive_count}"
+        )
+
+        print(
+            f"   🔴 Negative: "
+            f"{negative_count}"
+        )
+
+        print(
+            f"   📊 Sentiment: "
+            f"{normalized:.3f}"
+        )
+
         return {
+
             "score":
                 normalized,
+
             "label":
                 label,
+
             "count":
-                len(articles),
+                len(unique_articles),
+
             "positive":
                 positive_count,
+
             "negative":
                 negative_count,
+
+            "headline":
+                headline,
+
+            "source":
+                source,
         }
 
     except Exception as error:
 
+        error_text = str(
+            error
+        )
+
         print(
-            f"   ⚠️ Web News {name}: "
-            f"{error}"
+            f"   ❌ Web News "
+            f"{name}: "
+            f"{error_text}"
         )
 
         return {
-            "score": 0,
-            "label": "ERRORE",
-            "count": 0,
-            "positive": 0,
-            "negative": 0,
+
+            "score":
+                0.0,
+
+            "label":
+                "ERRORE",
+
+            "count":
+                0,
+
+            "positive":
+                0,
+
+            "negative":
+                0,
+
+            "headline":
+                "",
+
+            "source":
+                "",
+
+            "error":
+                error_text,
         }
 
 
@@ -1896,11 +2549,17 @@ def analyze(
 
         model_signal = "NO TRADE"
 
-    elif probability >= LONG_THRESHOLD:
+    elif (
+        probability
+        >= LONG_THRESHOLD
+    ):
 
         model_signal = "LONG"
 
-    elif probability <= SHORT_THRESHOLD:
+    elif (
+        probability
+        <= SHORT_THRESHOLD
+    ):
 
         model_signal = "SHORT"
 
@@ -1909,8 +2568,11 @@ def analyze(
         model_signal = "WAIT"
 
     main_direction = (
+
         "LONG"
+
         if probability >= 0.50
+
         else "SHORT"
     )
 
@@ -1927,7 +2589,9 @@ def analyze(
     ):
 
         direction = (
-            timeframes[tf]["direction"]
+            timeframes[
+                tf
+            ]["direction"]
         )
 
         if direction == main_direction:
@@ -1954,7 +2618,9 @@ def analyze(
     ):
 
         direction = (
-            timeframes[tf]["direction"]
+            timeframes[
+                tf
+            ]["direction"]
         )
 
         if direction == main_direction:
@@ -1980,21 +2646,28 @@ def analyze(
 
     repetition_impact = 0
 
-    if repetition["direction"] == main_direction:
+    if (
+        repetition["direction"]
+        == main_direction
+    ):
 
         repetition_impact = (
-            repetition["frequency"]
-            * 8
+            repetition[
+                "frequency"
+            ] * 8
         )
 
-    elif repetition["direction"] not in (
+    elif repetition[
+        "direction"
+    ] not in (
         "NEUTRALE",
         main_direction
     ):
 
         repetition_impact = (
-            -repetition["frequency"]
-            * 8
+            -repetition[
+                "frequency"
+            ] * 8
         )
 
     # --------------------------------------------------------
@@ -2010,17 +2683,31 @@ def analyze(
     )
 
     score = (
-        direction_score * 0.40
-        + quality * 0.20
-        + confidence * 0.15
+
+        direction_score
+        * 0.40
+
+        + quality
+        * 0.20
+
+        + confidence
+        * 0.15
+
         + max(
             tf_score,
             -3
         ) * 5
-        + fast_confirmations * 5
+
+        + fast_confirmations
+        * 5
+
         + repetition_impact
-        + news["score"] * 6
-        + usd["impact"] * 3
+
+        + news["score"]
+        * 6
+
+        + usd["impact"]
+        * 3
     )
 
     score = clamp(
@@ -2100,7 +2787,9 @@ def analyze(
     # RISK
     # --------------------------------------------------------
 
-    price = candles[-1]["close"]
+    price = candles[-1][
+        "close"
+    ]
 
     current_atr = (
         atr(
@@ -2114,34 +2803,40 @@ def analyze(
 
         stop = (
             price
-            - current_atr * STOP_ATR
+            - current_atr
+            * STOP_ATR
         )
 
         tp1 = (
             price
-            + current_atr * TP1_ATR
+            + current_atr
+            * TP1_ATR
         )
 
         tp2 = (
             price
-            + current_atr * TP2_ATR
+            + current_atr
+            * TP2_ATR
         )
 
     elif operational_signal == "SHORT":
 
         stop = (
             price
-            + current_atr * STOP_ATR
+            + current_atr
+            * STOP_ATR
         )
 
         tp1 = (
             price
-            - current_atr * TP1_ATR
+            - current_atr
+            * TP1_ATR
         )
 
         tp2 = (
             price
-            - current_atr * TP2_ATR
+            - current_atr
+            * TP2_ATR
         )
 
     else:
@@ -2151,6 +2846,7 @@ def analyze(
         tp2 = None
 
     return {
+
         "signal":
             operational_signal,
 
@@ -2435,7 +3131,9 @@ def manage_position(
 # TELEGRAM
 # ============================================================
 
-def send_telegram(message):
+def send_telegram(
+    message
+):
 
     if (
         not TELEGRAM_BOT_TOKEN
@@ -2455,8 +3153,10 @@ def send_telegram(message):
     )
 
     payload = {
+
         "chat_id":
             TELEGRAM_CHAT_ID,
+
         "text":
             message,
     }
@@ -2484,10 +3184,19 @@ def icon_for_signal(
 ):
 
     return {
-        "LONG": "🟢",
-        "SHORT": "🔴",
-        "WAIT": "🟡",
-        "NO TRADE": "⚪",
+
+        "LONG":
+            "🟢",
+
+        "SHORT":
+            "🔴",
+
+        "WAIT":
+            "🟡",
+
+        "NO TRADE":
+            "⚪",
+
     }.get(
         signal,
         "⚪"
@@ -2499,9 +3208,12 @@ def compact_tf(
 ):
 
     return " | ".join(
+
         f"{tf} "
         f"{timeframes[tf]['direction']}"
+
         for tf in (
+
             "4H",
             "1H",
             "15m",
@@ -2539,15 +3251,20 @@ def confirmation_text(
         )
 
     opposite = (
+
         "SHORT"
+
         if signal == "LONG"
+
         else "LONG"
     )
 
     if (
         tfs["5m"]["direction"]
         == signal
+
         and
+
         tfs["1m"]["direction"]
         == signal
     ):
@@ -2560,7 +3277,9 @@ def confirmation_text(
     if (
         tfs["5m"]["direction"]
         == opposite
+
         or
+
         tfs["1m"]["direction"]
         == opposite
     ):
@@ -2602,7 +3321,13 @@ def build_telegram(
     position_message=None
 ):
 
-    a = best["analysis"]
+    a = best[
+        "analysis"
+    ]
+
+    news = a[
+        "news"
+    ]
 
     lines = [
 
@@ -2637,14 +3362,14 @@ def build_telegram(
         "",
 
         f"📰 News: "
-        f"{a['news']['label']} "
-        f"({a['news']['count']})",
+        f"{news['label']} "
+        f"({news['count']})",
 
         f"🟢 News positive: "
-        f"{a['news']['positive']}",
+        f"{news['positive']}",
 
         f"🔴 News negative: "
-        f"{a['news']['negative']}",
+        f"{news['negative']}",
 
         f"💵 Dollaro: "
         f"{a['usd']['label']}",
@@ -2659,6 +3384,66 @@ def build_telegram(
 
         "",
     ]
+
+    # --------------------------------------------------------
+    # ULTIMA NOTIZIA
+    # --------------------------------------------------------
+
+    if (
+        news.get("headline")
+        and news.get("label")
+        != "ERRORE"
+    ):
+
+        headline = news[
+            "headline"
+        ]
+
+        if len(headline) > 180:
+
+            headline = (
+                headline[:177]
+                + "..."
+            )
+
+        lines.extend([
+
+            "🗞️ Ultima news:",
+
+            headline,
+
+            (
+                f"Fonte: "
+                f"{news.get('source', '')}"
+                if news.get("source")
+                else ""
+            ),
+
+            "",
+        ])
+
+    # --------------------------------------------------------
+    # ERRORE NEWS
+    # --------------------------------------------------------
+
+    if news.get(
+        "error"
+    ):
+
+        lines.extend([
+
+            "⚠️ Errore web:",
+
+            news[
+                "error"
+            ],
+
+            "",
+        ])
+
+    # --------------------------------------------------------
+    # RISK
+    # --------------------------------------------------------
 
     if a["signal"] in (
         "LONG",
@@ -2696,10 +3481,16 @@ def build_telegram(
         ranked[:3]
     ):
 
-        if item["name"] == best["name"]:
+        if (
+            item["name"]
+            == best["name"]
+        ):
+
             continue
 
-        x = item["analysis"]
+        x = item[
+            "analysis"
+        ]
 
         medal = (
             medals[i]
@@ -2708,16 +3499,23 @@ def build_telegram(
         )
 
         lines.append(
+
             f"{medal} "
             f"{item['name']} — "
             f"{x['signal']} | "
             f"{x['score']:.0f}/100"
         )
 
+    # --------------------------------------------------------
+    # POSIZIONE
+    # --------------------------------------------------------
+
     if position_message:
 
         lines.extend([
+
             "",
+
             position_message
         ])
 
@@ -2752,10 +3550,12 @@ def main():
 
     print()
 
-    print("=" * 70)
+    print(
+        "=" * 70
+    )
 
     print(
-        "🌍 COMMODITY TRADING BOT v6.0"
+        "🌍 COMMODITY TRADING BOT v6.1"
     )
 
     print(
@@ -2763,7 +3563,9 @@ def main():
         "USD + RIPETIZIONE STORICA"
     )
 
-    print("=" * 70)
+    print(
+        "=" * 70
+    )
 
     print()
 
@@ -2794,7 +3596,8 @@ def main():
             if len(candles) < 500:
 
                 print(
-                    "   ⚠️ Dati insufficienti"
+                    "   ⚠️ Dati "
+                    "insufficienti"
                 )
 
                 continue
@@ -2810,7 +3613,8 @@ def main():
             if len(dataset) < 300:
 
                 print(
-                    "   ⚠️ Dataset insufficiente"
+                    "   ⚠️ Dataset "
+                    "insufficiente"
                 )
 
                 continue
@@ -2857,12 +3661,19 @@ def main():
             # ------------------------------------------------
 
             analysis = analyze(
+
                 candles,
+
                 dataset,
+
                 model,
+
                 bt,
+
                 usd,
+
                 news,
+
                 timeframes,
             )
 
@@ -2925,9 +3736,12 @@ def main():
     # ========================================================
 
     ranked = sorted(
+
         results,
+
         key=lambda x:
             x["analysis"]["score"],
+
         reverse=True
     )
 
@@ -2942,8 +3756,10 @@ def main():
     if position:
 
         matching = [
+
             x
             for x in results
+
             if x["name"]
             == position["name"]
         ]
@@ -2953,41 +3769,56 @@ def main():
             current = matching[0]
 
             current_price = (
-                current["analysis"][
-                    "price"
-                ]
+                current[
+                    "analysis"
+                ]["price"]
             )
 
             management = (
                 manage_position(
+
                     position,
-                    current["analysis"],
+
+                    current[
+                        "analysis"
+                    ],
+
                     current_price
                 )
             )
 
             if (
-                management["action"]
+                management[
+                    "action"
+                ]
                 == "EXIT"
             ):
 
                 position_message = (
+
                     f"🚨 POSIZIONE "
                     f"{position['direction']} "
                     f"— USCITA\n"
+
                     f"Motivo: "
                     f"{management['reason']}"
                 )
 
                 clear_position()
 
+                position = None
+
             elif (
-                management["action"]
+                management[
+                    "action"
+                ]
                 == "WARNING"
             ):
 
                 position["stop"] = (
-                    management["new_stop"]
+                    management[
+                        "new_stop"
+                    ]
                 )
 
                 save_position(
@@ -2995,21 +3826,31 @@ def main():
                 )
 
                 position_message = (
+
                     f"🟠 POSIZIONE "
                     f"{position['direction']} "
                     f"— ATTENZIONE\n"
+
                     f"{management['reason']}"
                 )
 
             else:
 
                 if (
-                    management["new_stop"]
-                    != position["stop"]
+                    management[
+                        "new_stop"
+                    ]
+                    != position[
+                        "stop"
+                    ]
                 ):
 
-                    position["stop"] = (
-                        management["new_stop"]
+                    position[
+                        "stop"
+                    ] = (
+                        management[
+                            "new_stop"
+                        ]
                     )
 
                     save_position(
@@ -3017,9 +3858,11 @@ def main():
                     )
 
                 position_message = (
+
                     f"🟢 POSIZIONE "
                     f"{position['direction']} "
                     f"— MANTIENI\n"
+
                     f"{management['reason']}"
                 )
 
@@ -3029,17 +3872,30 @@ def main():
 
     if (
         not position
-        and best["analysis"]["signal"]
-        in ("LONG", "SHORT")
+
+        and best[
+            "analysis"
+        ]["signal"]
+        in (
+            "LONG",
+            "SHORT"
+        )
     ):
 
         second_score = (
-            ranked[1]["analysis"]["score"]
+
+            ranked[1][
+                "analysis"
+            ]["score"]
+
             if len(ranked) > 1
+
             else 0
         )
 
-        a = best["analysis"]
+        a = best[
+            "analysis"
+        ]
 
         if (
 
@@ -3123,6 +3979,7 @@ def main():
         else:
 
             position_message = (
+
                 "🟡 NESSUNA APERTURA "
                 "AUTOMATICA — "
                 "setup non abbastanza "
@@ -3141,15 +3998,21 @@ def main():
 
     print()
 
-    print("=" * 70)
+    print(
+        "=" * 70
+    )
 
     print(
         "🏆 MIGLIORE OPPORTUNITÀ"
     )
 
-    print("=" * 70)
+    print(
+        "=" * 70
+    )
 
-    a = best["analysis"]
+    a = best[
+        "analysis"
+    ]
 
     print(
         f"Materia prima: "
@@ -3193,27 +4056,52 @@ def main():
     )
 
     print(
+        f"News positive: "
+        f"{a['news']['positive']}"
+    )
+
+    print(
+        f"News negative: "
+        f"{a['news']['negative']}"
+    )
+
+    print(
         f"Ricorrenza storica: "
         f"{a['repetition']['direction']} | "
         f"{a['repetition']['frequency'] * 100:.1f}%"
     )
 
+    if a["news"].get(
+        "error"
+    ):
+
+        print(
+            f"Errore News: "
+            f"{a['news']['error']}"
+        )
+
     print()
 
-    print("=" * 70)
+    print(
+        "=" * 70
+    )
 
     print(
         "📊 RANKING"
     )
 
-    print("=" * 70)
+    print(
+        "=" * 70
+    )
 
     for i, item in enumerate(
         ranked,
         1
     ):
 
-        x = item["analysis"]
+        x = item[
+            "analysis"
+        ]
 
         print(
 
@@ -3242,8 +4130,11 @@ def main():
     # ========================================================
 
     message = build_telegram(
+
         ranked,
+
         best,
+
         position_message
     )
 
@@ -3253,7 +4144,9 @@ def main():
 
     print()
 
-    print("=" * 70)
+    print(
+        "=" * 70
+    )
 
     print(
         "🌐 News web: GDELT "
@@ -3265,7 +4158,9 @@ def main():
         "non garanzia di profitto."
     )
 
-    print("=" * 70)
+    print(
+        "=" * 70
+    )
 
 
 # ============================================================
@@ -3273,4 +4168,5 @@ def main():
 # ============================================================
 
 if __name__ == "__main__":
+
     main()
