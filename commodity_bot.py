@@ -2301,29 +2301,6 @@ def choose_entry_setup(candles, direction, atr_value, world_patterns):
         return _price_round(entry), 'PULLBACK'
 
 
-def v84_entry_state(price, entry, atr_value, direction, confirmed=False, setup_valid=True):
-    """Operational entry state: ENTER / WAIT / NO ENTRY; never chase price."""
-    try:
-        price=float(price); entry=float(entry)
-        atr_value=max(float(atr_value or 0.0), abs(entry)*0.001)
-    except Exception:
-        return "INVALIDATED", "NON ENTRARE", "Dati ingresso non validi."
-    zone=max(atr_value*0.12, abs(entry)*0.0015)
-    if not setup_valid:
-        return "INVALIDATED", "NON ENTRARE", "Setup invalidato."
-    direction=str(direction).upper()
-    distance=price-entry if direction=="LONG" else entry-price
-    if abs(distance)<=zone:
-        if confirmed:
-            return "ENTRY_CONFIRMED", "ENTRARE", "Entrata in zona con conferma."
-        return "ENTRY_REACHED_NO_CONFIRM", "ATTENDERE", "Entrata raggiunta: manca la conferma."
-    if distance < -zone:
-        return "PRICE_NOT_AT_ENTRY", "ATTENDERE", "Prezzo non ancora in zona d'ingresso."
-    if not confirmed:
-        return "ENTRY_PASSED_NO_CHASE", "ATTENDERE", "Entrata superata senza conferma: NON INSEGUIRE."
-    return "ENTRY_CONFIRMED", "ENTRARE", "Setup confermato."
-
-
 def v83_setup_engine(analysis, intraday_candles=None, commodity_name=None, pattern_timeframes=None):
     direction=analysis.get('setup_direction') or analysis.get('model_signal')
     if direction not in ('LONG','SHORT'):
@@ -2367,19 +2344,14 @@ def v83_setup_engine(analysis, intraday_candles=None, commodity_name=None, patte
         else: stop=p*(1+sl_pct); tp1=p*(1-tp1_pct); tp2=p*(1-tp2_pct); tp3=p*(1-tp3_pct)
         analysis.update({'entry':_price_round(p),'stop':_price_round(stop),'tp1':_price_round(tp1),
                          'tp2':_price_round(tp2),'tp3':_price_round(tp3)})
-    # v8.4: operational state machine. Reaching/passing entry is handled
-    # separately from confirmation so the user never has to guess.
+    # Decide only after confluence. A good pattern alone is not enough.
     action='ATTENDERE'
-    entry_state='PRICE_NOT_AT_ENTRY'
-    entry_reason='Prezzo non ancora in zona d\'ingresso.'
     risk_mode=analysis.get('risk',{}).get('mode','NORMAL')
-    confirmed=(analysis.get('signal') in ('LONG','SHORT') and entry_quality>=72 and combo.get('samples',0)>=15 and world.get('score',0)>0)
-    if risk_mode=='SHOCK':
-        action='NON ENTRARE'; entry_state='INVALIDATED'; entry_reason='Shock attivo: operazione bloccata.'
-    elif entry:
-        entry_state,action,entry_reason=v84_entry_state(analysis.get('price'),entry,atr_value,direction,confirmed=confirmed,setup_valid=True)
+    if risk_mode=='SHOCK': action='NON ENTRARE'
+    elif analysis.get('signal') in ('LONG','SHORT') and entry_quality>=72 and combo.get('samples',0)>=15 and world.get('score',0)>0:
+        action='ENTRARE'
     elif analysis.get('signal') not in ('LONG','SHORT'):
-        action='NON ENTRARE'; entry_state='INVALIDATED'; entry_reason='Nessuna direzione operativa valida.'
+        action='ATTENDERE'
     analysis.update({
         'entry_method':method,
         'candle_pattern':world.get('setup','NESSUN SETUP FORTE'),
@@ -2392,8 +2364,6 @@ def v83_setup_engine(analysis, intraday_candles=None, commodity_name=None, patte
         'timing':timing,
         'entry_quality':entry_quality,
         'action_label':action,
-        'entry_state':entry_state,
-        'entry_reason':entry_reason,
     })
     return analysis
 
@@ -2928,7 +2898,7 @@ def enrich_v82_setup(item):
 def build_telegram(ranked, best, position_message=None):
     """Telegram operativo V8: niente dettagli tecnici interni."""
     available=[x for x in ranked if x.get('available')][:3]
-    lines=['🌍 COMMODITIES BOT v8.4','', '🏆 CLASSIFICA']
+    lines=['🌍 COMMODITIES BOT v8.3','', '🏆 CLASSIFICA']
     medals=['🥇','🥈','🥉']
     for i,item in enumerate(available):
         a=item['analysis']; action=a.get('action_label')
@@ -2950,8 +2920,7 @@ def build_telegram(ranked, best, position_message=None):
         lines += ['', '━━━━━━━━━━━━━━━━━━━━', f'{medal} {item["name"]}', '━━━━━━━━━━━━━━━━━━━━',
                   f'🎯 AZIONE: {action}', f'🧭 DIREZIONE: {direction}',
                   f'💰 PREZZO ATTUALE: {price:.4f}' if price is not None else '💰 PREZZO ATTUALE: N/D',
-                  f'📥 ENTRATA: {entry:.4f}' if entry is not None else '📥 ENTRATA: N/D', f'📌 SETUP: {a.get("entry_method","N/D")}', f'🕯️ PATTERN PRINCIPALE: {pattern.split(" + ")[0]}',
-                  f'✅ CONFERME: {" + ".join(pattern.split(" + ")[1:]) if " + " in pattern else "Nessuna"}', f'📚 STORICO SETUP: {a.get("pattern_backtest",{}).get("win_rate",0)*100:.0f}% successo' if a.get("pattern_backtest",{}).get("samples",0)>=5 else '📚 STORICO SETUP: dati insufficienti']
+                  f'📥 ENTRATA: {entry:.4f}' if entry is not None else '📥 ENTRATA: N/D', f'📌 SETUP: {a.get("entry_method","N/D")}', f'🕯️ PATTERN: {pattern}', f'📚 STORICO SETUP: {a.get("pattern_backtest",{}).get("win_rate",0)*100:.0f}% successo' if a.get("pattern_backtest",{}).get("samples",0)>=5 else '📚 STORICO SETUP: dati insufficienti']
         item_mode=a.get('risk',{}).get('mode', global_mode)
         if item_mode=='SHOCK':
             lines.append('🚨 ENTRATA BLOCCATA — SHOCK MODE')
@@ -2965,10 +2934,7 @@ def build_telegram(ranked, best, position_message=None):
             f'⏰ ORARIO MIGLIORE: {timing.get("best_time","N/D")}',
             f'⏳ FINESTRA: {timing.get("window","N/D")}',
         ]
-        if action=='ENTRARE': lines.append('👉 ENTRATA CONFERMATA.')
-        elif a.get('entry_state')=='ENTRY_PASSED_NO_CHASE': lines.append('👉 Entrata superata senza conferma: NON INSEGUIRE.')
-        elif a.get('entry_state')=='ENTRY_REACHED_NO_CONFIRM': lines.append('👉 Entrata raggiunta: attendere la conferma.')
-        elif a.get('entry_state')=='INVALIDATED': lines.append('👉 NON ENTRARE: setup invalidato.')
+        if action=='ENTRARE': lines.append('👉 Entrare solo se il prezzo conferma l\'area di ingresso.')
         elif action=='ATTENDERE': lines.append(f'👉 Attendere conferma {direction}.')
         else: lines.append('👉 Nessuna nuova entrata.')
         lines += ['', '📌 GESTIONE','TP1 → STOP A BREAK-EVEN','TP2 → STOP A TP1','TP3 → CHIUDERE','STOP LOSS → CHIUDERE','SEGNALE OPPOSTO CONFERMATO → CHIUDERE']
@@ -2992,7 +2958,7 @@ def analysis_direction_hint(timeframes):
 def main():
     print()
     print("=" * 70)
-    print("🌍 COMMODITIES BOT v8.4")
+    print("🌍 COMMODITIES BOT v8.3")
     print("RANKING RISK/BENEFIT + CYCLICAL ENGINE + GOLD ENGINE v15.1 + GLOBAL INTELLIGENCE + SESSION ENGINE + RISK ENGINE")
     print("=" * 70)
     print()
