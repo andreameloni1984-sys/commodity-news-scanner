@@ -1025,17 +1025,44 @@ def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None):
 
     if quality < MIN_QUALITY:
         model_signal = "NO TRADE"
-    elif probability >= LONG_THRESHOLD:
+    elif combined_long >= LONG_THRESHOLD:
         model_signal = "LONG"
-    elif probability <= SHORT_THRESHOLD:
+    elif combined_short >= (1.0 - SHORT_THRESHOLD):
         model_signal = "SHORT"
     else:
         model_signal = "WAIT"
 
-    main_direction = (
-        "LONG" if probability >= 0.50
-        else "SHORT"
-    )
+    # GOLD ENGINE: la direzione non viene decisa dal modello da solo.
+    # Il modello quantitativo viene fuso con il consenso MTF, dando più peso
+    # ai timeframe strutturali (4H/1H/15m) e una conferma aggiuntiva ai veloci.
+    model_direction = "LONG" if probability >= 0.50 else "SHORT"
+
+    tf_votes = {
+        "4H": 0.25,
+        "1H": 0.25,
+        "15m": 0.20,
+        "5m": 0.20,
+        "1m": 0.10,
+    }
+    mtf_bias = 0.0
+    for tf, weight in tf_votes.items():
+        direction = timeframes[tf]["direction"]
+        if direction == "LONG":
+            mtf_bias += weight
+        elif direction == "SHORT":
+            mtf_bias -= weight
+
+    # Bias finale: 50% modello + 50% MTF.
+    # USD/news/political sono filtri di contesto, non sostituiscono il trend.
+    combined_long = clamp(0.50 * probability + 0.50 * (0.50 + mtf_bias), 0.01, 0.99)
+    combined_short = 1.0 - combined_long
+
+    if combined_long >= LONG_THRESHOLD:
+        main_direction = "LONG"
+    elif combined_short >= (1.0 - SHORT_THRESHOLD):
+        main_direction = "SHORT"
+    else:
+        main_direction = model_direction
 
     tf_score = 0
     for tf in ("4H", "1H", "15m"):
@@ -1066,7 +1093,7 @@ def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None):
         repetition_impact = -repetition["frequency"] * 8
 
     # Score 0-100.
-    direction_score = abs(probability - 0.50) * 200
+    direction_score = abs(combined_long - 0.50) * 200
 
     score = (
         direction_score * 0.40
@@ -1132,6 +1159,9 @@ def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None):
         "model_signal": model_signal,
         "grade": grade,
         "probability": probability,
+        "long_probability": combined_long,
+        "short_probability": combined_short,
+        "mtf_bias": mtf_bias,
         "confidence": confidence,
         "quality": quality,
         "score": score,
@@ -1248,7 +1278,7 @@ def compact_tf(timeframes):
 
 
 def confirmation_text(analysis):
-    signal = analysis["model_signal"]
+    signal = analysis["signal"] if analysis["signal"] in ("LONG", "SHORT") else analysis["model_signal"]
     tfs = analysis["timeframes"]
 
     if signal not in ("LONG", "SHORT"):
@@ -1289,7 +1319,7 @@ def build_telegram(ranked, best, position_message=None):
         f"📊 Score: {a['score']:.0f}/100",
         "",
         f"💰 Prezzo: {a['price']:.4f}",
-        f"🧠 Modello: {pct(a['probability'])}",
+        f"🧠 Forecast: LONG {a['long_probability'] * 100:.1f}% | SHORT {a['short_probability'] * 100:.1f}%",
         f"📈 {compact_tf(a['timeframes'])}",
         confirmation_text(a),
         "",
