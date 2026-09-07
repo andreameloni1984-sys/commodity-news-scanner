@@ -7,7 +7,7 @@ import requests
 
 
 # ============================================================
-# COMMODITY TRADING BOT v5.0
+# COMMODITY TRADING BOT v6.0
 # QUANT MODEL + MULTI-TIMEFRAME + NEWS + USD + SEASONALITY
 # + RANKING + POSITION MANAGEMENT
 #
@@ -31,8 +31,9 @@ HISTORY_SIZE = 4000
 HORIZON = 5
 
 STOP_ATR = 1.5
-TP1_ATR = 1.5
-TP2_ATR = 2.5
+TP1_ATR = 2.0
+TP2_ATR = 3.0
+TP3_ATR = 4.5
 
 LONG_THRESHOLD = 0.62
 SHORT_THRESHOLD = 0.38
@@ -51,7 +52,7 @@ COMMODITIES = {
     "Rame": "COPPER/USD",
     "Grano": "WHEAT/USD",
     "Mais": "CORN/USD",
-    "CaffÃ¨": "COFFEE/USD",
+    "Caffè": "COFFEE/USD",
 }
 
 NEWS_TERMS = {
@@ -63,7 +64,7 @@ NEWS_TERMS = {
     "Rame": "copper",
     "Grano": "wheat OR grain",
     "Mais": "corn OR maize",
-    "CaffÃ¨": "coffee",
+    "Caffè": "coffee",
 }
 
 FEATURE_NAMES = [
@@ -124,7 +125,7 @@ def load_position():
             data = json.load(file)
         return data or None
     except Exception as error:
-        print(f"â ï¸ Impossibile leggere {POSITION_FILE}: {error}")
+        print(f"⚠️ Impossibile leggere {POSITION_FILE}: {error}")
         return None
 
 
@@ -325,7 +326,7 @@ def breakout(values, period=20):
 
 
 # ============================================================
-# STAGIONALITÃ / RIPETIZIONE NEGLI ANNI
+# STAGIONALITÀ / RIPETIZIONE NEGLI ANNI
 # ============================================================
 
 def historical_repetition(candles):
@@ -359,7 +360,7 @@ def historical_repetition(candles):
         }
 
     # Finestra di circa 45 giorni attorno alla data corrente,
-    # cosÃ¬ confrontiamo un periodo stagionale e non solo il mese.
+    # così confrontiamo un periodo stagionale e non solo il mese.
     target_day = current_date.timetuple().tm_yday
     samples = []
 
@@ -407,7 +408,7 @@ def historical_repetition(candles):
         direction = "NEUTRALE"
         raw_score = 0.0
 
-    # PiÃ¹ la media storica Ã¨ consistente, piÃ¹ il punteggio pesa.
+    # Più la media storica è consistente, più il punteggio pesa.
     magnitude_factor = clamp(abs(avg_return) / 0.01, 0.0, 1.0)
     score = raw_score * magnitude_factor
 
@@ -808,7 +809,7 @@ def get_multitimeframe(symbol):
                 "score": score,
             }
         except Exception as error:
-            print(f"   â ï¸ {name}: {error}")
+            print(f"   ⚠️ {name}: {error}")
             result[name] = {
                 "direction": "NONE",
                 "score": 0,
@@ -845,7 +846,7 @@ def analyze_usd():
             "label": label,
         }
     except Exception as error:
-        print(f"â ï¸ UUP non disponibile: {error}")
+        print(f"⚠️ UUP non disponibile: {error}")
         return {
             "direction": "NONE",
             "score": 0,
@@ -934,7 +935,7 @@ def analyze_news(name):
         }
 
     except Exception as error:
-        print(f"   â ï¸ News {name}: {error}")
+        print(f"   ⚠️ News {name}: {error}")
         return {
             "score": 0,
             "label": "ERRORE",
@@ -943,11 +944,68 @@ def analyze_news(name):
 
 
 # ============================================================
+# POLITICAL / GEOPOLITICAL IMPACT
+# ============================================================
+
+def political_impact(name):
+    """Valuta il rischio politico/geopolitico specifico della commodity."""
+    if not NEWS_API_KEY:
+        return {"score": 0.0, "direction": "NEUTRALE", "count": 0}
+
+    queries = {
+        "Oro": "gold Trump tariffs Fed geopolitics sanctions war",
+        "Argento": "silver Trump tariffs industrial demand geopolitics",
+        "Petrolio WTI": "oil WTI OPEC Trump sanctions war tariffs",
+        "Petrolio Brent": "Brent oil OPEC Trump sanctions war tariffs",
+        "Gas Naturale": "natural gas geopolitics LNG sanctions Europe Trump",
+        "Rame": "copper Trump tariffs China geopolitics mining",
+        "Grano": "wheat grain Trump tariffs Russia Ukraine geopolitics",
+        "Mais": "corn maize Trump tariffs agriculture geopolitics",
+        "Caffè": "coffee Brazil tariffs Trump trade weather geopolitics",
+    }
+
+    positive = {
+        "tariff", "tariffs", "sanction", "sanctions", "war", "conflict",
+        "attack", "attacks", "shortage", "disruption", "disruptions",
+        "supply risk", "opec cut", "cut production", "embargo",
+    }
+    negative = {
+        "ceasefire", "peace", "de-escalation", "oversupply", "surplus",
+        "production increase", "supply increase", "opec increase",
+    }
+
+    try:
+        params = {
+            "q": queries.get(name, name),
+            "apiKey": NEWS_API_KEY,
+            "language": "en",
+            "sortBy": "publishedAt",
+            "pageSize": 20,
+        }
+        response = requests.get(NEWS_URL, params=params, timeout=20)
+        response.raise_for_status()
+        articles = response.json().get("articles", [])
+        score = 0
+        for article in articles:
+            text = f"{article.get('title','')} {article.get('description','')}".lower()
+            pos = sum(1 for w in positive if w in text)
+            neg = sum(1 for w in negative if w in text)
+            score += 1 if pos > neg else -1 if neg > pos else 0
+        normalized = clamp(score / max(len(articles), 1), -1, 1)
+        direction = "FAVOREVOLE" if normalized >= 0.20 else "SFAVOREVOLE" if normalized <= -0.20 else "NEUTRALE"
+        return {"score": normalized, "direction": direction, "count": len(articles)}
+    except Exception as error:
+        print(f"   ⚠️ Political {name}: {error}")
+        return {"score": 0.0, "direction": "NEUTRALE", "count": 0}
+
+
+# ============================================================
 # SIGNAL
 # ============================================================
 
-def analyze(candles, dataset, model, bt, usd, news, timeframes):
+def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None):
     features = build_features(candles)
+    political = political or {"score": 0.0, "direction": "NEUTRALE", "count": 0}
 
     if features is None:
         return None
@@ -1019,6 +1077,7 @@ def analyze(candles, dataset, model, bt, usd, news, timeframes):
         + repetition_impact
         + news["score"] * 6
         + usd["impact"] * 3
+        + political["score"] * 5
     )
 
     score = clamp(score, 0, 100)
@@ -1059,12 +1118,14 @@ def analyze(candles, dataset, model, bt, usd, news, timeframes):
         stop = price - current_atr * STOP_ATR
         tp1 = price + current_atr * TP1_ATR
         tp2 = price + current_atr * TP2_ATR
+        tp3 = price + current_atr * TP3_ATR
     elif operational_signal == "SHORT":
         stop = price + current_atr * STOP_ATR
         tp1 = price - current_atr * TP1_ATR
         tp2 = price - current_atr * TP2_ATR
+        tp3 = price - current_atr * TP3_ATR
     else:
-        stop = tp1 = tp2 = None
+        stop = tp1 = tp2 = tp3 = None
 
     return {
         "signal": operational_signal,
@@ -1079,9 +1140,18 @@ def analyze(candles, dataset, model, bt, usd, news, timeframes):
         "stop": stop,
         "tp1": tp1,
         "tp2": tp2,
+        "tp3": tp3,
+        "strong_confirmation": (
+            operational_signal in ("LONG", "SHORT")
+            and confidence >= 70
+            and fast_confirmations == 2
+            and tf_score >= 1
+            and score >= 75
+        ),
         "timeframes": timeframes,
         "usd": usd,
         "news": news,
+        "political": political,
         "repetition": repetition,
         "tf_score": tf_score,
         "fast_confirmations": fast_confirmations,
@@ -1094,92 +1164,48 @@ def analyze(candles, dataset, model, bt, usd, news, timeframes):
 # ============================================================
 
 def manage_position(position, current_analysis, current_price):
+    """Gestione posizione allineata al GOLD BOT v15.1."""
     direction = position["direction"]
     entry = position["entry"]
     stop = position["stop"]
     tp1 = position["tp1"]
     tp2 = position["tp2"]
+    tp3 = position["tp3"]
+    break_even = position.get("break_even", False)
+    tp2_reached = position.get("tp2_reached", False)
 
-    probability = current_analysis["probability"]
-    signal = current_analysis["signal"]
+    strong_opposite = (
+        current_analysis.get("strong_confirmation", False)
+        and current_analysis.get("signal") == ("SHORT" if direction == "LONG" else "LONG")
+    )
 
     if direction == "LONG":
         if current_price <= stop:
             return {"action": "EXIT", "reason": "STOP LOSS", "new_stop": stop}
-
-        if current_price >= tp2:
-            return {"action": "EXIT", "reason": "TAKE PROFIT 2", "new_stop": stop}
-
-        if probability <= 0.38 or signal == "SHORT":
-            return {
-                "action": "EXIT",
-                "reason": "INVERSIONE CONFERMATA",
-                "new_stop": stop,
-            }
-
-        if probability < 0.48:
-            return {
-                "action": "WARNING",
-                "reason": "LONG INDEBOLITO",
-                "new_stop": stop,
-            }
-
-        if current_price >= tp1:
-            trailing_stop = current_price - current_analysis["atr"]
-            new_stop = max(stop, entry, trailing_stop)
-            return {
-                "action": "HOLD",
-                "reason": "TP1 RAGGIUNTO - TRAILING STOP",
-                "new_stop": new_stop,
-            }
-
-        return {
-            "action": "HOLD",
-            "reason": "TREND LONG ANCORA VALIDO",
-            "new_stop": stop,
-        }
+        if current_price >= tp3:
+            return {"action": "EXIT", "reason": "TP3 RAGGIUNTO — INCASSARE", "new_stop": stop}
+        if current_price >= tp2 and not tp2_reached:
+            return {"action": "MOVE_STOP", "reason": "TP2 RAGGIUNTO — STOP A TP1", "new_stop": max(stop, tp1), "tp2_reached": True}
+        if current_price >= tp1 and not break_even:
+            return {"action": "MOVE_STOP", "reason": "TP1 RAGGIUNTO — STOP A BREAK-EVEN", "new_stop": max(stop, entry), "break_even": True}
+        if strong_opposite:
+            return {"action": "EXIT", "reason": "SEGNALE OPPOSTO CONFERMATO", "new_stop": stop}
+        return {"action": "HOLD", "reason": "LONG — TENERE", "new_stop": stop}
 
     if direction == "SHORT":
         if current_price >= stop:
             return {"action": "EXIT", "reason": "STOP LOSS", "new_stop": stop}
+        if current_price <= tp3:
+            return {"action": "EXIT", "reason": "TP3 RAGGIUNTO — INCASSARE", "new_stop": stop}
+        if current_price <= tp2 and not tp2_reached:
+            return {"action": "MOVE_STOP", "reason": "TP2 RAGGIUNTO — STOP A TP1", "new_stop": min(stop, tp1), "tp2_reached": True}
+        if current_price <= tp1 and not break_even:
+            return {"action": "MOVE_STOP", "reason": "TP1 RAGGIUNTO — STOP A BREAK-EVEN", "new_stop": min(stop, entry), "break_even": True}
+        if strong_opposite:
+            return {"action": "EXIT", "reason": "SEGNALE OPPOSTO CONFERMATO", "new_stop": stop}
+        return {"action": "HOLD", "reason": "SHORT — TENERE", "new_stop": stop}
 
-        if current_price <= tp2:
-            return {"action": "EXIT", "reason": "TAKE PROFIT 2", "new_stop": stop}
-
-        if probability >= 0.62 or signal == "LONG":
-            return {
-                "action": "EXIT",
-                "reason": "INVERSIONE CONFERMATA",
-                "new_stop": stop,
-            }
-
-        if probability > 0.52:
-            return {
-                "action": "WARNING",
-                "reason": "SHORT INDEBOLITO",
-                "new_stop": stop,
-            }
-
-        if current_price <= tp1:
-            trailing_stop = current_price + current_analysis["atr"]
-            new_stop = min(stop, entry, trailing_stop)
-            return {
-                "action": "HOLD",
-                "reason": "TP1 RAGGIUNTO - TRAILING STOP",
-                "new_stop": new_stop,
-            }
-
-        return {
-            "action": "HOLD",
-            "reason": "TREND SHORT ANCORA VALIDO",
-            "new_stop": stop,
-        }
-
-    return {
-        "action": "EXIT",
-        "reason": "DIREZIONE NON RICONOSCIUTA",
-        "new_stop": stop,
-    }
+    return {"action": "EXIT", "reason": "DIREZIONE NON RICONOSCIUTA", "new_stop": stop}
 
 
 # ============================================================
@@ -1187,15 +1213,9 @@ def manage_position(position, current_analysis, current_price):
 # ============================================================
 
 def send_telegram(message):
-    if not TELEGRAM_BOT_TOKEN:
-        raise RuntimeError(
-            "TELEGRAM_BOT_TOKEN non configurata nei GitHub Secrets."
-        )
-
-    if not TELEGRAM_CHAT_ID:
-        raise RuntimeError(
-            "TELEGRAM_CHAT_ID non configurata nei GitHub Secrets."
-        )
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("⚠️ Telegram non configurato.")
+        return
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
 
@@ -1204,29 +1224,20 @@ def send_telegram(message):
         "text": message,
     }
 
-    response = requests.post(url, json=payload, timeout=30)
-
     try:
-        data = response.json()
-    except ValueError:
-        data = {}
-
-    if response.status_code != 200 or not data.get("ok", False):
-        description = data.get("description", response.text)
-        raise RuntimeError(
-            f"Errore Telegram ({response.status_code}): {description}"
-        )
-
-    print("â Messaggio Telegram inviato correttamente.")
+        response = requests.post(url, json=payload, timeout=20)
+        response.raise_for_status()
+    except Exception as error:
+        print(f"⚠️ Errore Telegram: {error}")
 
 
 def icon_for_signal(signal):
     return {
-        "LONG": "ð¢",
-        "SHORT": "ð´",
-        "WAIT": "ð¡",
-        "NO TRADE": "âª",
-    }.get(signal, "âª")
+        "LONG": "🟢",
+        "SHORT": "🔴",
+        "WAIT": "🟡",
+        "NO TRADE": "⚪",
+    }.get(signal, "⚪")
 
 
 def compact_tf(timeframes):
@@ -1241,7 +1252,7 @@ def confirmation_text(analysis):
     tfs = analysis["timeframes"]
 
     if signal not in ("LONG", "SHORT"):
-        return "ð Nessun setup principale sufficientemente forte."
+        return "👉 Nessun setup principale sufficientemente forte."
 
     opposite = "SHORT" if signal == "LONG" else "LONG"
 
@@ -1249,42 +1260,43 @@ def confirmation_text(analysis):
         tfs["5m"]["direction"] == signal
         and tfs["1m"]["direction"] == signal
     ):
-        return f"ð â 5m + 1m CONFERMANO {signal}"
+        return f"👉 ✅ 5m + 1m CONFERMANO {signal}"
 
     if (
         tfs["5m"]["direction"] == opposite
         or tfs["1m"]["direction"] == opposite
     ):
-        return f"ð â ï¸ CONFLITTO CONTRO {signal}"
+        return f"👉 ⚠️ CONFLITTO CONTRO {signal}"
 
     if tfs["5m"]["direction"] == signal:
-        return f"ð â³ ATTENDERE CONFERMA 1m {signal}"
+        return f"👉 ⏳ ATTENDERE CONFERMA 1m {signal}"
 
     if tfs["1m"]["direction"] == signal:
-        return f"ð â³ ATTENDERE CONFERMA 5m {signal}"
+        return f"👉 ⏳ ATTENDERE CONFERMA 5m {signal}"
 
-    return f"ð â³ ATTENDERE CONFERMA {signal}"
+    return f"👉 ⏳ ATTENDERE CONFERMA {signal}"
 
 
 def build_telegram(ranked, best, position_message=None):
     a = best["analysis"]
 
     lines = [
-        "ð COMMODITIES BOT",
+        "🌍 COMMODITIES BOT",
         "",
-        f"ð MIGLIOR SETUP",
+        f"🏆 MIGLIOR SETUP",
         f"{icon_for_signal(a['signal'])} {best['name']}",
-        f"ð¯ {a['signal']} | {a['grade']}",
-        f"ð Score: {a['score']:.0f}/100",
+        f"🎯 {a['signal']} | {a['grade']}",
+        f"📊 Score: {a['score']:.0f}/100",
         "",
-        f"ð° Prezzo: {a['price']:.4f}",
-        f"ð§  Modello: {pct(a['probability'])}",
-        f"ð {compact_tf(a['timeframes'])}",
+        f"💰 Prezzo: {a['price']:.4f}",
+        f"🧠 Modello: {pct(a['probability'])}",
+        f"📈 {compact_tf(a['timeframes'])}",
         confirmation_text(a),
         "",
-        f"ð° News: {a['news']['label']}",
-        f"ðµ Dollaro: {a['usd']['label']}",
-        f"ð Storico: {a['repetition']['direction']} "
+        f"📰 News: {a['news']['label']}",
+        f"🌍 Political Impact: {a['political']['direction']} ({a['political']['score']:+.2f})",
+        f"💵 Dollaro: {a['usd']['label']}",
+        f"🔄 Storico: {a['repetition']['direction']} "
         f"({a['repetition']['frequency'] * 100:.0f}% "
         f"su {a['repetition']['samples']} casi)",
         "",
@@ -1292,10 +1304,11 @@ def build_telegram(ranked, best, position_message=None):
 
     if a["signal"] in ("LONG", "SHORT"):
         lines.extend([
-            f"ð ENTRY: {a['price']:.4f}",
-            f"ð SL: {a['stop']:.4f}",
-            f"ð¯ TP1: {a['tp1']:.4f}",
-            f"ð¯ TP2: {a['tp2']:.4f}",
+            f"👉 ENTRY: {a['price']:.4f}",
+            f"🛑 SL: {a['stop']:.4f}",
+            f"🎯 TP1: {a['tp1']:.4f}",
+            f"🎯 TP2: {a['tp2']:.4f}",
+            f"🎯 TP3: {a['tp3']:.4f}",
             "",
         ])
 
@@ -1305,7 +1318,7 @@ def build_telegram(ranked, best, position_message=None):
 
         x = item["analysis"]
         lines.append(
-            f"{'ð¥' if i == 2 else 'ð¥'} {item['name']} â "
+            f"{'🥈' if i == 2 else '🥉'} {item['name']} — "
             f"{x['signal']} | {x['score']:.0f}/100"
         )
 
@@ -1314,9 +1327,12 @@ def build_telegram(ranked, best, position_message=None):
 
     lines.extend([
         "",
-        f"ð FOCUS: {best['name']}",
+        f"👉 FOCUS: {best['name']}",
         "",
-        "â ï¸ Segnale algoritmico, non garanzia di profitto.",
+        "📌 GESTIONE GOLD ENGINE",
+        "TP1 → BREAK-EVEN | TP2 → STOP A TP1 | TP3 → CHIUDERE",
+        "",
+        "⚠️ Segnale algoritmico, non garanzia di profitto.",
     ])
 
     return "\n".join(lines)
@@ -1329,8 +1345,8 @@ def build_telegram(ranked, best, position_message=None):
 def main():
     print()
     print("=" * 70)
-    print("ð COMMODITY TRADING BOT v5.0")
-    print("QUANT + MTF + NEWS + USD + RIPETIZIONE STORICA")
+    print("🌍 COMMODITIES BOT v6.0")
+    print("RANKING + GOLD ENGINE + MTF + NEWS + USD + POLITICAL IMPACT")
     print("=" * 70)
     print()
 
@@ -1340,19 +1356,19 @@ def main():
     results = []
 
     for name, symbol in COMMODITIES.items():
-        print(f"ð Analizzo {name}...")
+        print(f"🔎 Analizzo {name}...")
 
         try:
             candles = get_daily_data(symbol)
 
             if len(candles) < 500:
-                print("   â ï¸ Dati insufficienti")
+                print("   ⚠️ Dati insufficienti")
                 continue
 
             dataset = build_dataset(candles)
 
             if len(dataset) < 300:
-                print("   â ï¸ Dataset insufficiente")
+                print("   ⚠️ Dataset insufficiente")
                 continue
 
             bt = backtest(dataset)
@@ -1363,6 +1379,7 @@ def main():
 
             timeframes = get_multitimeframe(symbol)
             news = analyze_news(name)
+            political = political_impact(name)
 
             analysis = analyze(
                 candles,
@@ -1372,6 +1389,7 @@ def main():
                 usd,
                 news,
                 timeframes,
+                political,
             )
 
             if analysis is None:
@@ -1386,13 +1404,13 @@ def main():
             })
 
             print(
-                f"   â MODELLO {analysis['model_signal']} | "
+                f"   → MODELLO {analysis['model_signal']} | "
                 f"OPERATIVO {analysis['signal']} | "
                 f"Score {analysis['score']:.0f}"
             )
 
         except Exception as error:
-            print(f"   â {error}")
+            print(f"   ❌ {error}")
 
     if not results:
         raise RuntimeError("Nessuna materia prima analizzata.")
@@ -1433,27 +1451,26 @@ def main():
 
             if management["action"] == "EXIT":
                 position_message = (
-                    f"ð¨ POSIZIONE {position['direction']} â USCITA\n"
+                    f"🚨 POSIZIONE {position['direction']} — USCITA\n"
                     f"Motivo: {management['reason']}"
                 )
                 clear_position()
-
-            elif management["action"] == "WARNING":
-                position["stop"] = management["new_stop"]
-                save_position(position)
-                position_message = (
-                    f"ð  POSIZIONE {position['direction']} â ATTENZIONE\n"
-                    f"{management['reason']}"
-                )
+                position = None
 
             else:
-                if management["new_stop"] != position["stop"]:
+                if management.get("new_stop") != position["stop"]:
                     position["stop"] = management["new_stop"]
-                    save_position(position)
+                if management.get("break_even"):
+                    position["break_even"] = True
+                if management.get("tp2_reached"):
+                    position["tp2_reached"] = True
+                save_position(position)
 
+                icon = "🟡" if management["action"] == "MOVE_STOP" else "🟢"
                 position_message = (
-                    f"ð¢ POSIZIONE {position['direction']} â MANTIENI\n"
-                    f"{management['reason']}"
+                    f"{icon} POSIZIONE {position['direction']} — "
+                    f"{management['reason']}\n"
+                    f"STOP ATTUALE: {position['stop']:.4f}"
                 )
 
     # ========================================================
@@ -1466,7 +1483,7 @@ def main():
 
         # Apertura solo se:
         # - score alto
-        # - qualitÃ /confidenza sufficienti
+        # - qualità/confidenza sufficienti
         # - margine sul secondo setup
         # - nessun conflitto rapido
         if (
@@ -1475,6 +1492,7 @@ def main():
             and a["confidence"] >= MIN_CONFIDENCE
             and a["score"] - second_score >= MIN_RANK_MARGIN
             and a["fast_conflicts"] == 0
+            and a["strong_confirmation"]
         ):
             position = {
                 "name": best["name"],
@@ -1484,13 +1502,16 @@ def main():
                 "stop": a["stop"],
                 "tp1": a["tp1"],
                 "tp2": a["tp2"],
+                "tp3": a["tp3"],
+                "break_even": False,
+                "tp2_reached": False,
                 "opened_at": datetime.now(timezone.utc).isoformat(),
             }
 
             save_position(position)
 
             position_message = (
-                f"ð¨ NUOVA POSIZIONE {a['signal']}\n"
+                f"🚨 NUOVA POSIZIONE {a['signal']}\n"
                 f"Entry {a['price']:.4f} | "
                 f"SL {a['stop']:.4f} | "
                 f"TP1 {a['tp1']:.4f} | "
@@ -1498,11 +1519,11 @@ def main():
             )
         else:
             position_message = (
-                "ð¡ NESSUNA APERTURA AUTOMATICA â "
+                "🟡 NESSUNA APERTURA AUTOMATICA — "
                 "setup non abbastanza selettivo."
             )
     elif not position:
-        position_message = "ð¡ NESSUNA ENTRATA."
+        position_message = "🟡 NESSUNA ENTRATA."
 
     # ========================================================
     # OUTPUT
@@ -1510,7 +1531,7 @@ def main():
 
     print()
     print("=" * 70)
-    print("ð MIGLIORE OPPORTUNITÃ")
+    print("🏆 MIGLIORE OPPORTUNITÀ")
     print("=" * 70)
 
     a = best["analysis"]
@@ -1519,9 +1540,9 @@ def main():
     print(f"Segnale modello: {a['model_signal']}")
     print(f"Segnale operativo: {a['signal']}")
     print(f"Score: {a['score']:.1f}/100")
-    print(f"ProbabilitÃ : {a['probability'] * 100:.1f}%")
+    print(f"Probabilità: {a['probability'] * 100:.1f}%")
     print(f"Confidenza: {a['confidence']:.1f}/100")
-    print(f"QualitÃ : {a['quality']:.1f}/100")
+    print(f"Qualità: {a['quality']:.1f}/100")
     print(
         f"Ricorrenza storica: "
         f"{a['repetition']['direction']} | "
@@ -1530,7 +1551,7 @@ def main():
 
     print()
     print("=" * 70)
-    print("ð RANKING")
+    print("📊 RANKING")
     print("=" * 70)
 
     for i, item in enumerate(ranked, 1):
@@ -1554,7 +1575,7 @@ def main():
 
     print()
     print("=" * 70)
-    print("â ï¸ Analisi quantitativa, non garanzia di profitto.")
+    print("⚠️ Analisi quantitativa, non garanzia di profitto.")
     print("=" * 70)
 
 
