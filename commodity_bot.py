@@ -7,7 +7,7 @@ import requests
 
 
 # ============================================================
-# COMMODITY TRADING BOT v7.1
+# COMMODITY TRADING BOT v7.2
 # QUANT MODEL + MULTI-TIMEFRAME + NEWS + USD + SEASONALITY
 # + RANKING + POSITION MANAGEMENT
 #
@@ -73,12 +73,61 @@ MAX_DAILY_RISK_PCT = 1.00
 MAX_COMMODITY_RISK_PCT = 0.75
 
 GLOBAL_NEWS_QUERIES = [
-    "global markets stocks bonds dollar Fed ECB inflation recession",
-    "geopolitics war sanctions tariffs trade conflict markets",
-    "natural disaster earthquake hurricane flood drought markets commodities",
-    "OPEC oil supply shipping Strait Hormuz energy markets",
-    "China economy stimulus tariffs copper commodities markets",
+    # Macro / rates / FX
+    "global markets stocks bonds dollar Fed ECB BoE BoJ PBoC inflation recession",
+    "US jobs payrolls Fed interest rates Treasury yields dollar commodities",
+    "ECB rates euro inflation energy prices commodities",
+    "China economy stimulus tariffs PMI property demand commodities",
+    # Geopolitics / trade
+    "geopolitics war sanctions tariffs trade conflict markets commodities",
+    "Trump tariffs sanctions trade policy oil gold copper markets",
+    "Ukraine Russia war sanctions oil gas wheat commodities",
+    "Middle East Iran Israel US war shipping Hormuz oil gas gold",
+    # Energy
+    "OPEC OPEC+ oil supply production quotas Brent WTI",
+    "Strait Hormuz tanker shipping disruption crude oil LNG",
+    "IEA EIA oil inventories refinery outages diesel fuel oil",
+    "natural gas LNG Europe Asia storage weather supply disruption",
+    # Metals
+    "gold silver precious metals central banks safe haven dollar rates",
+    "copper China demand mine supply smelter inventories LME COMEX",
+    # Agriculture / weather
+    "wheat corn grain USDA crop drought frost flood Ukraine Russia",
+    "coffee Brazil Vietnam crop frost drought exports arabica robusta",
+    "agriculture commodities weather El Nino La Nina drought harvest",
+    # Global risk / disasters / logistics
+    "earthquake hurricane flood wildfire drought volcano commodities supply chain",
+    "ports shipping freight Panama Suez Red Sea Hormuz supply chain commodities",
 ]
+
+# Fonti/aree estere da interrogare tramite Google News RSS. Il risultato viene
+# poi deduplicato per evitare che la stessa notizia pesi molte volte.
+GLOBAL_NEWS_LOCALes = [
+    ("en-US", "US:en"), ("en-GB", "GB:en"), ("en-AU", "AU:en"),
+    ("en-IN", "IN:en"), ("zh-CN", "CN:zh-Hans"), ("ja-JP", "JP:ja"),
+    ("de-DE", "DE:de"), ("fr-FR", "FR:fr"), ("es-ES", "ES:es"),
+    ("it-IT", "IT:it"), ("pt-BR", "BR:pt-BR"), ("ru-RU", "RU:ru"),
+]
+
+# Query mirate a testate internazionali: Google News RSS permette di pescare
+# articoli anche quando una singola API non espone direttamente quella fonte.
+GLOBAL_SOURCE_QUERIES = [
+    "site:reuters.com commodities oil gold copper markets",
+    "site:ft.com commodities oil gold copper markets",
+    "site:wsj.com markets commodities oil gold copper",
+    "site:cnbc.com commodities oil gold copper markets",
+    "site:bloomberg.com commodities oil gold copper markets",
+    "site:bbc.com business oil gold commodities geopolitics",
+    "site:aljazeera.com economy oil commodities geopolitics",
+    "site:scmp.com China economy commodities copper oil",
+    "site:nikkei.com markets commodities China oil metals",
+    "site:theguardian.com business oil commodities markets",
+    "site:dw.com economy oil commodities markets",
+    "site:timesofindia.indiatimes.com commodities gold oil markets",
+    "site:business-standard.com commodities oil gold copper",
+    "site:theedgemalaysia.com commodities oil copper China",
+]
+
 
 SHOCK_TERMS = {
     "war", "attack", "missile", "invasion", "airstrike", "sanctions",
@@ -1235,7 +1284,7 @@ def analyze_news(name):
             response = requests.get(
                 url,
                 timeout=15,
-                headers={"User-Agent": "Mozilla/5.0 (compatible; CommoditiesBot/7.1)"},
+                headers={"User-Agent": "Mozilla/5.0 (compatible; CommoditiesBot/7.2)"},
             )
             response.raise_for_status()
             root = ET.fromstring(response.text)
@@ -1339,7 +1388,7 @@ def political_impact(name):
     if not articles:
         try:
             url = "https://news.google.com/rss/search?" + urllib.parse.urlencode({"q": query, "hl": "en-US", "gl": "US", "ceid": "US:en"})
-            response = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0 (compatible; CommoditiesBot/7.1)"})
+            response = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0 (compatible; CommoditiesBot/7.2)"})
             response.raise_for_status()
             root = ET.fromstring(response.text)
             for item in root.findall(".//item")[:20]:
@@ -1368,38 +1417,65 @@ def political_impact(name):
 # GLOBAL MARKET INTELLIGENCE ENGINE
 # ============================================================
 
-def _fetch_rss_articles(query, limit=20):
+def _fetch_rss_articles(query, limit=20, hl="en-US", ceid="US:en"):
     import urllib.parse
     import xml.etree.ElementTree as ET
     url = "https://news.google.com/rss/search?" + urllib.parse.urlencode({
         "q": query,
-        "hl": "en-US",
-        "gl": "US",
-        "ceid": "US:en",
+        "hl": hl,
+        "gl": ceid.split(":")[0],
+        "ceid": ceid,
     })
     response = requests.get(
         url,
         timeout=15,
-        headers={"User-Agent": "Mozilla/5.0 (compatible; CommoditiesBot/7.1)"},
+        headers={"User-Agent": "Mozilla/5.0 (compatible; CommoditiesBot/7.2)"},
     )
     response.raise_for_status()
     root = ET.fromstring(response.text)
     articles = []
     for item in root.findall(".//item")[:limit]:
+        title = item.findtext("title", "")
+        desc = item.findtext("description", "")
+        link = item.findtext("link", "")
+        pub = item.findtext("pubDate", "")
+        source_node = item.find("source")
+        source_name = source_node.text.strip() if source_node is not None and source_node.text else "Google News"
         articles.append({
-            "title": item.findtext("title", ""),
-            "description": item.findtext("description", ""),
-            "published": item.findtext("pubDate", ""),
+            "title": title,
+            "description": desc,
+            "published": pub,
+            "url": link,
+            "source": {"name": source_name, "url": link},
+            "provider": "GOOGLE RSS",
+            "locale": hl,
         })
     return articles
 
 
+def _article_source_name(article):
+    src = article.get("source", "")
+    if isinstance(src, dict):
+        return str(src.get("name", "Google News"))
+    return str(src or "Google News")
+
+
+def _article_key(article):
+    title = str(article.get("title", "")).strip().lower()
+    # Normalizziamo titoli per ridurre duplicati cross-lingua/provider.
+    return " ".join(title.split())
+
+
 def global_market_intelligence():
-    """Scans broad world events once per run and produces a market-wide shock/context score."""
+    """Global multi-source intelligence: macro, geopolitica, energia, metalli,
+    agricoltura, disastri e supply-chain, con fonti/lingue multiple e consenso
+    prima di classificare un evento come SHOCK.
+    """
     articles = []
     sources = []
     errors = []
 
+    # 1) NewsAPI: utile se l'utente ha configurato una chiave.
     if NEWS_API_KEY:
         for query in GLOBAL_NEWS_QUERIES:
             try:
@@ -1410,12 +1486,14 @@ def global_market_intelligence():
                         "apiKey": NEWS_API_KEY,
                         "language": "en",
                         "sortBy": "publishedAt",
-                        "pageSize": 20,
+                        "pageSize": 50,
                     },
                     timeout=20,
                 )
                 data = response.json()
                 if response.ok and data.get("status") == "ok":
+                    for a in data.get("articles", []) or []:
+                        a["provider"] = "NEWSAPI"
                     articles.extend(data.get("articles", []) or [])
                     sources.append("NEWSAPI")
                 else:
@@ -1423,57 +1501,107 @@ def global_market_intelligence():
             except Exception as exc:
                 errors.append(f"NewsAPI: {exc}")
 
-    # Google RSS is always a fallback and is also used to broaden coverage.
-    if len(articles) < 10:
-        for query in GLOBAL_NEWS_QUERIES:
+    # 2) Google News RSS: 12 aree linguistiche/geografiche.
+    #    Non usiamo una sola query/locale: questo amplia molto la copertura.
+    for query in GLOBAL_NEWS_QUERIES:
+        for hl, ceid in GLOBAL_NEWS_LOCALes:
             try:
-                articles.extend(_fetch_rss_articles(query, 12))
-                sources.append("GOOGLE RSS")
+                articles.extend(_fetch_rss_articles(query, 8, hl, ceid))
+                sources.append(f"RSS:{hl}")
             except Exception as exc:
-                errors.append(f"RSS: {exc}")
+                errors.append(f"RSS {hl}: {exc}")
 
-    # Deduplicate by title.
+    # 3) Query specifiche per testata internazionale, con meno peso individuale.
+    for query in GLOBAL_SOURCE_QUERIES:
+        try:
+            articles.extend(_fetch_rss_articles(query, 10, "en-US", "US:en"))
+            sources.append("RSS:SOURCES")
+        except Exception as exc:
+            errors.append(f"RSS sources: {exc}")
+
+    # Deduplica aggressiva: una notizia ripresa da 10 feed vale come una notizia,
+    # mentre il numero di fonti viene conservato separatamente.
     unique = []
     seen = set()
     for article in articles:
         title = str(article.get("title", "")).strip()
-        key = title.lower()
-        if title and key not in seen:
+        key = _article_key(article)
+        if title and key and key not in seen:
             seen.add(key)
             unique.append(article)
 
-    shock_hits = []
-    total = 0
-    for article in unique[:100]:
+    unique = unique[:300]
+
+    # Analisi globale con distinzione tra eventi confermati e semplici keyword hit.
+    total = 0.0
+    shock_candidates = []
+    domain_counts = {}
+    confirmed_shock_sources = {}
+
+    for article in unique:
         text = f"{article.get('title', '')} {article.get('description', '')}".lower()
-        pos = sum(1 for term in GLOBAL_BULLISH_TERMS if term in text)
-        neg = sum(1 for term in GLOBAL_BEARISH_TERMS if term in text)
+        source_name = _article_source_name(article)
+        domain_counts[source_name] = domain_counts.get(source_name, 0) + 1
+
+        pos = sum(1 for w in GLOBAL_BULLISH_TERMS if w in text)
+        neg = sum(1 for w in GLOBAL_BEARISH_TERMS if w in text)
         if pos > neg:
             total += 1
         elif neg > pos:
             total -= 1
+
         hits = [term for term in SHOCK_TERMS if term in text]
         if hits:
-            shock_hits.append({"title": article.get("title", ""), "terms": hits[:4]})
+            shock_candidates.append({
+                "title": article.get("title", ""),
+                "terms": hits[:4],
+                "source": source_name,
+                "provider": article.get("provider", "RSS"),
+            })
+            # Raggruppamento approssimato dell'evento per parole chiave comuni.
+            event_key = next((t for t in hits if t in {
+                "war", "attack", "missile", "airstrike", "invasion",
+                "strait closed", "hormuz closed", "supply disruption",
+                "earthquake", "hurricane", "flood", "wildfire",
+                "opec emergency", "market crash", "bank collapse",
+            }), hits[0])
+            confirmed_shock_sources.setdefault(event_key, set()).add(source_name)
 
-    score = clamp(total / max(min(len(unique), 100), 1), -1, 1)
-    shock_intensity = clamp(len(shock_hits) / 8.0, 0, 1)
-    if shock_intensity >= 0.75:
+    denominator = max(min(len(unique), 300), 1)
+    score = clamp(total / denominator, -1, 1)
+
+    # SHOCK richiede consenso: almeno 3 articoli distinti e 2 fonti/editori
+    # per uno stesso evento, oppure una fonte primaria/ufficiale molto forte.
+    strong_events = []
+    for event_key, srcs in confirmed_shock_sources.items():
+        candidate_count = sum(1 for x in shock_candidates if event_key in x["terms"])
+        if candidate_count >= 3 and len(srcs) >= 2:
+            strong_events.append({"event": event_key, "articles": candidate_count, "sources": len(srcs)})
+
+    shock_count = len(strong_events)
+    raw_shock_hits = len(shock_candidates)
+    shock_intensity = clamp((0.60 * min(shock_count / 3.0, 1.0)) + (0.40 * min(raw_shock_hits / 15.0, 1.0)), 0, 1)
+
+    if shock_intensity >= 0.72 and shock_count >= 2:
         mode = "SHOCK"
-    elif shock_intensity >= 0.35:
+    elif shock_intensity >= 0.32 or shock_count >= 1:
         mode = "ALERT"
     else:
         mode = "NORMAL"
 
     return {
         "score": score,
-        "articles": unique[:100],
-        "count": len(unique[:100]),
-        "shock_count": len(shock_hits),
+        "articles": unique,
+        "count": len(unique),
+        "shock_count": shock_count,
+        "raw_shock_hits": raw_shock_hits,
         "shock_intensity": shock_intensity,
         "mode": mode,
-        "top_shocks": shock_hits[:5],
+        "top_shocks": shock_candidates[:8],
+        "confirmed_events": strong_events[:8],
         "source": "+".join(sorted(set(sources))) if sources else "NONE",
+        "source_count": len(domain_counts),
+        "source_names": sorted(domain_counts, key=domain_counts.get, reverse=True)[:15],
         "status": "OK" if unique else (" | ".join(errors)[:220] or "NESSUNA FONTE"),
     }
 
@@ -2209,7 +2337,7 @@ def build_telegram(ranked, best, position_message=None):
     a = best["analysis"]
 
     lines = [
-        "🌍 COMMODITIES BOT v7.1",
+        "🌍 COMMODITIES BOT v7.2",
         "",
         f"🏆 MIGLIOR SETUP",
         f"{icon_for_signal(a['signal'])} {best['name']}",
@@ -2230,17 +2358,26 @@ def build_telegram(ranked, best, position_message=None):
         f"🔄 Storico: {a['repetition']['direction']} "
         f"({a['repetition']['frequency'] * 100:.0f}% "
         f"su {a['repetition']['samples']} casi)",
-        f"🌍 Global Market: {a.get('global_impact', {}).get('direction', 'NEUTRALE')} | {a.get('global_impact', {}).get('mode', 'NORMAL')} | {a.get('global_impact', {}).get('count', 0)} news",
+        f"🌍 Global Market: {a.get('global_impact', {}).get('direction', 'NEUTRALE')} | {a.get('global_impact', {}).get('mode', 'NORMAL')} | {a.get('global_impact', {}).get('count', 0)} news | {a.get('global_impact', {}).get('source_count', 0)} fonti",
+        f"🚨 Shock: {a.get('global_impact', {}).get('shock_count', 0)} eventi confermati | intensità {a.get('global_impact', {}).get('shock_intensity', 0):.2f}",
         f"⏰ Fascia attuale: {a.get('session', {}).get('current_band', 'N/D')} | Entry migliore: {a.get('session', {}).get('best_band', 'N/D')}",
         f"🚪 Exit timing: uscita/gestione prioritaria prima di {a.get('session', {}).get('exit_band', 'N/D')}",
         f"🧠 Market Quality: {a.get('risk', {}).get('market_quality', 0):.0f}/100 | Confluenza {a.get('risk', {}).get('confluence', 0)}/{a.get('risk', {}).get('confluence_total', 6)}",
         f"🔄 Ciclicità: {a.get('cyclical', {}).get('direction', 'N/D')} | qualità {a.get('cyclical', {}).get('quality', 0):.0f}/100",
-        f"⚖️ Rischio/Beneficio: {a.get('risk_benefit', {}).get('reward_risk', 0):.2f} | rischio {a.get('risk_benefit', {}).get('risk', 0):.0f}/100",
-        f"💰 Rischio consigliato: {a.get('risk', {}).get('risk_pct', 0):.2f}% del budget rischio",
+        f"⚖️ R/R matematico: {a.get('risk_benefit', {}).get('reward_risk', 0):.2f}",
+        f"🛡️ Risk Score: {a.get('risk_benefit', {}).get('risk', 0):.0f}/100 | R/B Score: {a.get('risk_benefit', {}).get('score', 0):.0f}/100",
+        f"💰 Rischio: {('BLOCCATO — SHOCK MODE' if a.get('global_impact', {}).get('mode') == 'SHOCK' else f"{a.get('risk', {}).get('risk_pct', 0):.2f}% del budget rischio")}",
         "",
     ]
 
-    if a["signal"] in ("LONG", "SHORT"):
+    if a.get('global_impact', {}).get('mode') == 'SHOCK':
+        lines.extend([
+            "🚨 SHOCK MODE — NUOVE ENTRATE BLOCCATE",
+            "📌 Posizioni esistenti: SOLO GESTIONE/PROTEZIONE",
+            "",
+        ])
+
+    if a["signal"] in ("LONG", "SHORT") and a.get('global_impact', {}).get('mode') != 'SHOCK':
         lines.extend([
             f"👉 ENTRY: {a['price']:.4f}",
             f"🛑 SL: {a['stop']:.4f}",
@@ -2292,7 +2429,7 @@ def analysis_direction_hint(timeframes):
 def main():
     print()
     print("=" * 70)
-    print("🌍 COMMODITIES BOT v7.1")
+    print("🌍 COMMODITIES BOT v7.2")
     print("RANKING RISK/BENEFIT + CYCLICAL ENGINE + GOLD ENGINE v15.1 + GLOBAL INTELLIGENCE + SESSION ENGINE + RISK ENGINE")
     print("=" * 70)
     print()
@@ -2301,7 +2438,7 @@ def main():
     usd = analyze_usd()
     print("🌍 Avvio Global Market Intelligence...")
     global_intel = global_market_intelligence()
-    print(f"   📰 Global news: {global_intel['count']} | mode {global_intel['mode']} | shock {global_intel['shock_intensity']:.2f}")
+    print(f"   📰 Global news: {global_intel['count']} | fonti {global_intel.get('source_count', 0)} | mode {global_intel['mode']} | shock {global_intel['shock_intensity']:.2f}")
 
     results = []
     resolved_symbols = resolve_commodity_symbols()
