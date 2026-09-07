@@ -7,7 +7,7 @@ import requests
 
 
 # ============================================================
-# COMMODITY TRADING BOT v8.3
+# COMMODITY TRADING BOT v8.4
 # QUANT MODEL + MULTI-TIMEFRAME + NEWS + USD + SEASONALITY
 # + RANKING + POSITION MANAGEMENT
 #
