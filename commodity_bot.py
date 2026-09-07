@@ -2007,6 +2007,78 @@ def _recent_levels(candles, lookback=80):
     return (max(highs) if highs else None, min(lows) if lows else None, closes)
 
 
+
+# WORLD_PATTERN_ENGINE_V82
+# Pattern library: Japanese candlesticks + common price-action structures.
+def world_pattern_engine(candles, direction):
+    """Detect a broad, conservative library of widely used candle/price patterns.
+    Returns names and a compact directional quality score. It is an analytical filter,
+    not a guarantee of future price movement.
+    """
+    if not candles or len(candles) < 5 or direction not in ("LONG", "SHORT"):
+        return {"patterns": [], "score": 0.0, "bias": "NONE"}
+    def cm(c):
+        o,h,l,cl=float(c['open']),float(c['high']),float(c['low']),float(c['close'])
+        r=max(h-l,1e-12); b=abs(cl-o)
+        return o,h,l,cl,r,b,(h-max(o,cl))/r,(min(o,cl)-l)/r,(cl-l)/r
+    x=[cm(c) for c in candles[-60:]]
+    names=[]; score=0.0
+    a=x[-1]; prev=x[-2]
+    o,h,l,c,r,b,uw,lw,cp=a; po,ph,pl,pc,pr,pb,pu,plw,pcp=prev
+    bull=c>o; pbull=pc>po
+    # Single-candle patterns
+    if b/r < .10: names.append('DOJI')
+    if lw >= max(uw*1.8, b*1.2) and cp > .55: names.append('HAMMER')
+    if uw >= max(lw*1.8, b*1.2) and cp < .45: names.append('SHOOTING STAR')
+    # Engulfing
+    if bull and not pbull and c>=po and o<=pc: names.append('BULLISH ENGULFING')
+    if not bull and pbull and o>=pc and c<=po: names.append('BEARISH ENGULFING')
+    # Harami / inside bar
+    if max(o,c) < max(po,pc) and min(o,c) > min(po,pc): names.append('INSIDE BAR / HARAMI')
+    # Three-candle patterns
+    if len(x)>=3:
+        q=x[-3]
+        qo,qh,ql,qc,qr,qb,qu,qlw,qcp=q
+        if (not (qc>qo)) and abs(pc-po) < pr*.35 and c>o and c > (qo+qc)/2: names.append('MORNING STAR')
+        if (qc>qo) and abs(pc-po) < pr*.35 and c<o and c < (qo+qc)/2: names.append('EVENING STAR')
+    # Range/structure patterns from recent 20 bars
+    highs=[z[1] for z in x[:-1]]; lows=[z[2] for z in x[:-1]]
+    rh=max(highs[-20:]); rl=min(lows[-20:])
+    near_high=abs(c-rh)/max(c,1e-12) < .0025
+    near_low=abs(c-rl)/max(c,1e-12) < .0025
+    if near_high and bull: names.append('RESISTANCE BREAKOUT')
+    if near_low and not bull: names.append('SUPPORT BREAKDOWN')
+    # Momentum / trend structure
+    closes=[z[3] for z in x]
+    if len(closes)>=10:
+        fast=sum(closes[-5:])/5; slow=sum(closes[-10:])/10
+        if fast>slow and c>fast: names.append('MOMENTO RIALZISTA')
+        if fast<slow and c<fast: names.append('MOMENTO RIBASSISTA')
+    # Directional scoring; only count patterns that agree with requested direction.
+    bullish={'HAMMER','BULLISH ENGULFING','MORNING STAR','RESISTANCE BREAKOUT','MOMENTO RIALZISTA'}
+    bearish={'SHOOTING STAR','BEARISH ENGULFING','EVENING STAR','SUPPORT BREAKDOWN','MOMENTO RIBASSISTA'}
+    for n in names:
+        if n in bullish: score += 1
+        elif n in bearish: score -= 1
+    if direction=='SHORT': score=-score
+    return {'patterns':names[-4:], 'score':score, 'bias':('LONG' if score>0 else 'SHORT' if score<0 else 'NONE')}
+
+
+def classify_entry_type(price, entry, candles, direction):
+    """Classify the calculated entry as PULLBACK, BREAKOUT or RETEST."""
+    if not candles or entry is None: return 'PULLBACK'
+    highs=[float(c['high']) for c in candles[-30:]]; lows=[float(c['low']) for c in candles[-30:]]
+    rh=max(highs[:-2]) if len(highs)>2 else max(highs); rl=min(lows[:-2]) if len(lows)>2 else min(lows)
+    tol=max(price*0.002, (max(highs)-min(lows))*0.03)
+    if direction=='LONG':
+        if abs(entry-rh)<tol and entry>=price*0.997: return 'BREAKOUT + CONFERMA'
+        if entry<price: return 'PULLBACK'
+        return 'RETEST'
+    else:
+        if abs(entry-rl)<tol and entry<=price*1.003: return 'BREAKDOWN + CONFERMA'
+        if entry>price: return 'PULLBACK'
+        return 'RETEST'
+
 def calculate_entry_price(candles, direction, atr_value=None):
     """Entry singola: combina pullback, S/R locale, ATR e candela recente."""
     if direction not in ('LONG','SHORT') or len(candles)<20:
@@ -2622,10 +2694,26 @@ def confirmation_text(analysis):
     return f"👉 ⏳ ATTENDERE CONFERMA {signal}"
 
 
+
+def enrich_v82_setup(item):
+    """Attach global pattern library classification to an already-built setup."""
+    a=item.get('analysis',{})
+    candles=a.get('candles') or item.get('candles')
+    direction=a.get('setup_direction') or a.get('main_direction') or a.get('direction')
+    if candles and direction in ('LONG','SHORT'):
+        pe=world_pattern_engine(candles,direction)
+        a['pattern_library']=pe
+        entry=a.get('entry')
+        price=a.get('price')
+        a['entry_type']=classify_entry_type(price,entry,candles,direction)
+        if pe.get('patterns'):
+            a['pattern_display']=' + '.join(pe['patterns'])
+    return item
+
 def build_telegram(ranked, best, position_message=None):
     """Telegram operativo V8: niente dettagli tecnici interni."""
     available=[x for x in ranked if x.get('available')][:3]
-    lines=['🌍 COMMODITIES BOT v8.1','', '🏆 CLASSIFICA']
+    lines=['🌍 COMMODITIES BOT v8.2','', '🏆 CLASSIFICA']
     medals=['🥇','🥈','🥉']
     for i,item in enumerate(available):
         a=item['analysis']; action=a.get('action_label')
@@ -2686,7 +2774,7 @@ def analysis_direction_hint(timeframes):
 def main():
     print()
     print("=" * 70)
-    print("🌍 COMMODITIES BOT v8.1")
+    print("🌍 COMMODITIES BOT v8.2")
     print("RANKING RISK/BENEFIT + CYCLICAL ENGINE + GOLD ENGINE v15.1 + GLOBAL INTELLIGENCE + SESSION ENGINE + RISK ENGINE")
     print("=" * 70)
     print()
