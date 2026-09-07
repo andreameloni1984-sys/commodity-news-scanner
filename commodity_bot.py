@@ -7,7 +7,7 @@ import requests
 
 
 # ============================================================
-# COMMODITY TRADING BOT v7.2
+# COMMODITY TRADING BOT v7.3
 # QUANT MODEL + MULTI-TIMEFRAME + NEWS + USD + SEASONALITY
 # + RANKING + POSITION MANAGEMENT
 #
@@ -2334,82 +2334,97 @@ def confirmation_text(analysis):
 
 
 def build_telegram(ranked, best, position_message=None):
-    a = best["analysis"]
+    """Telegram ultra-clean: only ranking + operational guide for top 3."""
+    available = [x for x in ranked if x.get("available")][:3]
+    global_mode = best.get("analysis", {}).get("global_impact", {}).get("mode", "NORMAL")
 
     lines = [
-        "🌍 COMMODITIES BOT v7.2",
+        "🌍 COMMODITIES BOT v7.3",
         "",
-        f"🏆 MIGLIOR SETUP",
-        f"{icon_for_signal(a['signal'])} {best['name']}",
-        f"🎯 {a['signal']} | {a['grade']}",
-        f"📊 Score: {a['score']:.0f}/100 | R/B {a.get('risk_benefit', {}).get('score', 0):.0f}/100",
-        "",
-        f"💰 Prezzo: {a['price']:.4f}",
-        f"🔎 Dati: {best.get('source_check', {}).get('status', 'N/D')}",
-        f"🧠 Forecast: LONG {a['long_probability'] * 100:.1f}% | SHORT {a['short_probability'] * 100:.1f}%",
-        f"📈 {compact_tf(a['timeframes'])}",
-        f"🧠 GOLD ENGINE: struttura {a.get('structural_same', 0)}/3 | veloci {a.get('fast_confirmations', 0)}/2 | conflitti {a.get('fast_conflicts', 0)}",
-        confirmation_text(a),
-        "",
-        f"📰 News: {a['news']['label']} | {a['news'].get('count', 0)} articoli | {a['news'].get('source', 'NONE')}",
-        f"   Stato News: {a['news'].get('status', 'N/D')}",
-        f"🌍 Political Impact: {a['political']['direction']} ({a['political']['score']:+.2f}) | {a['political'].get('count', 0)} articoli",
-        f"💵 Dollaro: {a['usd']['label']}",
-        f"🔄 Storico: {a['repetition']['direction']} "
-        f"({a['repetition']['frequency'] * 100:.0f}% "
-        f"su {a['repetition']['samples']} casi)",
-        f"🌍 Global Market: {a.get('global_impact', {}).get('direction', 'NEUTRALE')} | {a.get('global_impact', {}).get('mode', 'NORMAL')} | {a.get('global_impact', {}).get('count', 0)} news | {a.get('global_impact', {}).get('source_count', 0)} fonti",
-        f"🚨 Shock: {a.get('global_impact', {}).get('shock_count', 0)} eventi confermati | intensità {a.get('global_impact', {}).get('shock_intensity', 0):.2f}",
-        f"⏰ Fascia attuale: {a.get('session', {}).get('current_band', 'N/D')} | Entry migliore: {a.get('session', {}).get('best_band', 'N/D')}",
-        f"🚪 Exit timing: uscita/gestione prioritaria prima di {a.get('session', {}).get('exit_band', 'N/D')}",
-        f"🧠 Market Quality: {a.get('risk', {}).get('market_quality', 0):.0f}/100 | Confluenza {a.get('risk', {}).get('confluence', 0)}/{a.get('risk', {}).get('confluence_total', 6)}",
-        f"🔄 Ciclicità: {a.get('cyclical', {}).get('direction', 'N/D')} | qualità {a.get('cyclical', {}).get('quality', 0):.0f}/100",
-        f"⚖️ R/R matematico: {a.get('risk_benefit', {}).get('reward_risk', 0):.2f}",
-        f"🛡️ Risk Score: {a.get('risk_benefit', {}).get('risk', 0):.0f}/100 | R/B Score: {a.get('risk_benefit', {}).get('score', 0):.0f}/100",
-        f"💰 Rischio: {('BLOCCATO — SHOCK MODE' if a.get('global_impact', {}).get('mode') == 'SHOCK' else f"{a.get('risk', {}).get('risk_pct', 0):.2f}% del budget rischio")}",
-        "",
+        "🏆 CLASSIFICA",
     ]
 
-    if a.get('global_impact', {}).get('mode') == 'SHOCK':
+    medals = ["🥇", "🥈", "🥉"]
+    for i, item in enumerate(available):
+        a = item["analysis"]
+        score = item.get("ranking_score", a.get("score", 0))
         lines.extend([
-            "🚨 SHOCK MODE — NUOVE ENTRATE BLOCCATE",
-            "📌 Posizioni esistenti: SOLO GESTIONE/PROTEZIONE",
             "",
+            f"{medals[i]} {item['name']}",
+            f"🎯 {a['signal']} | {a.get('grade', 'N/D')}",
+            f"📊 Score: {score:.0f}/100",
         ])
 
-    if a["signal"] in ("LONG", "SHORT") and a.get('global_impact', {}).get('mode') != 'SHOCK':
+    if global_mode == "SHOCK":
         lines.extend([
-            f"👉 ENTRY: {a['price']:.4f}",
-            f"🛑 SL: {a['stop']:.4f}",
-            f"🎯 TP1: {a['tp1']:.4f}",
-            f"🎯 TP2: {a['tp2']:.4f}",
-            f"🎯 TP3: {a['tp3']:.4f}",
             "",
+            "🚨 MERCATO BLOCCATO",
+            "NUOVE ENTRATE BLOCCATE",
+            "📌 Posizioni esistenti: SOLO GESTIONE / PROTEZIONE",
         ])
 
-    for i, item in enumerate([x for x in ranked if x.get("available")][:3], 1):
-        if item["name"] == best["name"]:
-            continue
+    for i, item in enumerate(available):
+        a = item["analysis"]
+        medal = medals[i]
+        signal = a.get("signal", "WAIT")
+        grade = a.get("grade", "N/D")
+        price = a.get("price", 0.0)
+        stop = a.get("stop", 0.0)
+        tp1 = a.get("tp1", 0.0)
+        tp2 = a.get("tp2", 0.0)
+        tp3 = a.get("tp3", 0.0)
+        risk_pct = a.get("risk", {}).get("risk_pct", 0.0)
+        session = a.get("session", {})
+        current_band = session.get("current_band", "N/D")
+        best_band = session.get("best_band", "N/D")
 
-        x = item["analysis"]
-        lines.append(
-            f"{'🥈' if i == 2 else '🥉'} {item['name']} — "
-            f"{x['signal']} | {x['score']:.0f}/100"
-        )
+        lines.extend([
+            "",
+            "━━━━━━━━━━━━━━━━━━━━",
+            f"{medal} {item['name']}",
+            "━━━━━━━━━━━━━━━━━━━━",
+            f"🎯 AZIONE: {signal} | {grade}",
+            f"💰 Prezzo: {price:.4f}",
+        ])
 
-    if position_message:
-        lines.extend(["", position_message])
+        if global_mode == "SHOCK":
+            lines.append("🚨 ENTRATA BLOCCATA — SHOCK MODE")
+        elif signal in ("LONG", "SHORT"):
+            lines.extend([
+                f"📥 ENTRATA: {price:.4f}",
+                f"🛑 STOP LOSS: {stop:.4f}",
+                f"🎯 TP1: {tp1:.4f}",
+                f"🎯 TP2: {tp2:.4f}",
+                f"🎯 TP3: {tp3:.4f}",
+                f"💰 RISCHIO: {risk_pct:.2f}% del budget rischio",
+            ])
+        else:
+            lines.extend([
+                "📥 ENTRATA: ATTENDERE",
+                f"🛑 STOP LOSS: {stop:.4f}" if stop else "🛑 STOP LOSS: da definire alla conferma",
+                f"🎯 TP1: {tp1:.4f}" if tp1 else "🎯 TP1: da definire alla conferma",
+                f"🎯 TP2: {tp2:.4f}" if tp2 else "🎯 TP2: da definire alla conferma",
+                f"🎯 TP3: {tp3:.4f}" if tp3 else "🎯 TP3: da definire alla conferma",
+            ])
+
+        lines.extend([
+            "",
+            "📌 GESTIONE",
+            "TP1 → STOP A BREAK-EVEN",
+            "TP2 → STOP A TP1",
+            "TP3 → CHIUDERE",
+            f"⏰ FASCIA: {current_band} | MIGLIORE: {best_band}",
+        ])
+
+        if signal in ("LONG", "SHORT"):
+            lines.append("⚠️ Se perde la conferma → NON ENTRARE")
+        else:
+            lines.append("⏳ Entrare solo dopo conferma del segnale")
 
     lines.extend([
         "",
-        f"👉 FOCUS: {best['name']}",
-        "",
-        "📌 GESTIONE GOLD ENGINE",
-        "TP1 → BREAK-EVEN | TP2 → STOP A TP1 | TP3 → CHIUDERE",
-        "",
         "⚠️ Segnale algoritmico, non garanzia di profitto.",
     ])
-
     return "\n".join(lines)
 
 
@@ -2429,7 +2444,7 @@ def analysis_direction_hint(timeframes):
 def main():
     print()
     print("=" * 70)
-    print("🌍 COMMODITIES BOT v7.2")
+    print("🌍 COMMODITIES BOT v7.3")
     print("RANKING RISK/BENEFIT + CYCLICAL ENGINE + GOLD ENGINE v15.1 + GLOBAL INTELLIGENCE + SESSION ENGINE + RISK ENGINE")
     print("=" * 70)
     print()
