@@ -19,9 +19,6 @@ NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "8002086130")
 
-if not API_KEY:
-    raise RuntimeError("TWELVE_DATA_API_KEY non configurata nei GitHub Secrets.")
-
 BASE_URL = "https://api.twelvedata.com/time_series"
 NEWS_URL = "https://newsapi.org/v2/everything"
 
@@ -145,6 +142,27 @@ def clear_position():
 
 COMMODITY_REFERENCE_CACHE = None
 
+# ============================================================
+# MULTI-SOURCE MARKET DATA
+# Yahoo Finance = fonte gratuita principale (futures)
+# Twelve Data   = fonte di confronto/fallback
+# ============================================================
+YAHOO_BASE_URL = "https://query1.finance.yahoo.com/v8/finance/chart"
+YAHOO_TICKERS = {
+    "Oro": "GC=F",
+    "Argento": "SI=F",
+    "Petrolio WTI": "CL=F",
+    "Petrolio Brent": "BZ=F",
+    "Gas Naturale": "NG=F",
+    "Rame": "HG=F",
+    "Grano": "ZW=F",
+    "Mais": "ZC=F",
+    "Caffè": "KC=F",
+}
+YAHOO_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0 Safari/537.36"}
+DATA_SOURCE_STATS = {}
+
+
 
 def resolve_commodity_symbols():
     """Resolve the configured commodities against Twelve Data's live /commodities reference list."""
@@ -215,7 +233,109 @@ def resolve_commodity_symbols():
         return COMMODITY_REFERENCE_CACHE
 
 
-def get_data(symbol, interval="1day", outputsize=4000):
+def _normalize_yahoo_interval(interval):
+    mapping = {"1day": "1d", "1day": "1d", "1h": "1h", "15min": "15m", "5min": "5m", "1min": "1m"}
+    return mapping.get(interval, interval)
+
+
+def _yahoo_range(interval):
+    # Yahoo limita la profondità degli intervalli intraday.
+    if interval == "1m":
+        return "7d"
+    if interval == "5m":
+        return "60d"
+    if interval == "15m":
+        return "60d"
+    if interval == "1h":
+        return "730d"
+    return "max"
+
+
+def get_data_yahoo(name, interval="1day", outputsize=4000):
+    ticker = YAHOO_TICKERS.get(name, name)
+    yahoo_interval = _normalize_yahoo_interval(interval)
+    params = {
+        "range": _yahoo_range(yahoo_interval),
+        "interval": yahoo_interval,
+        "includePrePost": "false",
+        "events": "div,splits",
+    }
+    response = requests.get(
+        f"{YAHOO_BASE_URL}/{ticker}",
+        params=params,
+        headers=YAHOO_HEADERS,
+        timeout=25,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    result = (payload.get("chart") or {}).get("result")
+    if not result:
+        error = (payload.get("chart") or {}).get("error")
+        raise RuntimeError(f"Yahoo {ticker}: {error or 'nessun risultato'}")
+
+    result = result[0]
+    timestamps = result.get("timestamp") or []
+    quote = ((result.get("indicators") or {}).get("quote") or [{}])[0]
+    opens = quote.get("open") or []
+    highs = quote.get("high") or []
+    lows = quote.get("low") or []
+    closes = quote.get("close") or []
+    volumes = quote.get("volume") or []
+
+    candles = []
+    for i, ts in enumerate(timestamps):
+        close = safe_float(closes[i] if i < len(closes) else None)
+        if close is None:
+            continue
+        dt = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+        candles.append({
+            "datetime": dt,
+            "open": safe_float(opens[i] if i < len(opens) else None),
+            "high": safe_float(highs[i] if i < len(highs) else None),
+            "low": safe_float(lows[i] if i < len(lows) else None),
+            "close": close,
+            "volume": safe_float(volumes[i] if i < len(volumes) else None),
+        })
+
+    candles.sort(key=lambda x: x["datetime"] or "")
+    if len(candles) > outputsize:
+        candles = candles[-outputsize:]
+    return candles
+
+
+def _resample_4h(candles):
+    if not candles:
+        return []
+    buckets = {}
+    for candle in candles:
+        try:
+            dt = datetime.fromisoformat(candle["datetime"].replace("Z", "+00:00"))
+        except Exception:
+            continue
+        hour = (dt.hour // 4) * 4
+        key = dt.replace(hour=hour, minute=0, second=0, microsecond=0)
+        buckets.setdefault(key, []).append(candle)
+
+    result = []
+    for key in sorted(buckets):
+        rows = buckets[key]
+        valid = [r for r in rows if r.get("close") is not None]
+        if not valid:
+            continue
+        result.append({
+            "datetime": key.isoformat(),
+            "open": valid[0].get("open"),
+            "high": max((r.get("high") for r in valid if r.get("high") is not None), default=valid[0]["close"]),
+            "low": min((r.get("low") for r in valid if r.get("low") is not None), default=valid[0]["close"]),
+            "close": valid[-1]["close"],
+            "volume": sum((r.get("volume") or 0) for r in valid),
+        })
+    return result
+
+
+def get_data_twelvedata(symbol, interval="1day", outputsize=4000):
+    if not API_KEY:
+        raise RuntimeError("TWELVE_DATA_API_KEY non configurata")
     params = {
         "symbol": symbol,
         "interval": interval,
@@ -223,21 +343,16 @@ def get_data(symbol, interval="1day", outputsize=4000):
         "apikey": API_KEY,
         "order": "ASC",
     }
-
     response = requests.get(BASE_URL, params=params, timeout=30)
     response.raise_for_status()
     data = response.json()
-
     if data.get("status") == "error":
         raise RuntimeError(data.get("message", "Errore Twelve Data"))
-
     candles = []
-
     for item in data.get("values", []):
         close = safe_float(item.get("close"))
         if close is None:
             continue
-
         candles.append({
             "datetime": item.get("datetime"),
             "open": safe_float(item.get("open")),
@@ -246,13 +361,81 @@ def get_data(symbol, interval="1day", outputsize=4000):
             "close": close,
             "volume": safe_float(item.get("volume")),
         })
-
     candles.sort(key=lambda x: x["datetime"] or "")
     return candles
 
 
+def get_data(symbol, interval="1day", outputsize=4000):
+    """Multi-source: Yahoo gratuito prima, Twelve Data come confronto/fallback."""
+    # Recuperiamo il nome della commodity dal simbolo configurato/risolto.
+    name = next((n for n, s in COMMODITIES.items() if s.upper() == str(symbol).upper()), None)
+    if name is None:
+        name = next((n for n, s in resolve_commodity_symbols().items() if s.upper() == str(symbol).upper()), None)
+    if name is None:
+        name = str(symbol)
+
+    yahoo_error = None
+    try:
+        raw_interval = interval
+        if interval == "4h":
+            hourly = get_data_yahoo(name, "1h", max(outputsize * 4, 800))
+            candles = _resample_4h(hourly)[-outputsize:]
+        else:
+            candles = get_data_yahoo(name, interval, outputsize)
+        if len(candles) >= 10:
+            DATA_SOURCE_STATS.setdefault(name, {})[interval] = "YAHOO"
+            return candles
+    except Exception as exc:
+        yahoo_error = str(exc)
+
+    # Fallback Twelve Data se Yahoo non risponde.
+    try:
+        candles = get_data_twelvedata(symbol, interval, outputsize)
+        if len(candles) >= 10:
+            DATA_SOURCE_STATS.setdefault(name, {})[interval] = "TWELVE DATA"
+            if yahoo_error:
+                print(f"   🔁 {name} {interval}: Yahoo KO → Twelve Data OK")
+            return candles
+    except Exception as td_error:
+        if yahoo_error:
+            raise RuntimeError(f"Yahoo: {yahoo_error} | Twelve Data: {td_error}")
+        raise
+
+    raise RuntimeError(f"Nessun provider dati disponibile per {name} {interval}")
+
+
 def get_daily_data(symbol):
     return get_data(symbol, "1day", HISTORY_SIZE)
+
+
+def compare_sources(name, symbol, candles):
+    """Confronta il prezzo giornaliero tra Yahoo e Twelve Data quando entrambi sono disponibili."""
+    result = {"sources": [], "status": "N/D", "difference_pct": None}
+    yahoo_price = candles[-1]["close"] if candles else None
+    if yahoo_price is not None:
+        result["sources"].append({"name": "Yahoo Finance", "price": yahoo_price})
+    if not API_KEY:
+        result["status"] = "YAHOO ONLY"
+        return result
+    try:
+        td = get_data_twelvedata(symbol, "1day", 5)
+        if td:
+            td_price = td[-1]["close"]
+            result["sources"].append({"name": "Twelve Data", "price": td_price})
+            if yahoo_price:
+                diff = abs(td_price / yahoo_price - 1) * 100
+                result["difference_pct"] = diff
+                result["status"] = "CONFERMATO" if diff <= 0.50 else "DISCREPANZA"
+                if diff > 0.50:
+                    print(f"   ⚠️ {name}: Yahoo/Twelve Data differiscono {diff:.2f}%")
+                else:
+                    print(f"   🔎 {name}: Yahoo {yahoo_price:.4f} | Twelve {td_price:.4f} | Δ {diff:.2f}%")
+                return result
+    except Exception as exc:
+        result["status"] = f"YAHOO ONLY ({str(exc)[:80]})"
+        return result
+    result["status"] = "YAHOO ONLY"
+    return result
 
 
 # ============================================================
@@ -407,7 +590,7 @@ def historical_repetition(candles):
     periodo dell'anno. Usa tutta la storia disponibile.
     Restituisce direzione, frequenza, rendimento medio e campioni.
     """
-    if len(candles) < 300:
+    if len(candles) < 120:
         return {
             "score": 0.0,
             "frequency": 0.0,
@@ -511,7 +694,7 @@ def seasonality(candles):
 def build_features(candles):
     closes = [c["close"] for c in candles]
 
-    if len(closes) < 100:
+    if len(closes) < 60:
         return None
 
     current = closes[-1]
@@ -549,7 +732,7 @@ def build_features(candles):
 
 def build_dataset(candles):
     dataset = []
-    minimum_history = 100
+    minimum_history = 60
 
     for i in range(minimum_history, len(candles) - HORIZON):
         history = candles[:i + 1]
@@ -657,7 +840,7 @@ def predict(row, weights, bias):
 # ============================================================
 
 def backtest(dataset):
-    if len(dataset) < 500:
+    if len(dataset) < 80:
         return {
             "accuracy": 0,
             "win_rate": 0,
@@ -770,7 +953,7 @@ def backtest(dataset):
 # ============================================================
 
 def train_final(dataset):
-    if len(dataset) < 300:
+    if len(dataset) < 40:
         return None
 
     X = [item["x"] for item in dataset]
@@ -1418,7 +1601,7 @@ def build_telegram(ranked, best, position_message=None):
     a = best["analysis"]
 
     lines = [
-        "🌍 COMMODITIES BOT v6.3",
+        "🌍 COMMODITIES BOT v6.4",
         "",
         f"🏆 MIGLIOR SETUP",
         f"{icon_for_signal(a['signal'])} {best['name']}",
@@ -1426,6 +1609,7 @@ def build_telegram(ranked, best, position_message=None):
         f"📊 Score: {a['score']:.0f}/100",
         "",
         f"💰 Prezzo: {a['price']:.4f}",
+        f"🔎 Dati: {best.get('source_check', {}).get('status', 'N/D')}",
         f"🧠 Forecast: LONG {a['long_probability'] * 100:.1f}% | SHORT {a['short_probability'] * 100:.1f}%",
         f"📈 {compact_tf(a['timeframes'])}",
         f"🧠 GOLD ENGINE: struttura {a.get('structural_same', 0)}/3 | veloci {a.get('fast_confirmations', 0)}/2 | conflitti {a.get('fast_conflicts', 0)}",
@@ -1484,7 +1668,7 @@ def build_telegram(ranked, best, position_message=None):
 def main():
     print()
     print("=" * 70)
-    print("🌍 COMMODITIES BOT v6.3")
+    print("🌍 COMMODITIES BOT v6.4")
     print("RANKING + GOLD ENGINE v15.1 + MTF + NEWS FALLBACK + USD + POLITICAL IMPACT")
     print("=" * 70)
     print()
@@ -1508,8 +1692,9 @@ def main():
             if len(candles) < 120:
                 raise RuntimeError(f"Dati giornalieri insufficienti ({len(candles)}/120)")
 
+            source_check = compare_sources(name, symbol, candles)
             dataset = build_dataset(candles)
-            print(f"   🧮 Dataset: {len(dataset)}")
+            print(f"   🧮 Dataset: {len(dataset)} | Fonte: {DATA_SOURCE_STATS.get(name, {}).get("1day", "N/D")}")
 
             if len(dataset) < 80:
                 raise RuntimeError(f"Dataset insufficiente ({len(dataset)}/80)")
@@ -1536,6 +1721,7 @@ def main():
                 "analysis": analysis,
                 "backtest": bt,
                 "available": True,
+                "source_check": source_check,
             })
 
             print(
@@ -1731,7 +1917,7 @@ def main():
             f"{x['signal']} | "
             f"{x['score']:.0f}/100 | "
             f"SHORT {x['short_probability'] * 100:.1f}% | "
-            f"storico {x['repetition']['direction']}"
+            f"storico {x['repetition']['direction']} | fonte {item.get('source_check', {}).get('status', 'N/D')}"
         )
 
     message = build_telegram(
