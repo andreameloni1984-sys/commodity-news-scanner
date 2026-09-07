@@ -1,4 +1,4 @@
-import os
+limport os
 import json
 import math
 from datetime import datetime, timezone
@@ -7,7 +7,7 @@ import requests
 
 
 # ============================================================
-# COMMODITY TRADING BOT v7.3
+# COMMODITY TRADING BOT v8.3
 # QUANT MODEL + MULTI-TIMEFRAME + NEWS + USD + SEASONALITY
 # + RANKING + POSITION MANAGEMENT
 #
@@ -2183,6 +2183,190 @@ def precise_timing_engine(candles, direction):
     return {'best_time':best,'window':window,'hour_score':score,'samples':n}
 
 
+
+
+def pattern_signature_engine(candles, direction, index=None):
+    """Classifica un setup storico usando una libreria ampia di candele + price action."""
+    if not candles or direction not in ("LONG", "SHORT"):
+        return {"patterns": [], "score": 0.0, "setup": "N/D"}
+    end = len(candles) if index is None else min(index + 1, len(candles))
+    if end < 5:
+        return {"patterns": [], "score": 0.0, "setup": "N/D"}
+    rows = candles[:end]
+    wp = world_pattern_engine(rows, direction)
+    names = list(wp.get("patterns", []))
+    score = float(wp.get("score", 0.0) or 0.0)
+    a = _candle_metrics(rows[-1]); p = _candle_metrics(rows[-2]); pp = _candle_metrics(rows[-3])
+    if not a or not p or not pp:
+        return {"patterns": names[-5:], "score": score, "setup": "N/D"}
+    price = a["close"]
+    hi20 = max(safe_float(x.get("high")) for x in rows[-21:-1] if safe_float(x.get("high")) is not None) if len(rows) >= 22 else price
+    lo20 = min(safe_float(x.get("low")) for x in rows[-21:-1] if safe_float(x.get("low")) is not None) if len(rows) >= 22 else price
+    atrv = atr(rows, 14) or price * .01
+    # Price-action states are mutually informative, not mutually exclusive.
+    if direction == "LONG":
+        if lo20 < price and abs(price-lo20) <= max(.35*atrv, price*.004):
+            names.append("PULLBACK")
+        if hi20 and price > hi20:
+            names.append("BREAKOUT")
+        if hi20 and abs(price-hi20) <= max(.25*atrv, price*.003):
+            names.append("RETEST RESISTENZA")
+    else:
+        if hi20 > price and abs(hi20-price) <= max(.35*atrv, price*.004):
+            names.append("PULLBACK")
+        if lo20 and price < lo20:
+            names.append("BREAKDOWN")
+        if lo20 and abs(price-lo20) <= max(.25*atrv, price*.003):
+            names.append("RETEST SUPPORTO")
+    # Penalize indecision when it is the only information.
+    if "DOJI" in names and len(names) <= 1:
+        score -= .5
+    return {"patterns": list(dict.fromkeys(names))[-6:], "score": clamp(score, -6, 6),
+            "setup": " + ".join(list(dict.fromkeys(names))[-3:]) or "NESSUN SETUP FORTE"}
+
+
+def pattern_combo_backtest(candles, direction, lookback=500, forward=4):
+    """Backtest locale di combinazioni candlestick/price-action sulla stessa commodity."""
+    if direction not in ("LONG", "SHORT") or len(candles) < 100:
+        return {"samples": 0, "win_rate": 0.0, "avg_return": 0.0, "quality": 0.0,
+                "top_patterns": []}
+    rows = candles[-min(len(candles), lookback):]
+    wins = 0; returns = []; counts = {}; wins_by = {}
+    # Skip one bar between samples to reduce dependence between adjacent candles.
+    for i in range(25, len(rows)-forward, 3):
+        sig = pattern_signature_engine(rows, direction, i)
+        pats = sig["patterns"]
+        directional = sig["score"]
+        if not pats or directional <= 0:
+            continue
+        entry = safe_float(rows[i].get("close")); future = safe_float(rows[i+forward].get("close"))
+        if not entry or not future: continue
+        r = (future-entry)/entry if direction == "LONG" else (entry-future)/entry
+        returns.append(r)
+        if r > 0: wins += 1
+        for pat in pats:
+            counts[pat] = counts.get(pat, 0) + 1
+            if r > 0: wins_by[pat] = wins_by.get(pat, 0) + 1
+    n=len(returns)
+    if not n:
+        return {"samples":0,"win_rate":0.0,"avg_return":0.0,"quality":0.0,"top_patterns":[]}
+    wr=wins/n; avg=sum(returns)/n
+    # Require both sample size and payoff; avoid letting tiny samples dominate.
+    sample_factor=clamp(n/40, .35, 1.0)
+    quality=clamp((wr*65 + clamp(avg/.008,-1,1)*35)*sample_factor,0,100)
+    ranked=[]
+    for pat,cnt in counts.items():
+        if cnt < 3: continue
+        pwr=wins_by.get(pat,0)/cnt
+        ranked.append((pwr*100,cnt,pat))
+    ranked.sort(reverse=True)
+    return {"samples":n,"win_rate":wr,"avg_return":avg,"quality":quality,
+            "top_patterns":[{"pattern":p,"samples":c,"win_rate":w} for w,c,p in ranked[:5]]}
+
+
+def choose_entry_setup(candles, direction, atr_value, world_patterns):
+    """Sceglie un solo prezzo di ingresso e il tipo di setup più coerente."""
+    if not candles or direction not in ("LONG","SHORT"): return None, "N/D"
+    price=safe_float(candles[-1].get("close"));
+    if not price: return None,"N/D"
+    atrv=safe_float(atr_value) or atr(candles,14) or price*.01
+    look=candles[-40:-1] if len(candles)>2 else candles
+    highs=[safe_float(x.get('high')) for x in look if safe_float(x.get('high')) is not None]
+    lows=[safe_float(x.get('low')) for x in look if safe_float(x.get('low')) is not None]
+    rh=max(highs) if highs else price; rl=min(lows) if lows else price
+    tol=max(.22*atrv, price*.0015)
+    pats=set(world_patterns.get('patterns',[]))
+    if direction=='LONG':
+        if 'BREAKOUT' in pats or 'RESISTANCE BREAKOUT' in pats:
+            entry=max(price, rh + .05*atrv)
+            return _price_round(entry), 'BREAKOUT + CONFERMA'
+        if 'RETEST RESISTENZA' in pats:
+            entry=max(rl, rh - .10*atrv)
+            return _price_round(min(entry, price+.10*atrv)), 'RETEST'
+        # Prefer support pullback; if price is already very close, use shallow pullback.
+        support=max([x for x in (rl, price-.35*atrv, price-.15*atrv) if x <= price] or [price-.20*atrv])
+        entry=min(price-.08*atrv, support+.12*atrv)
+        entry=max(entry, price-.50*atrv)
+        return _price_round(entry), 'PULLBACK'
+    else:
+        if 'BREAKDOWN' in pats or 'SUPPORT BREAKDOWN' in pats:
+            entry=min(price, rl - .05*atrv)
+            return _price_round(entry), 'BREAKDOWN + CONFERMA'
+        if 'RETEST SUPPORTO' in pats:
+            entry=min(rh, rl + .10*atrv)
+            return _price_round(max(entry, price-.10*atrv)), 'RETEST'
+        resistance=min([x for x in (rh, price+.35*atrv, price+.15*atrv) if x >= price] or [price+.20*atrv])
+        entry=max(price+.08*atrv, resistance-.12*atrv)
+        entry=min(entry, price+.50*atrv)
+        return _price_round(entry), 'PULLBACK'
+
+
+def v83_setup_engine(analysis, intraday_candles=None, commodity_name=None, pattern_timeframes=None):
+    direction=analysis.get('setup_direction') or analysis.get('model_signal')
+    if direction not in ('LONG','SHORT'):
+        analysis['action_label']='NON ENTRARE'
+        return analysis
+    candles=intraday_candles if intraday_candles and len(intraday_candles)>=30 else analysis.get('_candles',[])
+    if not candles: return analysis
+    atr_value=analysis.get('atr') or atr(candles,14)
+    world=pattern_signature_engine(candles,direction)
+    combo=pattern_combo_backtest(candles,direction)
+    entry,method=choose_entry_setup(candles,direction,atr_value,world)
+    # Multi-timeframe pattern confluence: structural TFs carry more weight.
+    tf_results=[]
+    for tf,tf_candles in (pattern_timeframes or {}).items():
+        if not tf_candles or len(tf_candles)<10: continue
+        sig=pattern_signature_engine(tf_candles,direction)
+        tf_results.append((tf,sig))
+    tf_weight={'4H':.30,'1H':.28,'15m':.22,'5m':.14,'1m':.06}
+    mtf_pattern_score=0.0; mtf_names=[]
+    for tf,sig in tf_results:
+        norm=clamp(sig.get('score',0)/6,-1,1)
+        mtf_pattern_score += norm*100*tf_weight.get(tf,.10)
+        if sig.get('patterns'):
+            mtf_names.append(f"{tf}: " + ' + '.join(sig['patterns'][:2]))
+    # Quality combines current pattern, historical combo and MTF agreement.
+    pattern_now=clamp((world.get('score',0)+3)/6*100,0,100)
+    combo_q=combo.get('quality',0)
+    entry_quality=clamp(
+        analysis.get('confidence',0)*.25 + analysis.get('quality',0)*.15 +
+        pattern_now*.20 + combo_q*.25 + clamp(50+mtf_pattern_score/2,0,100)*.15,0,100)
+    timing=precise_timing_engine(candles,direction)
+    timing['composite_score']=clamp(timing.get('hour_score',0)*.45 + combo_q*.30 +
+                                    clamp(50+mtf_pattern_score/2,0,100)*.25,0,100)
+    if entry:
+        profile=LEVEL_PROFILES.get(commodity_name or '',{})
+        p=entry; sl_pct=profile.get('sl_pct',min(atr_value/max(p,1e-8)*STOP_ATR,.025))
+        tp1_pct=profile.get('tp1_pct',min(atr_value/max(p,1e-8)*TP1_ATR,.035))
+        tp2_pct=profile.get('tp2_pct',min(atr_value/max(p,1e-8)*TP2_ATR,.055))
+        tp3_pct=profile.get('tp3_pct',min(atr_value/max(p,1e-8)*TP3_ATR,.080))
+        if direction=='LONG': stop=p*(1-sl_pct); tp1=p*(1+tp1_pct); tp2=p*(1+tp2_pct); tp3=p*(1+tp3_pct)
+        else: stop=p*(1+sl_pct); tp1=p*(1-tp1_pct); tp2=p*(1-tp2_pct); tp3=p*(1-tp3_pct)
+        analysis.update({'entry':_price_round(p),'stop':_price_round(stop),'tp1':_price_round(tp1),
+                         'tp2':_price_round(tp2),'tp3':_price_round(tp3)})
+    # Decide only after confluence. A good pattern alone is not enough.
+    action='ATTENDERE'
+    risk_mode=analysis.get('risk',{}).get('mode','NORMAL')
+    if risk_mode=='SHOCK': action='NON ENTRARE'
+    elif analysis.get('signal') in ('LONG','SHORT') and entry_quality>=72 and combo.get('samples',0)>=15 and world.get('score',0)>0:
+        action='ENTRARE'
+    elif analysis.get('signal') not in ('LONG','SHORT'):
+        action='ATTENDERE'
+    analysis.update({
+        'entry_method':method,
+        'candle_pattern':world.get('setup','NESSUN SETUP FORTE'),
+        'candle_patterns':world.get('patterns',[]),
+        'candle_score':world.get('score',0),
+        'pattern_mtf':mtf_names,
+        'pattern_mtf_score':mtf_pattern_score,
+        'pattern_backtest':combo,
+        'local_backtest':combo,
+        'timing':timing,
+        'entry_quality':entry_quality,
+        'action_label':action,
+    })
+    return analysis
+
 def v8_setup_engine(analysis, intraday_candles=None, commodity_name=None):
     direction=analysis.get('setup_direction') or analysis.get('model_signal')
     if direction not in ('LONG','SHORT'):
@@ -2325,13 +2509,14 @@ def risk_engine(analysis, session, global_impact):
 # SIGNAL
 # ============================================================
 
-def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None, commodity_name=None, global_impact=None, session=None, intraday_candles=None):
+def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None, commodity_name=None, global_impact=None, session=None, intraday_candles=None, pattern_timeframes=None):
     """Gold Engine instrument-agnostic: modello + MTF + contesto."""
     features = build_features(candles)
     political = political or {"score": 0.0, "direction": "NEUTRALE", "count": 0}
     global_impact = global_impact or {"score": 0.0, "direction": "NEUTRALE", "mode": "NORMAL", "shock_intensity": 0.0, "count": 0}
     session = session or {"quality": 50.0, "allocation_pct": 25.0, "current_band": "N/D", "best_band": "N/D", "bands": {}}
     news = news or {"score": 0.0, "label": "NON DISPONIBILI", "count": 0, "status": "N/D", "source": "NONE"}
+    pattern_timeframes = pattern_timeframes or {}
 
     if features is None or model is None:
         return None
@@ -2570,7 +2755,7 @@ def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None, 
         "risk_benefit": risk_benefit,
     }
     result["_candles"] = candles
-    result = v8_setup_engine(result, intraday_candles=intraday_candles, commodity_name=commodity_name)
+    result = v83_setup_engine(result, intraday_candles=intraday_candles, commodity_name=commodity_name, pattern_timeframes=pattern_timeframes)
     # Ricalcola R/B con l'entry effettiva trovata dal motore V8.
     result["risk_benefit"] = risk_benefit_engine(result, cyclical)
     return {k:v for k,v in result.items() if k != "_candles"} | {"_candles": candles}
@@ -2713,7 +2898,7 @@ def enrich_v82_setup(item):
 def build_telegram(ranked, best, position_message=None):
     """Telegram operativo V8: niente dettagli tecnici interni."""
     available=[x for x in ranked if x.get('available')][:3]
-    lines=['🌍 COMMODITIES BOT v8.2','', '🏆 CLASSIFICA']
+    lines=['🌍 COMMODITIES BOT v8.3','', '🏆 CLASSIFICA']
     medals=['🥇','🥈','🥉']
     for i,item in enumerate(available):
         a=item['analysis']; action=a.get('action_label')
@@ -2735,7 +2920,7 @@ def build_telegram(ranked, best, position_message=None):
         lines += ['', '━━━━━━━━━━━━━━━━━━━━', f'{medal} {item["name"]}', '━━━━━━━━━━━━━━━━━━━━',
                   f'🎯 AZIONE: {action}', f'🧭 DIREZIONE: {direction}',
                   f'💰 PREZZO ATTUALE: {price:.4f}' if price is not None else '💰 PREZZO ATTUALE: N/D',
-                  f'📥 ENTRATA: {entry:.4f}' if entry is not None else '📥 ENTRATA: N/D']
+                  f'📥 ENTRATA: {entry:.4f}' if entry is not None else '📥 ENTRATA: N/D', f'📌 SETUP: {a.get("entry_method","N/D")}', f'🕯️ PATTERN: {pattern}', f'📚 STORICO SETUP: {a.get("pattern_backtest",{}).get("win_rate",0)*100:.0f}% successo' if a.get("pattern_backtest",{}).get("samples",0)>=5 else '📚 STORICO SETUP: dati insufficienti']
         item_mode=a.get('risk',{}).get('mode', global_mode)
         if item_mode=='SHOCK':
             lines.append('🚨 ENTRATA BLOCCATA — SHOCK MODE')
@@ -2748,7 +2933,6 @@ def build_telegram(ranked, best, position_message=None):
             f'🎯 TP3: {tp3:.4f}' if tp3 is not None else '🎯 TP3: N/D',
             f'⏰ ORARIO MIGLIORE: {timing.get("best_time","N/D")}',
             f'⏳ FINESTRA: {timing.get("window","N/D")}',
-            f'🕯️ PATTERN: {pattern}',
         ]
         if action=='ENTRARE': lines.append('👉 Entrare solo se il prezzo conferma l\'area di ingresso.')
         elif action=='ATTENDERE': lines.append(f'👉 Attendere conferma {direction}.')
@@ -2774,7 +2958,7 @@ def analysis_direction_hint(timeframes):
 def main():
     print()
     print("=" * 70)
-    print("🌍 COMMODITIES BOT v8.2")
+    print("🌍 COMMODITIES BOT v8.3")
     print("RANKING RISK/BENEFIT + CYCLICAL ENGINE + GOLD ENGINE v15.1 + GLOBAL INTELLIGENCE + SESSION ENGINE + RISK ENGINE")
     print("=" * 70)
     print()
@@ -2824,9 +3008,20 @@ def main():
             if len(intraday_candles) < 80:
                 raise RuntimeError(f"Storico 1H insufficiente per Entry/Timing ({len(intraday_candles)}/80)")
 
+            # Libreria pattern multi-timeframe: 4H, 1H, 15m, 5m e 1m.
+            # Se un timeframe non è disponibile, gli altri continuano a pesare.
+            pattern_timeframes = {"1H": intraday_candles}
+            for _tf, _interval, _size in (("4H", "4h", 500), ("15m", "15min", 500), ("5m", "5min", 500), ("1m", "1min", 500)):
+                try:
+                    _c = get_data(symbol, _interval, _size)
+                    if len(_c) >= 30:
+                        pattern_timeframes[_tf] = _c
+                except Exception as _e:
+                    print(f"   ⚠️ Pattern {_tf}: {_e}")
+
             analysis = analyze(
                 candles, dataset, model, bt, usd, news, timeframes, political, commodity_name=name,
-                global_impact=global_impact, session=session, intraday_candles=intraday_candles
+                global_impact=global_impact, session=session, intraday_candles=intraday_candles, pattern_timeframes=pattern_timeframes
             )
             if analysis is None:
                 raise RuntimeError("Analisi Gold Engine non disponibile")
