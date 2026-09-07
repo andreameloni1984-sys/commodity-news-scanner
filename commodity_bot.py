@@ -1582,9 +1582,9 @@ def global_market_intelligence():
     raw_shock_hits = len(shock_candidates)
     shock_intensity = clamp((0.60 * min(shock_count / 3.0, 1.0)) + (0.40 * min(raw_shock_hits / 15.0, 1.0)), 0, 1)
 
-    if shock_intensity >= 0.72 and shock_count >= 2:
+    if shock_count >= 2:
         mode = "SHOCK"
-    elif shock_intensity >= 0.32 or shock_count >= 1:
+    elif shock_count >= 1 or raw_shock_hits >= 6:
         mode = "ALERT"
     else:
         mode = "NORMAL"
@@ -1881,12 +1881,233 @@ def cyclical_market_engine(candles, direction="NONE"):
     }
 
 
+
+# ============================================================
+# V8 ENTRY / CANDLE / TIMING / LOCAL BACKTEST ENGINE
+# ============================================================
+
+def _price_round(value):
+    value = safe_float(value)
+    if value is None:
+        return 0.0
+    if abs(value) >= 1000:
+        return round(value, 2)
+    if abs(value) >= 100:
+        return round(value, 3)
+    if abs(value) >= 10:
+        return round(value, 3)
+    return round(value, 4)
+
+
+def _candle_metrics(c):
+    o, h, l, cl = [safe_float(c.get(k)) for k in ('open','high','low','close')]
+    if None in (o,h,l,cl) or h <= l:
+        return None
+    rng = h-l
+    body = abs(cl-o)
+    upper = h-max(o,cl)
+    lower = min(o,cl)-l
+    close_pos = (cl-l)/rng
+    return {'open':o,'high':h,'low':l,'close':cl,'range':rng,'body':body,
+            'upper':upper,'lower':lower,'close_pos':close_pos,
+            'bull':cl>o,'bear':cl<o}
+
+
+def candle_engine(candles, direction):
+    """Riconosce pattern semplici e robusti; non pretende di predire il mercato."""
+    if direction not in ('LONG','SHORT') or len(candles) < 3:
+        return {'patterns': [], 'score': 0.0, 'label': 'N/D'}
+    a=_candle_metrics(candles[-1]); p=_candle_metrics(candles[-2]); pp=_candle_metrics(candles[-3])
+    if not a or not p or not pp:
+        return {'patterns': [], 'score': 0.0, 'label': 'N/D'}
+    patterns=[]; score=0.0
+    # engulfing
+    if a['bull'] and p['bear'] and a['open'] <= p['close'] and a['close'] >= p['open']:
+        patterns.append('BULLISH ENGULFING'); score += 2.0 if direction=='LONG' else -1.0
+    if a['bear'] and p['bull'] and a['open'] >= p['close'] and a['close'] <= p['open']:
+        patterns.append('BEARISH ENGULFING'); score += 2.0 if direction=='SHORT' else -1.0
+    # hammer / shooting star
+    if a['lower'] >= max(a['body']*2, a['range']*0.45) and a['upper'] <= a['range']*0.25:
+        patterns.append('HAMMER'); score += 1.5 if direction=='LONG' else -0.8
+    if a['upper'] >= max(a['body']*2, a['range']*0.45) and a['lower'] <= a['range']*0.25:
+        patterns.append('SHOOTING STAR'); score += 1.5 if direction=='SHORT' else -0.8
+    # doji
+    if a['body'] <= a['range']*0.12:
+        patterns.append('DOJI'); score -= 0.5
+    # inside bar
+    if a['high'] <= p['high'] and a['low'] >= p['low']:
+        patterns.append('INSIDE BAR'); score += 0.5
+    # short 3-candle momentum
+    if direction=='LONG' and a['close']>p['close']>pp['close']:
+        patterns.append('MOMENTO RIALZISTA'); score += 1.0
+    if direction=='SHORT' and a['close']<p['close']<pp['close']:
+        patterns.append('MOMENTO RIBASSISTA'); score += 1.0
+    score=clamp(score,-3,4)
+    label=' + '.join(patterns[:2]) if patterns else 'NESSUN PATTERN FORTE'
+    return {'patterns':patterns,'score':score,'label':label}
+
+
+def _recent_levels(candles, lookback=80):
+    rows=candles[-lookback:]
+    highs=[safe_float(x.get('high')) for x in rows if safe_float(x.get('high')) is not None]
+    lows=[safe_float(x.get('low')) for x in rows if safe_float(x.get('low')) is not None]
+    closes=[safe_float(x.get('close')) for x in rows if safe_float(x.get('close')) is not None]
+    return (max(highs) if highs else None, min(lows) if lows else None, closes)
+
+
+def calculate_entry_price(candles, direction, atr_value=None):
+    """Entry singola: combina pullback, S/R locale, ATR e candela recente."""
+    if direction not in ('LONG','SHORT') or len(candles)<20:
+        return None, 'N/D'
+    price=safe_float(candles[-1].get('close'))
+    if price is None: return None, 'N/D'
+    a=_candle_metrics(candles[-1]); prev=candles[-min(2,len(candles))]
+    atr_value=safe_float(atr_value) or atr(candles,14) or price*0.01
+    hi,lo,closes=_recent_levels(candles,80)
+    recent=candles[-20:]
+    rh=max((safe_float(x.get('high')) for x in recent if safe_float(x.get('high')) is not None), default=price)
+    rl=min((safe_float(x.get('low')) for x in recent if safe_float(x.get('low')) is not None), default=price)
+    pattern=candle_engine(candles,direction)
+    # Support/resistance candidates near price.
+    if direction=='LONG':
+        supports=[x for x in (lo,rl,price-0.35*atr_value) if x is not None and x<=price]
+        base=max(supports) if supports else price-0.25*atr_value
+        if pattern['score']>0 and a:
+            entry=price-0.12*atr_value
+            method='CONFERMA CANDELA + PULLBACK'
+        else:
+            entry=base+0.18*atr_value
+            method='PULLBACK SU SUPPORTO'
+        entry=min(entry,price+0.10*atr_value)
+        entry=max(entry,price-0.55*atr_value)
+    else:
+        resistances=[x for x in (hi,rh,price+0.35*atr_value) if x is not None and x>=price]
+        base=min(resistances) if resistances else price+0.25*atr_value
+        if pattern['score']>0 and a:
+            entry=price+0.12*atr_value
+            method='CONFERMA CANDELA + PULLBACK'
+        else:
+            entry=base-0.18*atr_value
+            method='PULLBACK SU RESISTENZA'
+        entry=max(entry,price-0.10*atr_value)
+        entry=min(entry,price+0.55*atr_value)
+    return _price_round(entry), method
+
+
+def local_setup_backtest(candles, direction, lookback=240):
+    """Mini-backtest dei pattern/setup: misura se il contesto storico ha seguito la direzione."""
+    if direction not in ('LONG','SHORT') or len(candles)<80:
+        return {'samples':0,'win_rate':0.0,'avg_return':0.0,'quality':0.0}
+    rows=candles[-min(len(candles),lookback):]
+    wins=0; returns=[]; samples=0
+    step=3
+    for i in range(20,len(rows)-5,step):
+        c=rows[i]
+        cm=_candle_metrics(c)
+        if not cm: continue
+        prev=_candle_metrics(rows[i-1]); nxt=rows[i+3]
+        if not prev: continue
+        bullish=(cm['bull'] and cm['close']>prev['close'])
+        bearish=(cm['bear'] and cm['close']<prev['close'])
+        if (direction=='LONG' and not bullish) or (direction=='SHORT' and not bearish):
+            continue
+        entry=cm['close']; future=safe_float(nxt.get('close'))
+        if not future or not entry: continue
+        r=(future-entry)/entry if direction=='LONG' else (entry-future)/entry
+        returns.append(r); samples+=1
+        if r>0: wins+=1
+    if not samples: return {'samples':0,'win_rate':0.0,'avg_return':0.0,'quality':0.0}
+    wr=wins/samples; avg=sum(returns)/len(returns)
+    quality=clamp(wr*70+clamp(avg/0.01,-1,1)*30,0,100)
+    return {'samples':samples,'win_rate':wr,'avg_return':avg,'quality':quality}
+
+
+def precise_timing_engine(candles, direction):
+    """Trova l'ora locale europea con migliore rendimento storico per la direzione."""
+    if direction not in ('LONG','SHORT') or len(candles)<80:
+        return {'best_time':'N/D','window':'N/D','hour_score':0.0,'samples':0}
+    try:
+        from zoneinfo import ZoneInfo
+        zone=ZoneInfo('Europe/Rome')
+    except Exception:
+        zone=timezone.utc
+    buckets={h:[] for h in range(24)}
+    for i in range(0,len(candles)-3):
+        c=candles[i]; n=candles[i+3]
+        cm=_candle_metrics(c); entry=safe_float(c.get('close')); future=safe_float(n.get('close'))
+        if not cm or not entry or not future: continue
+        try: dt=datetime.fromisoformat(str(c.get('datetime')).replace('Z','+00:00'))
+        except Exception: continue
+        if dt.tzinfo is None: dt=dt.replace(tzinfo=timezone.utc)
+        hour=dt.astimezone(zone).hour
+        # usa solo barre coerenti con la direzione del contesto
+        move=(future-entry)/entry if direction=='LONG' else (entry-future)/entry
+        buckets[hour].append(move)
+    scored=[]
+    for h,vals in buckets.items():
+        if len(vals)<5: continue
+        wr=sum(1 for x in vals if x>0)/len(vals); avg=sum(vals)/len(vals)
+        score=wr*70+clamp(avg/0.005,-1,1)*30
+        scored.append((score,h,len(vals)))
+    if not scored: return {'best_time':'N/D','window':'N/D','hour_score':0.0,'samples':0}
+    score,h,n=max(scored)
+    minute=30
+    best=f'{h:02d}:{minute:02d}'
+    # Finestra stretta attorno all'orario scelto.
+    h1=(h*60+25)%1440; h2=(h*60+40)%1440
+    window=f'{h1//60:02d}:{h1%60:02d}–{h2//60:02d}:{h2%60:02d}'
+    return {'best_time':best,'window':window,'hour_score':score,'samples':n}
+
+
+def v8_setup_engine(analysis, intraday_candles=None, commodity_name=None):
+    direction=analysis.get('setup_direction') or analysis.get('model_signal')
+    if direction not in ('LONG','SHORT'):
+        return analysis
+    candles=intraday_candles if intraday_candles and len(intraday_candles)>=20 else []
+    if not candles:
+        candles=analysis.get('_candles',[])
+    if not candles: return analysis
+    atr_value=analysis.get('atr') or atr(candles,14)
+    entry,method=calculate_entry_price(candles,direction,atr_value)
+    pattern=candle_engine(candles,direction)
+    bt=local_setup_backtest(candles,direction)
+    timing=precise_timing_engine(candles,direction)
+    if entry:
+        price=entry
+        profile=LEVEL_PROFILES.get(commodity_name or '',{})
+        sl_pct=profile.get('sl_pct',min((atr_value/max(price,1e-8))*STOP_ATR,0.025))
+        tp1_pct=profile.get('tp1_pct',min((atr_value/max(price,1e-8))*TP1_ATR,0.035))
+        tp2_pct=profile.get('tp2_pct',min((atr_value/max(price,1e-8))*TP2_ATR,0.055))
+        tp3_pct=profile.get('tp3_pct',min((atr_value/max(price,1e-8))*TP3_ATR,0.080))
+        if direction=='LONG':
+            stop=price*(1-sl_pct); tp1=price*(1+tp1_pct); tp2=price*(1+tp2_pct); tp3=price*(1+tp3_pct)
+        else:
+            stop=price*(1+sl_pct); tp1=price*(1-tp1_pct); tp2=price*(1-tp2_pct); tp3=price*(1-tp3_pct)
+        analysis.update({'entry':_price_round(price),'stop':_price_round(stop),'tp1':_price_round(tp1),'tp2':_price_round(tp2),'tp3':_price_round(tp3)})
+    entry_quality=clamp(
+        analysis.get('confidence',0)*0.30 + analysis.get('quality',0)*0.20 +
+        pattern['score']/4*15 + bt['quality']*0.20 + timing['hour_score']*0.15,0,100)
+    analysis.update({'entry_method':method,'candle_pattern':pattern['label'],'candle_score':pattern['score'],
+                     'local_backtest':bt,'timing':timing,'entry_quality':entry_quality})
+    # Decisione chiara per l'utente; shock blocca sempre l'ingresso.
+    shock_mode=analysis.get('risk',{}).get('mode')
+    if shock_mode=='SHOCK':
+        analysis['signal']='WAIT'; analysis['action_label']='NON ENTRARE'
+    elif analysis.get('signal') in ('LONG','SHORT') and entry_quality>=68:
+        analysis['action_label']='ENTRARE'
+    elif direction in ('LONG','SHORT'):
+        analysis['action_label']='ATTENDERE'
+    else:
+        analysis['action_label']='NON ENTRARE'
+    return analysis
+
+
 def risk_benefit_engine(analysis, cyclical):
     """Valuta opportunità e rischio. Non usa solo lo score tecnico."""
     direction = analysis.get("signal")
     if direction not in ("LONG", "SHORT"):
         direction = analysis.get("model_signal")
-    price = safe_float(analysis.get("price"))
+    price = safe_float(analysis.get("entry")) or safe_float(analysis.get("price"))
     stop = safe_float(analysis.get("stop"))
     tp3 = safe_float(analysis.get("tp3"))
     if not price or not stop or not tp3 or direction not in ("LONG", "SHORT"):
@@ -1949,10 +2170,11 @@ def risk_engine(analysis, session, global_impact):
         score * 0.45 + confidence * 0.20 + session_quality * 0.20 + confluence / 6 * 15,
         0, 100
     )
-    if shock >= 0.75:
+    confirmed_shocks = int(global_impact.get("shock_count", 0) or 0)
+    if confirmed_shocks >= 2:
         mode = "SHOCK"
         risk_pct = 0.0
-    elif shock >= 0.35:
+    elif confirmed_shocks >= 1 or shock >= 0.35:
         mode = "ALERT"
         risk_pct = min(MAX_RISK_PER_TRADE_PCT, 0.25)
     else:
@@ -1975,7 +2197,7 @@ def risk_engine(analysis, session, global_impact):
 # SIGNAL
 # ============================================================
 
-def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None, commodity_name=None, global_impact=None, session=None):
+def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None, commodity_name=None, global_impact=None, session=None, intraday_candles=None):
     """Gold Engine instrument-agnostic: modello + MTF + contesto."""
     features = build_features(candles)
     political = political or {"score": 0.0, "direction": "NEUTRALE", "count": 0}
@@ -2177,7 +2399,7 @@ def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None, 
     risk_benefit = risk_benefit_engine(
         {
             "signal": operational_signal, "model_signal": model_direction,
-            "price": price, "stop": stop, "tp3": tp3, "score": score,
+            "entry": price, "price": price, "stop": stop, "tp3": tp3, "score": score,
             "confidence": confidence, "quality": quality, "mtf_bias": mtf_bias,
             "atr": current_atr, "fast_conflicts": fast_opposite,
             "structural_opposite": structural_opposite, "news": news,
@@ -2185,7 +2407,7 @@ def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None, 
         }, cyclical
     )
 
-    return {
+    result = {
         "signal": operational_signal,
         "model_signal": model_direction,
         "setup_direction": setup_direction,
@@ -2219,6 +2441,11 @@ def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None, 
         "cyclical": cyclical,
         "risk_benefit": risk_benefit,
     }
+    result["_candles"] = candles
+    result = v8_setup_engine(result, intraday_candles=intraday_candles, commodity_name=commodity_name)
+    # Ricalcola R/B con l'entry effettiva trovata dal motore V8.
+    result["risk_benefit"] = risk_benefit_engine(result, cyclical)
+    return {k:v for k,v in result.items() if k != "_candles"} | {"_candles": candles}
 
 
 # ============================================================
@@ -2340,105 +2567,48 @@ def confirmation_text(analysis):
 
 
 def build_telegram(ranked, best, position_message=None):
-    """Telegram ultra-clean: only ranking + operational guide for top 3."""
-    available = [x for x in ranked if x.get("available")][:3]
-    global_mode = best.get("analysis", {}).get("global_impact", {}).get("mode", "NORMAL")
-
-    lines = [
-        "🌍 COMMODITIES BOT v7.3",
-        "",
-        "🏆 CLASSIFICA",
-    ]
-
-    medals = ["🥇", "🥈", "🥉"]
-    for i, item in enumerate(available):
-        a = item["analysis"]
-        score = item.get("ranking_score", a.get("score", 0))
-        lines.extend([
-            "",
-            f"{medals[i]} {item['name']}",
-            f"🎯 {a['signal']} | {a.get('grade', 'N/D')}",
-            f"📊 Score: {score:.0f}/100",
-        ])
-
-    if global_mode == "SHOCK":
-        lines.extend([
-            "",
-            "🚨 MERCATO BLOCCATO",
-            "NUOVE ENTRATE BLOCCATE",
-            "📌 Posizioni esistenti: SOLO GESTIONE / PROTEZIONE",
-        ])
-
-    for i, item in enumerate(available):
-        a = item["analysis"]
-        medal = medals[i]
-        signal = a.get("signal", "WAIT")
-        grade = a.get("grade", "N/D")
-        price = a.get("price", 0.0)
-        stop = a.get("stop", 0.0)
-        tp1 = a.get("tp1", 0.0)
-        tp2 = a.get("tp2", 0.0)
-        tp3 = a.get("tp3", 0.0)
-        risk_pct = a.get("risk", {}).get("risk_pct", 0.0)
-        session = a.get("session", {})
-        current_band = session.get("current_band", "N/D")
-        best_band = session.get("best_band", "N/D")
-
-        lines.extend([
-            "",
-            "━━━━━━━━━━━━━━━━━━━━",
-            f"{medal} {item['name']}",
-            "━━━━━━━━━━━━━━━━━━━━",
-            f"🎯 AZIONE: {signal} | {grade}",
-            f"💰 Prezzo: {price:.4f}",
-        ])
-
-        setup_direction = a.get("setup_direction") or (signal if signal in ("LONG", "SHORT") else a.get("model_signal", "NONE"))
-        if global_mode == "SHOCK":
-            lines.append("🚨 ENTRATA BLOCCATA — SHOCK MODE")
-        elif signal in ("LONG", "SHORT"):
-            lines.append(f"📥 ENTRATA: {price:.4f}")
-        else:
-            lines.append(f"📥 ENTRATA: {price:.4f} — ATTENDERE CONFERMA {setup_direction}" if setup_direction in ("LONG", "SHORT") else "📥 ENTRATA: ATTENDERE")
-
-        if stop and tp1 and tp2 and tp3:
-            lines.extend([
-                f"🛑 STOP LOSS: {stop:.4f}",
-                f"🎯 TP1: {tp1:.4f}",
-                f"🎯 TP2: {tp2:.4f}",
-                f"🎯 TP3: {tp3:.4f}",
-            ])
-        else:
-            lines.extend([
-                "🛑 STOP LOSS: da definire",
-                "🎯 TP1: da definire",
-                "🎯 TP2: da definire",
-                "🎯 TP3: da definire",
-            ])
-
-        if signal in ("LONG", "SHORT") and global_mode != "SHOCK":
-            lines.append(f"💰 RISCHIO: {risk_pct:.2f}% del budget rischio")
-
-        lines.extend([
-            "",
-            "📌 GESTIONE",
-            "TP1 → STOP A BREAK-EVEN",
-            "TP2 → STOP A TP1",
-            "TP3 → CHIUDERE",
-            f"⏰ FASCIA: {current_band} | MIGLIORE: {best_band}",
-        ])
-
-        if signal in ("LONG", "SHORT"):
-            lines.append("⚠️ Se perde la conferma → NON ENTRARE")
-        else:
-            lines.append("⏳ Entrare solo dopo conferma del segnale")
-
-    lines.extend([
-        "",
-        "⚠️ Segnale algoritmico, non garanzia di profitto.",
-    ])
-    return "\n".join(lines)
-
+    """Telegram operativo V8: niente dettagli tecnici interni."""
+    available=[x for x in ranked if x.get('available')][:3]
+    lines=['🌍 COMMODITIES BOT v8.0','', '🏆 CLASSIFICA']
+    medals=['🥇','🥈','🥉']
+    for i,item in enumerate(available):
+        a=item['analysis']; action=a.get('action_label')
+        if action=='ENTRARE': icon='🟢'
+        elif action=='NON ENTRARE': icon='🔴'
+        else: icon='🟡'
+        lines += ['',f"{medals[i]} {item['name']}",f"{icon} {action} | {a.get('setup_direction','N/D')}"]
+    global_mode=best.get('analysis',{}).get('global_impact',{}).get('mode','NORMAL')
+    if global_mode=='SHOCK':
+        lines += ['', '🚨 MERCATO BLOCCATO','NUOVE ENTRATE BLOCCATE','📌 Posizioni esistenti: SOLO GESTIONE / PROTEZIONE']
+    elif global_mode=='ALERT':
+        lines += ['', '⚠️ MERCATO IN ALLERTA','Entrare solo con conferma completa']
+    for i,item in enumerate(available):
+        a=item['analysis']; medal=medals[i]; direction=a.get('setup_direction') or a.get('signal')
+        price=a.get('price'); entry=a.get('entry'); stop=a.get('stop'); tp1=a.get('tp1'); tp2=a.get('tp2'); tp3=a.get('tp3')
+        timing=a.get('timing',{}); pattern=a.get('candle_pattern','N/D')
+        action=a.get('action_label','ATTENDERE')
+        lines += ['', '━━━━━━━━━━━━━━━━━━━━', f'{medal} {item["name"]}', '━━━━━━━━━━━━━━━━━━━━',
+                  f'🎯 AZIONE: {action}', f'🧭 DIREZIONE: {direction}',
+                  f'💰 PREZZO ATTUALE: {price:.4f}' if price is not None else '💰 PREZZO ATTUALE: N/D',
+                  f'📥 ENTRATA: {entry:.4f}' if entry is not None else '📥 ENTRATA: N/D']
+        if global_mode=='SHOCK':
+            lines.append('🚨 ENTRATA BLOCCATA — SHOCK MODE')
+        lines += [
+            f'🛑 STOP LOSS: {stop:.4f}' if stop is not None else '🛑 STOP LOSS: N/D',
+            f'🎯 TP1: {tp1:.4f}' if tp1 is not None else '🎯 TP1: N/D',
+            f'🎯 TP2: {tp2:.4f}' if tp2 is not None else '🎯 TP2: N/D',
+            f'🎯 TP3: {tp3:.4f}' if tp3 is not None else '🎯 TP3: N/D',
+            f'⏰ ORARIO MIGLIORE: {timing.get("best_time","N/D")}',
+            f'⏳ FINESTRA: {timing.get("window","N/D")}',
+            f'🕯️ PATTERN: {pattern}',
+        ]
+        if action=='ENTRARE': lines.append('👉 Entrare solo se il prezzo conferma l\'area di ingresso.')
+        elif action=='ATTENDERE': lines.append(f'👉 Attendere conferma {direction}.')
+        else: lines.append('👉 Nessuna nuova entrata.')
+        lines += ['', '📌 GESTIONE','TP1 → STOP A BREAK-EVEN','TP2 → STOP A TP1','TP3 → CHIUDERE','STOP LOSS → CHIUDERE','SEGNALE OPPOSTO CONFERMATO → CHIUDERE']
+    if position_message:
+        lines += ['', '━━━━━━━━━━━━━━━━━━━━','📌 POSIZIONE',position_message]
+    return '\n'.join(lines)
 
 def analysis_direction_hint(timeframes):
     vals = [timeframes.get(tf, {}).get("direction", "NONE") for tf in ("4H", "1H", "15m")]
@@ -2456,7 +2626,7 @@ def analysis_direction_hint(timeframes):
 def main():
     print()
     print("=" * 70)
-    print("🌍 COMMODITIES BOT v7.3")
+    print("🌍 COMMODITIES BOT v8.0")
     print("RANKING RISK/BENEFIT + CYCLICAL ENGINE + GOLD ENGINE v15.1 + GLOBAL INTELLIGENCE + SESSION ENGINE + RISK ENGINE")
     print("=" * 70)
     print()
@@ -2501,9 +2671,14 @@ def main():
             global_impact = commodity_global_impact(name, global_intel)
             session = session_engine(name, symbol, "LONG" if analysis_direction_hint(timeframes) == "LONG" else "SHORT" if analysis_direction_hint(timeframes) == "SHORT" else "NONE")
 
+            # Dati 1H dedicati a candlestick, entry e timing storico.
+            intraday_candles = get_data(symbol, "1h", 1200)
+            if len(intraday_candles) < 80:
+                raise RuntimeError(f"Storico 1H insufficiente per Entry/Timing ({len(intraday_candles)}/80)")
+
             analysis = analyze(
                 candles, dataset, model, bt, usd, news, timeframes, political, commodity_name=name,
-                global_impact=global_impact, session=session
+                global_impact=global_impact, session=session, intraday_candles=intraday_candles
             )
             if analysis is None:
                 raise RuntimeError("Analisi Gold Engine non disponibile")
@@ -2658,7 +2833,7 @@ def main():
                 "name": best["name"],
                 "symbol": best["symbol"],
                 "direction": a["signal"],
-                "entry": a["price"],
+                "entry": a.get("entry") or a["price"],
                 "stop": a["stop"],
                 "tp1": a["tp1"],
                 "tp2": a["tp2"],
@@ -2673,7 +2848,7 @@ def main():
 
             position_message = (
                 f"🚨 NUOVA POSIZIONE {a['signal']}\n"
-                f"Entry {a['price']:.4f} | "
+                f"Entry {a.get('entry') or a['price']:.4f} | "
                 f"SL {a['stop']:.4f} | "
                 f"TP1 {a['tp1']:.4f} | "
                 f"TP2 {a['tp2']:.4f}"
