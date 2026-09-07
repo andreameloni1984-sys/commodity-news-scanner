@@ -7,7 +7,7 @@ import requests
 
 
 # ============================================================
-# COMMODITY TRADING BOT v6.0
+# COMMODITY TRADING BOT v7.1
 # QUANT MODEL + MULTI-TIMEFRAME + NEWS + USD + SEASONALITY
 # + RANKING + POSITION MANAGEMENT
 #
@@ -32,6 +32,21 @@ TP1_ATR = 2.0
 TP2_ATR = 3.0
 TP3_ATR = 4.5
 
+# Limiti di volatilità per evitare SL/TP irrealistici quando l'ATR giornaliero
+# viene gonfiato da spike o gap. Il Gold Engine resta invariato nella
+# gestione della posizione; qui limitiamo soltanto la distanza iniziale.
+LEVEL_PROFILES = {
+    "Oro":          {"max_atr_pct": 0.025, "sl_pct": 0.015, "tp1_pct": 0.022, "tp2_pct": 0.038, "tp3_pct": 0.060},
+    "Argento":      {"max_atr_pct": 0.045, "sl_pct": 0.022, "tp1_pct": 0.032, "tp2_pct": 0.055, "tp3_pct": 0.085},
+    "Petrolio WTI": {"max_atr_pct": 0.060, "sl_pct": 0.020, "tp1_pct": 0.030, "tp2_pct": 0.050, "tp3_pct": 0.075},
+    "Petrolio Brent":{"max_atr_pct": 0.060, "sl_pct": 0.020, "tp1_pct": 0.030, "tp2_pct": 0.050, "tp3_pct": 0.075},
+    "Gas Naturale": {"max_atr_pct": 0.100, "sl_pct": 0.035, "tp1_pct": 0.050, "tp2_pct": 0.085, "tp3_pct": 0.125},
+    "Rame":         {"max_atr_pct": 0.035, "sl_pct": 0.018, "tp1_pct": 0.028, "tp2_pct": 0.045, "tp3_pct": 0.065},
+    "Grano":        {"max_atr_pct": 0.050, "sl_pct": 0.025, "tp1_pct": 0.035, "tp2_pct": 0.055, "tp3_pct": 0.080},
+    "Mais":         {"max_atr_pct": 0.050, "sl_pct": 0.025, "tp1_pct": 0.035, "tp2_pct": 0.055, "tp3_pct": 0.080},
+    "Caffè":        {"max_atr_pct": 0.060, "sl_pct": 0.030, "tp1_pct": 0.045, "tp2_pct": 0.070, "tp3_pct": 0.100},
+}
+
 LONG_THRESHOLD = 0.62
 SHORT_THRESHOLD = 0.38
 
@@ -39,6 +54,49 @@ MIN_QUALITY = 45
 MIN_CONFIDENCE = 58
 MIN_SCORE = 65
 MIN_RANK_MARGIN = 5
+
+# ============================================================
+# v7.0 GLOBAL / SESSION / RISK ENGINE
+# ============================================================
+SESSION_BANDS = {
+    "NOTTE": (0, 7),
+    "EUROPA": (7, 13),
+    "USA_OVERLAP": (13, 18),
+    "SERA": (18, 24),
+}
+
+# Quota iniziale del budget di rischio giornaliero. Il motore la ricalcola
+# usando i dati storici intraday della singola commodity. Non rappresenta
+# una percentuale da investire automaticamente sul capitale totale.
+MAX_RISK_PER_TRADE_PCT = 0.50
+MAX_DAILY_RISK_PCT = 1.00
+MAX_COMMODITY_RISK_PCT = 0.75
+
+GLOBAL_NEWS_QUERIES = [
+    "global markets stocks bonds dollar Fed ECB inflation recession",
+    "geopolitics war sanctions tariffs trade conflict markets",
+    "natural disaster earthquake hurricane flood drought markets commodities",
+    "OPEC oil supply shipping Strait Hormuz energy markets",
+    "China economy stimulus tariffs copper commodities markets",
+]
+
+SHOCK_TERMS = {
+    "war", "attack", "missile", "invasion", "airstrike", "sanctions",
+    "earthquake", "hurricane", "tsunami", "flood", "wildfire",
+    "default", "bank collapse", "emergency", "halted production",
+    "supply disruption", "strait closed", "hormuz closed",
+    "opec emergency", "market crash", "circuit breaker",
+}
+
+GLOBAL_BULLISH_TERMS = {
+    "risk-off", "safe haven", "supply disruption", "shortage", "sanctions",
+    "war", "attack", "production cut", "stimulus", "rate cuts",
+    "weaker dollar", "dollar falls",
+}
+GLOBAL_BEARISH_TERMS = {
+    "risk-on", "ceasefire", "peace", "oversupply", "surplus",
+    "production increase", "demand slowdown", "recession", "strong dollar",
+}
 
 COMMODITIES = {
     "Oro": "XAU/USD",
@@ -409,33 +467,51 @@ def get_daily_data(symbol):
 
 
 def compare_sources(name, symbol, candles):
-    """Confronta il prezzo giornaliero tra Yahoo e Twelve Data quando entrambi sono disponibili."""
+    """Confronto provider senza trattare futures Yahoo e spot Twelve Data come prezzi identici."""
     result = {"sources": [], "status": "N/D", "difference_pct": None}
     yahoo_price = candles[-1]["close"] if candles else None
     if yahoo_price is not None:
         result["sources"].append({"name": "Yahoo Finance", "price": yahoo_price})
+
     if not API_KEY:
         result["status"] = "YAHOO ONLY"
         return result
+
     try:
         td = get_data_twelvedata(symbol, "1day", 5)
-        if td:
-            td_price = td[-1]["close"]
-            result["sources"].append({"name": "Twelve Data", "price": td_price})
-            if yahoo_price:
-                diff = abs(td_price / yahoo_price - 1) * 100
-                result["difference_pct"] = diff
-                result["status"] = "CONFERMATO" if diff <= 0.50 else "DISCREPANZA"
-                if diff > 0.50:
-                    print(f"   ⚠️ {name}: Yahoo/Twelve Data differiscono {diff:.2f}%")
-                else:
-                    print(f"   🔎 {name}: Yahoo {yahoo_price:.4f} | Twelve {td_price:.4f} | Δ {diff:.2f}%")
-                return result
-    except Exception as exc:
-        result["status"] = f"YAHOO ONLY ({str(exc)[:80]})"
+        if not td:
+            result["status"] = "YAHOO ONLY (Twelve Data nessun dato)"
+            return result
+        td_price = td[-1]["close"]
+        result["sources"].append({"name": "Twelve Data", "price": td_price})
+
+        # Futures e spot possono avere livelli assoluti diversi. Confrontiamo
+        # soprattutto la direzione dell'ultima variazione, non il prezzo assoluto.
+        def ret(rows):
+            if len(rows) < 2 or not rows[-2].get("close"):
+                return None
+            return rows[-1]["close"] / rows[-2]["close"] - 1.0
+
+        y_ret = ret(candles)
+        t_ret = ret(td)
+        if y_ret is not None and t_ret is not None:
+            result["difference_pct"] = abs(y_ret - t_ret) * 100.0
+            same_direction = (y_ret == 0 and t_ret == 0) or (y_ret >= 0 and t_ret >= 0) or (y_ret < 0 and t_ret < 0)
+            result["status"] = "CONFERMATO" if same_direction else "DISCREPANZA DIREZIONALE"
+            return result
+
+        result["status"] = "CONFRONTO PARZIALE"
         return result
-    result["status"] = "YAHOO ONLY"
-    return result
+    except Exception as exc:
+        # Non mostriamo URL/query interne nel messaggio operativo.
+        msg = str(exc).lower()
+        if "404" in msg or "not found" in msg:
+            result["status"] = "YAHOO ONLY (Twelve Data simbolo non disponibile)"
+        elif "401" in msg or "403" in msg or "api key" in msg:
+            result["status"] = "YAHOO ONLY (Twelve Data API key non valida)"
+        else:
+            result["status"] = "YAHOO ONLY (Twelve Data non disponibile)"
+        return result
 
 
 # ============================================================
@@ -1159,7 +1235,7 @@ def analyze_news(name):
             response = requests.get(
                 url,
                 timeout=15,
-                headers={"User-Agent": "Mozilla/5.0 (compatible; CommoditiesBot/6.1)"},
+                headers={"User-Agent": "Mozilla/5.0 (compatible; CommoditiesBot/7.1)"},
             )
             response.raise_for_status()
             root = ET.fromstring(response.text)
@@ -1263,7 +1339,7 @@ def political_impact(name):
     if not articles:
         try:
             url = "https://news.google.com/rss/search?" + urllib.parse.urlencode({"q": query, "hl": "en-US", "gl": "US", "ceid": "US:en"})
-            response = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0 (compatible; CommoditiesBot/6.1)"})
+            response = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0 (compatible; CommoditiesBot/7.1)"})
             response.raise_for_status()
             root = ET.fromstring(response.text)
             for item in root.findall(".//item")[:20]:
@@ -1289,13 +1365,494 @@ def political_impact(name):
 
 
 # ============================================================
+# GLOBAL MARKET INTELLIGENCE ENGINE
+# ============================================================
+
+def _fetch_rss_articles(query, limit=20):
+    import urllib.parse
+    import xml.etree.ElementTree as ET
+    url = "https://news.google.com/rss/search?" + urllib.parse.urlencode({
+        "q": query,
+        "hl": "en-US",
+        "gl": "US",
+        "ceid": "US:en",
+    })
+    response = requests.get(
+        url,
+        timeout=15,
+        headers={"User-Agent": "Mozilla/5.0 (compatible; CommoditiesBot/7.1)"},
+    )
+    response.raise_for_status()
+    root = ET.fromstring(response.text)
+    articles = []
+    for item in root.findall(".//item")[:limit]:
+        articles.append({
+            "title": item.findtext("title", ""),
+            "description": item.findtext("description", ""),
+            "published": item.findtext("pubDate", ""),
+        })
+    return articles
+
+
+def global_market_intelligence():
+    """Scans broad world events once per run and produces a market-wide shock/context score."""
+    articles = []
+    sources = []
+    errors = []
+
+    if NEWS_API_KEY:
+        for query in GLOBAL_NEWS_QUERIES:
+            try:
+                response = requests.get(
+                    NEWS_URL,
+                    params={
+                        "q": query,
+                        "apiKey": NEWS_API_KEY,
+                        "language": "en",
+                        "sortBy": "publishedAt",
+                        "pageSize": 20,
+                    },
+                    timeout=20,
+                )
+                data = response.json()
+                if response.ok and data.get("status") == "ok":
+                    articles.extend(data.get("articles", []) or [])
+                    sources.append("NEWSAPI")
+                else:
+                    errors.append(f"NewsAPI {response.status_code}")
+            except Exception as exc:
+                errors.append(f"NewsAPI: {exc}")
+
+    # Google RSS is always a fallback and is also used to broaden coverage.
+    if len(articles) < 10:
+        for query in GLOBAL_NEWS_QUERIES:
+            try:
+                articles.extend(_fetch_rss_articles(query, 12))
+                sources.append("GOOGLE RSS")
+            except Exception as exc:
+                errors.append(f"RSS: {exc}")
+
+    # Deduplicate by title.
+    unique = []
+    seen = set()
+    for article in articles:
+        title = str(article.get("title", "")).strip()
+        key = title.lower()
+        if title and key not in seen:
+            seen.add(key)
+            unique.append(article)
+
+    shock_hits = []
+    total = 0
+    for article in unique[:100]:
+        text = f"{article.get('title', '')} {article.get('description', '')}".lower()
+        pos = sum(1 for term in GLOBAL_BULLISH_TERMS if term in text)
+        neg = sum(1 for term in GLOBAL_BEARISH_TERMS if term in text)
+        if pos > neg:
+            total += 1
+        elif neg > pos:
+            total -= 1
+        hits = [term for term in SHOCK_TERMS if term in text]
+        if hits:
+            shock_hits.append({"title": article.get("title", ""), "terms": hits[:4]})
+
+    score = clamp(total / max(min(len(unique), 100), 1), -1, 1)
+    shock_intensity = clamp(len(shock_hits) / 8.0, 0, 1)
+    if shock_intensity >= 0.75:
+        mode = "SHOCK"
+    elif shock_intensity >= 0.35:
+        mode = "ALERT"
+    else:
+        mode = "NORMAL"
+
+    return {
+        "score": score,
+        "articles": unique[:100],
+        "count": len(unique[:100]),
+        "shock_count": len(shock_hits),
+        "shock_intensity": shock_intensity,
+        "mode": mode,
+        "top_shocks": shock_hits[:5],
+        "source": "+".join(sorted(set(sources))) if sources else "NONE",
+        "status": "OK" if unique else (" | ".join(errors)[:220] or "NESSUNA FONTE"),
+    }
+
+
+def commodity_global_impact(name, global_intel):
+    """Maps broad events to a conservative commodity-specific context."""
+    base = safe_float(global_intel.get("score")) or 0.0
+    text = " ".join(
+        str(a.get("title", "")) + " " + str(a.get("description", ""))
+        for a in global_intel.get("articles", [])[:50]
+    ).lower()
+
+    positive = {
+        "Oro": {"safe haven", "war", "attack", "sanctions", "risk-off", "rate cuts", "weaker dollar"},
+        "Argento": {"industrial demand", "stimulus", "weaker dollar", "rate cuts", "risk-off"},
+        "Petrolio WTI": {"opec", "supply disruption", "hormuz", "oil", "crude", "sanctions", "attack"},
+        "Petrolio Brent": {"opec", "supply disruption", "hormuz", "oil", "brent", "sanctions", "attack"},
+        "Gas Naturale": {"lng", "gas", "cold", "heat", "supply disruption", "sanctions"},
+        "Rame": {"china", "stimulus", "industrial demand", "supply disruption", "mine"},
+        "Grano": {"wheat", "grain", "drought", "flood", "ukraine", "russia", "supply disruption"},
+        "Mais": {"corn", "maize", "drought", "flood", "crop", "supply disruption"},
+        "Caffè": {"coffee", "brazil", "drought", "frost", "crop", "supply disruption"},
+    }
+    negative = {
+        "Oro": {"risk-on", "peace", "ceasefire", "strong dollar"},
+        "Argento": {"strong dollar", "recession", "industrial slowdown"},
+        "Petrolio WTI": {"ceasefire", "oversupply", "demand slowdown", "recession"},
+        "Petrolio Brent": {"ceasefire", "oversupply", "demand slowdown", "recession"},
+        "Gas Naturale": {"oversupply", "warm weather", "demand slowdown"},
+        "Rame": {"china slowdown", "recession", "industrial slowdown", "strong dollar"},
+        "Grano": {"harvest increase", "oversupply", "strong dollar"},
+        "Mais": {"crop increase", "oversupply", "strong dollar"},
+        "Caffè": {"harvest increase", "oversupply", "strong dollar"},
+    }
+
+    pos_hits = sum(1 for term in positive.get(name, set()) if term in text)
+    neg_hits = sum(1 for term in negative.get(name, set()) if term in text)
+    event_bias = clamp((pos_hits - neg_hits) / 6.0, -1, 1)
+    score = clamp(0.35 * base + 0.65 * event_bias, -1, 1)
+    direction = "FAVOREVOLE" if score >= 0.20 else "SFAVOREVOLE" if score <= -0.20 else "NEUTRALE"
+    return {
+        "score": score,
+        "direction": direction,
+        "mode": global_intel.get("mode", "NORMAL"),
+        "shock_intensity": global_intel.get("shock_intensity", 0.0),
+        "count": global_intel.get("count", 0),
+    }
+
+
+# ============================================================
+# SESSION / HISTORICAL INTRADAY ENGINE
+# ============================================================
+
+def session_engine(name, symbol, current_direction="NONE"):
+    """Four intraday windows; weights come from historical 1h returns, not fixed guesses."""
+    try:
+        hourly = get_data(symbol, "1h", 4000)
+    except Exception as exc:
+        return {
+            "bands": {}, "best_band": "N/D", "current_band": "N/D",
+            "quality": 50.0, "allocation_pct": 0.25,
+            "status": f"NON DISPONIBILE: {str(exc)[:120]}"
+        }
+
+    rows = {k: [] for k in SESSION_BANDS}
+    now_utc = datetime.now(timezone.utc)
+    # Current hour converted to the same UTC bucket. User-facing label is Italian time;
+    # using UTC internally avoids DST errors. The four windows are applied to local Italy.
+    try:
+        from zoneinfo import ZoneInfo
+        local_now = now_utc.astimezone(ZoneInfo("Europe/Rome"))
+        current_hour = local_now.hour
+        current_band = next((b for b, (start, end) in SESSION_BANDS.items() if start <= current_hour < end), "SERA")
+    except Exception:
+        current_hour = now_utc.hour
+        current_band = next((b for b, (start, end) in SESSION_BANDS.items() if start <= current_hour < end), "SERA")
+
+    for i in range(len(hourly) - 3):
+        c = hourly[i]
+        n = hourly[i + 3]
+        try:
+            dt = datetime.fromisoformat(c["datetime"].replace("Z", "+00:00"))
+            from zoneinfo import ZoneInfo
+            hour_local = dt.astimezone(ZoneInfo("Europe/Rome")).hour
+        except Exception:
+            continue
+        band = next((b for b, (start, end) in SESSION_BANDS.items() if start <= hour_local < end), "SERA")
+        close = c.get("close")
+        future = n.get("close")
+        if close:
+            rows[band].append((future / close) - 1)
+
+    bands = {}
+    for band, values in rows.items():
+        if len(values) < 20:
+            bands[band] = {"samples": len(values), "win_rate": 0.50, "avg_return": 0.0, "quality": 50.0, "allocation": 0.25}
+            continue
+        if current_direction == "SHORT":
+            directional = [-x for x in values]
+        else:
+            directional = values
+        win_rate = sum(1 for x in directional if x > 0) / len(directional)
+        avg_return = mean(directional)
+        vol = std(values)
+        edge = clamp((win_rate - 0.50) * 2, -1, 1)
+        reward_risk = clamp(abs(avg_return) / max(vol, 1e-8), 0, 1)
+        quality = clamp(50 + edge * 35 + reward_risk * 15, 0, 100)
+        bands[band] = {
+            "samples": len(values), "win_rate": win_rate,
+            "avg_return": avg_return, "quality": quality,
+            "allocation": 0.25,
+        }
+
+    qualities = {b: v["quality"] for b, v in bands.items()}
+    total_quality = sum(max(q, 1) for q in qualities.values()) or 1
+    for band in bands:
+        bands[band]["allocation"] = qualities[band] / total_quality
+
+    best_band = max(bands, key=lambda b: bands[b]["quality"])
+    worst_band = min(bands, key=lambda b: bands[b]["quality"])
+    current_quality = bands[current_band]["quality"]
+    # Allocation is a share of the daily risk budget, capped for safety.
+    raw_alloc = bands[current_band]["allocation"] * 100
+    allocation_pct = clamp(raw_alloc * (current_quality / 100), 5, 50)
+
+    return {
+        "bands": bands,
+        "best_band": best_band,
+        "worst_band": worst_band,
+        "exit_band": worst_band,
+        "current_band": current_band,
+        "quality": current_quality,
+        "allocation_pct": allocation_pct,
+        "status": "OK",
+        "sample_hours": len(hourly),
+    }
+
+
+# ============================================================
+# CYCLICAL MARKET ENGINE
+# ============================================================
+
+def cyclical_market_engine(candles, direction="NONE"):
+    """Misura cicli intraday, settimanali, mensili e stagionali.
+    Usa solo osservazioni passate rispetto all'ultima candela disponibile.
+    Se il campione è insufficiente, riduce il peso invece di inventare un edge.
+    """
+    if len(candles) < 120:
+        return {"score": 0.0, "direction": "NEUTRALE", "confidence": 0.0,
+                "intraday": {}, "weekly": {}, "monthly": {}, "seasonal": {},
+                "samples": 0, "status": "CAMPIONE INSUFFICIENTE"}
+
+    def parse_dt(row):
+        try:
+            return datetime.fromisoformat(str(row["datetime"]).replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    current_dt = parse_dt(candles[-1])
+    if current_dt is None:
+        return {"score": 0.0, "direction": "NEUTRALE", "confidence": 0.0,
+                "intraday": {}, "weekly": {}, "monthly": {}, "seasonal": {},
+                "samples": 0, "status": "DATE NON DISPONIBILE"}
+
+    # Il ciclo intraday viene stimato su rendimenti a 3 ore, raggruppati per ora locale.
+    try:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo("Europe/Rome")
+    except Exception:
+        tz = timezone.utc
+
+    horizons = []
+    for i in range(len(candles) - 3):
+        d = parse_dt(candles[i])
+        c = safe_float(candles[i].get("close"))
+        f = safe_float(candles[i + 3].get("close"))
+        if d is None or not c or f is None:
+            continue
+        horizons.append((d, f / c - 1.0))
+
+    current_local = current_dt.astimezone(tz)
+    current_hour = current_local.hour
+    hour_rows = []
+    for d, r in horizons:
+        if d.astimezone(tz).hour == current_hour:
+            hour_rows.append(r)
+    if direction == "SHORT":
+        hour_rows = [-r for r in hour_rows]
+
+    # Weekly cycle: same weekday, forward 1 trading day.
+    weekly_rows = []
+    for i in range(len(candles) - 24):
+        d = parse_dt(candles[i])
+        if d is None or d.astimezone(tz).weekday() != current_local.weekday():
+            continue
+        c = safe_float(candles[i].get("close")); f = safe_float(candles[i + 24].get("close"))
+        if c and f:
+            weekly_rows.append(f / c - 1.0)
+    if direction == "SHORT":
+        weekly_rows = [-r for r in weekly_rows]
+
+    # Monthly cycle: same month/day bucket (±7 days), 5-day forward return.
+    seasonal_rows = []
+    target_doy = current_local.timetuple().tm_yday
+    for i in range(20, len(candles) - 5):
+        d = parse_dt(candles[i])
+        if d is None:
+            continue
+        local = d.astimezone(tz)
+        doy = local.timetuple().tm_yday
+        dist = abs(doy - target_doy)
+        dist = min(dist, 366 - dist)
+        if dist <= 7:
+            c = safe_float(candles[i].get("close")); f = safe_float(candles[i + 5].get("close"))
+            if c and f:
+                seasonal_rows.append(f / c - 1.0)
+    if direction == "SHORT":
+        seasonal_rows = [-r for r in seasonal_rows]
+
+    monthly_rows = []
+    for i in range(len(candles) - 5):
+        d = parse_dt(candles[i])
+        if d is None or d.astimezone(tz).day != current_local.day:
+            continue
+        c = safe_float(candles[i].get("close")); f = safe_float(candles[i + 5].get("close"))
+        if c and f:
+            monthly_rows.append(f / c - 1.0)
+    if direction == "SHORT":
+        monthly_rows = [-r for r in monthly_rows]
+
+    def summarize(rows):
+        if len(rows) < 10:
+            return {"samples": len(rows), "win_rate": 0.50, "avg_return": 0.0, "quality": 50.0}
+        win = sum(1 for x in rows if x > 0) / len(rows)
+        avg = mean(rows)
+        vol = std(rows)
+        edge = clamp((win - 0.50) * 2.0, -1, 1)
+        rr = clamp(abs(avg) / max(vol, 1e-8), 0, 1)
+        quality = clamp(50 + edge * 35 + rr * 15, 0, 100)
+        return {"samples": len(rows), "win_rate": win, "avg_return": avg, "quality": quality}
+
+    intraday = summarize(hour_rows)
+    weekly = summarize(weekly_rows)
+    monthly = summarize(monthly_rows)
+    seasonal = summarize(seasonal_rows)
+
+    parts = [
+        (intraday, 0.35), (weekly, 0.20), (monthly, 0.15), (seasonal, 0.30)
+    ]
+    valid = [(x, w) for x, w in parts if x["samples"] >= 10]
+    if not valid:
+        return {"score": 0.0, "direction": "NEUTRALE", "confidence": 0.0,
+                "intraday": intraday, "weekly": weekly, "monthly": monthly,
+                "seasonal": seasonal, "samples": 0, "status": "CAMPIONE INSUFFICIENTE"}
+
+    total_w = sum(w for _, w in valid)
+    quality = sum(x["quality"] * w for x, w in valid) / total_w
+    signed_edges = []
+    for x, w in valid:
+        signed_edges.append(((x["win_rate"] - 0.50) * 2.0, w))
+    edge = sum(e * w for e, w in signed_edges) / total_w
+    score = clamp(edge, -1, 1)
+    cyc_direction = "LONG" if score >= 0.10 else "SHORT" if score <= -0.10 else "NEUTRALE"
+    confidence = clamp(abs(score) * 100 * min(1.0, len(valid) / 4), 0, 100)
+
+    return {
+        "score": score,
+        "direction": cyc_direction,
+        "confidence": confidence,
+        "quality": quality,
+        "intraday": intraday,
+        "weekly": weekly,
+        "monthly": monthly,
+        "seasonal": seasonal,
+        "samples": sum(x["samples"] for x, _ in valid),
+        "status": "OK",
+    }
+
+
+def risk_benefit_engine(analysis, cyclical):
+    """Valuta opportunità e rischio. Non usa solo lo score tecnico."""
+    direction = analysis.get("signal")
+    if direction not in ("LONG", "SHORT"):
+        direction = analysis.get("model_signal")
+    price = safe_float(analysis.get("price"))
+    stop = safe_float(analysis.get("stop"))
+    tp3 = safe_float(analysis.get("tp3"))
+    if not price or not stop or not tp3 or direction not in ("LONG", "SHORT"):
+        return {"opportunity": 0.0, "risk": 100.0, "reward_risk": 0.0, "score": 0.0, "label": "NON OPERATIVO"}
+
+    risk_dist = abs(price - stop)
+    reward_dist = abs(tp3 - price)
+    rr = reward_dist / max(risk_dist, 1e-8)
+    rr_score = clamp((rr - 1.0) / 3.0, 0, 1) * 100
+
+    pressure = safe_float(analysis.get("pressure_score"))
+    if pressure is None:
+        # proxy conservativo: la pressione MTF/fast non viene trattata come order book reale
+        pressure = clamp(50 + analysis.get("mtf_bias", 0) * 50, 0, 100)
+    vol_pct = (safe_float(analysis.get("atr")) or 0) / max(price, 1e-8)
+    vol_risk = clamp(vol_pct / 0.06, 0, 1) * 100
+    conflict_risk = analysis.get("fast_conflicts", 0) * 15 + analysis.get("structural_opposite", 0) * 20
+    news_risk = 35 if abs(safe_float(analysis.get("news", {}).get("score")) or 0) < 0.20 else 0
+    shock_risk = (safe_float(analysis.get("global_impact", {}).get("shock_intensity")) or 0) * 100
+    risk = clamp(0.45 * vol_risk + 0.20 * conflict_risk + 0.10 * news_risk + 0.25 * shock_risk, 0, 100)
+
+    opportunity = clamp(
+        0.30 * analysis.get("score", 0)
+        + 0.20 * analysis.get("confidence", 0)
+        + 0.15 * analysis.get("quality", 0)
+        + 0.15 * pressure
+        + 0.10 * rr_score
+        + 0.10 * (abs(cyclical.get("score", 0)) * 100),
+        0, 100
+    )
+    final = clamp(0.60 * opportunity + 0.40 * rr_score - 0.35 * risk, 0, 100)
+    label = "ECCELLENTE" if final >= 80 else "ALTO" if final >= 65 else "MEDIO" if final >= 50 else "BASSO"
+    return {"opportunity": opportunity, "risk": risk, "reward_risk": rr,
+            "rr_score": rr_score, "score": final, "label": label}
+
+
+# ============================================================
+# RISK / CONFLUENCE / SHOCK ENGINE
+# ============================================================
+
+def risk_engine(analysis, session, global_impact):
+    score = analysis.get("score", 0)
+    confidence = analysis.get("confidence", 0)
+    session_quality = session.get("quality", 50)
+    shock = global_impact.get("shock_intensity", 0)
+    confluence = 0
+    checks = []
+    for key, good in [
+        ("tecnica", analysis.get("structural_same", 0) >= 2),
+        ("modello", analysis.get("model_signal") == analysis.get("signal") and analysis.get("signal") in ("LONG", "SHORT")),
+        ("news", abs(safe_float(analysis.get("news", {}).get("score")) or 0) >= 0.20),
+        ("political", abs(safe_float(analysis.get("political", {}).get("score")) or 0) >= 0.20),
+        ("sessione", session_quality >= 65),
+        ("storico", analysis.get("repetition", {}).get("frequency", 0) >= 0.55),
+    ]:
+        checks.append((key, good))
+        confluence += 1 if good else 0
+
+    market_quality = clamp(
+        score * 0.45 + confidence * 0.20 + session_quality * 0.20 + confluence / 6 * 15,
+        0, 100
+    )
+    if shock >= 0.75:
+        mode = "SHOCK"
+        risk_pct = 0.0
+    elif shock >= 0.35:
+        mode = "ALERT"
+        risk_pct = min(MAX_RISK_PER_TRADE_PCT, 0.25)
+    else:
+        mode = "NORMAL"
+        risk_pct = min(MAX_RISK_PER_TRADE_PCT, session.get("allocation_pct", 25) / 100 * MAX_RISK_PER_TRADE_PCT)
+        if market_quality < 60:
+            risk_pct *= 0.5
+
+    return {
+        "confluence": confluence,
+        "confluence_total": 6,
+        "market_quality": market_quality,
+        "risk_pct": risk_pct,
+        "mode": mode,
+        "checks": checks,
+    }
+
+
+# ============================================================
 # SIGNAL
 # ============================================================
 
-def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None):
+def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None, commodity_name=None, global_impact=None, session=None):
     """Gold Engine instrument-agnostic: modello + MTF + contesto."""
     features = build_features(candles)
     political = political or {"score": 0.0, "direction": "NEUTRALE", "count": 0}
+    global_impact = global_impact or {"score": 0.0, "direction": "NEUTRALE", "mode": "NORMAL", "shock_intensity": 0.0, "count": 0}
+    session = session or {"quality": 50.0, "allocation_pct": 25.0, "current_band": "N/D", "best_band": "N/D", "bands": {}}
     news = news or {"score": 0.0, "label": "NON DISPONIBILI", "count": 0, "status": "N/D", "source": "NONE"}
 
     if features is None or model is None:
@@ -1351,11 +1908,18 @@ def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None):
     structural_score = structural_same * 2 - structural_opposite * 2
 
     repetition = historical_repetition(candles)
+    cyclical = cyclical_market_engine(candles, main_direction)
     repetition_impact = 0.0
     if repetition["direction"] == main_direction:
         repetition_impact = repetition["frequency"] * 6
     elif repetition["direction"] not in ("NEUTRALE", main_direction):
         repetition_impact = -repetition["frequency"] * 6
+
+    cyclical_impact = 0.0
+    if cyclical["direction"] == main_direction:
+        cyclical_impact = abs(cyclical["score"]) * 7
+    elif cyclical["direction"] not in ("NEUTRALE", main_direction):
+        cyclical_impact = -abs(cyclical["score"]) * 7
 
     # --------------------------------------------------------
     # 4) CONFIDENCE E SCORE DEL SETUP
@@ -1379,14 +1943,20 @@ def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None):
     elif main_direction == "SHORT":
         context -= news_impact * 5 + usd_impact * 3 + political_score * 4
 
+    global_score = safe_float(global_impact.get("score")) or 0.0
+    if main_direction == "SHORT":
+        global_score = -global_score
+    context += global_score * 5
+
     score = clamp(
-        direction_score * 0.42
-        + quality * 0.18
-        + confidence * 0.16
+        direction_score * 0.40
+        + quality * 0.17
+        + confidence * 0.15
         + structural_score * 4
         + fast_same * 3
         - fast_opposite * 2
         + repetition_impact
+        + cyclical_impact
         + context,
         0,
         100,
@@ -1426,18 +1996,28 @@ def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None):
         grade = "NEUTRALE"
 
     price = candles[-1]["close"]
-    current_atr = atr(candles, 14) or price * 0.01
+    raw_atr = atr(candles, 14) or price * 0.01
+    profile = LEVEL_PROFILES.get(commodity_name or "", {})
+    max_atr_pct = profile.get("max_atr_pct", 0.05)
+    current_atr = min(raw_atr, price * max_atr_pct)
 
-    if operational_signal == "LONG":
-        stop = price - current_atr * STOP_ATR
-        tp1 = price + current_atr * TP1_ATR
-        tp2 = price + current_atr * TP2_ATR
-        tp3 = price + current_atr * TP3_ATR
-    elif operational_signal == "SHORT":
-        stop = price + current_atr * STOP_ATR
-        tp1 = price - current_atr * TP1_ATR
-        tp2 = price - current_atr * TP2_ATR
-        tp3 = price - current_atr * TP3_ATR
+    # I livelli iniziali sono calibrati per strumento. La gestione Gold Engine
+    # (BE dopo TP1, stop a TP1 dopo TP2, chiusura a TP3) non cambia.
+    if operational_signal in ("LONG", "SHORT"):
+        sl_pct = profile.get("sl_pct", min((current_atr / price) * STOP_ATR, 0.025))
+        tp1_pct = profile.get("tp1_pct", min((current_atr / price) * TP1_ATR, 0.035))
+        tp2_pct = profile.get("tp2_pct", min((current_atr / price) * TP2_ATR, 0.055))
+        tp3_pct = profile.get("tp3_pct", min((current_atr / price) * TP3_ATR, 0.080))
+        if operational_signal == "LONG":
+            stop = price * (1 - sl_pct)
+            tp1 = price * (1 + tp1_pct)
+            tp2 = price * (1 + tp2_pct)
+            tp3 = price * (1 + tp3_pct)
+        else:
+            stop = price * (1 + sl_pct)
+            tp1 = price * (1 - tp1_pct)
+            tp2 = price * (1 - tp2_pct)
+            tp3 = price * (1 - tp3_pct)
     else:
         stop = tp1 = tp2 = tp3 = None
 
@@ -1447,6 +2027,29 @@ def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None):
         and confidence >= 68
         and structural_same >= 2
         and fast_opposite == 0
+    )
+
+    risk = risk_engine(
+        {
+            "score": score, "confidence": confidence, "structural_same": structural_same,
+            "model_signal": model_direction, "signal": operational_signal,
+            "news": news, "political": political, "repetition": repetition,
+        }, session, global_impact
+    )
+    if risk["mode"] == "SHOCK":
+        strong_confirmation = False
+        if operational_signal in ("LONG", "SHORT"):
+            operational_signal = "WAIT"
+
+    risk_benefit = risk_benefit_engine(
+        {
+            "signal": operational_signal, "model_signal": model_direction,
+            "price": price, "stop": stop, "tp3": tp3, "score": score,
+            "confidence": confidence, "quality": quality, "mtf_bias": mtf_bias,
+            "atr": current_atr, "fast_conflicts": fast_opposite,
+            "structural_opposite": structural_opposite, "news": news,
+            "global_impact": global_impact,
+        }, cyclical
     )
 
     return {
@@ -1476,6 +2079,11 @@ def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None):
         "structural_opposite": structural_opposite,
         "fast_confirmations": fast_same,
         "fast_conflicts": fast_opposite,
+        "global_impact": global_impact,
+        "session": session,
+        "risk": risk,
+        "cyclical": cyclical,
+        "risk_benefit": risk_benefit,
     }
 
 
@@ -1601,12 +2209,12 @@ def build_telegram(ranked, best, position_message=None):
     a = best["analysis"]
 
     lines = [
-        "🌍 COMMODITIES BOT v6.4",
+        "🌍 COMMODITIES BOT v7.1",
         "",
         f"🏆 MIGLIOR SETUP",
         f"{icon_for_signal(a['signal'])} {best['name']}",
         f"🎯 {a['signal']} | {a['grade']}",
-        f"📊 Score: {a['score']:.0f}/100",
+        f"📊 Score: {a['score']:.0f}/100 | R/B {a.get('risk_benefit', {}).get('score', 0):.0f}/100",
         "",
         f"💰 Prezzo: {a['price']:.4f}",
         f"🔎 Dati: {best.get('source_check', {}).get('status', 'N/D')}",
@@ -1622,6 +2230,13 @@ def build_telegram(ranked, best, position_message=None):
         f"🔄 Storico: {a['repetition']['direction']} "
         f"({a['repetition']['frequency'] * 100:.0f}% "
         f"su {a['repetition']['samples']} casi)",
+        f"🌍 Global Market: {a.get('global_impact', {}).get('direction', 'NEUTRALE')} | {a.get('global_impact', {}).get('mode', 'NORMAL')} | {a.get('global_impact', {}).get('count', 0)} news",
+        f"⏰ Fascia attuale: {a.get('session', {}).get('current_band', 'N/D')} | Entry migliore: {a.get('session', {}).get('best_band', 'N/D')}",
+        f"🚪 Exit timing: uscita/gestione prioritaria prima di {a.get('session', {}).get('exit_band', 'N/D')}",
+        f"🧠 Market Quality: {a.get('risk', {}).get('market_quality', 0):.0f}/100 | Confluenza {a.get('risk', {}).get('confluence', 0)}/{a.get('risk', {}).get('confluence_total', 6)}",
+        f"🔄 Ciclicità: {a.get('cyclical', {}).get('direction', 'N/D')} | qualità {a.get('cyclical', {}).get('quality', 0):.0f}/100",
+        f"⚖️ Rischio/Beneficio: {a.get('risk_benefit', {}).get('reward_risk', 0):.2f} | rischio {a.get('risk_benefit', {}).get('risk', 0):.0f}/100",
+        f"💰 Rischio consigliato: {a.get('risk', {}).get('risk_pct', 0):.2f}% del budget rischio",
         "",
     ]
 
@@ -1661,6 +2276,15 @@ def build_telegram(ranked, best, position_message=None):
     return "\n".join(lines)
 
 
+def analysis_direction_hint(timeframes):
+    vals = [timeframes.get(tf, {}).get("direction", "NONE") for tf in ("4H", "1H", "15m")]
+    if vals.count("LONG") >= 2:
+        return "LONG"
+    if vals.count("SHORT") >= 2:
+        return "SHORT"
+    return "NONE"
+
+
 # ============================================================
 # MAIN
 # ============================================================
@@ -1668,13 +2292,16 @@ def build_telegram(ranked, best, position_message=None):
 def main():
     print()
     print("=" * 70)
-    print("🌍 COMMODITIES BOT v6.4")
-    print("RANKING + GOLD ENGINE v15.1 + MTF + NEWS FALLBACK + USD + POLITICAL IMPACT")
+    print("🌍 COMMODITIES BOT v7.1")
+    print("RANKING RISK/BENEFIT + CYCLICAL ENGINE + GOLD ENGINE v15.1 + GLOBAL INTELLIGENCE + SESSION ENGINE + RISK ENGINE")
     print("=" * 70)
     print()
 
     position = load_position()
     usd = analyze_usd()
+    print("🌍 Avvio Global Market Intelligence...")
+    global_intel = global_market_intelligence()
+    print(f"   📰 Global news: {global_intel['count']} | mode {global_intel['mode']} | shock {global_intel['shock_intensity']:.2f}")
 
     results = []
     resolved_symbols = resolve_commodity_symbols()
@@ -1707,9 +2334,12 @@ def main():
             timeframes = get_multitimeframe(symbol)
             news = analyze_news(name)
             political = political_impact(name)
+            global_impact = commodity_global_impact(name, global_intel)
+            session = session_engine(name, symbol, "LONG" if analysis_direction_hint(timeframes) == "LONG" else "SHORT" if analysis_direction_hint(timeframes) == "SHORT" else "NONE")
 
             analysis = analyze(
-                candles, dataset, model, bt, usd, news, timeframes, political
+                candles, dataset, model, bt, usd, news, timeframes, political, commodity_name=name,
+                global_impact=global_impact, session=session
             )
             if analysis is None:
                 raise RuntimeError("Analisi Gold Engine non disponibile")
@@ -1726,7 +2356,9 @@ def main():
 
             print(
                 f"   ✅ ANALIZZATA | MODELLO {analysis['model_signal']} | "
-                f"OPERATIVO {analysis['signal']} | SCORE {analysis['score']:.0f}"
+                f"OPERATIVO {analysis['signal']} | SCORE {analysis['score']:.0f} | "
+                f"QUALITÀ {analysis['risk']['market_quality']:.0f} | "
+                f"SESSIONE {analysis['session']['current_band']}"
             )
 
         except Exception as error:
@@ -1756,6 +2388,11 @@ def main():
                     "fast_confirmations": 0,
                     "structural_same": 0,
                     "strong_confirmation": False,
+                    "global_impact": global_impact,
+                    "session": {"current_band": "N/D", "best_band": "N/D", "worst_band": "N/D", "exit_band": "N/D", "quality": 0, "allocation_pct": 0, "bands": {}},
+                    "risk": {"confluence": 0, "confluence_total": 6, "market_quality": 0, "risk_pct": 0, "mode": "ERROR", "checks": []},
+                    "cyclical": {"direction": "N/D", "quality": 0, "score": 0},
+                    "risk_benefit": {"score": 0, "risk": 100, "reward_risk": 0, "label": "N/D"},
                 },
                 "backtest": {},
                 "available": False,
@@ -1769,11 +2406,15 @@ def main():
     # RANKING
     # ========================================================
 
-    ranked = sorted(
-        results,
-        key=lambda x: x["analysis"]["score"],
-        reverse=True,
-    )
+    # Ranking finale: non basta il segnale; privilegiamo opportunità, rischio e R/R.
+    for item in results:
+        if item.get("available"):
+            rb = item["analysis"].get("risk_benefit", {})
+            item["ranking_score"] = rb.get("score", item["analysis"].get("score", 0))
+        else:
+            item["ranking_score"] = -1
+
+    ranked = sorted(results, key=lambda x: x.get("ranking_score", -1), reverse=True)
     available_ranked = [x for x in ranked if x.get("available") and x["analysis"]["score"] >= 0]
     if not available_ranked:
         raise RuntimeError("Nessuna commodity dispone di dati sufficienti per il Gold Engine. Controllare simboli/API quota.")
@@ -1830,7 +2471,7 @@ def main():
     # ========================================================
 
     if not position and best["analysis"]["signal"] in ("LONG", "SHORT"):
-        second_score = available_ranked[1]["analysis"]["score"] if len(available_ranked) > 1 else 0
+        second_score = available_ranked[1].get("ranking_score", available_ranked[1]["analysis"]["score"]) if len(available_ranked) > 1 else 0
         a = best["analysis"]
 
         # Apertura solo se:
@@ -1842,9 +2483,12 @@ def main():
             a["score"] >= MIN_SCORE
             and a["quality"] >= MIN_QUALITY
             and a["confidence"] >= MIN_CONFIDENCE
-            and a["score"] - second_score >= MIN_RANK_MARGIN
+            and a.get("risk_benefit", {}).get("score", a["score"]) - second_score >= MIN_RANK_MARGIN
             and a["fast_conflicts"] == 0
             and a["strong_confirmation"]
+            and a.get("risk", {}).get("mode") == "NORMAL"
+            and a.get("risk", {}).get("market_quality", 0) >= 60
+            and a.get("risk", {}).get("risk_pct", 0) > 0
         ):
             position = {
                 "name": best["name"],
@@ -1855,6 +2499,7 @@ def main():
                 "tp1": a["tp1"],
                 "tp2": a["tp2"],
                 "tp3": a["tp3"],
+                "risk_pct": a.get("risk", {}).get("risk_pct", 0.0),
                 "break_even": False,
                 "tp2_reached": False,
                 "opened_at": datetime.now(timezone.utc).isoformat(),
@@ -1915,7 +2560,7 @@ def main():
             f"{i}. {icon_for_signal(x['signal'])} "
             f"{item['name']} | "
             f"{x['signal']} | "
-            f"{x['score']:.0f}/100 | "
+            f"R/B {item.get('ranking_score', x['score']):.0f}/100 | "
             f"SHORT {x['short_probability'] * 100:.1f}% | "
             f"storico {x['repetition']['direction']} | fonte {item.get('source_check', {}).get('status', 'N/D')}"
         )
