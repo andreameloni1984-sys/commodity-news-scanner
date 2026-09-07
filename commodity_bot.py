@@ -1607,48 +1607,100 @@ def global_market_intelligence():
 
 
 def commodity_global_impact(name, global_intel):
-    """Maps broad events to a conservative commodity-specific context."""
+    """Impatto globale specifico per commodity.
+    Uno shock generale non blocca automaticamente tutte le materie prime:
+    l'evento deve essere rilevante per lo strumento e sufficientemente confermato.
+    """
     base = safe_float(global_intel.get("score")) or 0.0
-    text = " ".join(
-        str(a.get("title", "")) + " " + str(a.get("description", ""))
-        for a in global_intel.get("articles", [])[:50]
-    ).lower()
+    articles = global_intel.get("articles", []) or []
 
-    positive = {
-        "Oro": {"safe haven", "war", "attack", "sanctions", "risk-off", "rate cuts", "weaker dollar"},
-        "Argento": {"industrial demand", "stimulus", "weaker dollar", "rate cuts", "risk-off"},
-        "Petrolio WTI": {"opec", "supply disruption", "hormuz", "oil", "crude", "sanctions", "attack"},
-        "Petrolio Brent": {"opec", "supply disruption", "hormuz", "oil", "brent", "sanctions", "attack"},
-        "Gas Naturale": {"lng", "gas", "cold", "heat", "supply disruption", "sanctions"},
-        "Rame": {"china", "stimulus", "industrial demand", "supply disruption", "mine"},
-        "Grano": {"wheat", "grain", "drought", "flood", "ukraine", "russia", "supply disruption"},
-        "Mais": {"corn", "maize", "drought", "flood", "crop", "supply disruption"},
-        "Caffè": {"coffee", "brazil", "drought", "frost", "crop", "supply disruption"},
+    profiles = {
+        "Oro": {"keys": {"gold", "safe haven", "war", "attack", "sanctions", "risk-off", "rate cuts", "weaker dollar", "central bank"},
+                "shock": {"war", "attack", "missile", "invasion", "sanctions", "bank collapse", "market crash"}},
+        "Argento": {"keys": {"silver", "industrial demand", "stimulus", "weaker dollar", "rate cuts", "risk-off"},
+                    "shock": {"war", "attack", "supply disruption", "market crash"}},
+        "Petrolio WTI": {"keys": {"opec", "oil", "crude", "hormuz", "supply disruption", "sanctions", "attack", "brent"},
+                         "shock": {"hormuz closed", "strait closed", "supply disruption", "opec emergency", "attack", "missile", "war"}},
+        "Petrolio Brent": {"keys": {"opec", "oil", "crude", "hormuz", "supply disruption", "sanctions", "attack", "brent"},
+                           "shock": {"hormuz closed", "strait closed", "supply disruption", "opec emergency", "attack", "missile", "war"}},
+        "Gas Naturale": {"keys": {"lng", "natural gas", "gas", "cold", "heat", "supply disruption", "sanctions"},
+                          "shock": {"supply disruption", "lng disruption", "pipeline", "explosion", "war"}},
+        "Rame": {"keys": {"copper", "china", "stimulus", "industrial demand", "supply disruption", "mine"},
+                 "shock": {"mine", "mine strike", "supply disruption", "earthquake", "flood", "war"}},
+        "Grano": {"keys": {"wheat", "grain", "drought", "flood", "ukraine", "russia", "supply disruption"},
+                  "shock": {"drought", "flood", "crop failure", "supply disruption", "war"}},
+        "Mais": {"keys": {"corn", "maize", "drought", "flood", "crop", "supply disruption"},
+                 "shock": {"drought", "flood", "crop failure", "supply disruption"}},
+        "Caffè": {"keys": {"coffee", "brazil", "drought", "frost", "crop", "supply disruption"},
+                  "shock": {"drought", "frost", "crop failure", "supply disruption"}},
     }
-    negative = {
-        "Oro": {"risk-on", "peace", "ceasefire", "strong dollar"},
-        "Argento": {"strong dollar", "recession", "industrial slowdown"},
-        "Petrolio WTI": {"ceasefire", "oversupply", "demand slowdown", "recession"},
-        "Petrolio Brent": {"ceasefire", "oversupply", "demand slowdown", "recession"},
-        "Gas Naturale": {"oversupply", "warm weather", "demand slowdown"},
-        "Rame": {"china slowdown", "recession", "industrial slowdown", "strong dollar"},
-        "Grano": {"harvest increase", "oversupply", "strong dollar"},
-        "Mais": {"crop increase", "oversupply", "strong dollar"},
-        "Caffè": {"harvest increase", "oversupply", "strong dollar"},
-    }
+    prof=profiles.get(name, {"keys":set(), "shock":set()})
+    relevant=[]
+    relevant_shocks=[]
+    for a in articles[:120]:
+        text=(str(a.get("title", ""))+" "+str(a.get("description", ""))).lower()
+        if any(k in text for k in prof["keys"]):
+            relevant.append(a)
+            hits=[k for k in prof["shock"] if k in text]
+            if hits:
+                relevant_shocks.append((a,hits))
 
-    pos_hits = sum(1 for term in positive.get(name, set()) if term in text)
-    neg_hits = sum(1 for term in negative.get(name, set()) if term in text)
-    event_bias = clamp((pos_hits - neg_hits) / 6.0, -1, 1)
-    score = clamp(0.35 * base + 0.65 * event_bias, -1, 1)
-    direction = "FAVOREVOLE" if score >= 0.20 else "SFAVOREVOLE" if score <= -0.20 else "NEUTRALE"
-    return {
-        "score": score,
-        "direction": direction,
-        "mode": global_intel.get("mode", "NORMAL"),
-        "shock_intensity": global_intel.get("shock_intensity", 0.0),
-        "count": global_intel.get("count", 0),
+    # Un evento viene considerato specifico solo se compare in almeno 3 articoli
+    # distinti provenienti da almeno 2 fonti/editori. Keyword isolate = ALERT, non SHOCK.
+    groups={}
+    for a,hits in relevant_shocks:
+        key=hits[0]
+        src=_article_source_name(a)
+        groups.setdefault(key, {"articles":0,"sources":set()})
+        groups[key]["articles"] += 1
+        groups[key]["sources"].add(src)
+    confirmed=[]
+    for key,g in groups.items():
+        real_sources={x for x in g["sources"] if x and x.upper() not in {"NONE","UNKNOWN","N/D"}}
+        if g["articles"] >= 3 and len(real_sources) >= 2:
+            confirmed.append({"event":key,"articles":g["articles"],"sources":len(real_sources)})
+
+    # Direzione specifica: solo gli articoli rilevanti pesano fortemente.
+    pos_terms = {
+        "Oro":{"safe haven","war","attack","sanctions","risk-off","rate cuts","weaker dollar"},
+        "Argento":{"industrial demand","stimulus","weaker dollar","rate cuts","risk-off"},
+        "Petrolio WTI":{"opec","supply disruption","hormuz","oil","crude","sanctions","attack"},
+        "Petrolio Brent":{"opec","supply disruption","hormuz","oil","crude","sanctions","attack"},
+        "Gas Naturale":{"lng","gas","cold","heat","supply disruption","sanctions"},
+        "Rame":{"china","stimulus","industrial demand","supply disruption","mine"},
+        "Grano":{"wheat","grain","drought","flood","ukraine","russia","supply disruption"},
+        "Mais":{"corn","maize","drought","flood","crop","supply disruption"},
+        "Caffè":{"coffee","brazil","drought","frost","crop","supply disruption"},
     }
+    neg_terms = {
+        "Oro":{"risk-on","peace","ceasefire","strong dollar"},
+        "Argento":{"strong dollar","recession","industrial slowdown"},
+        "Petrolio WTI":{"ceasefire","oversupply","demand slowdown","recession"},
+        "Petrolio Brent":{"ceasefire","oversupply","demand slowdown","recession"},
+        "Gas Naturale":{"oversupply","warm weather","demand slowdown"},
+        "Rame":{"china slowdown","recession","industrial slowdown","strong dollar"},
+        "Grano":{"harvest increase","oversupply","strong dollar"},
+        "Mais":{"crop increase","oversupply","strong dollar"},
+        "Caffè":{"harvest increase","oversupply","strong dollar"},
+    }
+    rel_text=" ".join(str(a.get("title",""))+" "+str(a.get("description","")) for a in relevant).lower()
+    pos=sum(1 for t in pos_terms.get(name,set()) if t in rel_text)
+    neg=sum(1 for t in neg_terms.get(name,set()) if t in rel_text)
+    event_bias=clamp((pos-neg)/6.0,-1,1)
+    score=clamp(0.25*base+0.75*event_bias,-1,1)
+    if len(confirmed)>=1:
+        mode="ALERT"
+    elif relevant_shocks and len(relevant_shocks)>=3:
+        mode="ALERT"
+    else:
+        mode="NORMAL"
+    if len(confirmed)>=2:
+        mode="SHOCK"
+    intensity=clamp(0.65*min(len(confirmed)/2.0,1.0)+0.35*min(len(relevant_shocks)/8.0,1.0),0,1)
+    direction="FAVOREVOLE" if score>=0.20 else "SFAVOREVOLE" if score<=-0.20 else "NEUTRALE"
+    return {"score":score,"direction":direction,"mode":mode,"shock_intensity":intensity,
+            "count":len(relevant),"relevant_articles":len(relevant),"shock_count":len(confirmed),
+            "confirmed_events":confirmed[:6]}
 
 
 # ============================================================
@@ -2072,6 +2124,10 @@ def v8_setup_engine(analysis, intraday_candles=None, commodity_name=None):
     pattern=candle_engine(candles,direction)
     bt=local_setup_backtest(candles,direction)
     timing=precise_timing_engine(candles,direction)
+    # Timing composito: storico orario + pattern + ricorrenza del setup.
+    timing['composite_score']=clamp(
+        timing.get('hour_score',0)*0.55 + bt.get('quality',0)*0.25 +
+        max(0.0, pattern.get('score',0))/4.0*100*0.20, 0, 100)
     if entry:
         price=entry
         profile=LEVEL_PROFILES.get(commodity_name or '',{})
@@ -2086,7 +2142,7 @@ def v8_setup_engine(analysis, intraday_candles=None, commodity_name=None):
         analysis.update({'entry':_price_round(price),'stop':_price_round(stop),'tp1':_price_round(tp1),'tp2':_price_round(tp2),'tp3':_price_round(tp3)})
     entry_quality=clamp(
         analysis.get('confidence',0)*0.30 + analysis.get('quality',0)*0.20 +
-        pattern['score']/4*15 + bt['quality']*0.20 + timing['hour_score']*0.15,0,100)
+        pattern['score']/4*15 + bt['quality']*0.20 + timing.get('composite_score', timing.get('hour_score',0))*0.15,0,100)
     analysis.update({'entry_method':method,'candle_pattern':pattern['label'],'candle_score':pattern['score'],
                      'local_backtest':bt,'timing':timing,'entry_quality':entry_quality})
     # Decisione chiara per l'utente; shock blocca sempre l'ingresso.
@@ -2174,7 +2230,7 @@ def risk_engine(analysis, session, global_impact):
     if confirmed_shocks >= 2:
         mode = "SHOCK"
         risk_pct = 0.0
-    elif confirmed_shocks >= 1 or shock >= 0.35:
+    elif confirmed_shocks >= 1:
         mode = "ALERT"
         risk_pct = min(MAX_RISK_PER_TRADE_PCT, 0.25)
     else:
@@ -2569,7 +2625,7 @@ def confirmation_text(analysis):
 def build_telegram(ranked, best, position_message=None):
     """Telegram operativo V8: niente dettagli tecnici interni."""
     available=[x for x in ranked if x.get('available')][:3]
-    lines=['🌍 COMMODITIES BOT v8.0','', '🏆 CLASSIFICA']
+    lines=['🌍 COMMODITIES BOT v8.1','', '🏆 CLASSIFICA']
     medals=['🥇','🥈','🥉']
     for i,item in enumerate(available):
         a=item['analysis']; action=a.get('action_label')
@@ -2578,7 +2634,8 @@ def build_telegram(ranked, best, position_message=None):
         else: icon='🟡'
         lines += ['',f"{medals[i]} {item['name']}",f"{icon} {action} | {a.get('setup_direction','N/D')}"]
     global_mode=best.get('analysis',{}).get('global_impact',{}).get('mode','NORMAL')
-    if global_mode=='SHOCK':
+    confirmed_global=int(best.get('analysis',{}).get('global_impact',{}).get('shock_count',0) or 0)
+    if global_mode=='SHOCK' and confirmed_global>=2:
         lines += ['', '🚨 MERCATO BLOCCATO','NUOVE ENTRATE BLOCCATE','📌 Posizioni esistenti: SOLO GESTIONE / PROTEZIONE']
     elif global_mode=='ALERT':
         lines += ['', '⚠️ MERCATO IN ALLERTA','Entrare solo con conferma completa']
@@ -2591,8 +2648,11 @@ def build_telegram(ranked, best, position_message=None):
                   f'🎯 AZIONE: {action}', f'🧭 DIREZIONE: {direction}',
                   f'💰 PREZZO ATTUALE: {price:.4f}' if price is not None else '💰 PREZZO ATTUALE: N/D',
                   f'📥 ENTRATA: {entry:.4f}' if entry is not None else '📥 ENTRATA: N/D']
-        if global_mode=='SHOCK':
+        item_mode=a.get('risk',{}).get('mode', global_mode)
+        if item_mode=='SHOCK':
             lines.append('🚨 ENTRATA BLOCCATA — SHOCK MODE')
+        elif item_mode=='ALERT':
+            lines.append('⚠️ ENTRATA SOLO CON CONFERMA COMPLETA')
         lines += [
             f'🛑 STOP LOSS: {stop:.4f}' if stop is not None else '🛑 STOP LOSS: N/D',
             f'🎯 TP1: {tp1:.4f}' if tp1 is not None else '🎯 TP1: N/D',
@@ -2626,7 +2686,7 @@ def analysis_direction_hint(timeframes):
 def main():
     print()
     print("=" * 70)
-    print("🌍 COMMODITIES BOT v8.0")
+    print("🌍 COMMODITIES BOT v8.1")
     print("RANKING RISK/BENEFIT + CYCLICAL ENGINE + GOLD ENGINE v15.1 + GLOBAL INTELLIGENCE + SESSION ENGINE + RISK ENGINE")
     print("=" * 70)
     print()
