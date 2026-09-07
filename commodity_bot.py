@@ -143,6 +143,78 @@ def clear_position():
 # TWELVE DATA
 # ============================================================
 
+COMMODITY_REFERENCE_CACHE = None
+
+
+def resolve_commodity_symbols():
+    """Resolve the configured commodities against Twelve Data's live /commodities reference list."""
+    global COMMODITY_REFERENCE_CACHE
+    if COMMODITY_REFERENCE_CACHE is not None:
+        return COMMODITY_REFERENCE_CACHE
+
+    resolved = {}
+    aliases = {
+        "Oro": ["gold spot", "gold"],
+        "Argento": ["silver spot", "silver"],
+        "Petrolio WTI": ["crude oil wti", "wti"],
+        "Petrolio Brent": ["brent spot", "brent", "crude oil brent"],
+        "Gas Naturale": ["natural gas", "natural gas spot"],
+        "Rame": ["copper spot", "copper"],
+        "Grano": ["wheat", "wheat spot"],
+        "Mais": ["corn", "corn spot", "maize"],
+        "Caffè": ["coffee", "coffee spot"],
+    }
+
+    try:
+        response = requests.get(
+            "https://api.twelvedata.com/commodities",
+            params={"apikey": API_KEY, "format": "JSON"},
+            timeout=30,
+        )
+        response.raise_for_status()
+        data = response.json()
+        items = data.get("data", data if isinstance(data, list) else [])
+        if not isinstance(items, list):
+            items = []
+
+        normalized = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            symbol = str(item.get("symbol", "")).strip()
+            text = " ".join(str(item.get(k, "")) for k in ("name", "description", "category")).lower()
+            normalized.append((symbol, text))
+
+        for name, configured in COMMODITIES.items():
+            wanted = [x.lower() for x in aliases.get(name, [name])]
+            match = None
+            # Prefer exact configured symbol first if it is present in reference data.
+            for symbol, text in normalized:
+                if symbol.upper() == configured.upper():
+                    match = symbol
+                    break
+            # Then match aliases against name/description/category.
+            if match is None:
+                for alias in wanted:
+                    for symbol, text in normalized:
+                        if alias in text:
+                            match = symbol
+                            break
+                    if match:
+                        break
+            resolved[name] = match or configured
+
+        COMMODITY_REFERENCE_CACHE = resolved
+        print("📚 Simboli commodity risolti:")
+        for name, symbol in resolved.items():
+            print(f"   {name}: {symbol}")
+        return resolved
+    except Exception as error:
+        print(f"⚠️ Reference /commodities non disponibile: {error}")
+        COMMODITY_REFERENCE_CACHE = dict(COMMODITIES)
+        return COMMODITY_REFERENCE_CACHE
+
+
 def get_data(symbol, interval="1day", outputsize=4000):
     params = {
         "symbol": symbol,
@@ -1346,7 +1418,7 @@ def build_telegram(ranked, best, position_message=None):
     a = best["analysis"]
 
     lines = [
-        "🌍 COMMODITIES BOT v6.1",
+        "🌍 COMMODITIES BOT v6.2",
         "",
         f"🏆 MIGLIOR SETUP",
         f"{icon_for_signal(a['signal'])} {best['name']}",
@@ -1379,7 +1451,7 @@ def build_telegram(ranked, best, position_message=None):
             "",
         ])
 
-    for i, item in enumerate(ranked[:3], 1):
+    for i, item in enumerate([x for x in ranked if x.get("available")][:3], 1):
         if item["name"] == best["name"]:
             continue
 
@@ -1412,7 +1484,7 @@ def build_telegram(ranked, best, position_message=None):
 def main():
     print()
     print("=" * 70)
-    print("🌍 COMMODITIES BOT v6.1")
+    print("🌍 COMMODITIES BOT v6.2")
     print("RANKING + GOLD ENGINE v15.1 + MTF + NEWS FALLBACK + USD + POLITICAL IMPACT")
     print("=" * 70)
     print()
@@ -1421,46 +1493,41 @@ def main():
     usd = analyze_usd()
 
     results = []
+    resolved_symbols = resolve_commodity_symbols()
 
-    for name, symbol in COMMODITIES.items():
-        print(f"🔎 Analizzo {name}...")
+    # Analizza SEMPRE tutte le commodity configurate. Un errore su una non
+    # deve interrompere né nascondere le altre.
+    for name in COMMODITIES:
+        symbol = resolved_symbols.get(name, COMMODITIES[name])
+        print(f"🔎 Analizzo {name} [{symbol}]...")
 
         try:
             candles = get_daily_data(symbol)
+            print(f"   📥 Dati giornalieri: {len(candles)}")
 
             if len(candles) < 500:
-                print("   ⚠️ Dati insufficienti")
-                continue
+                raise RuntimeError(f"Dati giornalieri insufficienti ({len(candles)}/500)")
 
             dataset = build_dataset(candles)
+            print(f"   🧮 Dataset: {len(dataset)}")
 
             if len(dataset) < 300:
-                print("   ⚠️ Dataset insufficiente")
-                continue
+                raise RuntimeError(f"Dataset insufficiente ({len(dataset)}/300)")
 
             bt = backtest(dataset)
             model = train_final(dataset)
-
             if model is None:
-                continue
+                raise RuntimeError("Modello non disponibile")
 
             timeframes = get_multitimeframe(symbol)
             news = analyze_news(name)
             political = political_impact(name)
 
             analysis = analyze(
-                candles,
-                dataset,
-                model,
-                bt,
-                usd,
-                news,
-                timeframes,
-                political,
+                candles, dataset, model, bt, usd, news, timeframes, political
             )
-
             if analysis is None:
-                continue
+                raise RuntimeError("Analisi Gold Engine non disponibile")
 
             results.append({
                 "name": name,
@@ -1468,16 +1535,46 @@ def main():
                 "candles": candles,
                 "analysis": analysis,
                 "backtest": bt,
+                "available": True,
             })
 
             print(
-                f"   → MODELLO {analysis['model_signal']} | "
-                f"OPERATIVO {analysis['signal']} | "
-                f"Score {analysis['score']:.0f}"
+                f"   ✅ ANALIZZATA | MODELLO {analysis['model_signal']} | "
+                f"OPERATIVO {analysis['signal']} | SCORE {analysis['score']:.0f}"
             )
 
         except Exception as error:
-            print(f"   ❌ {error}")
+            # La commodity resta nel ranking come NON DISPONIBILE, così il
+            # report dimostra esplicitamente che è stata controllata.
+            print(f"   ❌ NON DISPONIBILE: {error}")
+            results.append({
+                "name": name,
+                "symbol": symbol,
+                "candles": [],
+                "analysis": {
+                    "signal": "NONE",
+                    "grade": "DATI NON DISPONIBILI",
+                    "score": -1,
+                    "price": None,
+                    "long_probability": 0.5,
+                    "short_probability": 0.5,
+                    "confidence": 0,
+                    "quality": 0,
+                    "model_signal": "NONE",
+                    "timeframes": {},
+                    "news": {"label": "N/D", "count": 0, "source": "NONE", "status": str(error)},
+                    "political": {"direction": "N/D", "score": 0, "count": 0},
+                    "usd": usd,
+                    "repetition": {"direction": "N/D", "frequency": 0, "samples": 0},
+                    "fast_conflicts": 0,
+                    "fast_confirmations": 0,
+                    "structural_same": 0,
+                    "strong_confirmation": False,
+                },
+                "backtest": {},
+                "available": False,
+                "error": str(error),
+            })
 
     if not results:
         raise RuntimeError("Nessuna materia prima analizzata.")
@@ -1491,8 +1588,10 @@ def main():
         key=lambda x: x["analysis"]["score"],
         reverse=True,
     )
-
-    best = ranked[0]
+    available_ranked = [x for x in ranked if x.get("available") and x["analysis"]["score"] >= 0]
+    if not available_ranked:
+        raise RuntimeError("Nessuna commodity dispone di dati sufficienti per il Gold Engine.")
+    best = available_ranked[0]
 
     # ========================================================
     # GESTIONE POSIZIONE ESISTENTE
@@ -1545,7 +1644,7 @@ def main():
     # ========================================================
 
     if not position and best["analysis"]["signal"] in ("LONG", "SHORT"):
-        second_score = ranked[1]["analysis"]["score"] if len(ranked) > 1 else 0
+        second_score = available_ranked[1]["analysis"]["score"] if len(available_ranked) > 1 else 0
         a = best["analysis"]
 
         # Apertura solo se:
@@ -1623,12 +1722,15 @@ def main():
 
     for i, item in enumerate(ranked, 1):
         x = item["analysis"]
+        if not item.get("available"):
+            print(f"{i}. ⚪ {item['name']} | DATI NON DISPONIBILI | {item.get('error', '')}")
+            continue
         print(
             f"{i}. {icon_for_signal(x['signal'])} "
             f"{item['name']} | "
             f"{x['signal']} | "
             f"{x['score']:.0f}/100 | "
-            f"model {x['probability'] * 100:.1f}% | "
+            f"SHORT {x['short_probability'] * 100:.1f}% | "
             f"storico {x['repetition']['direction']}"
         )
 
