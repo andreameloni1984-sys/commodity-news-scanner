@@ -2131,12 +2131,17 @@ def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None, 
 
     # I livelli iniziali sono calibrati per strumento. La gestione Gold Engine
     # (BE dopo TP1, stop a TP1 dopo TP2, chiusura a TP3) non cambia.
-    if operational_signal in ("LONG", "SHORT"):
+    # IMPORTANTISSIMO: i livelli vengono calcolati anche in WAIT, usando la
+    # direzione del setup (main_direction). In questo modo Telegram mostra
+    # sempre numeri operativi provvisori anche quando l'ingresso è bloccato,
+    # in formazione o in attesa di conferma.
+    setup_direction = operational_signal if operational_signal in ("LONG", "SHORT") else main_direction
+    if setup_direction in ("LONG", "SHORT"):
         sl_pct = profile.get("sl_pct", min((current_atr / price) * STOP_ATR, 0.025))
         tp1_pct = profile.get("tp1_pct", min((current_atr / price) * TP1_ATR, 0.035))
         tp2_pct = profile.get("tp2_pct", min((current_atr / price) * TP2_ATR, 0.055))
         tp3_pct = profile.get("tp3_pct", min((current_atr / price) * TP3_ATR, 0.080))
-        if operational_signal == "LONG":
+        if setup_direction == "LONG":
             stop = price * (1 - sl_pct)
             tp1 = price * (1 + tp1_pct)
             tp2 = price * (1 + tp2_pct)
@@ -2183,6 +2188,7 @@ def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None, 
     return {
         "signal": operational_signal,
         "model_signal": model_direction,
+        "setup_direction": setup_direction,
         "grade": grade,
         "probability": probability,
         "long_probability": combined_long,
@@ -2387,25 +2393,31 @@ def build_telegram(ranked, best, position_message=None):
             f"💰 Prezzo: {price:.4f}",
         ])
 
+        setup_direction = a.get("setup_direction") or (signal if signal in ("LONG", "SHORT") else a.get("model_signal", "NONE"))
         if global_mode == "SHOCK":
             lines.append("🚨 ENTRATA BLOCCATA — SHOCK MODE")
         elif signal in ("LONG", "SHORT"):
+            lines.append(f"📥 ENTRATA: {price:.4f}")
+        else:
+            lines.append(f"📥 ENTRATA: {price:.4f} — ATTENDERE CONFERMA {setup_direction}" if setup_direction in ("LONG", "SHORT") else "📥 ENTRATA: ATTENDERE")
+
+        if stop and tp1 and tp2 and tp3:
             lines.extend([
-                f"📥 ENTRATA: {price:.4f}",
                 f"🛑 STOP LOSS: {stop:.4f}",
                 f"🎯 TP1: {tp1:.4f}",
                 f"🎯 TP2: {tp2:.4f}",
                 f"🎯 TP3: {tp3:.4f}",
-                f"💰 RISCHIO: {risk_pct:.2f}% del budget rischio",
             ])
         else:
             lines.extend([
-                "📥 ENTRATA: ATTENDERE",
-                f"🛑 STOP LOSS: {stop:.4f}" if stop else "🛑 STOP LOSS: da definire alla conferma",
-                f"🎯 TP1: {tp1:.4f}" if tp1 else "🎯 TP1: da definire alla conferma",
-                f"🎯 TP2: {tp2:.4f}" if tp2 else "🎯 TP2: da definire alla conferma",
-                f"🎯 TP3: {tp3:.4f}" if tp3 else "🎯 TP3: da definire alla conferma",
+                "🛑 STOP LOSS: da definire",
+                "🎯 TP1: da definire",
+                "🎯 TP2: da definire",
+                "🎯 TP3: da definire",
             ])
+
+        if signal in ("LONG", "SHORT") and global_mode != "SHOCK":
+            lines.append(f"💰 RISCHIO: {risk_pct:.2f}% del budget rischio")
 
         lines.extend([
             "",
