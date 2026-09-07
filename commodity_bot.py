@@ -1418,7 +1418,7 @@ def build_telegram(ranked, best, position_message=None):
     a = best["analysis"]
 
     lines = [
-        "🌍 COMMODITIES BOT v6.2",
+        "🌍 COMMODITIES BOT v6.3",
         "",
         f"🏆 MIGLIOR SETUP",
         f"{icon_for_signal(a['signal'])} {best['name']}",
@@ -1484,7 +1484,7 @@ def build_telegram(ranked, best, position_message=None):
 def main():
     print()
     print("=" * 70)
-    print("🌍 COMMODITIES BOT v6.2")
+    print("🌍 COMMODITIES BOT v6.3")
     print("RANKING + GOLD ENGINE v15.1 + MTF + NEWS FALLBACK + USD + POLITICAL IMPACT")
     print("=" * 70)
     print()
@@ -1505,14 +1505,14 @@ def main():
             candles = get_daily_data(symbol)
             print(f"   📥 Dati giornalieri: {len(candles)}")
 
-            if len(candles) < 500:
-                raise RuntimeError(f"Dati giornalieri insufficienti ({len(candles)}/500)")
+            if len(candles) < 120:
+                raise RuntimeError(f"Dati giornalieri insufficienti ({len(candles)}/120)")
 
             dataset = build_dataset(candles)
             print(f"   🧮 Dataset: {len(dataset)}")
 
-            if len(dataset) < 300:
-                raise RuntimeError(f"Dataset insufficiente ({len(dataset)}/300)")
+            if len(dataset) < 80:
+                raise RuntimeError(f"Dataset insufficiente ({len(dataset)}/80)")
 
             bt = backtest(dataset)
             model = train_final(dataset)
@@ -1590,7 +1590,7 @@ def main():
     )
     available_ranked = [x for x in ranked if x.get("available") and x["analysis"]["score"] >= 0]
     if not available_ranked:
-        raise RuntimeError("Nessuna commodity dispone di dati sufficienti per il Gold Engine.")
+        raise RuntimeError("Nessuna commodity dispone di dati sufficienti per il Gold Engine. Controllare simboli/API quota.")
     best = available_ranked[0]
 
     # ========================================================
