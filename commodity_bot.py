@@ -860,87 +860,105 @@ def analyze_usd():
 # ============================================================
 
 def analyze_news(name):
-    if not NEWS_API_KEY:
-        return {
-            "score": 0,
-            "label": "NON DISPONIBILI",
-            "count": 0,
-        }
+    """News robusta: NewsAPI -> Google News RSS. Non nasconde l'errore."""
+    import urllib.parse
+    import xml.etree.ElementTree as ET
 
     query = NEWS_TERMS.get(name, name)
+    errors = []
+    articles = []
+    source = "NONE"
 
-    params = {
-        "q": query,
-        "apiKey": NEWS_API_KEY,
-        "language": "en",
-        "sortBy": "publishedAt",
-        "pageSize": 20,
+    if NEWS_API_KEY:
+        try:
+            response = requests.get(
+                NEWS_URL,
+                params={
+                    "q": query,
+                    "apiKey": NEWS_API_KEY,
+                    "language": "en",
+                    "sortBy": "publishedAt",
+                    "pageSize": 20,
+                },
+                timeout=20,
+            )
+            data = response.json()
+            if response.ok and data.get("status") == "ok":
+                articles = data.get("articles", []) or []
+                source = "NEWSAPI"
+            else:
+                errors.append(f"NewsAPI {response.status_code}: {data.get('code', data.get('message', 'errore'))}")
+        except Exception as error:
+            errors.append(f"NewsAPI: {error}")
+    else:
+        errors.append("NEWS_API_KEY assente")
+
+    if not articles:
+        try:
+            url = "https://news.google.com/rss/search?" + urllib.parse.urlencode({
+                "q": query,
+                "hl": "en-US",
+                "gl": "US",
+                "ceid": "US:en",
+            })
+            response = requests.get(
+                url,
+                timeout=15,
+                headers={"User-Agent": "Mozilla/5.0 (compatible; CommoditiesBot/6.1)"},
+            )
+            response.raise_for_status()
+            root = ET.fromstring(response.text)
+            for item in root.findall(".//item")[:20]:
+                articles.append({
+                    "title": item.findtext("title", ""),
+                    "description": item.findtext("description", ""),
+                })
+            if articles:
+                source = "GOOGLE RSS"
+        except Exception as error:
+            errors.append(f"Google RSS: {error}")
+
+    if not articles:
+        return {
+            "score": 0.0,
+            "label": "NON DISPONIBILI",
+            "count": 0,
+            "status": " | ".join(errors)[:220],
+            "source": "NONE",
+        }
+
+    positive_words = {
+        "rise", "rises", "rising", "gain", "gains", "bullish", "surge",
+        "strong", "higher", "increase", "increases", "shortage", "demand",
+        "support", "cuts", "disruption", "disruptions",
+    }
+    negative_words = {
+        "fall", "falls", "falling", "drop", "drops", "bearish", "weak",
+        "lower", "decrease", "decreases", "oversupply", "collapse", "concern",
+        "recession", "surplus", "peace", "ceasefire",
     }
 
-    try:
-        response = requests.get(NEWS_URL, params=params, timeout=20)
-        response.raise_for_status()
-        data = response.json()
+    total = 0
+    for article in articles:
+        text = f"{article.get('title', '')} {article.get('description', '')}".lower()
+        words = set(text.replace("/", " ").replace("-", " ").split())
+        pos = len(words & positive_words)
+        neg = len(words & negative_words)
+        if pos > neg:
+            total += 1
+        elif neg > pos:
+            total -= 1
 
-        articles = data.get("articles", [])
-        if not articles:
-            return {
-                "score": 0,
-                "label": "NEUTRALI",
-                "count": 0,
-            }
+    normalized = clamp(total / max(len(articles), 1), -1, 1)
+    label = "POSITIVE" if normalized >= 0.20 else "NEGATIVE" if normalized <= -0.20 else "NEUTRALI"
 
-        positive_words = {
-            "rise", "rises", "rising", "gain", "gains", "bullish",
-            "surge", "surges", "strong", "higher", "increase",
-            "increases", "shortage", "demand", "support",
-        }
-
-        negative_words = {
-            "fall", "falls", "falling", "drop", "drops", "bearish",
-            "weak", "lower", "decrease", "decreases", "oversupply",
-            "collapse", "concern", "concerns", "recession",
-        }
-
-        total = 0
-
-        for article in articles:
-            text = (
-                f"{article.get('title', '')} "
-                f"{article.get('description', '')}"
-            ).lower()
-
-            words = set(text.split())
-            pos = len(words & positive_words)
-            neg = len(words & negative_words)
-
-            if pos > neg:
-                total += 1
-            elif neg > pos:
-                total -= 1
-
-        normalized = clamp(total / max(len(articles), 1), -1, 1)
-
-        if normalized >= 0.20:
-            label = "POSITIVE"
-        elif normalized <= -0.20:
-            label = "NEGATIVE"
-        else:
-            label = "NEUTRALI"
-
-        return {
-            "score": normalized,
-            "label": label,
-            "count": len(articles),
-        }
-
-    except Exception as error:
-        print(f"   ⚠️ News {name}: {error}")
-        return {
-            "score": 0,
-            "label": "ERRORE",
-            "count": 0,
-        }
+    return {
+        "score": normalized,
+        "label": label,
+        "count": len(articles),
+        "status": "OK",
+        "source": source,
+    }
 
 
 # ============================================================
@@ -948,9 +966,9 @@ def analyze_news(name):
 # ============================================================
 
 def political_impact(name):
-    """Valuta il rischio politico/geopolitico specifico della commodity."""
-    if not NEWS_API_KEY:
-        return {"score": 0.0, "direction": "NEUTRALE", "count": 0}
+    """Impatto politico/geopolitico specifico, con fallback Google RSS."""
+    import urllib.parse
+    import xml.etree.ElementTree as ET
 
     queries = {
         "Oro": "gold Trump tariffs Fed geopolitics sanctions war",
@@ -963,40 +981,56 @@ def political_impact(name):
         "Mais": "corn maize Trump tariffs agriculture geopolitics",
         "Caffè": "coffee Brazil tariffs Trump trade weather geopolitics",
     }
+    query = queries.get(name, name)
+    positive = {"tariff", "tariffs", "sanction", "sanctions", "war", "conflict", "attack", "shortage", "disruption", "embargo", "opec cut", "cut production", "trade war", "escalation"}
+    negative = {"ceasefire", "peace", "de-escalation", "oversupply", "surplus", "production increase", "supply increase", "opec increase", "truce"}
 
-    positive = {
-        "tariff", "tariffs", "sanction", "sanctions", "war", "conflict",
-        "attack", "attacks", "shortage", "disruption", "disruptions",
-        "supply risk", "opec cut", "cut production", "embargo",
-    }
-    negative = {
-        "ceasefire", "peace", "de-escalation", "oversupply", "surplus",
-        "production increase", "supply increase", "opec increase",
-    }
+    articles = []
+    source = "NONE"
+    error = None
 
-    try:
-        params = {
-            "q": queries.get(name, name),
-            "apiKey": NEWS_API_KEY,
-            "language": "en",
-            "sortBy": "publishedAt",
-            "pageSize": 20,
-        }
-        response = requests.get(NEWS_URL, params=params, timeout=20)
-        response.raise_for_status()
-        articles = response.json().get("articles", [])
-        score = 0
-        for article in articles:
-            text = f"{article.get('title','')} {article.get('description','')}".lower()
-            pos = sum(1 for w in positive if w in text)
-            neg = sum(1 for w in negative if w in text)
-            score += 1 if pos > neg else -1 if neg > pos else 0
-        normalized = clamp(score / max(len(articles), 1), -1, 1)
-        direction = "FAVOREVOLE" if normalized >= 0.20 else "SFAVOREVOLE" if normalized <= -0.20 else "NEUTRALE"
-        return {"score": normalized, "direction": direction, "count": len(articles)}
-    except Exception as error:
-        print(f"   ⚠️ Political {name}: {error}")
-        return {"score": 0.0, "direction": "NEUTRALE", "count": 0}
+    if NEWS_API_KEY:
+        try:
+            response = requests.get(
+                NEWS_URL,
+                params={"q": query, "apiKey": NEWS_API_KEY, "language": "en", "sortBy": "publishedAt", "pageSize": 20},
+                timeout=20,
+            )
+            data = response.json()
+            if response.ok and data.get("status") == "ok":
+                articles = data.get("articles", []) or []
+                source = "NEWSAPI"
+            else:
+                error = f"NewsAPI {response.status_code}"
+        except Exception as exc:
+            error = str(exc)
+
+    if not articles:
+        try:
+            url = "https://news.google.com/rss/search?" + urllib.parse.urlencode({"q": query, "hl": "en-US", "gl": "US", "ceid": "US:en"})
+            response = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0 (compatible; CommoditiesBot/6.1)"})
+            response.raise_for_status()
+            root = ET.fromstring(response.text)
+            for item in root.findall(".//item")[:20]:
+                articles.append({"title": item.findtext("title", ""), "description": item.findtext("description", "")})
+            if articles:
+                source = "GOOGLE RSS"
+        except Exception as exc:
+            error = f"{error or ''} Google RSS: {exc}".strip()
+
+    if not articles:
+        return {"score": 0.0, "direction": "NEUTRALE", "count": 0, "source": "NONE", "status": error or "NESSUNA FONTE"}
+
+    total = 0
+    for article in articles:
+        text = f"{article.get('title', '')} {article.get('description', '')}".lower()
+        pos = sum(1 for w in positive if w in text)
+        neg = sum(1 for w in negative if w in text)
+        total += 1 if pos > neg else -1 if neg > pos else 0
+
+    normalized = clamp(total / max(len(articles), 1), -1, 1)
+    direction = "FAVOREVOLE" if normalized >= 0.20 else "SFAVOREVOLE" if normalized <= -0.20 else "NEUTRALE"
+    return {"score": normalized, "direction": direction, "count": len(articles), "source": source, "status": "OK"}
 
 
 # ============================================================
@@ -1004,137 +1038,135 @@ def political_impact(name):
 # ============================================================
 
 def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None):
+    """Gold Engine instrument-agnostic: modello + MTF + contesto."""
     features = build_features(candles)
     political = political or {"score": 0.0, "direction": "NEUTRALE", "count": 0}
+    news = news or {"score": 0.0, "label": "NON DISPONIBILI", "count": 0, "status": "N/D", "source": "NONE"}
 
-    if features is None:
+    if features is None or model is None:
         return None
 
     scaled = scale_current(features, model)
-
-    probability = predict(
-        scaled,
-        model["weights"],
-        model["bias"],
-    )
-
+    probability = predict(scaled, model["weights"], model["bias"])
     quality = quality_score(bt)
 
-    strength = abs(probability - 0.50) * 200
-    confidence = strength * 0.60 + quality * 0.40
-
-    if quality < MIN_QUALITY:
-        model_signal = "NO TRADE"
-    elif combined_long >= LONG_THRESHOLD:
-        model_signal = "LONG"
-    elif combined_short >= (1.0 - SHORT_THRESHOLD):
-        model_signal = "SHORT"
-    else:
-        model_signal = "WAIT"
-
-    # GOLD ENGINE: la direzione non viene decisa dal modello da solo.
-    # Il modello quantitativo viene fuso con il consenso MTF, dando più peso
-    # ai timeframe strutturali (4H/1H/15m) e una conferma aggiuntiva ai veloci.
+    # --------------------------------------------------------
+    # 1) MODELLO QUANTITATIVO
+    # --------------------------------------------------------
     model_direction = "LONG" if probability >= 0.50 else "SHORT"
+    model_strength = abs(probability - 0.50) * 2.0
 
-    tf_votes = {
-        "4H": 0.25,
-        "1H": 0.25,
-        "15m": 0.20,
-        "5m": 0.20,
-        "1m": 0.10,
-    }
+    # --------------------------------------------------------
+    # 2) MULTI-TIMEFRAME: struttura > velocità
+    # --------------------------------------------------------
+    weights = {"4H": 0.30, "1H": 0.25, "15m": 0.20, "5m": 0.15, "1m": 0.10}
     mtf_bias = 0.0
-    for tf, weight in tf_votes.items():
-        direction = timeframes[tf]["direction"]
+    for tf, weight in weights.items():
+        direction = timeframes.get(tf, {}).get("direction", "NONE")
         if direction == "LONG":
             mtf_bias += weight
         elif direction == "SHORT":
             mtf_bias -= weight
 
-    # Bias finale: 50% modello + 50% MTF.
-    # USD/news/political sono filtri di contesto, non sostituiscono il trend.
-    combined_long = clamp(0.50 * probability + 0.50 * (0.50 + mtf_bias), 0.01, 0.99)
+    mtf_probability = clamp(0.50 + mtf_bias, 0.01, 0.99)
+
+    # Il modello resta importante, ma il consenso MTF può rafforzarlo.
+    combined_long = clamp(0.45 * probability + 0.55 * mtf_probability, 0.01, 0.99)
     combined_short = 1.0 - combined_long
 
-    if combined_long >= LONG_THRESHOLD:
+    if combined_long >= 0.62:
         main_direction = "LONG"
-    elif combined_short >= (1.0 - SHORT_THRESHOLD):
+    elif combined_short >= 0.62:
         main_direction = "SHORT"
     else:
-        main_direction = model_direction
+        main_direction = model_direction if model_strength >= 0.20 else "NONE"
 
-    tf_score = 0
-    for tf in ("4H", "1H", "15m"):
-        direction = timeframes[tf]["direction"]
-        if direction == main_direction:
-            tf_score += 1
-        elif direction not in ("NONE", main_direction):
-            tf_score -= 1
+    # --------------------------------------------------------
+    # 3) CONSENSO STRUTTURALE E CONFERMA VELOCE
+    # --------------------------------------------------------
+    structural = [timeframes.get(tf, {}).get("direction", "NONE") for tf in ("4H", "1H", "15m")]
+    fast = [timeframes.get(tf, {}).get("direction", "NONE") for tf in ("5m", "1m")]
 
-    fast_confirmations = 0
-    fast_conflicts = 0
+    structural_same = sum(1 for d in structural if d == main_direction)
+    structural_opposite = sum(1 for d in structural if d not in ("NONE", main_direction))
+    fast_same = sum(1 for d in fast if d == main_direction)
+    fast_opposite = sum(1 for d in fast if d not in ("NONE", main_direction))
 
-    for tf in ("5m", "1m"):
-        direction = timeframes[tf]["direction"]
-        if direction == main_direction:
-            fast_confirmations += 1
-        elif direction not in ("NONE", main_direction):
-            fast_conflicts += 1
+    # 4H + 1H + 15m hanno priorità. Un solo 1m contrario non annulla il setup.
+    structural_score = structural_same * 2 - structural_opposite * 2
 
-    # Fattore storico: positivo se concorda col modello,
-    # negativo se va contro.
     repetition = historical_repetition(candles)
-
-    repetition_impact = 0
+    repetition_impact = 0.0
     if repetition["direction"] == main_direction:
-        repetition_impact = repetition["frequency"] * 8
+        repetition_impact = repetition["frequency"] * 6
     elif repetition["direction"] not in ("NEUTRALE", main_direction):
-        repetition_impact = -repetition["frequency"] * 8
+        repetition_impact = -repetition["frequency"] * 6
 
-    # Score 0-100.
-    direction_score = abs(combined_long - 0.50) * 200
-
-    score = (
-        direction_score * 0.40
-        + quality * 0.20
-        + confidence * 0.15
-        + max(tf_score, -3) * 5
-        + fast_confirmations * 5
-        + repetition_impact
-        + news["score"] * 6
-        + usd["impact"] * 3
-        + political["score"] * 5
+    # --------------------------------------------------------
+    # 4) CONFIDENCE E SCORE DEL SETUP
+    # --------------------------------------------------------
+    confidence = clamp(
+        model_strength * 100 * 0.45
+        + (abs(mtf_bias) * 100) * 0.35
+        + (structural_same / 3.0) * 20 * 0.20,
+        0,
+        100,
     )
 
-    score = clamp(score, 0, 100)
+    direction_score = abs(combined_long - 0.50) * 200
+    news_impact = safe_float(news.get("score")) or 0.0
+    usd_impact = safe_float(usd.get("impact")) or 0.0
+    political_score = safe_float(political.get("score")) or 0.0
 
-    # Non permettiamo un LONG/SHORT operativo se i timeframe
-    # principali sono completamente contrari o i veloci mostrano
-    # un conflitto netto.
-    operational_signal = model_signal
+    context = 0.0
+    if main_direction == "LONG":
+        context += news_impact * 5 + usd_impact * 3 + political_score * 4
+    elif main_direction == "SHORT":
+        context -= news_impact * 5 + usd_impact * 3 + political_score * 4
 
-    if model_signal in ("LONG", "SHORT"):
-        if tf_score <= -2:
-            operational_signal = "WAIT"
-        elif fast_conflicts == 2:
-            operational_signal = "WAIT"
+    score = clamp(
+        direction_score * 0.42
+        + quality * 0.18
+        + confidence * 0.16
+        + structural_score * 4
+        + fast_same * 3
+        - fast_opposite * 2
+        + repetition_impact
+        + context,
+        0,
+        100,
+    )
 
-    # Grado del setup.
+    # --------------------------------------------------------
+    # 5) DECISIONE OPERATIVA
+    # --------------------------------------------------------
+    operational_signal = main_direction
+
+    # Se la struttura è 3/3 contro, niente ingresso.
+    if structural_opposite >= 2 and structural_same == 0:
+        operational_signal = "WAIT"
+
+    # Il solo 1m contrario è un conflitto veloce, non un annullamento.
+    # Due conflitti veloci richiedono attesa.
+    if fast_opposite >= 2:
+        operational_signal = "WAIT"
+
     if operational_signal in ("LONG", "SHORT"):
-        if (
-            confidence >= 70
-            and fast_confirmations == 2
-            and tf_score >= 1
-            and score >= 75
-        ):
+        if score < MIN_SCORE or confidence < MIN_CONFIDENCE:
+            operational_signal = "WAIT"
+
+    # --------------------------------------------------------
+    # 6) GRADE
+    # --------------------------------------------------------
+    if operational_signal in ("LONG", "SHORT"):
+        if score >= 80 and confidence >= 72 and structural_same >= 2:
             grade = "FORTE"
-        elif confidence >= 58 and score >= 65:
+        elif score >= 65 and confidence >= 58 and structural_same >= 2:
             grade = "IN FORMAZIONE"
         else:
             grade = "DEBOLE"
-    elif model_signal in ("LONG", "SHORT"):
-        grade = "CONFLITTO" if fast_conflicts else "IN FORMAZIONE"
+    elif main_direction in ("LONG", "SHORT"):
+        grade = "CONFLITTO" if fast_opposite else "ATTENDERE"
     else:
         grade = "NEUTRALE"
 
@@ -1154,9 +1186,17 @@ def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None):
     else:
         stop = tp1 = tp2 = tp3 = None
 
+    strong_confirmation = (
+        operational_signal in ("LONG", "SHORT")
+        and score >= 75
+        and confidence >= 68
+        and structural_same >= 2
+        and fast_opposite == 0
+    )
+
     return {
         "signal": operational_signal,
-        "model_signal": model_signal,
+        "model_signal": model_direction,
         "grade": grade,
         "probability": probability,
         "long_probability": combined_long,
@@ -1171,21 +1211,16 @@ def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None):
         "tp1": tp1,
         "tp2": tp2,
         "tp3": tp3,
-        "strong_confirmation": (
-            operational_signal in ("LONG", "SHORT")
-            and confidence >= 70
-            and fast_confirmations == 2
-            and tf_score >= 1
-            and score >= 75
-        ),
+        "strong_confirmation": strong_confirmation,
         "timeframes": timeframes,
         "usd": usd,
         "news": news,
         "political": political,
         "repetition": repetition,
-        "tf_score": tf_score,
-        "fast_confirmations": fast_confirmations,
-        "fast_conflicts": fast_conflicts,
+        "structural_same": structural_same,
+        "structural_opposite": structural_opposite,
+        "fast_confirmations": fast_same,
+        "fast_conflicts": fast_opposite,
     }
 
 
@@ -1311,7 +1346,7 @@ def build_telegram(ranked, best, position_message=None):
     a = best["analysis"]
 
     lines = [
-        "🌍 COMMODITIES BOT",
+        "🌍 COMMODITIES BOT v6.1",
         "",
         f"🏆 MIGLIOR SETUP",
         f"{icon_for_signal(a['signal'])} {best['name']}",
@@ -1321,10 +1356,12 @@ def build_telegram(ranked, best, position_message=None):
         f"💰 Prezzo: {a['price']:.4f}",
         f"🧠 Forecast: LONG {a['long_probability'] * 100:.1f}% | SHORT {a['short_probability'] * 100:.1f}%",
         f"📈 {compact_tf(a['timeframes'])}",
+        f"🧠 GOLD ENGINE: struttura {a.get('structural_same', 0)}/3 | veloci {a.get('fast_confirmations', 0)}/2 | conflitti {a.get('fast_conflicts', 0)}",
         confirmation_text(a),
         "",
-        f"📰 News: {a['news']['label']}",
-        f"🌍 Political Impact: {a['political']['direction']} ({a['political']['score']:+.2f})",
+        f"📰 News: {a['news']['label']} | {a['news'].get('count', 0)} articoli | {a['news'].get('source', 'NONE')}",
+        f"   Stato News: {a['news'].get('status', 'N/D')}",
+        f"🌍 Political Impact: {a['political']['direction']} ({a['political']['score']:+.2f}) | {a['political'].get('count', 0)} articoli",
         f"💵 Dollaro: {a['usd']['label']}",
         f"🔄 Storico: {a['repetition']['direction']} "
         f"({a['repetition']['frequency'] * 100:.0f}% "
@@ -1375,8 +1412,8 @@ def build_telegram(ranked, best, position_message=None):
 def main():
     print()
     print("=" * 70)
-    print("🌍 COMMODITIES BOT v6.0")
-    print("RANKING + GOLD ENGINE + MTF + NEWS + USD + POLITICAL IMPACT")
+    print("🌍 COMMODITIES BOT v6.1")
+    print("RANKING + GOLD ENGINE v15.1 + MTF + NEWS FALLBACK + USD + POLITICAL IMPACT")
     print("=" * 70)
     print()
 
