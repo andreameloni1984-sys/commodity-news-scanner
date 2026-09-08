@@ -3322,7 +3322,7 @@ def build_reversal_alert(position, analysis):
         action,
     ])
 
-def build_telegram(ranked, best, position_message=None):
+def build_telegram(ranked, best, position_message=None, position=None):
     """Telegram operativo V8: niente dettagli tecnici interni."""
     available=[x for x in ranked if x.get('available')][:3]
     lines=['🌍 COMMODITIES BOT v2.0','', '🏆 CLASSIFICA']
