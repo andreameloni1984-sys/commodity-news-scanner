@@ -3407,6 +3407,8 @@ def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None, 
         "risk_benefit": risk_benefit,
         "knowledge_bias": knowledge_bias,
         "trading_knowledge": trading_knowledge or {},
+        "pattern_timeframes": pattern_timeframes or {},
+        "source_check": {},
     }
     result["_candles"] = candles
     result = v83_setup_engine(result, intraday_candles=intraday_candles, commodity_name=commodity_name, pattern_timeframes=pattern_timeframes)
@@ -3680,36 +3682,111 @@ def normalize_analysis_metrics(analysis):
     return analysis
 
 
-def smart_entry_engine(analysis):
-    """Trasforma un segnale direzionale in uno stato operativo chiaro.
+def entry_trigger_engine(analysis):
+    """Trigger di ingresso separato dalla previsione direzionale.
 
-    Stati:
-      PREPARAZIONE = direzione valida ma ingresso non confermato
-      CONFERMA     = condizioni quasi complete, attendere trigger rapido
-      ENTRARE      = tutti i gate quantitativi rispettati
-      NON ENTRARE  = rischio/conflitto troppo alto
-    Nessun ordine viene inviato da questo motore.
+    Cerca due famiglie di trigger testabili:
+      1) BREAKOUT: chiusura oltre il massimo/minimo precedente con momentum;
+      2) PULLBACK + RIPARTENZA: ritracciamento verso EMA21/struttura e barra
+         corrente che riprende la direzione.
+
+    Il trigger viene calcolato sui timeframe rapidi (5m/1m) quando disponibili.
+    Non apre ordini e non sostituisce i filtri di rischio.
     """
     d = analysis.get("setup_direction") or analysis.get("model_signal")
+    pts = analysis.get("pattern_timeframes", {}) or {}
+    # v2.6 non esponeva sempre le candele dei timeframe nell'analysis; in quel
+    # caso usiamo i risultati già calcolati dal pattern engine.
+    tfs = analysis.get("timeframes", {}) or {}
     if d not in ("LONG", "SHORT"):
-        analysis.update({"entry_state":"NO_SETUP", "action_label":"NON ENTRARE"})
+        return {"confirmed": False, "kind": "NONE", "score": 0.0,
+                "reasons": ["NESSUNA DIREZIONE"]}
+
+    details=[]
+    candidates=[]
+    for tf in ("5m", "1m"):
+        rows=pts.get(tf)
+        if not rows or len(rows)<25:
+            continue
+        closes=[safe_float(x.get("close")) for x in rows if safe_float(x.get("close")) is not None]
+        highs=[safe_float(x.get("high")) for x in rows if safe_float(x.get("high")) is not None]
+        lows=[safe_float(x.get("low")) for x in rows if safe_float(x.get("low")) is not None]
+        if len(closes)<25 or len(highs)<25 or len(lows)<25:
+            continue
+        c=closes[-1]; prev=candle_metrics = _candle_metrics(rows[-1])
+        if not candle_metrics:
+            continue
+        a=atr(rows,14) or c*0.005
+        e9=ema(closes,9); e21=ema(closes,21)
+        prior_hi=max(highs[-21:-1]); prior_lo=min(lows[-21:-1])
+        body=abs(candle_metrics["close"]-candle_metrics["open"])
+        range_=max(candle_metrics["high"]-candle_metrics["low"], 1e-12)
+        body_ratio=body/range_
+        bullish=candle_metrics["close"]>candle_metrics["open"]
+        bearish=candle_metrics["close"]<candle_metrics["open"]
+
+        breakout = ((c>prior_hi + 0.05*a) and bullish and body_ratio>=0.45) if d=="LONG" else ((c<prior_lo - 0.05*a) and bearish and body_ratio>=0.45)
+        # Pullback: prezzo ha interagito con EMA21 negli ultimi 3 bar e la barra
+        # attuale chiude di nuovo dalla parte della direzione.
+        recent=closes[-4:]
+        interacted = any(abs(x-e21) <= max(0.45*a, c*0.0015) for x in recent)
+        pullback = (interacted and c>e9 and c>e21 and bullish) if d=="LONG" else (interacted and c<e9 and c<e21 and bearish)
+        momentum = ((c-e9)/max(a,1e-12) > 0.10) if d=="LONG" else ((e9-c)/max(a,1e-12) > 0.10)
+        kind = "BREAKOUT" if breakout else "PULLBACK + RIPARTENZA" if pullback else "NONE"
+        score=0
+        if breakout: score += 55
+        if pullback: score += 55
+        if momentum: score += 20
+        if tfs.get(tf,{}).get("direction")==d: score += 15
+        score=clamp(score,0,100)
+        candidates.append((score,tf,kind,breakout,pullback,momentum))
+
+    if not candidates:
+        return {"confirmed": False, "kind": "NONE", "score": 0.0,
+                "reasons": ["TRIGGER RAPIDO NON DISPONIBILE"]}
+
+    candidates.sort(reverse=True)
+    best_score,tf,kind,bo,pb,mom=candidates[0]
+    confirmations=sum(1 for x in candidates if x[3] or x[4])
+    confirmed=bool(kind!="NONE" and best_score>=75 and mom and confirmations>=1)
+    reasons=[]
+    if bo: reasons.append(f"BREAKOUT {tf}")
+    if pb: reasons.append(f"PULLBACK + RIPARTENZA {tf}")
+    if mom: reasons.append("MOMENTUM CONFERMATO")
+    if not reasons: reasons.append("NESSUN TRIGGER")
+    return {"confirmed": confirmed, "kind": kind, "score": round(best_score,1),
+            "timeframe": tf, "reasons": reasons, "candidates": [
+                {"tf":x[1],"kind":x[2],"score":round(x[0],1)} for x in candidates
+            ]}
+
+
+def smart_entry_engine(analysis):
+    """Trade gate v2.6.1: direzione e trigger di ingresso sono separati."""
+    d = analysis.get("setup_direction") or analysis.get("model_signal")
+    if d not in ("LONG", "SHORT"):
+        analysis.update({"entry_state":"NO_SETUP", "action_label":"NON ENTRARE",
+                         "signal":"WAIT", "strong_confirmation":False})
         return analysis
 
     tfs = analysis.get("timeframes", {}) or {}
-    fast = [tfs.get(tf, {}).get("direction", "NONE") for tf in ("5m", "1m")]
     structural = [tfs.get(tf, {}).get("direction", "NONE") for tf in ("4H", "1H", "15m")]
-    fast_same = sum(x == d for x in fast)
-    fast_opp = sum(x in (("SHORT" if d == "LONG" else "LONG"),) for x in fast)
+    fast = [tfs.get(tf, {}).get("direction", "NONE") for tf in ("5m", "1m")]
     structural_same = sum(x == d for x in structural)
+    fast_opp = sum(x == ("SHORT" if d=="LONG" else "LONG") for x in fast)
+    fast_same = sum(x == d for x in fast)
     rev = analysis.get("reversal", {}) or {}
     risk = analysis.get("risk", {}) or {}
-    ensemble_ok = analysis.get("ensemble_gate", True)
+    ensemble_ok = bool(analysis.get("ensemble_gate", True))
     score = safe_float(analysis.get("score"), 0) or 0
     quality = safe_float(analysis.get("quality"), 0) or 0
     conf = safe_float(analysis.get("confidence"), 0) or 0
     entry_q = safe_float(analysis.get("entry_quality"), 0) or 0
     rb = safe_float(analysis.get("risk_benefit", {}).get("score"), 0) or 0
-    combo_samples = safe_float(analysis.get("pattern_backtest", {}).get("samples"), 0) or 0
+    prob = safe_float(analysis.get("long_probability" if d=="LONG" else "short_probability"), 0) or 0
+    prob *= 100 if prob <= 1 else 1
+    source_status = str(analysis.get("source_check",{}).get("status", ""))
+    source_discrepancy = "DISCREPANZA" in source_status.upper()
+    trigger = entry_trigger_engine(analysis)
 
     blockers=[]
     if risk.get("mode") == "SHOCK": blockers.append("SHOCK")
@@ -3717,46 +3794,64 @@ def smart_entry_engine(analysis):
     if rev.get("stage") == "CONFIRMED": blockers.append("INVERSIONE CONFERMATA")
     if fast_opp > 0: blockers.append("CONFLITTO 1m/5m")
     if structural_same < 2: blockers.append("MTF STRUTTURALE")
+    if source_discrepancy: blockers.append("DISCREPANZA FONTI")
 
     hard = (
-        score >= MIN_SCORE and quality >= MIN_QUALITY and conf >= MIN_CONFIDENCE
+        score >= 65 and quality >= 50 and conf >= 58 and prob >= 58
         and entry_q >= 68 and rb >= 50 and structural_same >= 2
         and fast_opp == 0 and ensemble_ok and risk.get("mode") == "NORMAL"
-        and risk.get("market_quality", 0) >= 60 and risk.get("risk_pct", 0) > 0
+        and safe_float(risk.get("market_quality"),0) >= 60
+        and safe_float(risk.get("risk_pct"),0) > 0
         and rev.get("stage") != "CONFIRMED"
+        and not source_discrepancy
+        and trigger.get("confirmed",False)
     )
-    trigger = fast_same >= 2 and combo_samples >= 15
-    near = score >= 60 and quality >= 45 and conf >= 52 and entry_q >= 58 and structural_same >= 2
 
-    if blockers and ("SHOCK" in blockers or "INVERSIONE CONFERMATA" in blockers):
-        state="NON_ENTRARE"
-        action="NON ENTRARE"
-    elif hard and trigger:
-        state="ENTRY_CONFIRMED"
-        action="ENTRARE"
-    elif hard or (near and fast_same >= 1):
-        state="CONFERMA_RICHIESTA"
-        action="ATTENDERE"
+    near = (
+        score >= 55 and quality >= 42 and conf >= 50 and prob >= 53
+        and structural_same >= 2 and fast_opp == 0
+    )
+
+    if risk.get("mode") == "SHOCK" or rev.get("stage") == "CONFIRMED":
+        state, action = "NON_ENTRARE", "NON ENTRARE"
+    elif hard:
+        state, action = "ENTRY_CONFIRMED", "ENTRARE"
+    elif near and (trigger.get("kind") != "NONE" or fast_same >= 1):
+        state, action = "PREPARAZIONE", "ATTENDERE"
     elif near:
-        state="PREPARAZIONE"
-        action="ATTENDERE"
+        state, action = "CONFERMA_RICHIESTA", "ATTENDERE"
     else:
-        state="WEAK_SETUP"
-        action="NON ENTRARE"
+        state, action = "WEAK_SETUP", "NON ENTRARE"
 
-    analysis["entry_state"] = state
-    analysis["entry_blockers"] = blockers[:5]
     analysis["entry_trigger"] = trigger
+    analysis["entry_state"] = state
+    analysis["entry_blockers"] = blockers[:6]
     analysis["action_label"] = action
-    analysis["signal"] = d if action == "ENTRARE" else (d if d in ("LONG","SHORT") else "WAIT")
-    analysis["strong_confirmation"] = bool(action == "ENTRARE")
+    # CRITICO: signal è operativo. La previsione resta in setup_direction.
+    analysis["signal"] = d if state == "ENTRY_CONFIRMED" else "WAIT"
+    analysis["strong_confirmation"] = bool(state == "ENTRY_CONFIRMED")
+    analysis["entry_probability"] = round(prob,2)
     return analysis
-
 
 def finalize_v26_analysis(analysis):
     normalize_analysis_metrics(analysis)
+    # Ricalcolo del rischio DOPO tutti i layer che possono aver modificato score
+    # e contesto. Per la qualità del rischio usiamo la direzione del setup, non
+    # il signal operativo WAIT/ENTRARE.
+    d = analysis.get("setup_direction") or analysis.get("model_signal")
+    if d in ("LONG", "SHORT"):
+        risk_input = dict(analysis)
+        risk_input["signal"] = d
+        try:
+            analysis["risk"] = risk_engine(
+                risk_input,
+                analysis.get("session", {}) or {},
+                analysis.get("global_impact", {}) or {}
+            )
+            analysis["risk_benefit"] = risk_benefit_engine(analysis, analysis.get("cyclical", {}) or {})
+        except Exception as exc:
+            print(f"⚠️ Ricalcolo rischio v2.6.1: {exc}")
     smart_entry_engine(analysis)
-    # R/B va ricalcolato con i livelli di ingresso finali, poi resta coerente.
     return analysis
 
 # ============================================================
@@ -4288,7 +4383,7 @@ def build_reversal_alert(position, analysis):
 def build_telegram(ranked, best, position_message=None, position=None):
     """Telegram operativo V8: niente dettagli tecnici interni."""
     available=[x for x in ranked if x.get('available')][:3]
-    lines=['🌍 COMMODITIES BOT v2.6','', '🏆 CLASSIFICA']
+    lines=['🌍 COMMODITIES BOT v2.6.1','', '🏆 CLASSIFICA']
     medals=['🥇','🥈','🥉']
     for i,item in enumerate(available):
         a=item['analysis']; action=a.get('action_label')
@@ -4310,7 +4405,7 @@ def build_telegram(ranked, best, position_message=None, position=None):
         lines += ['', '━━━━━━━━━━━━━━━━━━━━', f'{medal} {item["name"]}', '━━━━━━━━━━━━━━━━━━━━',
                   f'🎯 AZIONE: {action}', f'🧭 DIREZIONE: {direction}', f'🧩 STATO ENTRY: {a.get("entry_state","N/D")}', f'📊 SCORE/QUALITÀ/CONF: {a.get("score",0):.0f}/{a.get("quality",0):.0f}/{a.get("confidence",0):.0f}',
                   f'💰 PREZZO ATTUALE: {price:.4f}' if price is not None else '💰 PREZZO ATTUALE: N/D',
-                  f'📥 ENTRATA: {entry:.4f}' if entry is not None else '📥 ENTRATA: N/D', f'📌 SETUP: {a.get("entry_method","N/D")}', f'🕯️ PATTERN: {pattern}', f'📚 STORICO SETUP: {a.get("pattern_backtest",{}).get("win_rate",0)*100:.0f}% successo' if a.get("pattern_backtest",{}).get("samples",0)>=5 else '📚 STORICO SETUP: dati insufficienti',
+                  f'📥 ENTRATA: {entry:.4f}' if entry is not None else '📥 ENTRATA: N/D', f'📌 SETUP: {a.get("entry_method","N/D")}', f'⚡ TRIGGER: {a.get("entry_trigger",{}).get("kind","N/D")} {a.get("entry_trigger",{}).get("timeframe","")}'.strip(), f'🕯️ PATTERN: {pattern}', f'📚 STORICO SETUP: {a.get("pattern_backtest",{}).get("win_rate",0)*100:.0f}% successo' if a.get("pattern_backtest",{}).get("samples",0)>=5 else '📚 STORICO SETUP: dati insufficienti',
                   f'🧠 ENSEMBLE: {a.get("ensemble_alignment","N/D")} | RANK {a.get("ensemble_rank","N/D")} | {a.get("cross_sectional_score",50):.0f}/100',
                   f'🌡️ REGIME: {a.get("institutional",{}).get("regime","N/D")} | VOLUME/FLOW PROXY: {a.get("institutional",{}).get("volume_confirmation",0):+.2f}']
         item_mode=a.get('risk',{}).get('mode', global_mode)
@@ -4358,7 +4453,7 @@ def analysis_direction_hint(timeframes):
 def main():
     print()
     print("=" * 70)
-    print("🌍 COMMODITIES BOT v2.6")
+    print("🌍 COMMODITIES BOT v2.6.1")
     print("RANKING + LEARNING + GLOBAL INTELLIGENCE + WEATHER/DISASTER + ENSEMBLE + SMART ENTRY + PAPER/DEMO GATE")
     print("=" * 70)
     print()
@@ -4429,6 +4524,9 @@ def main():
             )
             if analysis is None:
                 raise RuntimeError("Analisi Gold Engine non disponibile")
+
+            analysis["pattern_timeframes"] = pattern_timeframes or {}
+            analysis["source_check"] = source_check or {}
 
             weather = weather_intelligence(name)
             disasters = natural_disaster_intelligence(name)
