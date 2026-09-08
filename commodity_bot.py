@@ -10,7 +10,7 @@ import requests
 
 
 # ============================================================
-# COMMODITY TRADING BOT v2.0
+# COMMODITY TRADING BOT v2.2
 # QUANT MODEL + MULTI-TIMEFRAME + NEWS + USD + SEASONALITY
 # + RANKING + POSITION MANAGEMENT
 #
@@ -30,22 +30,22 @@ DIRECTION_STATE_FILE = "commodities_direction_state.json"
 
 KNOWLEDGE_CACHE_FILE = "trading_knowledge_cache.json"
 KNOWLEDGE_REFRESH_HOURS = 24
+KNOWLEDGE_FETCH_TIMEOUT = 6
 KNOWLEDGE_SOURCES = [
-    {
-        "name": "CME Technical Analysis",
-        "url": "https://www.cmegroup.com/it/education/courses/technical-analysis.html",
-        "type": "web",
-    },
-    {
-        "name": "CME Trading and Analysis",
-        "url": "https://www.cmegroup.com/education/courses/trading-and-analysis",
-        "type": "web",
-    },
-    {
-        "name": "IG Academy",
-        "url": "https://www.ig.com/it/scuola-di-trading/ig-academy/corsi-online",
-        "type": "web",
-    },
+    # Exchange / regulator / institutional education
+    {"name": "CME Technical Analysis", "url": "https://www.cmegroup.com/it/education/courses/technical-analysis.html", "type": "web"},
+    {"name": "CME Trading and Analysis", "url": "https://www.cmegroup.com/education/courses/trading-and-analysis", "type": "web"},
+    {"name": "CFTC Futures Market Basics", "url": "https://www.cftc.gov/LearnAndProtect/EducationCenter/FuturesMarketBasics/index2.htm", "type": "web"},
+    {"name": "CFTC Learn to Trade Safely", "url": "https://www.cftc.gov/LearnAndProtect/AdvisoriesAndArticles/learn_to_trade_without_scam.htm", "type": "web"},
+    {"name": "CFA Commodities and Derivatives", "url": "https://www.cfainstitute.org/insights/professional-learning/refresher-readings/2026/introduction-commodities-commodity-derivatives", "type": "web"},
+    {"name": "CFA Market Risk", "url": "https://www.cfainstitute.org/insights/professional-learning/refresher-readings/2026/measuring-managing-market-risk", "type": "web"},
+    {"name": "CFA Trade Strategy and Execution", "url": "https://www.cfainstitute.org/insights/professional-learning/refresher-readings/2026/trade-strategy-execution", "type": "web"},
+    # International / independent educational material
+    {"name": "IG Academy", "url": "https://www.ig.com/it/scuola-di-trading/ig-academy/corsi-online", "type": "web"},
+    {"name": "Babypips School of Pipsology", "url": "https://www.babypips.com/learn/forex", "type": "web"},
+    {"name": "Investopedia Technical Analysis", "url": "https://www.investopedia.com/trading/best-ways-learn-technical-analysis/", "type": "web"},
+    # Academic research on momentum / trend following
+    {"name": "Academic Trend Following Research", "url": "https://arxiv.org/abs/2106.08420", "type": "web"},
 ]
 # Add public YouTube URLs here. The bot will use a transcript only when
 # youtube-transcript-api is installed and a transcript is publicly available.
@@ -325,7 +325,8 @@ def fetch_knowledge_text(source):
             return ""
 
     try:
-        r = requests.get(url, timeout=15, headers={"User-Agent": "CommoditiesBot/2.0"})
+        # Keep the cycle responsive: unavailable educational pages must not block market analysis.
+        r = requests.get(url, timeout=6, headers={"User-Agent": "CommoditiesBot/2.2"})
         r.raise_for_status()
         parser = _TextExtractor()
         parser.feed(r.text)
@@ -2867,6 +2868,213 @@ def risk_engine(analysis, session, global_impact):
     }
 
 
+
+# ============================================================
+# v2.1 LEARNING / RULE VALIDATION ENGINE
+# ============================================================
+# The engine converts educational concepts into explicit, testable rules.
+# It never "learns" a strategy from text and assumes it works: each rule
+# is measured on historical candles before it can influence the live signal.
+
+RULE_MEMORY_FILE = "validated_trading_rules.json"
+RULE_MIN_SAMPLES = 20
+RULE_MIN_WIN_RATE = 0.52
+RULE_MAX_DRAWDOWN_PCT = 35.0
+RULE_WEIGHT_CAP = 0.18
+
+
+def _close_series(candles):
+    return [safe_float(c.get("close")) for c in candles if safe_float(c.get("close")) is not None]
+
+
+def _rule_features(candles, i, direction):
+    if i < 20 or i >= len(candles):
+        return None
+    window = candles[:i+1]
+    closes = _close_series(window)
+    if len(closes) < 20:
+        return None
+    c = closes[-1]
+    e9 = ema(closes, 9)
+    e21 = ema(closes, 21)
+    r = rsi(closes, 14)
+    a = atr(window, 14) or c * 0.01
+    recent = window[-20:]
+    hi = max(safe_float(x.get("high")) or safe_float(x.get("close")) or c for x in recent[:-1])
+    lo = min(safe_float(x.get("low")) or safe_float(x.get("close")) or c for x in recent[:-1])
+    slope = closes[-1] - closes[-6]
+    trend_ok = (e9 > e21 and slope > 0) if direction == "LONG" else (e9 < e21 and slope < 0)
+    momentum_ok = (r >= 52 and r <= 72 and slope > 0) if direction == "LONG" else (r <= 48 and r >= 28 and slope < 0)
+    pullback_ok = (c >= e21 - 0.60*a and c <= e9 + 0.20*a) if direction == "LONG" else (c <= e21 + 0.60*a and c >= e9 - 0.20*a)
+    breakout_ok = c > hi if direction == "LONG" else c < lo
+    vol_pct = a / max(c, 1e-9)
+    volatility_ok = 0.001 <= vol_pct <= 0.08
+    return {
+        "trend": trend_ok,
+        "momentum": momentum_ok,
+        "pullback": pullback_ok,
+        "breakout": breakout_ok,
+        "volatility": volatility_ok,
+    }
+
+
+def _future_outcome(candles, i, direction, horizon=5):
+    if i + horizon >= len(candles):
+        return None
+    entry = safe_float(candles[i].get("close"))
+    future = [safe_float(candles[j].get("close")) for j in range(i+1, i+horizon+1)]
+    future = [x for x in future if x is not None]
+    if not entry or not future:
+        return None
+    final = future[-1]
+    return final > entry if direction == "LONG" else final < entry
+
+
+def _rule_trade_outcome(candles, i, direction, atr_value, horizon=8):
+    """Realistic educational rule outcome: 1R stop vs 2R target, first touch wins."""
+    entry = safe_float(candles[i].get("close"))
+    if not entry or not atr_value or atr_value <= 0:
+        return None
+    risk = atr_value
+    target = 2.0 * risk
+    for j in range(i + 1, min(len(candles), i + 1 + horizon)):
+        hi = safe_float(candles[j].get("high"), entry)
+        lo = safe_float(candles[j].get("low"), entry)
+        if direction == "LONG":
+            hit_stop = lo <= entry - risk
+            hit_target = hi >= entry + target
+        else:
+            hit_stop = hi >= entry + risk
+            hit_target = lo <= entry - target
+        # Conservative convention when both are touched in the same candle.
+        if hit_stop and hit_target:
+            return False
+        if hit_target:
+            return True
+        if hit_stop:
+            return False
+    return None
+
+
+def backtest_learning_rules(candles, direction):
+    """Walk-forward validation of explicit trading rules.
+
+    The rule is calibrated only on the first historical segment and accepted
+    only when it also survives an unseen validation segment. This reduces
+    the risk of turning educational ideas into overfit signals.
+    """
+    rules = {
+        "TREND_FOLLOWING": lambda f: f["trend"],
+        "MOMENTUM": lambda f: f["momentum"],
+        "PULLBACK": lambda f: f["trend"] and f["pullback"],
+        "BREAKOUT": lambda f: f["trend"] and f["breakout"],
+        "VOLATILITY_FILTER": lambda f: f["volatility"],
+        "TREND_MOMENTUM": lambda f: f["trend"] and f["momentum"],
+        "PULLBACK_MOMENTUM": lambda f: f["trend"] and f["pullback"] and f["momentum"],
+    }
+    split = max(40, int(len(candles) * 0.60))
+    stats = {}
+    for name, predicate in rules.items():
+        buckets = {"train": {"wins": 0, "losses": 0}, "test": {"wins": 0, "losses": 0}}
+        for i in range(20, len(candles) - HORIZON):
+            f = _rule_features(candles, i, direction)
+            if f is None or not predicate(f):
+                continue
+            a = atr(candles[:i+1], 14) or safe_float(candles[i].get("close"), 0) * 0.01
+            outcome = _rule_trade_outcome(candles, i, direction, a, HORIZON)
+            if outcome is None:
+                continue
+            bucket = "train" if i < split else "test"
+            buckets[bucket]["wins" if outcome else "losses"] += 1
+
+        tr = buckets["train"]; te = buckets["test"]
+        train_n = tr["wins"] + tr["losses"]
+        test_n = te["wins"] + te["losses"]
+        train_wr = tr["wins"] / train_n if train_n else 0.0
+        test_wr = te["wins"] / test_n if test_n else 0.0
+        # Accept only when unseen performance is at least 52% and does not
+        # collapse more than 8 percentage points below the training result.
+        validated = (
+            train_n >= RULE_MIN_SAMPLES and
+            test_n >= max(10, RULE_MIN_SAMPLES // 2) and
+            train_wr >= RULE_MIN_WIN_RATE and
+            test_wr >= RULE_MIN_WIN_RATE and
+            test_wr >= train_wr - 0.08
+        )
+        stats[name] = {
+            "train_samples": train_n,
+            "train_win_rate": round(train_wr, 4),
+            "test_samples": test_n,
+            "test_win_rate": round(test_wr, 4),
+            "validated": bool(validated),
+            "expectancy_proxy": round((2 * test_wr) - (1 - test_wr), 3) if test_n else 0.0,
+        }
+    return stats
+
+def learning_rule_snapshot(candles, direction, commodity_name=None):
+    """Return current rule state + historical validation, persisted for audit."""
+    if direction not in ("LONG", "SHORT") or len(candles) < 50:
+        return {"direction": direction, "validated": [], "active": [], "score": 0.0, "samples": 0}
+    stats = backtest_learning_rules(candles, direction)
+    active = [k for k,v in stats.items() if v.get("validated")]
+    current = _rule_features(candles, len(candles)-1, direction) or {}
+    current_hits = []
+    mapping = {
+        "TREND_FOLLOWING": "trend", "MOMENTUM": "momentum", "PULLBACK": "pullback",
+        "BREAKOUT": "breakout", "VOLATILITY_FILTER": "volatility",
+        "TREND_MOMENTUM": None, "PULLBACK_MOMENTUM": None,
+    }
+    for rule in active:
+        key = mapping.get(rule)
+        if key is not None and current.get(key):
+            current_hits.append(rule)
+        elif rule == "TREND_MOMENTUM" and current.get("trend") and current.get("momentum"):
+            current_hits.append(rule)
+        elif rule == "PULLBACK_MOMENTUM" and current.get("trend") and current.get("pullback") and current.get("momentum"):
+            current_hits.append(rule)
+    score = clamp(len(current_hits) / max(len(active), 1) * 100, 0, 100) if active else 0.0
+    snapshot = {
+        "commodity": commodity_name or "N/D",
+        "direction": direction,
+        "validated": stats,
+        "active": active,
+        "current_hits": current_hits,
+        "score": round(score, 1),
+        "samples": sum(v.get("test_samples",0) for v in stats.values()),
+        "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        memory = {}
+        if os.path.exists(RULE_MEMORY_FILE):
+            with open(RULE_MEMORY_FILE, "r", encoding="utf-8") as f:
+                memory = json.load(f) or {}
+        memory[f"{commodity_name or 'UNKNOWN'}:{direction}"] = snapshot
+        with open(RULE_MEMORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(memory, f, ensure_ascii=False, indent=2)
+    except Exception as exc:
+        snapshot["memory_error"] = str(exc)
+    return snapshot
+
+
+def apply_learning_rules(analysis, learning):
+    """Use validated rules only as a capped confirmation bonus/penalty."""
+    if not learning:
+        return analysis
+    base_score = safe_float(analysis.get("score")) or 0.0
+    score = base_score
+    hits = len(learning.get("current_hits", []))
+    active = len(learning.get("active", []))
+    bonus = 0.0
+    if active:
+        bonus = clamp((hits / active) * 8.0, 0, 8)
+        score = clamp(score + bonus, 0, 100)
+    analysis["learning_rules"] = learning
+    analysis["score"] = score
+    analysis["learning_bonus"] = round(bonus, 2)
+    return analysis
+
+
 # ============================================================
 # SIGNAL
 # ============================================================
@@ -3130,6 +3338,15 @@ def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None, 
     result["trading_knowledge"] = trading_knowledge or {}
     result["trading_knowledge"] = trading_knowledge_engine(result)
 
+    # v2.1: validate explicit trading rules on historical candles.
+    learning = learning_rule_snapshot(candles, result.get("setup_direction"), commodity_name)
+    before_learning_score = result.get("score", 0.0)
+    result = apply_learning_rules(result, learning)
+    result["learning_score"] = learning.get("score", 0.0)
+    result["learning_validated_rules"] = learning.get("active", [])
+    result["learning_current_hits"] = learning.get("current_hits", [])
+    result["learning_score_delta"] = round(result.get("score", 0.0) - before_learning_score, 2)
+
     # Compare with the previous run for this commodity.
     direction_state = load_direction_state()
     previous = direction_state.get(commodity_name or "")
@@ -3325,7 +3542,7 @@ def build_reversal_alert(position, analysis):
 def build_telegram(ranked, best, position_message=None, position=None):
     """Telegram operativo V8: niente dettagli tecnici interni."""
     available=[x for x in ranked if x.get('available')][:3]
-    lines=['🌍 COMMODITIES BOT v2.0','', '🏆 CLASSIFICA']
+    lines=['🌍 COMMODITIES BOT v2.1','', '🏆 CLASSIFICA']
     medals=['🥇','🥈','🥉']
     for i,item in enumerate(available):
         a=item['analysis']; action=a.get('action_label')
@@ -3393,8 +3610,8 @@ def analysis_direction_hint(timeframes):
 def main():
     print()
     print("=" * 70)
-    print("🌍 COMMODITIES BOT v2.0")
-    print("RANKING + KNOWLEDGE ENGINE + REVERSAL ENGINE + GOLD ENGINE LOGIC + GLOBAL INTELLIGENCE + SESSION ENGINE + RISK ENGINE")
+    print("🌍 COMMODITIES BOT v2.2")
+    print("RANKING + LEARNING ENGINE + KNOWLEDGE ENGINE + REVERSAL ENGINE + GOLD ENGINE LOGIC + GLOBAL INTELLIGENCE + SESSION ENGINE + RISK ENGINE")
     print("=" * 70)
     print()
 
@@ -3663,6 +3880,7 @@ def main():
     print(f"Confidenza: {a['confidence']:.1f}/100")
     print(f"Qualità: {a['quality']:.1f}/100")
     print(f"Knowledge Engine: {a.get('trading_knowledge', {}).get('usable', 0)} fonti | bias {a.get('knowledge_bias', 0):+.1f}")
+    print(f"Learning Engine: {len(a.get('learning_validated_rules', []))} regole validate | attive {', '.join(a.get('learning_current_hits', [])) or 'nessuna'} | score {a.get('learning_score', 0):.1f}")
     print(
         f"Ricorrenza storica: "
         f"{a['repetition']['direction']} | "
@@ -3692,6 +3910,7 @@ def main():
         ranked,
         best,
         position_message,
+        position,
     )
 
     send_telegram(message)
