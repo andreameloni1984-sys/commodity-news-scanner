@@ -3,8 +3,9 @@ import json
 import math
 import re
 from html.parser import HTMLParser
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from urllib.parse import urlparse, parse_qs
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -27,6 +28,10 @@ NEWS_URL = "https://newsapi.org/v2/everything"
 
 POSITION_FILE = "position.json"
 DIRECTION_STATE_FILE = "commodities_direction_state.json"
+PREDICTION_LOG_FILE = "commodities_prediction_log.json"
+DAILY_REPORT_FILE = "commodities_daily_report_state.json"
+PREDICTION_HORIZON_HOURS = 24
+EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "23"))
 
 KNOWLEDGE_CACHE_FILE = "trading_knowledge_cache.json"
 KNOWLEDGE_REFRESH_HOURS = 24
@@ -49,9 +54,26 @@ KNOWLEDGE_SOURCES = [
 ]
 # Add public YouTube URLs here. The bot will use a transcript only when
 # youtube-transcript-api is installed and a transcript is publicly available.
+# International source registry. The bot does not crawl the entire internet;
+# it uses explicitly configured public sources and validates resulting rules
+# against market history before allowing them to influence the score.
+WORLDWIDE_KNOWLEDGE_SOURCES = [
+    {"name": "CME Education", "url": "https://www.cmegroup.com/education.html", "lang": "en", "tier": "exchange"},
+    {"name": "CFTC Education", "url": "https://www.cftc.gov/LearnAndProtect/AdvisoriesAndArticles/index.htm", "lang": "en", "tier": "regulator"},
+    {"name": "CFA Institute", "url": "https://www.cfainstitute.org/insights", "lang": "en", "tier": "professional"},
+    {"name": "Eurex Education", "url": "https://www.eurex.com/ex-en/education", "lang": "en/de", "tier": "exchange"},
+    {"name": "ICE Education", "url": "https://www.ice.com/education", "lang": "en", "tier": "exchange"},
+    {"name": "SGX Academy", "url": "https://www.sgx.com/academy", "lang": "en", "tier": "exchange"},
+    {"name": "JPX Learning", "url": "https://www.jpx.co.jp/english/learning/index.html", "lang": "en/ja", "tier": "exchange"},
+    {"name": "NSE Academy", "url": "https://www.nseindia.com/learn", "lang": "en", "tier": "exchange"},
+    {"name": "B3 Education", "url": "https://edu.b3.com.br/", "lang": "pt", "tier": "exchange"},
+    {"name": "Euronext Academy", "url": "https://www.euronext.com/en/academy", "lang": "en/fr", "tier": "exchange"},
+]
+
 YOUTUBE_KNOWLEDGE_URLS = [
     # "https://www.youtube.com/watch?v=VIDEO_ID",
 ]
+KNOWLEDGE_SOURCES.extend(WORLDWIDE_KNOWLEDGE_SOURCES)
 KNOWLEDGE_CONCEPTS = {
     "trend": ["trend", "trending", "trendline", "higher high", "lower low"],
     "reversal": ["reversal", "inversion", "inversione", "turning point"],
@@ -3368,6 +3390,173 @@ def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None, 
 
 
 # ============================================================
+# v2.3 PREDICTION JOURNAL + END-OF-DAY TEST
+# ============================================================
+
+def _json_load(path, default):
+    try:
+        if not os.path.exists(path):
+            return default
+        with open(path, "r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception as exc:
+        print(f"⚠️ Impossibile leggere {path}: {exc}")
+        return default
+
+
+def _json_save(path, data):
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2, ensure_ascii=False)
+    os.replace(tmp, path)
+
+
+def _prediction_direction(item):
+    a = item.get("analysis", {})
+    direction = a.get("setup_direction") or a.get("model_signal") or a.get("signal")
+    return direction if direction in ("LONG", "SHORT") else "WAIT"
+
+
+def record_predictions(results):
+    """Record auditable forecasts without looking at future candles."""
+    log = _json_load(PREDICTION_LOG_FILE, [])
+    if not isinstance(log, list):
+        log = []
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=45)
+    new_items = 0
+    for item in results:
+        if not item.get("available"):
+            continue
+        a = item.get("analysis", {})
+        price = safe_float(a.get("price"))
+        if price is None:
+            continue
+        direction = _prediction_direction(item)
+        rec = {
+            "id": f"{item['name']}|{now.strftime('%Y-%m-%dT%H:%M:%SZ')}|{direction}|{price:.8f}",
+            "created_at": now.isoformat(), "name": item["name"], "symbol": item["symbol"],
+            "direction": direction, "action": a.get("action_label", "ATTENDERE"), "price": price,
+            "entry": safe_float(a.get("entry")), "stop": safe_float(a.get("stop")),
+            "tp1": safe_float(a.get("tp1")), "tp2": safe_float(a.get("tp2")), "tp3": safe_float(a.get("tp3")),
+            "atr": safe_float(a.get("atr")) or 0.0, "score": safe_float(a.get("score")) or 0.0,
+            "confidence": safe_float(a.get("confidence")) or 0.0, "quality": safe_float(a.get("quality")) or 0.0,
+            "setup": a.get("entry_method", "N/D"),
+            "validated_rules": list(a.get("learning_current_hits", [])) if isinstance(a.get("learning_current_hits", []), list) else [],
+            "status": "PENDING"
+        }
+        if not any(x.get("id") == rec["id"] for x in log):
+            log.append(rec); new_items += 1
+    log = [x for x in log if x.get("created_at", "") >= cutoff.isoformat()]
+    _json_save(PREDICTION_LOG_FILE, log)
+    return new_items, log
+
+
+def _future_candles_for_prediction(prediction):
+    created = datetime.fromisoformat(prediction["created_at"].replace("Z", "+00:00"))
+    if datetime.now(timezone.utc) < created + timedelta(hours=PREDICTION_HORIZON_HOURS):
+        return []
+    try:
+        rows = get_data(prediction["symbol"], "1h", 1200)
+    except Exception:
+        return []
+    end = created + timedelta(hours=PREDICTION_HORIZON_HOURS)
+    out = []
+    for row in rows:
+        try:
+            dt = datetime.fromisoformat(str(row["datetime"]).replace("Z", "+00:00"))
+        except Exception:
+            continue
+        if created < dt <= end:
+            out.append(row)
+    return out
+
+
+def evaluate_prediction(prediction, future):
+    if not future:
+        return None
+    p = safe_float(prediction.get("price"))
+    if p is None:
+        return None
+    direction = prediction.get("direction", "WAIT")
+    sl, tp1 = safe_float(prediction.get("stop")), safe_float(prediction.get("tp1"))
+    close_end = safe_float(future[-1].get("close"))
+    if close_end is None:
+        return None
+    first_hit = "NONE"
+    if direction in ("LONG", "SHORT"):
+        for c in future:
+            hi, lo = safe_float(c.get("high")), safe_float(c.get("low"))
+            if hi is None or lo is None:
+                continue
+            hit_tp = (tp1 is not None and (hi >= tp1 if direction == "LONG" else lo <= tp1))
+            hit_sl = (sl is not None and (lo <= sl if direction == "LONG" else hi >= sl))
+            if hit_tp and hit_sl: first_hit = "AMBIGUO"; break
+            if hit_tp: first_hit = "TP1"; break
+            if hit_sl: first_hit = "SL"; break
+        close_correct = close_end > p if direction == "LONG" else close_end < p
+        verdict = "CORRETTA" if first_hit == "TP1" or (first_hit == "NONE" and close_correct) else "ERRATA"
+        if first_hit == "AMBIGUO": verdict = "AMBIGUA"
+    else:
+        atr = safe_float(prediction.get("atr")) or 0.0
+        band = max(abs(p) * 0.003, atr * 0.75)
+        max_high = max((safe_float(c.get("high")) or p) for c in future)
+        min_low = min((safe_float(c.get("low")) or p) for c in future)
+        verdict = "CORRETTA" if max_high <= p + band and min_low >= p - band else "ERRATA"
+        first_hit = "NEUTRALE" if verdict == "CORRETTA" else "MOVIMENTO"
+    return {"verdict": verdict, "first_hit": first_hit, "close_end": close_end, "move_pct": (close_end / p - 1.0) * 100.0, "evaluated_at": datetime.now(timezone.utc).isoformat()}
+
+
+def run_end_of_day_test(force=False):
+    log = _json_load(PREDICTION_LOG_FILE, [])
+    if not isinstance(log, list) or not log:
+        return None
+    local_now = datetime.now(ZoneInfo("Europe/Rome"))
+    if not force and local_now.hour < EOD_REPORT_HOUR:
+        return None
+    changed = False
+    for pred in log:
+        if pred.get("status") != "PENDING":
+            continue
+        result = evaluate_prediction(pred, _future_candles_for_prediction(pred))
+        if result:
+            pred.update(result); pred["status"] = "EVALUATED"; changed = True
+    if changed: _json_save(PREDICTION_LOG_FILE, log)
+    today = local_now.date().isoformat()
+    evaluated = []
+    for pred in log:
+        try: d = datetime.fromisoformat(pred.get("created_at", "").replace("Z", "+00:00")).astimezone(ZoneInfo("Europe/Rome")).date().isoformat()
+        except Exception: continue
+        if d == today and pred.get("status") == "EVALUATED": evaluated.append(pred)
+    if not evaluated:
+        return None
+    correct = sum(p.get("verdict") == "CORRETTA" for p in evaluated)
+    wrong = sum(p.get("verdict") == "ERRATA" for p in evaluated)
+    ambiguous = sum(p.get("verdict") == "AMBIGUA" for p in evaluated)
+    accuracy = correct / (correct + wrong) * 100.0 if correct + wrong else 0.0
+    lines = ["📊 COMMODITIES BOT v2.3 — TEST FINE GIORNATA", "", f"📅 {local_now.strftime('%d/%m/%Y')}", "━━━━━━━━━━━━━━━━━━━━", "🎯 ACCURATEZZA PREVISIONI", f"Previsioni valutate: {len(evaluated)}", f"✅ Corrette: {correct}", f"❌ Errate: {wrong}", f"⚪ Ambigue: {ambiguous}", f"🎯 Accuratezza: {accuracy:.1f}%", "", "🧭 PER DIREZIONE"]
+    for direction, icon in (("LONG", "🟢"), ("SHORT", "🔴"), ("WAIT", "🟡")):
+        rows = [p for p in evaluated if p.get("direction") == direction]
+        d = sum(x.get("verdict") == "CORRETTA" for x in rows); w = sum(x.get("verdict") == "ERRATA" for x in rows)
+        acc = d / (d + w) * 100.0 if d + w else 0.0
+        lines.append(f"{icon} {direction}: {len(rows)} | {acc:.1f}%")
+    by_name = {}
+    for pred in evaluated: by_name.setdefault(pred["name"], []).append(pred)
+    ranking = []
+    for name, rows in by_name.items():
+        d = sum(x.get("verdict") == "CORRETTA" for x in rows); w = sum(x.get("verdict") == "ERRATA" for x in rows)
+        if d + w: ranking.append((d / (d + w) * 100.0, name, len(rows)))
+    ranking.sort(reverse=True)
+    lines += ["", "🏆 MIGLIORI COMMODITY"]
+    for i, (acc, name, n) in enumerate(ranking[:3]): lines.append(f"{('🥇','🥈','🥉')[i]} {name}: {acc:.1f}% ({n})")
+    lines += ["", "🔒 STATO: PAPER TRADING", "🚫 ORDINI REALI: DISATTIVATI"]
+    state = _json_load(DAILY_REPORT_FILE, {})
+    if state.get("last_report_date") == today and not force: return None
+    state.update({"last_report_date": today, "accuracy": accuracy, "evaluated": len(evaluated)})
+    _json_save(DAILY_REPORT_FILE, state)
+    return "\n".join(lines)
+
+# ============================================================
 # POSITION MANAGEMENT
 # ============================================================
 
@@ -3542,7 +3731,7 @@ def build_reversal_alert(position, analysis):
 def build_telegram(ranked, best, position_message=None, position=None):
     """Telegram operativo V8: niente dettagli tecnici interni."""
     available=[x for x in ranked if x.get('available')][:3]
-    lines=['🌍 COMMODITIES BOT v2.1','', '🏆 CLASSIFICA']
+    lines=['🌍 COMMODITIES BOT v2.3','', '🏆 CLASSIFICA']
     medals=['🥇','🥈','🥉']
     for i,item in enumerate(available):
         a=item['analysis']; action=a.get('action_label')
@@ -3610,7 +3799,7 @@ def analysis_direction_hint(timeframes):
 def main():
     print()
     print("=" * 70)
-    print("🌍 COMMODITIES BOT v2.2")
+    print("🌍 COMMODITIES BOT v2.3")
     print("RANKING + LEARNING ENGINE + KNOWLEDGE ENGINE + REVERSAL ENGINE + GOLD ENGINE LOGIC + GLOBAL INTELLIGENCE + SESSION ENGINE + RISK ENGINE")
     print("=" * 70)
     print()
@@ -3739,6 +3928,9 @@ def main():
 
     if not results:
         raise RuntimeError("Nessuna materia prima analizzata.")
+
+    new_predictions, _prediction_log = record_predictions(results)
+    print(f"📝 Prediction Journal: {new_predictions} nuove previsioni registrate")
 
     # ========================================================
     # RANKING
@@ -3914,6 +4106,12 @@ def main():
     )
 
     send_telegram(message)
+
+    # Fine giornata: valuta le previsioni maturate e invia il report una sola volta.
+    eod_report = run_end_of_day_test()
+    if eod_report:
+        send_telegram(eod_report)
+        print(eod_report)
 
     # Separate alert: only for the commodity currently held.
     if position:
