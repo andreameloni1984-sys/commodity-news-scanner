@@ -1,13 +1,16 @@
 import os
 import json
 import math
+import re
+from html.parser import HTMLParser
 from datetime import datetime, timezone
+from urllib.parse import urlparse, parse_qs
 
 import requests
 
 
 # ============================================================
-# COMMODITY TRADING BOT v8.3
+# COMMODITY TRADING BOT v2.0
 # QUANT MODEL + MULTI-TIMEFRAME + NEWS + USD + SEASONALITY
 # + RANKING + POSITION MANAGEMENT
 #
@@ -23,6 +26,43 @@ BASE_URL = "https://api.twelvedata.com/time_series"
 NEWS_URL = "https://newsapi.org/v2/everything"
 
 POSITION_FILE = "position.json"
+DIRECTION_STATE_FILE = "commodities_direction_state.json"
+
+KNOWLEDGE_CACHE_FILE = "trading_knowledge_cache.json"
+KNOWLEDGE_REFRESH_HOURS = 24
+KNOWLEDGE_SOURCES = [
+    {
+        "name": "CME Technical Analysis",
+        "url": "https://www.cmegroup.com/it/education/courses/technical-analysis.html",
+        "type": "web",
+    },
+    {
+        "name": "CME Trading and Analysis",
+        "url": "https://www.cmegroup.com/education/courses/trading-and-analysis",
+        "type": "web",
+    },
+    {
+        "name": "IG Academy",
+        "url": "https://www.ig.com/it/scuola-di-trading/ig-academy/corsi-online",
+        "type": "web",
+    },
+]
+# Add public YouTube URLs here. The bot will use a transcript only when
+# youtube-transcript-api is installed and a transcript is publicly available.
+YOUTUBE_KNOWLEDGE_URLS = [
+    # "https://www.youtube.com/watch?v=VIDEO_ID",
+]
+KNOWLEDGE_CONCEPTS = {
+    "trend": ["trend", "trending", "trendline", "higher high", "lower low"],
+    "reversal": ["reversal", "inversion", "inversione", "turning point"],
+    "support_resistance": ["support", "resistance", "supporto", "resistenza"],
+    "breakout": ["breakout", "break out", "rottura", "range break"],
+    "pullback": ["pullback", "retracement", "ritracciamento", "correction"],
+    "momentum": ["momentum", "oscillator", "rsi", "macd", "stochastic"],
+    "volatility": ["volatility", "volatilità", "atr", "average true range"],
+    "risk": ["risk management", "risk/reward", "stop loss", "take profit", "money management"],
+    "fundamental": ["fundamental", "supply", "demand", "inflation", "interest rate", "macro"],
+}
 
 HISTORY_SIZE = 4000
 HORIZON = 5
@@ -215,6 +255,328 @@ def clamp(value, low, high):
 
 def pct(value):
     return f"{value * 100:.1f}%"
+
+
+
+
+# ============================================================
+# v2.0 WEB / VIDEO KNOWLEDGE INGESTION
+# ============================================================
+class _TextExtractor(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.parts = []
+        self.skip = 0
+    def handle_starttag(self, tag, attrs):
+        if tag.lower() in {"script", "style", "noscript", "svg"}:
+            self.skip += 1
+    def handle_endtag(self, tag):
+        if tag.lower() in {"script", "style", "noscript", "svg"} and self.skip:
+            self.skip -= 1
+    def handle_data(self, data):
+        if not self.skip:
+            t = re.sub(r"\s+", " ", data).strip()
+            if t:
+                self.parts.append(t)
+
+def _knowledge_cache_load():
+    try:
+        with open(KNOWLEDGE_CACHE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f) or {}
+    except Exception:
+        return {}
+
+def _knowledge_cache_save(cache):
+    try:
+        with open(KNOWLEDGE_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(cache, f, indent=2, ensure_ascii=False)
+    except Exception as exc:
+        print(f"⚠️ Knowledge cache: {exc}")
+
+def _youtube_video_id(url):
+    parsed = urlparse(url)
+    if parsed.hostname in {"youtu.be"}:
+        return parsed.path.strip("/").split("/")[0]
+    if parsed.hostname and "youtube.com" in parsed.hostname:
+        q = parse_qs(parsed.query).get("v")
+        if q:
+            return q[0]
+        m = re.search(r"/(?:shorts|embed)/([^/?]+)", parsed.path)
+        if m:
+            return m.group(1)
+    return None
+
+def fetch_knowledge_text(source):
+    url = source.get("url", "")
+    if not url:
+        return ""
+    # Optional YouTube transcript support.
+    if source.get("type") == "youtube":
+        video_id = _youtube_video_id(url)
+        if not video_id:
+            return ""
+        try:
+            from youtube_transcript_api import YouTubeTranscriptApi
+            api = YouTubeTranscriptApi()
+            transcript = api.fetch(video_id)
+            return " ".join(getattr(x, "text", str(x)) for x in transcript)
+        except Exception as exc:
+            print(f"⚠️ Transcript YouTube non disponibile ({video_id}): {exc}")
+            return ""
+
+    try:
+        r = requests.get(url, timeout=15, headers={"User-Agent": "CommoditiesBot/2.0"})
+        r.raise_for_status()
+        parser = _TextExtractor()
+        parser.feed(r.text)
+        return " ".join(parser.parts)
+    except Exception as exc:
+        print(f"⚠️ Fonte knowledge non disponibile: {url} | {exc}")
+        return ""
+
+def extract_knowledge_profile(text):
+    text = (text or "").lower()
+    counts = {}
+    total = 0
+    for concept, terms in KNOWLEDGE_CONCEPTS.items():
+        count = sum(text.count(term.lower()) for term in terms)
+        counts[concept] = count
+        total += count
+    return counts, total
+
+def refresh_trading_knowledge():
+    """Reads public educational pages/transcripts and stores only derived concept counts."""
+    sources = list(KNOWLEDGE_SOURCES)
+    for url in YOUTUBE_KNOWLEDGE_URLS:
+        sources.append({"name": "YouTube", "url": url, "type": "youtube"})
+    env_urls = os.getenv("TRADING_KNOWLEDGE_URLS", "")
+    for url in [x.strip() for x in env_urls.split(",") if x.strip()]:
+        sources.append({"name": "Custom", "url": url, "type": "youtube" if "youtube.com" in url or "youtu.be" in url else "web"})
+
+    cache = _knowledge_cache_load()
+    now = datetime.now(timezone.utc)
+    profile = {k: 0 for k in KNOWLEDGE_CONCEPTS}
+    usable = 0
+    for source in sources:
+        key = source["url"]
+        cached = cache.get(key, {})
+        age_hours = 999999
+        try:
+            age_hours = (now - datetime.fromisoformat(cached["updated_at"])).total_seconds() / 3600
+        except Exception:
+            pass
+        counts = cached.get("counts") if age_hours < KNOWLEDGE_REFRESH_HOURS else None
+        if counts is None:
+            text = fetch_knowledge_text(source)
+            counts, total = extract_knowledge_profile(text)
+            cache[key] = {
+                "name": source["name"],
+                "updated_at": now.isoformat(),
+                "counts": counts,
+                "total": total,
+                "status": "OK" if text else "NO_TEXT",
+            }
+        for k, v in counts.items():
+            profile[k] += int(v or 0)
+        if sum(counts.values()) > 0:
+            usable += 1
+
+    _knowledge_cache_save(cache)
+    return {
+        "sources": len(sources),
+        "usable": usable,
+        "profile": profile,
+        "updated_at": now.isoformat(),
+    }
+
+def knowledge_bias_for_setup(knowledge, direction, analysis):
+    """Small, capped educational prior. Market data always dominates."""
+    profile = (knowledge or {}).get("profile", {})
+    if not profile:
+        return 0.0
+    total = max(1, sum(profile.values()))
+    # Knowledge increases validation quality rather than inventing a direction.
+    emphasis = sum(profile.get(k, 0) for k in ("trend", "structure", "breakout", "pullback", "risk"))
+    density = clamp(emphasis / total, 0, 1)
+    base = 2.5 * density
+    # Strong MTF alignment earns the full prior; weak alignment gets almost none.
+    alignment = abs(safe_float(analysis.get("mtf_bias")))
+    return base * clamp(alignment / 0.75, 0, 1)
+
+# ============================================================
+# v2.0 TRADING KNOWLEDGE ENGINE
+# ============================================================
+# Educational principles distilled from freely available trading
+# material (trend, price action, support/resistance, breakout,
+# pullback, momentum, volatility and risk management).
+# The bot uses them as quantitative checks; it does NOT copy ebook
+# text and it does not treat any source as a profit guarantee.
+KNOWLEDGE_WEIGHTS = {
+    "trend": 0.24,
+    "structure": 0.20,
+    "momentum": 0.16,
+    "breakout_pullback": 0.16,
+    "volatility": 0.08,
+    "multi_timeframe": 0.10,
+    "risk_reward": 0.06,
+}
+
+def trading_knowledge_engine(analysis):
+    """Converts core trading-school principles into a 0-100 quality score."""
+    tfs = analysis.get("timeframes", {})
+    direction = analysis.get("setup_direction") or analysis.get("signal")
+    if direction not in ("LONG", "SHORT"):
+        return {"score": 0.0, "label": "NEUTRALE", "checks": []}
+
+    vals = [tfs.get(tf, {}).get("direction", "NONE")
+            for tf in ("4H", "1H", "15m", "5m", "1m")]
+    same = sum(v == direction for v in vals)
+    structural_same = sum(tfs.get(tf, {}).get("direction") == direction
+                          for tf in ("4H", "1H", "15m"))
+    fast_same = sum(tfs.get(tf, {}).get("direction") == direction
+                    for tf in ("5m", "1m"))
+    opposite = sum(v not in ("NONE", direction) for v in vals)
+
+    trend = clamp(50 + (structural_same / 3.0) * 50 - opposite * 6, 0, 100)
+    structure = clamp(
+        50 + analysis.get("structural_same", 0) * 18
+        - analysis.get("structural_opposite", 0) * 20, 0, 100
+    )
+    momentum = clamp(50 + analysis.get("mtf_bias", 0) * 50, 0, 100)
+    breakout_pullback = 70 if analysis.get("entry_method") else 50
+    volatility = 65 if analysis.get("atr") else 45
+    mtf = clamp(50 + same * 10 - opposite * 8, 0, 100)
+
+    entry = analysis.get("entry")
+    stop = analysis.get("stop")
+    tp3 = analysis.get("tp3")
+    rr = 0.0
+    if entry and stop and tp3:
+        risk = abs(entry - stop)
+        reward = abs(tp3 - entry)
+        rr = reward / risk if risk else 0.0
+    risk_reward = clamp(rr / 3.0 * 100, 0, 100)
+
+    components = {
+        "trend": trend,
+        "structure": structure,
+        "momentum": momentum,
+        "breakout_pullback": breakout_pullback,
+        "volatility": volatility,
+        "multi_timeframe": mtf,
+        "risk_reward": risk_reward,
+    }
+    score = sum(components[k] * KNOWLEDGE_WEIGHTS[k] for k in components)
+    if score >= 75:
+        label = "FORTE"
+    elif score >= 60:
+        label = "BUONA"
+    elif score >= 45:
+        label = "MISTA"
+    else:
+        label = "DEBOLE"
+
+    return {
+        "score": round(score, 1),
+        "label": label,
+        "components": {k: round(v, 1) for k, v in components.items()},
+        "checks": [
+            f"Trend strutturale {structural_same}/3",
+            f"Conferme rapide {fast_same}/2",
+            f"Conflitti MTF {opposite}",
+            f"R/R TP3 {rr:.2f}",
+        ],
+    }
+
+
+# ============================================================
+# v2.0 RETRACEMENT vs REVERSAL ENGINE
+# ============================================================
+def load_direction_state():
+    if not os.path.exists(DIRECTION_STATE_FILE):
+        return {}
+    try:
+        with open(DIRECTION_STATE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f) or {}
+    except Exception:
+        return {}
+
+def save_direction_state(state):
+    with open(DIRECTION_STATE_FILE, "w", encoding="utf-8") as f:
+        json.dump(state, f, indent=2, ensure_ascii=False)
+
+def _direction_score_from_analysis(a):
+    direction = a.get("setup_direction") or a.get("signal")
+    if direction == "LONG":
+        return float(a.get("score", 0))
+    if direction == "SHORT":
+        return -float(a.get("score", 0))
+    return 0.0
+
+def reversal_engine(name, analysis, previous=None):
+    """
+    Distinguishes a normal pullback from a genuine reversal.
+    4H/1H/15m define the structural trend; 5m/1m are timing signals.
+    """
+    tfs = analysis.get("timeframes", {})
+    current = analysis.get("setup_direction") or analysis.get("signal")
+    score = _direction_score_from_analysis(analysis)
+    prev_score = float((previous or {}).get("score", score))
+    prev_dir = (previous or {}).get("direction", current)
+
+    structural = [tfs.get(tf, {}).get("direction", "NONE")
+                  for tf in ("4H", "1H", "15m")]
+    fast = [tfs.get(tf, {}).get("direction", "NONE")
+            for tf in ("5m", "1m")]
+
+    # Structural trend remains intact -> retracement, not reversal.
+    if prev_dir in ("LONG", "SHORT"):
+        opposite = "SHORT" if prev_dir == "LONG" else "LONG"
+        structural_opposite = sum(x == opposite for x in structural)
+        fast_opposite = sum(x == opposite for x in fast)
+        score_flip = (prev_score > 0 and score < -10) or (prev_score < 0 and score > 10)
+        rapid_move = abs(score - prev_score) >= 28
+
+        if structural_opposite == 0 and fast_opposite >= 1:
+            stage = "RETRACEMENT"
+            label = "🟡 RITRACCIAMENTO"
+        elif structural_opposite <= 1 and not score_flip:
+            stage = "RETRACEMENT"
+            label = "🟡 RITRACCIAMENTO"
+        elif structural_opposite >= 2 and fast_opposite >= 1 and (score_flip or rapid_move):
+            stage = "CONFIRMED"
+            label = "🔴 INVERSIONE CONFERMATA"
+        elif structural_opposite >= 1 and (score_flip or rapid_move):
+            stage = "POSSIBLE"
+            label = "🟠 POSSIBILE INVERSIONE"
+        elif rapid_move and fast_opposite >= 1:
+            stage = "POSSIBLE"
+            label = "🟠 POSSIBILE INVERSIONE"
+        else:
+            stage = "NORMAL"
+            label = "🟢 TREND INTACT"
+    else:
+        stage = "NORMAL"
+        label = "🟢 TREND IN FORMAZIONE"
+
+    # A sudden move against an open position gets its own alert flag.
+    sudden = False
+    if prev_dir in ("LONG", "SHORT") and current in ("LONG", "SHORT"):
+        if current != prev_dir and abs(score - prev_score) >= 35:
+            sudden = True
+    if abs(score - prev_score) >= 45:
+        sudden = True
+
+    return {
+        "stage": stage,
+        "label": label,
+        "sudden": sudden,
+        "direction": current,
+        "previous_direction": prev_dir,
+        "score_change": round(score - prev_score, 1),
+        "previous_score": round(prev_score, 1),
+        "current_score": round(score, 1),
+    }
 
 
 # ============================================================
@@ -2509,7 +2871,7 @@ def risk_engine(analysis, session, global_impact):
 # SIGNAL
 # ============================================================
 
-def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None, commodity_name=None, global_impact=None, session=None, intraday_candles=None, pattern_timeframes=None):
+def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None, commodity_name=None, global_impact=None, session=None, intraday_candles=None, pattern_timeframes=None, trading_knowledge=None):
     """Gold Engine instrument-agnostic: modello + MTF + contesto."""
     features = build_features(candles)
     political = political or {"score": 0.0, "direction": "NEUTRALE", "count": 0}
@@ -2689,6 +3051,9 @@ def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None, 
     else:
         stop = tp1 = tp2 = tp3 = None
 
+    knowledge_bias = knowledge_bias_for_setup(trading_knowledge, setup_direction, {"mtf_bias": mtf_bias})
+    score = clamp(score + knowledge_bias, 0, 100)
+
     strong_confirmation = (
         operational_signal in ("LONG", "SHORT")
         and score >= 75
@@ -2753,11 +3118,35 @@ def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None, 
         "risk": risk,
         "cyclical": cyclical,
         "risk_benefit": risk_benefit,
+        "knowledge_bias": knowledge_bias,
+        "trading_knowledge": trading_knowledge or {},
     }
     result["_candles"] = candles
     result = v83_setup_engine(result, intraday_candles=intraday_candles, commodity_name=commodity_name, pattern_timeframes=pattern_timeframes)
     # Ricalcola R/B con l'entry effettiva trovata dal motore V8.
     result["risk_benefit"] = risk_benefit_engine(result, cyclical)
+
+    # v2.0 knowledge layer
+    result["trading_knowledge"] = trading_knowledge or {}
+    result["trading_knowledge"] = trading_knowledge_engine(result)
+
+    # Compare with the previous run for this commodity.
+    direction_state = load_direction_state()
+    previous = direction_state.get(commodity_name or "")
+    result["reversal"] = reversal_engine(commodity_name or "", result, previous)
+
+    # Store the current state for the next polling cycle.
+    direction_state[commodity_name or "UNKNOWN"] = {
+        "direction": result.get("setup_direction") or result.get("signal"),
+        "score": _direction_score_from_analysis(result),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    save_direction_state(direction_state)
+
+    # A confirmed reversal is stronger than the generic "strong confirmation".
+    if result["reversal"]["stage"] == "CONFIRMED":
+        result["strong_confirmation"] = True
+
     return {k:v for k,v in result.items() if k != "_candles"} | {"_candles": candles}
 
 
@@ -2777,7 +3166,7 @@ def manage_position(position, current_analysis, current_price):
     tp2_reached = position.get("tp2_reached", False)
 
     strong_opposite = (
-        current_analysis.get("strong_confirmation", False)
+        current_analysis.get("reversal", {}).get("stage") == "CONFIRMED"
         and current_analysis.get("signal") == ("SHORT" if direction == "LONG" else "LONG")
     )
 
@@ -2895,10 +3284,48 @@ def enrich_v82_setup(item):
             a['pattern_display']=' + '.join(pe['patterns'])
     return item
 
+
+def build_reversal_alert(position, analysis):
+    """Builds a concise Telegram alert only for an existing position."""
+    if not position or not analysis:
+        return None
+    rev = analysis.get("reversal", {})
+    if not rev.get("sudden") and rev.get("stage") not in ("POSSIBLE", "CONFIRMED"):
+        return None
+
+    name = position.get("name", "Commodity")
+    old_dir = position.get("direction", "N/D")
+    new_dir = rev.get("direction", "N/D")
+    stage = rev.get("stage")
+
+    if stage == "CONFIRMED":
+        headline = "🔴 INVERSIONE CONFERMATA"
+        action = "🚨 VALUTARE USCITA / NUOVO SHORT"
+    elif rev.get("sudden"):
+        headline = "🚨 CAMBIO DIREZIONE REPENTINO"
+        action = "⚠️ PROTEGGERE LA POSIZIONE E ATTENDERE CONFERMA"
+    else:
+        headline = "🟠 POSSIBILE INVERSIONE"
+        action = "⚠️ NON CONFONDERE CON UN NORMALE RITRACCIAMENTO"
+
+    return "\n".join([
+        "🚨 COMMODITIES ALERT",
+        "",
+        f"{headline}",
+        f"📌 {name}",
+        f"🟢 Posizione: {old_dir}",
+        f"🧭 Direzione rilevata: {new_dir}",
+        f"📊 Score: {rev.get('previous_score', 0):.0f} → {rev.get('current_score', 0):.0f}",
+        f"📈 Variazione: {rev.get('score_change', 0):+.0f}",
+        f"🧠 Stato: {rev.get('label', 'N/D')}",
+        "",
+        action,
+    ])
+
 def build_telegram(ranked, best, position_message=None):
     """Telegram operativo V8: niente dettagli tecnici interni."""
     available=[x for x in ranked if x.get('available')][:3]
-    lines=['🌍 COMMODITIES BOT v8.3','', '🏆 CLASSIFICA']
+    lines=['🌍 COMMODITIES BOT v2.0','', '🏆 CLASSIFICA']
     medals=['🥇','🥈','🥉']
     for i,item in enumerate(available):
         a=item['analysis']; action=a.get('action_label')
@@ -2940,6 +3367,14 @@ def build_telegram(ranked, best, position_message=None):
         lines += ['', '📌 GESTIONE','TP1 → STOP A BREAK-EVEN','TP2 → STOP A TP1','TP3 → CHIUDERE','STOP LOSS → CHIUDERE','SEGNALE OPPOSTO CONFERMATO → CHIUDERE']
     if position_message:
         lines += ['', '━━━━━━━━━━━━━━━━━━━━','📌 POSIZIONE',position_message]
+        if position and best.get("name") == position.get("name"):
+            rev = best.get("analysis", {}).get("reversal", {})
+            if rev.get("stage") == "RETRACEMENT":
+                lines.append("🟡 RITRACCIAMENTO — trend principale ancora valido")
+            elif rev.get("stage") == "POSSIBLE":
+                lines.append("🟠 POSSIBILE INVERSIONE — attendere conferma")
+            elif rev.get("stage") == "CONFIRMED":
+                lines.append("🔴 INVERSIONE CONFERMATA — proteggere/valutare uscita")
     return '\n'.join(lines)
 
 def analysis_direction_hint(timeframes):
@@ -2958,12 +3393,15 @@ def analysis_direction_hint(timeframes):
 def main():
     print()
     print("=" * 70)
-    print("🌍 COMMODITIES BOT v8.3")
-    print("RANKING RISK/BENEFIT + CYCLICAL ENGINE + GOLD ENGINE v15.1 + GLOBAL INTELLIGENCE + SESSION ENGINE + RISK ENGINE")
+    print("🌍 COMMODITIES BOT v2.0")
+    print("RANKING + KNOWLEDGE ENGINE + REVERSAL ENGINE + GOLD ENGINE LOGIC + GLOBAL INTELLIGENCE + SESSION ENGINE + RISK ENGINE")
     print("=" * 70)
     print()
 
     position = load_position()
+    print("🧠 Aggiornamento Trading Knowledge Engine...")
+    trading_knowledge = refresh_trading_knowledge()
+    print(f"   📚 Fonti: {trading_knowledge['sources']} | utilizzabili: {trading_knowledge['usable']}")
     usd = analyze_usd()
     print("🌍 Avvio Global Market Intelligence...")
     global_intel = global_market_intelligence()
@@ -3021,7 +3459,8 @@ def main():
 
             analysis = analyze(
                 candles, dataset, model, bt, usd, news, timeframes, political, commodity_name=name,
-                global_impact=global_impact, session=session, intraday_candles=intraday_candles, pattern_timeframes=pattern_timeframes
+                global_impact=global_impact, session=session, intraday_candles=intraday_candles, pattern_timeframes=pattern_timeframes,
+                trading_knowledge=trading_knowledge
             )
             if analysis is None:
                 raise RuntimeError("Analisi Gold Engine non disponibile")
@@ -3171,6 +3610,7 @@ def main():
             and a.get("risk", {}).get("mode") == "NORMAL"
             and a.get("risk", {}).get("market_quality", 0) >= 60
             and a.get("risk", {}).get("risk_pct", 0) > 0
+            and a.get("reversal", {}).get("stage") != "CONFIRMED"
         ):
             position = {
                 "name": best["name"],
@@ -3222,6 +3662,7 @@ def main():
     print(f"Probabilità: {a['probability'] * 100:.1f}%")
     print(f"Confidenza: {a['confidence']:.1f}/100")
     print(f"Qualità: {a['quality']:.1f}/100")
+    print(f"Knowledge Engine: {a.get('trading_knowledge', {}).get('usable', 0)} fonti | bias {a.get('knowledge_bias', 0):+.1f}")
     print(
         f"Ricorrenza storica: "
         f"{a['repetition']['direction']} | "
@@ -3254,6 +3695,14 @@ def main():
     )
 
     send_telegram(message)
+
+    # Separate alert: only for the commodity currently held.
+    if position:
+        held = next((x for x in results if x.get("name") == position.get("name") and x.get("available")), None)
+        if held:
+            alert = build_reversal_alert(position, held.get("analysis", {}))
+            if alert:
+                send_telegram(alert)
 
     print()
     print("=" * 70)
