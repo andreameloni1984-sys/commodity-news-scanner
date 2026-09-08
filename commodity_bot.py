@@ -259,27 +259,56 @@ GLOBAL_BEARISH_TERMS = {
 }
 
 COMMODITIES = {
+    # Precious metals
     "Oro": "XAU/USD",
     "Argento": "XAG/USD",
+    "Platino": "XPT/USD",
+    "Palladio": "XPD/USD",
+    # Energy
     "Petrolio WTI": "WTI/USD",
     "Petrolio Brent": "BRN/USD",
     "Gas Naturale": "NG/USD",
+    "Benzina RBOB": "RB/USD",
+    "Heating Oil": "HO/USD",
+    # Industrial metals
     "Rame": "COPPER/USD",
+    "Alluminio": "ALUMINUM/USD",
+    "Nichel": "NICKEL/USD",
+    "Zinco": "ZINC/USD",
+    "Piombo": "LEAD/USD",
+    # Grains / oilseeds
     "Grano": "WHEAT/USD",
     "Mais": "CORN/USD",
+    "Soia": "SOYBEAN/USD",
+    "Farina di soia": "SOYBEAN_MEAL/USD",
+    "Olio di soia": "SOYBEAN_OIL/USD",
+    "Avena": "OATS/USD",
+    "Riso": "RICE/USD",
+    # Soft commodities
     "Caffè": "COFFEE/USD",
+    "Cacao": "COCOA/USD",
+    "Zucchero": "SUGAR/USD",
+    "Cotone": "COTTON/USD",
+    "Succo d'arancia": "ORANGE_JUICE/USD",
+    # Livestock
+    "Bovini vivi": "LIVE_CATTLE/USD",
+    "Maiali magri": "LEAN_HOGS/USD",
+    "Feeder Cattle": "FEEDER_CATTLE/USD",
 }
 
 NEWS_TERMS = {
-    "Oro": "gold OR bullion OR XAU",
-    "Argento": "silver OR XAG",
-    "Petrolio WTI": "oil OR crude OR WTI",
-    "Petrolio Brent": "oil OR crude OR Brent",
-    "Gas Naturale": "natural gas",
-    "Rame": "copper",
-    "Grano": "wheat OR grain",
-    "Mais": "corn OR maize",
-    "Caffè": "coffee",
+    "Oro": "gold OR bullion OR XAU", "Argento": "silver OR XAG",
+    "Platino": "platinum OR XPT", "Palladio": "palladium OR XPD",
+    "Petrolio WTI": "oil OR crude OR WTI", "Petrolio Brent": "oil OR crude OR Brent",
+    "Gas Naturale": "natural gas", "Benzina RBOB": "gasoline OR RBOB",
+    "Heating Oil": "heating oil OR diesel", "Rame": "copper",
+    "Alluminio": "aluminum OR aluminium", "Nichel": "nickel", "Zinco": "zinc",
+    "Piombo": "lead metal", "Grano": "wheat OR grain", "Mais": "corn OR maize",
+    "Soia": "soybean OR soybeans", "Farina di soia": "soybean meal",
+    "Olio di soia": "soybean oil", "Avena": "oats", "Riso": "rice",
+    "Caffè": "coffee", "Cacao": "cocoa", "Zucchero": "sugar", "Cotone": "cotton",
+    "Succo d'arancia": "orange juice", "Bovini vivi": "live cattle",
+    "Maiali magri": "lean hogs OR hogs", "Feeder Cattle": "feeder cattle",
 }
 
 FEATURE_NAMES = [
@@ -690,15 +719,16 @@ COMMODITY_REFERENCE_CACHE = None
 # ============================================================
 YAHOO_BASE_URL = "https://query1.finance.yahoo.com/v8/finance/chart"
 YAHOO_TICKERS = {
-    "Oro": "GC=F",
-    "Argento": "SI=F",
-    "Petrolio WTI": "CL=F",
-    "Petrolio Brent": "BZ=F",
-    "Gas Naturale": "NG=F",
-    "Rame": "HG=F",
-    "Grano": "ZW=F",
-    "Mais": "ZC=F",
-    "Caffè": "KC=F",
+    "Oro": "GC=F", "Argento": "SI=F", "Platino": "PL=F", "Palladio": "PA=F",
+    "Petrolio WTI": "CL=F", "Petrolio Brent": "BZ=F", "Gas Naturale": "NG=F",
+    "Benzina RBOB": "RB=F", "Heating Oil": "HO=F",
+    "Rame": "HG=F", "Alluminio": "ALI=F", "Nichel": "NICKEL=F", "Zinco": "ZNC=F",
+    "Piombo": "LEAD=F",
+    "Grano": "ZW=F", "Mais": "ZC=F", "Soia": "ZS=F", "Farina di soia": "ZM=F",
+    "Olio di soia": "ZL=F", "Avena": "ZO=F", "Riso": "ZR=F",
+    "Caffè": "KC=F", "Cacao": "CC=F", "Zucchero": "SB=F", "Cotone": "CT=F",
+    "Succo d'arancia": "OJ=F", "Bovini vivi": "LE=F", "Maiali magri": "HE=F",
+    "Feeder Cattle": "GF=F",
 }
 YAHOO_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0 Safari/537.36"}
 DATA_SOURCE_STATS = {}
@@ -713,17 +743,19 @@ def resolve_commodity_symbols():
 
     resolved = {}
     aliases = {
-        "Oro": ["gold spot", "gold"],
-        "Argento": ["silver spot", "silver"],
-        "Petrolio WTI": ["crude oil wti", "wti"],
-        "Petrolio Brent": ["brent spot", "brent", "crude oil brent"],
-        "Gas Naturale": ["natural gas", "natural gas spot"],
-        "Rame": ["copper spot", "copper"],
-        "Grano": ["wheat", "wheat spot"],
-        "Mais": ["corn", "corn spot", "maize"],
-        "Caffè": ["coffee", "coffee spot"],
+        "Oro": ["gold spot", "gold"], "Argento": ["silver spot", "silver"],
+        "Platino": ["platinum spot", "platinum"], "Palladio": ["palladium spot", "palladium"],
+        "Petrolio WTI": ["crude oil wti", "wti"], "Petrolio Brent": ["brent spot", "brent", "crude oil brent"],
+        "Gas Naturale": ["natural gas", "natural gas spot"], "Benzina RBOB": ["rbob", "gasoline"],
+        "Heating Oil": ["heating oil", "ultra low sulfur diesel", "ulsd"], "Rame": ["copper spot", "copper"],
+        "Alluminio": ["aluminum", "aluminium"], "Nichel": ["nickel"], "Zinco": ["zinc"], "Piombo": ["lead"],
+        "Grano": ["wheat", "wheat spot"], "Mais": ["corn", "corn spot", "maize"],
+        "Soia": ["soybean", "soybeans"], "Farina di soia": ["soybean meal"], "Olio di soia": ["soybean oil"],
+        "Avena": ["oats"], "Riso": ["rough rice", "rice"], "Caffè": ["coffee", "coffee spot"],
+        "Cacao": ["cocoa"], "Zucchero": ["sugar", "sugar no. 11"], "Cotone": ["cotton"],
+        "Succo d'arancia": ["orange juice", "frozen concentrated orange juice", "fcoj"],
+        "Bovini vivi": ["live cattle"], "Maiali magri": ["lean hogs", "lean hog"], "Feeder Cattle": ["feeder cattle"],
     }
-
     try:
         response = requests.get(
             "https://api.twelvedata.com/commodities",
@@ -2903,7 +2935,7 @@ def risk_engine(analysis, session, global_impact):
     checks = []
     for key, good in [
         ("tecnica", analysis.get("structural_same", 0) >= 2),
-        ("modello", analysis.get("model_signal") == analysis.get("signal") and analysis.get("signal") in ("LONG", "SHORT")),
+        ("modello", (analysis.get("model_signal") or analysis.get("setup_direction")) == (analysis.get("setup_direction") or analysis.get("signal") ) and (analysis.get("setup_direction") or analysis.get("signal")) in ("LONG", "SHORT")),
         ("news", abs(safe_float(analysis.get("news", {}).get("score")) or 0) >= 0.20),
         ("political", abs(safe_float(analysis.get("political", {}).get("score")) or 0) >= 0.20),
         ("sessione", session_quality >= 65),
@@ -2917,7 +2949,12 @@ def risk_engine(analysis, session, global_impact):
         0, 100
     )
     confirmed_shocks = int(global_impact.get("shock_count", 0) or 0)
-    if confirmed_shocks >= 2:
+    # Uno shock globale non deve bloccare automaticamente TUTTE le commodities.
+    # Blocchiamo solo se esiste un impatto avverso esplicito sulla commodity.
+    gi_text = str(global_impact.get("summary", "") or "").upper()
+    adverse = str(analysis.get("shock_impact", "") or "").upper()
+    commodity_specific_shock = any(k in adverse for k in ("STRONG NEGATIVE", "ADVERSE", "BEARISH SHOCK", "NEGATIVE SHOCK"))
+    if confirmed_shocks >= 2 and commodity_specific_shock:
         mode = "SHOCK"
         risk_pct = 0.0
     elif confirmed_shocks >= 1:
@@ -3740,7 +3777,7 @@ def entry_trigger_engine(analysis):
     candidates.sort(reverse=True)
     best_score,tf,kind,bo,pb,mom=candidates[0]
     confirmations=sum(1 for x in candidates if x[3] or x[4])
-    confirmed=bool(kind!="NONE" and best_score>=75 and mom and confirmations>=1)
+    confirmed=bool(kind!="NONE" and best_score>=70 and confirmations>=1 and (mom or best_score>=90))
     reasons=[]
     if bo: reasons.append(f"BREAKOUT {tf}")
     if pb: reasons.append(f"PULLBACK + RIPARTENZA {tf}")
@@ -3753,7 +3790,7 @@ def entry_trigger_engine(analysis):
 
 
 def smart_entry_engine(analysis):
-    """Trade gate v2.6.1: direzione e trigger di ingresso sono separati."""
+    """Trade gate v2.6.2: direzione e trigger di ingresso sono separati."""
     d = analysis.get("setup_direction") or analysis.get("model_signal")
     if d not in ("LONG", "SHORT"):
         analysis.update({"entry_state":"NO_SETUP", "action_label":"NON ENTRARE",
@@ -3789,19 +3826,21 @@ def smart_entry_engine(analysis):
     if source_discrepancy: blockers.append("DISCREPANZA FONTI")
 
     hard = (
-        score >= 65 and quality >= 50 and conf >= 58 and prob >= 58
-        and entry_q >= 68 and rb >= 50 and structural_same >= 2
-        and fast_opp == 0 and ensemble_ok and risk.get("mode") == "NORMAL"
-        and safe_float(risk.get("market_quality"),0) >= 60
+        score >= 62 and quality >= 45 and conf >= 52 and prob >= 55
+        and structural_same >= 2 and fast_opp == 0 and ensemble_ok
+        and risk.get("mode") in ("NORMAL", "ALERT")
+        and safe_float(risk.get("market_quality"),0) >= 50
+        and (entry_q >= 55 or trigger.get("confirmed",False))
         and safe_float(risk.get("risk_pct"),0) > 0
         and rev.get("stage") != "CONFIRMED"
         and not source_discrepancy
         and trigger.get("confirmed",False)
+        and (rb >= 40 or trigger.get("score",0) >= 75)
     )
 
     near = (
-        score >= 55 and quality >= 42 and conf >= 50 and prob >= 53
-        and structural_same >= 2 and fast_opp == 0
+        score >= 50 and quality >= 38 and conf >= 45 and prob >= 51
+        and structural_same >= 2 and fast_opp <= 1
     )
 
     if risk.get("mode") == "SHOCK" or rev.get("stage") == "CONFIRMED":
@@ -3842,7 +3881,7 @@ def finalize_v26_analysis(analysis):
             )
             analysis["risk_benefit"] = risk_benefit_engine(analysis, analysis.get("cyclical", {}) or {})
         except Exception as exc:
-            print(f"⚠️ Ricalcolo rischio v2.6.1: {exc}")
+            print(f"⚠️ Ricalcolo rischio v2.6.2: {exc}")
     smart_entry_engine(analysis)
     return analysis
 
@@ -4375,7 +4414,7 @@ def build_reversal_alert(position, analysis):
 def build_telegram(ranked, best, position_message=None, position=None):
     """Telegram operativo V8: niente dettagli tecnici interni."""
     available=[x for x in ranked if x.get('available')][:3]
-    lines=['🌍 COMMODITIES BOT v2.6.1','', '🏆 CLASSIFICA']
+    lines=['🌍 COMMODITIES BOT v2.6.2','', '🏆 CLASSIFICA']
     medals=['🥇','🥈','🥉']
     for i,item in enumerate(available):
         a=item['analysis']; action=a.get('action_label')
@@ -4445,7 +4484,7 @@ def analysis_direction_hint(timeframes):
 def main():
     print()
     print("=" * 70)
-    print("🌍 COMMODITIES BOT v2.6.1")
+    print("🌍 COMMODITIES BOT v2.6.2")
     print("RANKING + LEARNING + GLOBAL INTELLIGENCE + WEATHER/DISASTER + ENSEMBLE + SMART ENTRY + PAPER/DEMO GATE")
     print("=" * 70)
     print()
