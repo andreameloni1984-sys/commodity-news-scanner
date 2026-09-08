@@ -49,38 +49,30 @@ KNOWLEDGE_CACHE_FILE = "trading_knowledge_cache.json"
 KNOWLEDGE_REFRESH_HOURS = 24
 KNOWLEDGE_FETCH_TIMEOUT = 6
 KNOWLEDGE_SOURCES = [
-    # Exchange / regulator / institutional education
-    {"name": "CME Technical Analysis", "url": "https://www.cmegroup.com/it/education/courses/technical-analysis.html", "type": "web"},
+    # Worldwide primary / institutional sources verified for availability.
+    {"name": "CME Technical Analysis", "url": "https://www.cmegroup.com/education/courses/technical-analysis", "type": "web"},
     {"name": "CME Trading and Analysis", "url": "https://www.cmegroup.com/education/courses/trading-and-analysis", "type": "web"},
-    {"name": "CFTC Futures Market Basics", "url": "https://www.cftc.gov/LearnAndProtect/EducationCenter/FuturesMarketBasics/index2.htm", "type": "web"},
-    {"name": "CFTC Learn to Trade Safely", "url": "https://www.cftc.gov/LearnAndProtect/AdvisoriesAndArticles/learn_to_trade_without_scam.htm", "type": "web"},
-    {"name": "CFA Commodities and Derivatives", "url": "https://www.cfainstitute.org/insights/professional-learning/refresher-readings/2026/introduction-commodities-commodity-derivatives", "type": "web"},
-    {"name": "CFA Market Risk", "url": "https://www.cfainstitute.org/insights/professional-learning/refresher-readings/2026/measuring-managing-market-risk", "type": "web"},
-    {"name": "CFA Trade Strategy and Execution", "url": "https://www.cfainstitute.org/insights/professional-learning/refresher-readings/2026/trade-strategy-execution", "type": "web"},
-    # International / independent educational material
-    {"name": "IG Academy", "url": "https://www.ig.com/it/scuola-di-trading/ig-academy/corsi-online", "type": "web"},
-    {"name": "Babypips School of Pipsology", "url": "https://www.babypips.com/learn/forex", "type": "web"},
-    {"name": "Investopedia Technical Analysis", "url": "https://www.investopedia.com/trading/best-ways-learn-technical-analysis/", "type": "web"},
-    # Academic research on momentum / trend following
-    {"name": "Academic Trend Following Research", "url": "https://arxiv.org/abs/2106.08420", "type": "web"},
+    {"name": "CME Technical Patterns Reversals", "url": "https://www.cmegroup.com/education/courses/technical-analysis/technical-patterns-reversals", "type": "web"},
+    {"name": "CFTC Commitments of Traders", "url": "https://www.cftc.gov/MarketReports/CommitmentsofTraders/index.htm", "type": "web"},
+    {"name": "CFTC COT Historical", "url": "https://www.cftc.gov/MarketReports/CommitmentsofTraders/HistoricalViewable/index.htm", "type": "web"},
+    {"name": "CFTC Trading Risk Advisory", "url": "https://www.cftc.gov/LearnAndProtect/AdvisoriesAndArticles/CustomerAdvisory_SocialMedia_Metals.html", "type": "web"},
+    {"name": "ICE Education", "url": "https://www.ice.com/support/education", "type": "web"},
+    {"name": "ICE Commodity Technical Analysis", "url": "https://www.ice.com/publicdocs/Charting_and_Technical_Analysis_for_Commodity_Markets.pdf", "type": "web"},
+    {"name": "NOAA Climate Data Online", "url": "https://www.ncei.noaa.gov/cdo-web/", "type": "web"},
 ]
-# Add public YouTube URLs here. The bot will use a transcript only when
-# youtube-transcript-api is installed and a transcript is publicly available.
-# International source registry. The bot does not crawl the entire internet;
-# it uses explicitly configured public sources and validates resulting rules
-# against market history before allowing them to influence the score.
+
+# Additional global institutional sources. Kept separate so the bot can report
+# which source family is healthy without depending on fragile regional academy pages.
 WORLDWIDE_KNOWLEDGE_SOURCES = [
     {"name": "CME Education", "url": "https://www.cmegroup.com/education.html", "lang": "en", "tier": "exchange"},
     {"name": "CFTC Education", "url": "https://www.cftc.gov/LearnAndProtect/AdvisoriesAndArticles/index.htm", "lang": "en", "tier": "regulator"},
-    {"name": "CFA Institute", "url": "https://www.cfainstitute.org/insights", "lang": "en", "tier": "professional"},
-    {"name": "Eurex Education", "url": "https://www.eurex.com/ex-en/education", "lang": "en/de", "tier": "exchange"},
+    {"name": "CFTC COT Explanatory Notes", "url": "https://www.cftc.gov/MarketReports/CommitmentsofTraders/DisaggregatedExplanatoryNotes/index.htm", "lang": "en", "tier": "regulator"},
     {"name": "ICE Education", "url": "https://www.ice.com/education", "lang": "en", "tier": "exchange"},
-    {"name": "SGX Academy", "url": "https://www.sgx.com/academy", "lang": "en", "tier": "exchange"},
-    {"name": "JPX Learning", "url": "https://www.jpx.co.jp/english/learning/index.html", "lang": "en/ja", "tier": "exchange"},
-    {"name": "NSE Academy", "url": "https://www.nseindia.com/learn", "lang": "en", "tier": "exchange"},
-    {"name": "B3 Education", "url": "https://edu.b3.com.br/", "lang": "pt", "tier": "exchange"},
-    {"name": "Euronext Academy", "url": "https://www.euronext.com/en/academy", "lang": "en/fr", "tier": "exchange"},
+    {"name": "ICE Trading Concepts", "url": "https://www.ice.com/support/education/sample-our-trading-market-education", "lang": "en", "tier": "exchange"},
+    {"name": "Eurex Global Derivatives", "url": "https://www.eurex.com/ex-en/", "lang": "en/de", "tier": "exchange"},
+    {"name": "NOAA Climate Data Online", "url": "https://www.ncei.noaa.gov/cdo-web/", "lang": "en", "tier": "weather"},
 ]
+
 
 YOUTUBE_KNOWLEDGE_URLS = [
     # "https://www.youtube.com/watch?v=VIDEO_ID",
