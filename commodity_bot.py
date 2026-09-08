@@ -302,11 +302,11 @@ FEATURE_NAMES = [
 # UTILITY
 # ============================================================
 
-def safe_float(value):
+def safe_float(value, default=None):
     try:
         return float(value)
     except (TypeError, ValueError):
-        return None
+        return default
 
 
 def mean(values):
