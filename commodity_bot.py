@@ -3390,6 +3390,204 @@ def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None, 
 
 
 # ============================================================
+# v2.4 INSTITUTIONAL-STYLE ENSEMBLE LAYER
+# Inspired by robust ideas found in commodity research/platforms:
+# multi-horizon ensemble, cross-sectional ranking, flow/volume proxy,
+# regime detection and explicit execution-quality gating.
+# This layer is deliberately transparent and testable; it is NOT a claim
+# of access to proprietary institutional order-flow feeds.
+# ============================================================
+
+def _pct_change_at(closes, bars):
+    if not closes or len(closes) <= bars:
+        return 0.0
+    base = closes[-bars-1]
+    return (closes[-1] / base - 1.0) if base else 0.0
+
+
+def _zscore(values, value):
+    vals = [safe_float(v) for v in values if safe_float(v) is not None]
+    if len(vals) < 3 or value is None:
+        return 0.0
+    mean = sum(vals) / len(vals)
+    var = sum((v - mean) ** 2 for v in vals) / max(len(vals) - 1, 1)
+    sd = math.sqrt(var)
+    return (value - mean) / sd if sd > 1e-12 else 0.0
+
+
+def institutional_style_features(candles):
+    """Transparent proxies for ideas commonly used by systematic desks.
+
+    Uses only data already available to the bot: OHLCV. No look-ahead.
+    """
+    if not candles or len(candles) < 80:
+        return {
+            "direction": "NONE", "score": 0.0, "regime": "UNKNOWN",
+            "momentum_ensemble": 0.0, "volume_confirmation": 0.0,
+            "trend_consistency": 0.0, "range_efficiency": 0.0,
+            "volatility_percentile": 0.0,
+        }
+
+    closes = [safe_float(c.get("close")) for c in candles]
+    closes = [x for x in closes if x is not None]
+    if len(closes) < 80:
+        return {"direction": "NONE", "score": 0.0, "regime": "UNKNOWN"}
+
+    # Ensemble across short / medium / long horizons.
+    r1 = _pct_change_at(closes, 1)
+    r5 = _pct_change_at(closes, 5)
+    r20 = _pct_change_at(closes, 20)
+    r60 = _pct_change_at(closes, 60)
+    momentum = 0.15*r1 + 0.25*r5 + 0.30*r20 + 0.30*r60
+
+    # Trend consistency: share of positive daily returns in the last 20 bars,
+    # converted to a signed measure.
+    daily = []
+    for i in range(max(1, len(closes)-20), len(closes)):
+        if closes[i-1]:
+            daily.append(closes[i] / closes[i-1] - 1.0)
+    pos = sum(1 for x in daily if x > 0)
+    neg = sum(1 for x in daily if x < 0)
+    consistency = (pos - neg) / max(len(daily), 1)
+
+    # Range efficiency: net displacement / total absolute movement.
+    moves = [abs(closes[i]/closes[i-1]-1.0) for i in range(max(1,len(closes)-20), len(closes)) if closes[i-1]]
+    efficiency = abs(_pct_change_at(closes, 20)) / max(sum(moves), 1e-9)
+    efficiency = clamp(efficiency, 0.0, 1.0)
+
+    # Volume confirmation proxy. A true institutional flow feed is not assumed.
+    vols = [safe_float(c.get("volume")) for c in candles]
+    vols = [v for v in vols if v is not None and v > 0]
+    volume_confirmation = 0.0
+    if len(vols) >= 21:
+        vz = _zscore(vols[-21:-1], vols[-1])
+        last_return = r1
+        volume_confirmation = clamp((vz / 2.5) * (1 if last_return > 0 else -1 if last_return < 0 else 0), -1, 1)
+
+    # Volatility regime relative to the recent history.
+    returns = [closes[i]/closes[i-1]-1.0 for i in range(1, len(closes)) if closes[i-1]]
+    recent_vol = math.sqrt(sum(x*x for x in returns[-20:]) / max(len(returns[-20:]),1)) if returns else 0
+    hist_vols=[]
+    for end in range(40, len(returns)+1, 5):
+        chunk=returns[max(0,end-20):end]
+        if chunk:
+            hist_vols.append(math.sqrt(sum(x*x for x in chunk)/len(chunk)))
+    vol_pct = 0.5
+    if hist_vols:
+        vol_pct = sum(1 for v in hist_vols if v <= recent_vol) / len(hist_vols)
+
+    if vol_pct >= 0.80:
+        regime = "HIGH_VOL"
+    elif vol_pct <= 0.20:
+        regime = "LOW_VOL"
+    else:
+        regime = "NORMAL"
+
+    direction_value = momentum * 0.50 + consistency * 0.30 + (1 if momentum != 0 else 0) * volume_confirmation * 0.20
+    direction = "LONG" if direction_value > 0.001 else "SHORT" if direction_value < -0.001 else "NONE"
+    score = clamp(abs(direction_value) * 5000 * (0.70 + 0.30*efficiency), 0, 100)
+
+    return {
+        "direction": direction,
+        "score": score,
+        "regime": regime,
+        "momentum_ensemble": momentum,
+        "momentum_1d": r1,
+        "momentum_5d": r5,
+        "momentum_20d": r20,
+        "momentum_60d": r60,
+        "volume_confirmation": volume_confirmation,
+        "trend_consistency": consistency,
+        "range_efficiency": efficiency,
+        "volatility_percentile": vol_pct,
+    }
+
+
+def apply_cross_sectional_ensemble(results):
+    """Rank commodities against each other, not only against fixed thresholds.
+
+    This implements a key research idea: cross-sectional commodity ranking
+    combined with multi-horizon signals. The adjustment is capped so the
+    ensemble cannot override the core risk gates by itself.
+    """
+    available = [x for x in results if x.get("available") and x.get("candles")]
+    if len(available) < 2:
+        return
+
+    feature_rows=[]
+    for item in available:
+        f = institutional_style_features(item.get("candles", []))
+        item["analysis"]["institutional"] = f
+        feature_rows.append((item, f))
+
+    def percentile(values, value):
+        ordered=sorted(values)
+        if not ordered:
+            return 0.5
+        rank=sum(1 for v in ordered if v <= value)
+        return rank/len(ordered)
+
+    mom20=[f.get("momentum_20d",0) for _,f in feature_rows]
+    mom60=[f.get("momentum_60d",0) for _,f in feature_rows]
+    eff=[f.get("range_efficiency",0) for _,f in feature_rows]
+    volc=[f.get("volume_confirmation",0) for _,f in feature_rows]
+
+    for item,f in feature_rows:
+        a=item["analysis"]
+        d=f.get("direction","NONE")
+        if d == "NONE":
+            a["cross_sectional_score"] = 50.0
+            a["ensemble_alignment"] = "NEUTRALE"
+            continue
+
+        p20=percentile(mom20, f.get("momentum_20d",0))
+        p60=percentile(mom60, f.get("momentum_60d",0))
+        pe=percentile(eff, f.get("range_efficiency",0))
+        pv=percentile(volc, f.get("volume_confirmation",0))
+        raw=100*(0.35*p20 + 0.35*p60 + 0.15*pe + 0.15*pv)
+        if d == "SHORT":
+            # Percentile direction must be inverted for bearish momentum.
+            raw=100*(0.35*(1-p20) + 0.35*(1-p60) + 0.15*pe + 0.15*(1-pv))
+
+        a["cross_sectional_score"] = round(raw, 1)
+        a["ensemble_alignment"] = d
+        a["ensemble_rank"] = 1 + sum(1 for _,other in feature_rows if other.get("score",0) > f.get("score",0))
+
+        # Only a bounded nudge: this is a confluence layer, not a replacement model.
+        nudge = (raw - 50.0) * 0.12
+        if d == a.get("setup_direction"):
+            a["score"] = clamp(a.get("score",0) + nudge, 0, 100)
+            a["confidence"] = clamp(a.get("confidence",0) + max(0, abs(nudge))*0.35, 0, 100)
+        elif a.get("setup_direction") in ("LONG","SHORT"):
+            a["score"] = clamp(a.get("score",0) - max(0, abs(nudge))*0.25, 0, 100)
+
+        # High-volatility regimes require stronger confirmation rather than
+        # automatically generating a signal.
+        if f.get("regime") == "HIGH_VOL":
+            a["high_volatility_guard"] = True
+            if a.get("signal") in ("LONG","SHORT") and a.get("confidence",0) < 72:
+                a["signal"] = "WAIT"
+                a["action_label"] = "ATTENDERE"
+        else:
+            a["high_volatility_guard"] = False
+
+
+def ensemble_trade_gate(analysis):
+    """Final transparent gate inspired by execution-quality/risk systems."""
+    inst=analysis.get("institutional",{})
+    d=analysis.get("setup_direction")
+    if d not in ("LONG","SHORT"):
+        return True, "N/D"
+    if inst.get("direction") not in (d, "NONE"):
+        return False, "MOMENTUM MULTI-HORIZON CONTRARIO"
+    if inst.get("regime") == "HIGH_VOL" and analysis.get("confidence",0) < 72:
+        return False, "VOLATILITÀ ELEVATA — CONFERMA RICHIESTA"
+    if analysis.get("cross_sectional_score",50) < 25:
+        return False, "RANKING CROSS-SECTIONALE DEBOLE"
+    return True, "OK"
+
+
+# ============================================================
 # v2.3 PREDICTION JOURNAL + END-OF-DAY TEST
 # ============================================================
 
@@ -3534,7 +3732,7 @@ def run_end_of_day_test(force=False):
     wrong = sum(p.get("verdict") == "ERRATA" for p in evaluated)
     ambiguous = sum(p.get("verdict") == "AMBIGUA" for p in evaluated)
     accuracy = correct / (correct + wrong) * 100.0 if correct + wrong else 0.0
-    lines = ["📊 COMMODITIES BOT v2.3 — TEST FINE GIORNATA", "", f"📅 {local_now.strftime('%d/%m/%Y')}", "━━━━━━━━━━━━━━━━━━━━", "🎯 ACCURATEZZA PREVISIONI", f"Previsioni valutate: {len(evaluated)}", f"✅ Corrette: {correct}", f"❌ Errate: {wrong}", f"⚪ Ambigue: {ambiguous}", f"🎯 Accuratezza: {accuracy:.1f}%", "", "🧭 PER DIREZIONE"]
+    lines = ["📊 COMMODITIES BOT v2.4 — TEST FINE GIORNATA", "", f"📅 {local_now.strftime('%d/%m/%Y')}", "━━━━━━━━━━━━━━━━━━━━", "🎯 ACCURATEZZA PREVISIONI", f"Previsioni valutate: {len(evaluated)}", f"✅ Corrette: {correct}", f"❌ Errate: {wrong}", f"⚪ Ambigue: {ambiguous}", f"🎯 Accuratezza: {accuracy:.1f}%", "", "🧭 PER DIREZIONE"]
     for direction, icon in (("LONG", "🟢"), ("SHORT", "🔴"), ("WAIT", "🟡")):
         rows = [p for p in evaluated if p.get("direction") == direction]
         d = sum(x.get("verdict") == "CORRETTA" for x in rows); w = sum(x.get("verdict") == "ERRATA" for x in rows)
@@ -3731,7 +3929,7 @@ def build_reversal_alert(position, analysis):
 def build_telegram(ranked, best, position_message=None, position=None):
     """Telegram operativo V8: niente dettagli tecnici interni."""
     available=[x for x in ranked if x.get('available')][:3]
-    lines=['🌍 COMMODITIES BOT v2.3','', '🏆 CLASSIFICA']
+    lines=['🌍 COMMODITIES BOT v2.4','', '🏆 CLASSIFICA']
     medals=['🥇','🥈','🥉']
     for i,item in enumerate(available):
         a=item['analysis']; action=a.get('action_label')
@@ -3753,7 +3951,9 @@ def build_telegram(ranked, best, position_message=None, position=None):
         lines += ['', '━━━━━━━━━━━━━━━━━━━━', f'{medal} {item["name"]}', '━━━━━━━━━━━━━━━━━━━━',
                   f'🎯 AZIONE: {action}', f'🧭 DIREZIONE: {direction}',
                   f'💰 PREZZO ATTUALE: {price:.4f}' if price is not None else '💰 PREZZO ATTUALE: N/D',
-                  f'📥 ENTRATA: {entry:.4f}' if entry is not None else '📥 ENTRATA: N/D', f'📌 SETUP: {a.get("entry_method","N/D")}', f'🕯️ PATTERN: {pattern}', f'📚 STORICO SETUP: {a.get("pattern_backtest",{}).get("win_rate",0)*100:.0f}% successo' if a.get("pattern_backtest",{}).get("samples",0)>=5 else '📚 STORICO SETUP: dati insufficienti']
+                  f'📥 ENTRATA: {entry:.4f}' if entry is not None else '📥 ENTRATA: N/D', f'📌 SETUP: {a.get("entry_method","N/D")}', f'🕯️ PATTERN: {pattern}', f'📚 STORICO SETUP: {a.get("pattern_backtest",{}).get("win_rate",0)*100:.0f}% successo' if a.get("pattern_backtest",{}).get("samples",0)>=5 else '📚 STORICO SETUP: dati insufficienti',
+                  f'🧠 ENSEMBLE: {a.get("ensemble_alignment","N/D")} | RANK {a.get("ensemble_rank","N/D")} | {a.get("cross_sectional_score",50):.0f}/100',
+                  f'🌡️ REGIME: {a.get("institutional",{}).get("regime","N/D")} | VOLUME/FLOW PROXY: {a.get("institutional",{}).get("volume_confirmation",0):+.2f}']
         item_mode=a.get('risk',{}).get('mode', global_mode)
         if item_mode=='SHOCK':
             lines.append('🚨 ENTRATA BLOCCATA — SHOCK MODE')
@@ -3928,6 +4128,18 @@ def main():
 
     if not results:
         raise RuntimeError("Nessuna materia prima analizzata.")
+
+    # v2.4: cross-sectional multi-horizon ensemble + volatility/flow proxies.
+    apply_cross_sectional_ensemble(results)
+    for _item in results:
+        if _item.get("available"):
+            _ok, _reason = ensemble_trade_gate(_item["analysis"])
+            _item["analysis"]["ensemble_gate"] = _ok
+            _item["analysis"]["ensemble_gate_reason"] = _reason
+            if not _ok and _item["analysis"].get("signal") in ("LONG", "SHORT"):
+                _item["analysis"]["signal"] = "WAIT"
+                _item["analysis"]["action_label"] = "ATTENDERE"
+                _item["analysis"]["strong_confirmation"] = False
 
     new_predictions, _prediction_log = record_predictions(results)
     print(f"📝 Prediction Journal: {new_predictions} nuove previsioni registrate")
