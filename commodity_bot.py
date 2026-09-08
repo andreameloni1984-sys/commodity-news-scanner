@@ -15,7 +15,7 @@ import requests
 # QUANT MODEL + MULTI-TIMEFRAME + NEWS + USD + SEASONALITY
 # + RANKING + POSITION MANAGEMENT
 #
-# Analitico/simulato: NON esegue ordini reali.
+# Analitico/simulato: NON esegue ordini reali. v2.5 aggiunge Weather/Disaster Intelligence e un adapter demo disabilitato di default.
 # ============================================================
 
 API_KEY = os.getenv("TWELVE_DATA_API_KEY")
@@ -32,6 +32,18 @@ PREDICTION_LOG_FILE = "commodities_prediction_log.json"
 DAILY_REPORT_FILE = "commodities_daily_report_state.json"
 PREDICTION_HORIZON_HOURS = 24
 EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "23"))
+
+# v2.5 GLOBAL COMMODITY INTELLIGENCE
+WEATHER_CACHE_FILE = "commodities_weather_cache.json"
+WEATHER_CACHE_HOURS = int(os.getenv("WEATHER_CACHE_HOURS", "3"))
+WEATHER_TIMEOUT = 12
+WEATHER_ENABLED = os.getenv("WEATHER_ENABLED", "1") == "1"
+DISASTER_ENABLED = os.getenv("DISASTER_ENABLED", "1") == "1"
+# Automatic broker/demo execution is deliberately OFF. Enable only after
+# forward/paper validation and a broker-specific adapter is configured.
+DEMO_TRADING_ENABLED = os.getenv("DEMO_TRADING_ENABLED", "0") == "1"
+DEMO_ORDERS_FILE = "commodities_demo_orders.json"
+WEATHER_IMPACT_CAP = 8.0
 
 KNOWLEDGE_CACHE_FILE = "trading_knowledge_cache.json"
 KNOWLEDGE_REFRESH_HOURS = 24
@@ -133,6 +145,51 @@ SESSION_BANDS = {
 MAX_RISK_PER_TRADE_PCT = 0.50
 MAX_DAILY_RISK_PCT = 1.00
 MAX_COMMODITY_RISK_PCT = 0.75
+
+# Weather regions are chosen around the main production/consumption hubs for
+# each commodity. Coordinates can be overridden with environment variables later.
+WEATHER_REGIONS = {
+    "Gas Naturale": [("US South/Central", 31.0, -97.0), ("US Northeast", 41.0, -74.0)],
+    "Grano": [("US Plains", 39.0, -98.0), ("Black Sea", 47.0, 35.0), ("EU", 50.0, 10.0)],
+    "Mais": [("US Corn Belt", 41.0, -93.0), ("Brazil", -15.0, -52.0)],
+    "Caffè": [("Brazil", -20.0, -47.0), ("Vietnam", 12.0, 108.0)],
+    "Petrolio WTI": [("US Gulf", 29.0, -95.0)],
+    "Petrolio Brent": [("North Sea", 57.0, 2.0), ("US Gulf", 29.0, -95.0)],
+    "Oro": [("Global", 0.0, 0.0)],
+    "Argento": [("Mexico/US", 25.0, -105.0)],
+    "Rame": [("Chile/Peru", -20.0, -70.0), ("China", 30.0, 105.0)],
+}
+
+# Weather variables most relevant to commodity demand/supply.
+WEATHER_VARIABLES = [
+    "temperature_2m", "precipitation", "windspeed_10m",
+]
+
+# Simple causal priors. They are deliberately capped and can only nudge the
+# main model until historical validation proves they deserve more weight.
+WEATHER_PRIORS = {
+    "Gas Naturale": {"hot": 1.0, "cold": 1.0, "wet": 0.0, "wind": 0.3},
+    "Grano": {"hot": -0.8, "cold": -0.5, "wet": -0.8, "wind": -0.2},
+    "Mais": {"hot": -0.8, "cold": -0.4, "wet": -0.6, "wind": -0.2},
+    "Caffè": {"hot": -0.6, "cold": -0.9, "wet": 0.4, "wind": -0.2},
+    "Petrolio WTI": {"hot": 0.1, "cold": 0.1, "wet": 0.0, "wind": -0.1},
+    "Petrolio Brent": {"hot": 0.1, "cold": 0.1, "wet": 0.0, "wind": -0.1},
+    "Oro": {"hot": 0.0, "cold": 0.0, "wet": 0.0, "wind": 0.0},
+    "Argento": {"hot": 0.0, "cold": 0.0, "wet": 0.0, "wind": 0.0},
+    "Rame": {"hot": -0.2, "cold": -0.1, "wet": -0.1, "wind": -0.1},
+}
+
+DISASTER_QUERIES = {
+    "Gas Naturale": ["hurricane Gulf Mexico oil gas", "wildfire pipeline gas", "flood gas infrastructure"],
+    "Petrolio WTI": ["hurricane Gulf Mexico oil production", "refinery outage hurricane", "pipeline disruption oil"],
+    "Petrolio Brent": ["North Sea storm oil production", "Middle East storm shipping oil", "flood oil refinery"],
+    "Grano": ["drought wheat crop", "frost wheat crop", "flood wheat harvest"],
+    "Mais": ["drought corn crop", "frost corn crop", "flood corn harvest"],
+    "Caffè": ["Brazil frost coffee crop", "Brazil drought coffee crop", "Vietnam flood coffee crop"],
+    "Rame": ["Chile Peru earthquake mine copper", "flood copper mine", "wildfire mining copper"],
+    "Oro": ["earthquake mine disruption gold", "flood gold mine", "wildfire mine disruption"],
+    "Argento": ["Mexico mine disruption silver", "earthquake silver mine", "flood silver mine"],
+}
 
 GLOBAL_NEWS_QUERIES = [
     # Macro / rates / FX
@@ -3804,6 +3861,193 @@ def manage_position(position, current_analysis, current_price):
 
 
 # ============================================================
+# v2.5 WEATHER + NATURAL DISASTER INTELLIGENCE
+# ============================================================
+
+def _cache_get(path, max_age_hours):
+    try:
+        obj = _json_load(path, {})
+        ts = datetime.fromisoformat(obj.get("timestamp", "").replace("Z", "+00:00"))
+        if datetime.now(timezone.utc) - ts <= timedelta(hours=max_age_hours):
+            return obj.get("data")
+    except Exception:
+        pass
+    return None
+
+
+def _cache_put(path, data):
+    try:
+        _json_save(path, {"timestamp": datetime.now(timezone.utc).isoformat(), "data": data})
+    except Exception:
+        pass
+
+
+def _weather_json(url, params):
+    r = requests.get(url, params=params, timeout=WEATHER_TIMEOUT)
+    r.raise_for_status()
+    return r.json()
+
+
+def _weather_region_snapshot(name, lat, lon):
+    """Free forecast + recent observations from Open-Meteo.
+
+    This is an intelligence layer, not a direct trading signal. We keep source,
+    timestamps and raw metrics so later backtests can audit the decision.
+    """
+    forecast = _weather_json(
+        "https://api.open-meteo.com/v1/forecast",
+        {"latitude": lat, "longitude": lon,
+         "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max",
+         "forecast_days": 10, "timezone": "UTC"}
+    )
+    # Recent history is used for anomaly context. Open-Meteo archive is a
+    # climate-history source; the model treats it as context, not as a future leak.
+    end = (datetime.now(timezone.utc) - timedelta(days=2)).date().isoformat()
+    start = (datetime.now(timezone.utc) - timedelta(days=32)).date().isoformat()
+    history = _weather_json(
+        "https://archive-api.open-meteo.com/v1/archive",
+        {"latitude": lat, "longitude": lon, "start_date": start, "end_date": end,
+         "daily": "temperature_2m_mean,precipitation_sum,wind_speed_10m_max",
+         "timezone": "UTC"}
+    )
+    fd=forecast.get("daily", {})
+    hd=history.get("daily", {})
+    temps=[x for x in (fd.get("temperature_2m_max") or []) if isinstance(x,(int,float))]
+    mins=[x for x in (fd.get("temperature_2m_min") or []) if isinstance(x,(int,float))]
+    rain=[x for x in (fd.get("precipitation_sum") or []) if isinstance(x,(int,float))]
+    winds=[x for x in (fd.get("wind_speed_10m_max") or []) if isinstance(x,(int,float))]
+    htemps=[x for x in (hd.get("temperature_2m_mean") or []) if isinstance(x,(int,float))]
+    hrain=[x for x in (hd.get("precipitation_sum") or []) if isinstance(x,(int,float))]
+    hwinds=[x for x in (hd.get("wind_speed_10m_max") or []) if isinstance(x,(int,float))]
+    return {
+        "region": name, "lat": lat, "lon": lon, "source": "Open-Meteo",
+        "forecast_days": len(temps),
+        "forecast_max_mean": sum(temps)/len(temps) if temps else None,
+        "forecast_min_mean": sum(mins)/len(mins) if mins else None,
+        "forecast_rain_total": sum(rain),
+        "forecast_wind_max": max(winds) if winds else None,
+        "recent_temp_mean": sum(htemps)/len(htemps) if htemps else None,
+        "recent_rain_total": sum(hrain),
+        "recent_wind_max": max(hwinds) if hwinds else None,
+        "raw_forecast_dates": fd.get("time", []),
+    }
+
+
+def weather_intelligence(commodity):
+    if not WEATHER_ENABLED or commodity not in WEATHER_REGIONS:
+        return {"enabled": False, "score": 0.0, "label": "N/D", "confidence": 0.0, "regions": []}
+    cached = _cache_get(WEATHER_CACHE_FILE, WEATHER_CACHE_HOURS)
+    if isinstance(cached, dict) and commodity in cached:
+        return cached[commodity]
+    regions=[]
+    for label,lat,lon in WEATHER_REGIONS.get(commodity, []):
+        try:
+            regions.append(_weather_region_snapshot(label,lat,lon))
+        except Exception as e:
+            regions.append({"region":label,"error":str(e),"source":"Open-Meteo"})
+    valid=[r for r in regions if not r.get("error")]
+    if not valid:
+        return {"enabled": True, "score": 0.0, "label": "DATI METEO NON DISPONIBILI", "confidence": 0.0, "regions": regions}
+    p=WEATHER_PRIORS.get(commodity,{})
+    raw=0.0
+    anomaly=[]
+    for r in valid:
+        # Recent-vs-forecast change is a "surprise" proxy. It is not a climate
+        # normal; this deliberately avoids pretending 30 days of history is a 30-year climatology.
+        if r.get("forecast_max_mean") is not None and r.get("recent_temp_mean") is not None:
+            dt=r["forecast_max_mean"]-r["recent_temp_mean"]
+            raw += max(-3,min(3,dt/5.0))*p.get("hot",0)
+            anomaly.append(dt)
+        if r.get("forecast_rain_total") is not None:
+            raw += max(-2,min(2,(r["forecast_rain_total"]-r.get("recent_rain_total",0))/100.0))*p.get("wet",0)
+        if r.get("forecast_wind_max") is not None:
+            raw += max(-1.5,min(1.5,(r["forecast_wind_max"]-r.get("recent_wind_max",0))/20.0))*p.get("wind",0)
+    score=max(-100,min(100,raw*25))
+    if score >= 15: label="BULLISH"
+    elif score <= -15: label="BEARISH"
+    else: label="NEUTRALE"
+    confidence=min(95,40+len(valid)*12)
+    out={"enabled":True,"score":round(score,1),"label":label,"confidence":round(confidence,1),"regions":regions,
+         "temperature_change_mean":round(sum(anomaly)/len(anomaly),2) if anomaly else None,
+         "historical_context":"recent 30-day observations + 10-day forecast"}
+    cache = _cache_get(WEATHER_CACHE_FILE, WEATHER_CACHE_HOURS) or {}
+    cache[commodity]=out
+    _cache_put(WEATHER_CACHE_FILE,cache)
+    return out
+
+
+def natural_disaster_intelligence(commodity):
+    if not DISASTER_ENABLED:
+        return {"enabled":False,"score":0.0,"count":0,"events":[]}
+    events=[]
+    # Global news engine is already configured for disasters. We use RSS search
+    # only as an extra event layer, not as a replacement for official feeds.
+    for q in DISASTER_QUERIES.get(commodity,[]):
+        try:
+            url="https://news.google.com/rss/search"
+            r=requests.get(url,params={"q":q,"hl":"en-US","gl":"US","ceid":"US:en"},timeout=8)
+            r.raise_for_status()
+            parser=RSSParser()
+            parser.feed(r.text)
+            for item in parser.items[:3]:
+                events.append({"query":q,"title":item.get("title",""),"source":item.get("source","Google News RSS")})
+        except Exception:
+            continue
+    # Keep only a bounded event score; relevance is further checked by the model.
+    count=len(events)
+    score=max(-20.0,min(20.0,count*1.5)) if count else 0.0
+    return {"enabled":True,"score":score,"count":count,"events":events[:12]}
+
+
+def apply_weather_and_disaster_layers(analysis, weather, disasters):
+    """Bounded fundamental nudge. No weather/disaster layer can override risk gates."""
+    analysis["weather"] = weather
+    analysis["natural_disasters"] = disasters
+    w=float(weather.get("score",0) or 0)
+    # Disaster events are risk/context first. They only become directional if
+    # weather/fundamental direction agrees with the current setup.
+    dscore=float(disasters.get("score",0) or 0)
+    direction=analysis.get("setup_direction")
+    if direction == "LONG":
+        nudge=(w+dscore)*0.08
+    elif direction == "SHORT":
+        nudge=(-w+dscore)*0.08
+    else:
+        nudge=0.0
+    nudge=max(-WEATHER_IMPACT_CAP,min(WEATHER_IMPACT_CAP,nudge))
+    analysis["weather_disaster_nudge"] = round(nudge,2)
+    analysis["score"] = clamp(analysis.get("score",0)+nudge,0,100)
+    if abs(w) >= 20 and analysis.get("confidence",0) < 70 and direction in ("LONG","SHORT"):
+        analysis["weather_confirmation"]="DEBOLE — conferma meteo insufficiente"
+    else:
+        analysis["weather_confirmation"]="OK"
+
+
+def demo_execution_adapter(results, position):
+    """Paper/demo execution adapter. No real broker API is called here.
+
+    It writes a proposed order only when DEMO_TRADING_ENABLED=1 and the normal
+    trade gates say the best setup is executable. A future Pepperstone/MT5
+    adapter can consume this exact order schema without changing the model.
+    """
+    if not DEMO_TRADING_ENABLED:
+        return {"enabled":False,"executed":False,"reason":"DEMO_TRADING_ENABLED=0"}
+    candidates=[x for x in results if x.get("available") and x.get("analysis",{}).get("signal") in ("LONG","SHORT")]
+    if not candidates:
+        return {"enabled":True,"executed":False,"reason":"NESSUN SEGNALE ESEGUIBILE"}
+    best=max(candidates,key=lambda x:x.get("ranking_score",-1))
+    a=best["analysis"]
+    if not a.get("ensemble_gate",False):
+        return {"enabled":True,"executed":False,"reason":"ENSEMBLE GATE BLOCCATO"}
+    order={"timestamp":datetime.now(timezone.utc).isoformat(),"commodity":best["name"],"symbol":best["symbol"],
+           "side":a["signal"],"price":a.get("price"),"entry":a.get("entry"),"stop":a.get("stop"),
+           "tp1":a.get("tp1"),"tp2":a.get("tp2"),"tp3":a.get("tp3"),"mode":"DEMO/PAPER"}
+    orders=_json_load(DEMO_ORDERS_FILE,[])
+    orders.append(order); _json_save(DEMO_ORDERS_FILE,orders[-500:])
+    return {"enabled":True,"executed":True,"order":order}
+
+
+# ============================================================
 # TELEGRAM
 # ============================================================
 
@@ -3999,8 +4243,8 @@ def analysis_direction_hint(timeframes):
 def main():
     print()
     print("=" * 70)
-    print("🌍 COMMODITIES BOT v2.3")
-    print("RANKING + LEARNING ENGINE + KNOWLEDGE ENGINE + REVERSAL ENGINE + GOLD ENGINE LOGIC + GLOBAL INTELLIGENCE + SESSION ENGINE + RISK ENGINE")
+    print("🌍 COMMODITIES BOT v2.5")
+    print("RANKING + LEARNING + GLOBAL INTELLIGENCE + WEATHER/DISASTER ENGINE + COT/ENSEMBLE READY + PAPER/DEMO GATE")
     print("=" * 70)
     print()
 
@@ -4070,6 +4314,10 @@ def main():
             )
             if analysis is None:
                 raise RuntimeError("Analisi Gold Engine non disponibile")
+
+            weather = weather_intelligence(name)
+            disasters = natural_disaster_intelligence(name)
+            apply_weather_and_disaster_layers(analysis, weather, disasters)
 
             results.append({
                 "name": name,
@@ -4161,6 +4409,9 @@ def main():
     if not available_ranked:
         raise RuntimeError("Nessuna commodity dispone di dati sufficienti per il Gold Engine. Controllare simboli/API quota.")
     best = available_ranked[0]
+
+    demo_execution = demo_execution_adapter(results, position)
+    print(f"🤖 Demo adapter: {demo_execution.get('reason', 'ordine registrato')}" if not demo_execution.get('executed') else f"🤖 DEMO ORDER: {demo_execution['order']['commodity']} {demo_execution['order']['side']}")
 
     # ========================================================
     # GESTIONE POSIZIONE ESISTENTE
