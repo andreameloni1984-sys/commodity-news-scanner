@@ -3,9 +3,8 @@ import json
 import math
 import re
 from html.parser import HTMLParser
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from urllib.parse import urlparse, parse_qs
-from zoneinfo import ZoneInfo
 
 import requests
 
@@ -15,7 +14,7 @@ import requests
 # QUANT MODEL + MULTI-TIMEFRAME + NEWS + USD + SEASONALITY
 # + RANKING + POSITION MANAGEMENT
 #
-# Analitico/simulato: NON esegue ordini reali. v2.5 aggiunge Weather/Disaster Intelligence e un adapter demo disabilitato di default.
+# Analitico/simulato: NON esegue ordini reali.
 # ============================================================
 
 API_KEY = os.getenv("TWELVE_DATA_API_KEY")
@@ -28,22 +27,6 @@ NEWS_URL = "https://newsapi.org/v2/everything"
 
 POSITION_FILE = "position.json"
 DIRECTION_STATE_FILE = "commodities_direction_state.json"
-PREDICTION_LOG_FILE = "commodities_prediction_log.json"
-DAILY_REPORT_FILE = "commodities_daily_report_state.json"
-PREDICTION_HORIZON_HOURS = 24
-EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "23"))
-
-# v2.5 GLOBAL COMMODITY INTELLIGENCE
-WEATHER_CACHE_FILE = "commodities_weather_cache.json"
-WEATHER_CACHE_HOURS = int(os.getenv("WEATHER_CACHE_HOURS", "3"))
-WEATHER_TIMEOUT = 12
-WEATHER_ENABLED = os.getenv("WEATHER_ENABLED", "1") == "1"
-DISASTER_ENABLED = os.getenv("DISASTER_ENABLED", "1") == "1"
-# Automatic broker/demo execution is deliberately OFF. Enable only after
-# forward/paper validation and a broker-specific adapter is configured.
-DEMO_TRADING_ENABLED = os.getenv("DEMO_TRADING_ENABLED", "0") == "1"
-DEMO_ORDERS_FILE = "commodities_demo_orders.json"
-WEATHER_IMPACT_CAP = 8.0
 
 KNOWLEDGE_CACHE_FILE = "trading_knowledge_cache.json"
 KNOWLEDGE_REFRESH_HOURS = 24
@@ -66,26 +49,9 @@ KNOWLEDGE_SOURCES = [
 ]
 # Add public YouTube URLs here. The bot will use a transcript only when
 # youtube-transcript-api is installed and a transcript is publicly available.
-# International source registry. The bot does not crawl the entire internet;
-# it uses explicitly configured public sources and validates resulting rules
-# against market history before allowing them to influence the score.
-WORLDWIDE_KNOWLEDGE_SOURCES = [
-    {"name": "CME Education", "url": "https://www.cmegroup.com/education.html", "lang": "en", "tier": "exchange"},
-    {"name": "CFTC Education", "url": "https://www.cftc.gov/LearnAndProtect/AdvisoriesAndArticles/index.htm", "lang": "en", "tier": "regulator"},
-    {"name": "CFA Institute", "url": "https://www.cfainstitute.org/insights", "lang": "en", "tier": "professional"},
-    {"name": "Eurex Education", "url": "https://www.eurex.com/ex-en/education", "lang": "en/de", "tier": "exchange"},
-    {"name": "ICE Education", "url": "https://www.ice.com/education", "lang": "en", "tier": "exchange"},
-    {"name": "SGX Academy", "url": "https://www.sgx.com/academy", "lang": "en", "tier": "exchange"},
-    {"name": "JPX Learning", "url": "https://www.jpx.co.jp/english/learning/index.html", "lang": "en/ja", "tier": "exchange"},
-    {"name": "NSE Academy", "url": "https://www.nseindia.com/learn", "lang": "en", "tier": "exchange"},
-    {"name": "B3 Education", "url": "https://edu.b3.com.br/", "lang": "pt", "tier": "exchange"},
-    {"name": "Euronext Academy", "url": "https://www.euronext.com/en/academy", "lang": "en/fr", "tier": "exchange"},
-]
-
 YOUTUBE_KNOWLEDGE_URLS = [
     # "https://www.youtube.com/watch?v=VIDEO_ID",
 ]
-KNOWLEDGE_SOURCES.extend(WORLDWIDE_KNOWLEDGE_SOURCES)
 KNOWLEDGE_CONCEPTS = {
     "trend": ["trend", "trending", "trendline", "higher high", "lower low"],
     "reversal": ["reversal", "inversion", "inversione", "turning point"],
@@ -145,51 +111,6 @@ SESSION_BANDS = {
 MAX_RISK_PER_TRADE_PCT = 0.50
 MAX_DAILY_RISK_PCT = 1.00
 MAX_COMMODITY_RISK_PCT = 0.75
-
-# Weather regions are chosen around the main production/consumption hubs for
-# each commodity. Coordinates can be overridden with environment variables later.
-WEATHER_REGIONS = {
-    "Gas Naturale": [("US South/Central", 31.0, -97.0), ("US Northeast", 41.0, -74.0)],
-    "Grano": [("US Plains", 39.0, -98.0), ("Black Sea", 47.0, 35.0), ("EU", 50.0, 10.0)],
-    "Mais": [("US Corn Belt", 41.0, -93.0), ("Brazil", -15.0, -52.0)],
-    "Caffè": [("Brazil", -20.0, -47.0), ("Vietnam", 12.0, 108.0)],
-    "Petrolio WTI": [("US Gulf", 29.0, -95.0)],
-    "Petrolio Brent": [("North Sea", 57.0, 2.0), ("US Gulf", 29.0, -95.0)],
-    "Oro": [("Global", 0.0, 0.0)],
-    "Argento": [("Mexico/US", 25.0, -105.0)],
-    "Rame": [("Chile/Peru", -20.0, -70.0), ("China", 30.0, 105.0)],
-}
-
-# Weather variables most relevant to commodity demand/supply.
-WEATHER_VARIABLES = [
-    "temperature_2m", "precipitation", "windspeed_10m",
-]
-
-# Simple causal priors. They are deliberately capped and can only nudge the
-# main model until historical validation proves they deserve more weight.
-WEATHER_PRIORS = {
-    "Gas Naturale": {"hot": 1.0, "cold": 1.0, "wet": 0.0, "wind": 0.3},
-    "Grano": {"hot": -0.8, "cold": -0.5, "wet": -0.8, "wind": -0.2},
-    "Mais": {"hot": -0.8, "cold": -0.4, "wet": -0.6, "wind": -0.2},
-    "Caffè": {"hot": -0.6, "cold": -0.9, "wet": 0.4, "wind": -0.2},
-    "Petrolio WTI": {"hot": 0.1, "cold": 0.1, "wet": 0.0, "wind": -0.1},
-    "Petrolio Brent": {"hot": 0.1, "cold": 0.1, "wet": 0.0, "wind": -0.1},
-    "Oro": {"hot": 0.0, "cold": 0.0, "wet": 0.0, "wind": 0.0},
-    "Argento": {"hot": 0.0, "cold": 0.0, "wet": 0.0, "wind": 0.0},
-    "Rame": {"hot": -0.2, "cold": -0.1, "wet": -0.1, "wind": -0.1},
-}
-
-DISASTER_QUERIES = {
-    "Gas Naturale": ["hurricane Gulf Mexico oil gas", "wildfire pipeline gas", "flood gas infrastructure"],
-    "Petrolio WTI": ["hurricane Gulf Mexico oil production", "refinery outage hurricane", "pipeline disruption oil"],
-    "Petrolio Brent": ["North Sea storm oil production", "Middle East storm shipping oil", "flood oil refinery"],
-    "Grano": ["drought wheat crop", "frost wheat crop", "flood wheat harvest"],
-    "Mais": ["drought corn crop", "frost corn crop", "flood corn harvest"],
-    "Caffè": ["Brazil frost coffee crop", "Brazil drought coffee crop", "Vietnam flood coffee crop"],
-    "Rame": ["Chile Peru earthquake mine copper", "flood copper mine", "wildfire mining copper"],
-    "Oro": ["earthquake mine disruption gold", "flood gold mine", "wildfire mine disruption"],
-    "Argento": ["Mexico mine disruption silver", "earthquake silver mine", "flood silver mine"],
-}
 
 GLOBAL_NEWS_QUERIES = [
     # Macro / rates / FX
@@ -3447,371 +3368,6 @@ def analyze(candles, dataset, model, bt, usd, news, timeframes, political=None, 
 
 
 # ============================================================
-# v2.4 INSTITUTIONAL-STYLE ENSEMBLE LAYER
-# Inspired by robust ideas found in commodity research/platforms:
-# multi-horizon ensemble, cross-sectional ranking, flow/volume proxy,
-# regime detection and explicit execution-quality gating.
-# This layer is deliberately transparent and testable; it is NOT a claim
-# of access to proprietary institutional order-flow feeds.
-# ============================================================
-
-def _pct_change_at(closes, bars):
-    if not closes or len(closes) <= bars:
-        return 0.0
-    base = closes[-bars-1]
-    return (closes[-1] / base - 1.0) if base else 0.0
-
-
-def _zscore(values, value):
-    vals = [safe_float(v) for v in values if safe_float(v) is not None]
-    if len(vals) < 3 or value is None:
-        return 0.0
-    mean = sum(vals) / len(vals)
-    var = sum((v - mean) ** 2 for v in vals) / max(len(vals) - 1, 1)
-    sd = math.sqrt(var)
-    return (value - mean) / sd if sd > 1e-12 else 0.0
-
-
-def institutional_style_features(candles):
-    """Transparent proxies for ideas commonly used by systematic desks.
-
-    Uses only data already available to the bot: OHLCV. No look-ahead.
-    """
-    if not candles or len(candles) < 80:
-        return {
-            "direction": "NONE", "score": 0.0, "regime": "UNKNOWN",
-            "momentum_ensemble": 0.0, "volume_confirmation": 0.0,
-            "trend_consistency": 0.0, "range_efficiency": 0.0,
-            "volatility_percentile": 0.0,
-        }
-
-    closes = [safe_float(c.get("close")) for c in candles]
-    closes = [x for x in closes if x is not None]
-    if len(closes) < 80:
-        return {"direction": "NONE", "score": 0.0, "regime": "UNKNOWN"}
-
-    # Ensemble across short / medium / long horizons.
-    r1 = _pct_change_at(closes, 1)
-    r5 = _pct_change_at(closes, 5)
-    r20 = _pct_change_at(closes, 20)
-    r60 = _pct_change_at(closes, 60)
-    momentum = 0.15*r1 + 0.25*r5 + 0.30*r20 + 0.30*r60
-
-    # Trend consistency: share of positive daily returns in the last 20 bars,
-    # converted to a signed measure.
-    daily = []
-    for i in range(max(1, len(closes)-20), len(closes)):
-        if closes[i-1]:
-            daily.append(closes[i] / closes[i-1] - 1.0)
-    pos = sum(1 for x in daily if x > 0)
-    neg = sum(1 for x in daily if x < 0)
-    consistency = (pos - neg) / max(len(daily), 1)
-
-    # Range efficiency: net displacement / total absolute movement.
-    moves = [abs(closes[i]/closes[i-1]-1.0) for i in range(max(1,len(closes)-20), len(closes)) if closes[i-1]]
-    efficiency = abs(_pct_change_at(closes, 20)) / max(sum(moves), 1e-9)
-    efficiency = clamp(efficiency, 0.0, 1.0)
-
-    # Volume confirmation proxy. A true institutional flow feed is not assumed.
-    vols = [safe_float(c.get("volume")) for c in candles]
-    vols = [v for v in vols if v is not None and v > 0]
-    volume_confirmation = 0.0
-    if len(vols) >= 21:
-        vz = _zscore(vols[-21:-1], vols[-1])
-        last_return = r1
-        volume_confirmation = clamp((vz / 2.5) * (1 if last_return > 0 else -1 if last_return < 0 else 0), -1, 1)
-
-    # Volatility regime relative to the recent history.
-    returns = [closes[i]/closes[i-1]-1.0 for i in range(1, len(closes)) if closes[i-1]]
-    recent_vol = math.sqrt(sum(x*x for x in returns[-20:]) / max(len(returns[-20:]),1)) if returns else 0
-    hist_vols=[]
-    for end in range(40, len(returns)+1, 5):
-        chunk=returns[max(0,end-20):end]
-        if chunk:
-            hist_vols.append(math.sqrt(sum(x*x for x in chunk)/len(chunk)))
-    vol_pct = 0.5
-    if hist_vols:
-        vol_pct = sum(1 for v in hist_vols if v <= recent_vol) / len(hist_vols)
-
-    if vol_pct >= 0.80:
-        regime = "HIGH_VOL"
-    elif vol_pct <= 0.20:
-        regime = "LOW_VOL"
-    else:
-        regime = "NORMAL"
-
-    direction_value = momentum * 0.50 + consistency * 0.30 + (1 if momentum != 0 else 0) * volume_confirmation * 0.20
-    direction = "LONG" if direction_value > 0.001 else "SHORT" if direction_value < -0.001 else "NONE"
-    score = clamp(abs(direction_value) * 5000 * (0.70 + 0.30*efficiency), 0, 100)
-
-    return {
-        "direction": direction,
-        "score": score,
-        "regime": regime,
-        "momentum_ensemble": momentum,
-        "momentum_1d": r1,
-        "momentum_5d": r5,
-        "momentum_20d": r20,
-        "momentum_60d": r60,
-        "volume_confirmation": volume_confirmation,
-        "trend_consistency": consistency,
-        "range_efficiency": efficiency,
-        "volatility_percentile": vol_pct,
-    }
-
-
-def apply_cross_sectional_ensemble(results):
-    """Rank commodities against each other, not only against fixed thresholds.
-
-    This implements a key research idea: cross-sectional commodity ranking
-    combined with multi-horizon signals. The adjustment is capped so the
-    ensemble cannot override the core risk gates by itself.
-    """
-    available = [x for x in results if x.get("available") and x.get("candles")]
-    if len(available) < 2:
-        return
-
-    feature_rows=[]
-    for item in available:
-        f = institutional_style_features(item.get("candles", []))
-        item["analysis"]["institutional"] = f
-        feature_rows.append((item, f))
-
-    def percentile(values, value):
-        ordered=sorted(values)
-        if not ordered:
-            return 0.5
-        rank=sum(1 for v in ordered if v <= value)
-        return rank/len(ordered)
-
-    mom20=[f.get("momentum_20d",0) for _,f in feature_rows]
-    mom60=[f.get("momentum_60d",0) for _,f in feature_rows]
-    eff=[f.get("range_efficiency",0) for _,f in feature_rows]
-    volc=[f.get("volume_confirmation",0) for _,f in feature_rows]
-
-    for item,f in feature_rows:
-        a=item["analysis"]
-        d=f.get("direction","NONE")
-        if d == "NONE":
-            a["cross_sectional_score"] = 50.0
-            a["ensemble_alignment"] = "NEUTRALE"
-            continue
-
-        p20=percentile(mom20, f.get("momentum_20d",0))
-        p60=percentile(mom60, f.get("momentum_60d",0))
-        pe=percentile(eff, f.get("range_efficiency",0))
-        pv=percentile(volc, f.get("volume_confirmation",0))
-        raw=100*(0.35*p20 + 0.35*p60 + 0.15*pe + 0.15*pv)
-        if d == "SHORT":
-            # Percentile direction must be inverted for bearish momentum.
-            raw=100*(0.35*(1-p20) + 0.35*(1-p60) + 0.15*pe + 0.15*(1-pv))
-
-        a["cross_sectional_score"] = round(raw, 1)
-        a["ensemble_alignment"] = d
-        a["ensemble_rank"] = 1 + sum(1 for _,other in feature_rows if other.get("score",0) > f.get("score",0))
-
-        # Only a bounded nudge: this is a confluence layer, not a replacement model.
-        nudge = (raw - 50.0) * 0.12
-        if d == a.get("setup_direction"):
-            a["score"] = clamp(a.get("score",0) + nudge, 0, 100)
-            a["confidence"] = clamp(a.get("confidence",0) + max(0, abs(nudge))*0.35, 0, 100)
-        elif a.get("setup_direction") in ("LONG","SHORT"):
-            a["score"] = clamp(a.get("score",0) - max(0, abs(nudge))*0.25, 0, 100)
-
-        # High-volatility regimes require stronger confirmation rather than
-        # automatically generating a signal.
-        if f.get("regime") == "HIGH_VOL":
-            a["high_volatility_guard"] = True
-            if a.get("signal") in ("LONG","SHORT") and a.get("confidence",0) < 72:
-                a["signal"] = "WAIT"
-                a["action_label"] = "ATTENDERE"
-        else:
-            a["high_volatility_guard"] = False
-
-
-def ensemble_trade_gate(analysis):
-    """Final transparent gate inspired by execution-quality/risk systems."""
-    inst=analysis.get("institutional",{})
-    d=analysis.get("setup_direction")
-    if d not in ("LONG","SHORT"):
-        return True, "N/D"
-    if inst.get("direction") not in (d, "NONE"):
-        return False, "MOMENTUM MULTI-HORIZON CONTRARIO"
-    if inst.get("regime") == "HIGH_VOL" and analysis.get("confidence",0) < 72:
-        return False, "VOLATILITÀ ELEVATA — CONFERMA RICHIESTA"
-    if analysis.get("cross_sectional_score",50) < 25:
-        return False, "RANKING CROSS-SECTIONALE DEBOLE"
-    return True, "OK"
-
-
-# ============================================================
-# v2.3 PREDICTION JOURNAL + END-OF-DAY TEST
-# ============================================================
-
-def _json_load(path, default):
-    try:
-        if not os.path.exists(path):
-            return default
-        with open(path, "r", encoding="utf-8") as fh:
-            return json.load(fh)
-    except Exception as exc:
-        print(f"⚠️ Impossibile leggere {path}: {exc}")
-        return default
-
-
-def _json_save(path, data):
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(data, fh, indent=2, ensure_ascii=False)
-    os.replace(tmp, path)
-
-
-def _prediction_direction(item):
-    a = item.get("analysis", {})
-    direction = a.get("setup_direction") or a.get("model_signal") or a.get("signal")
-    return direction if direction in ("LONG", "SHORT") else "WAIT"
-
-
-def record_predictions(results):
-    """Record auditable forecasts without looking at future candles."""
-    log = _json_load(PREDICTION_LOG_FILE, [])
-    if not isinstance(log, list):
-        log = []
-    now = datetime.now(timezone.utc)
-    cutoff = now - timedelta(days=45)
-    new_items = 0
-    for item in results:
-        if not item.get("available"):
-            continue
-        a = item.get("analysis", {})
-        price = safe_float(a.get("price"))
-        if price is None:
-            continue
-        direction = _prediction_direction(item)
-        rec = {
-            "id": f"{item['name']}|{now.strftime('%Y-%m-%dT%H:%M:%SZ')}|{direction}|{price:.8f}",
-            "created_at": now.isoformat(), "name": item["name"], "symbol": item["symbol"],
-            "direction": direction, "action": a.get("action_label", "ATTENDERE"), "price": price,
-            "entry": safe_float(a.get("entry")), "stop": safe_float(a.get("stop")),
-            "tp1": safe_float(a.get("tp1")), "tp2": safe_float(a.get("tp2")), "tp3": safe_float(a.get("tp3")),
-            "atr": safe_float(a.get("atr")) or 0.0, "score": safe_float(a.get("score")) or 0.0,
-            "confidence": safe_float(a.get("confidence")) or 0.0, "quality": safe_float(a.get("quality")) or 0.0,
-            "setup": a.get("entry_method", "N/D"),
-            "validated_rules": list(a.get("learning_current_hits", [])) if isinstance(a.get("learning_current_hits", []), list) else [],
-            "status": "PENDING"
-        }
-        if not any(x.get("id") == rec["id"] for x in log):
-            log.append(rec); new_items += 1
-    log = [x for x in log if x.get("created_at", "") >= cutoff.isoformat()]
-    _json_save(PREDICTION_LOG_FILE, log)
-    return new_items, log
-
-
-def _future_candles_for_prediction(prediction):
-    created = datetime.fromisoformat(prediction["created_at"].replace("Z", "+00:00"))
-    if datetime.now(timezone.utc) < created + timedelta(hours=PREDICTION_HORIZON_HOURS):
-        return []
-    try:
-        rows = get_data(prediction["symbol"], "1h", 1200)
-    except Exception:
-        return []
-    end = created + timedelta(hours=PREDICTION_HORIZON_HOURS)
-    out = []
-    for row in rows:
-        try:
-            dt = datetime.fromisoformat(str(row["datetime"]).replace("Z", "+00:00"))
-        except Exception:
-            continue
-        if created < dt <= end:
-            out.append(row)
-    return out
-
-
-def evaluate_prediction(prediction, future):
-    if not future:
-        return None
-    p = safe_float(prediction.get("price"))
-    if p is None:
-        return None
-    direction = prediction.get("direction", "WAIT")
-    sl, tp1 = safe_float(prediction.get("stop")), safe_float(prediction.get("tp1"))
-    close_end = safe_float(future[-1].get("close"))
-    if close_end is None:
-        return None
-    first_hit = "NONE"
-    if direction in ("LONG", "SHORT"):
-        for c in future:
-            hi, lo = safe_float(c.get("high")), safe_float(c.get("low"))
-            if hi is None or lo is None:
-                continue
-            hit_tp = (tp1 is not None and (hi >= tp1 if direction == "LONG" else lo <= tp1))
-            hit_sl = (sl is not None and (lo <= sl if direction == "LONG" else hi >= sl))
-            if hit_tp and hit_sl: first_hit = "AMBIGUO"; break
-            if hit_tp: first_hit = "TP1"; break
-            if hit_sl: first_hit = "SL"; break
-        close_correct = close_end > p if direction == "LONG" else close_end < p
-        verdict = "CORRETTA" if first_hit == "TP1" or (first_hit == "NONE" and close_correct) else "ERRATA"
-        if first_hit == "AMBIGUO": verdict = "AMBIGUA"
-    else:
-        atr = safe_float(prediction.get("atr")) or 0.0
-        band = max(abs(p) * 0.003, atr * 0.75)
-        max_high = max((safe_float(c.get("high")) or p) for c in future)
-        min_low = min((safe_float(c.get("low")) or p) for c in future)
-        verdict = "CORRETTA" if max_high <= p + band and min_low >= p - band else "ERRATA"
-        first_hit = "NEUTRALE" if verdict == "CORRETTA" else "MOVIMENTO"
-    return {"verdict": verdict, "first_hit": first_hit, "close_end": close_end, "move_pct": (close_end / p - 1.0) * 100.0, "evaluated_at": datetime.now(timezone.utc).isoformat()}
-
-
-def run_end_of_day_test(force=False):
-    log = _json_load(PREDICTION_LOG_FILE, [])
-    if not isinstance(log, list) or not log:
-        return None
-    local_now = datetime.now(ZoneInfo("Europe/Rome"))
-    if not force and local_now.hour < EOD_REPORT_HOUR:
-        return None
-    changed = False
-    for pred in log:
-        if pred.get("status") != "PENDING":
-            continue
-        result = evaluate_prediction(pred, _future_candles_for_prediction(pred))
-        if result:
-            pred.update(result); pred["status"] = "EVALUATED"; changed = True
-    if changed: _json_save(PREDICTION_LOG_FILE, log)
-    today = local_now.date().isoformat()
-    evaluated = []
-    for pred in log:
-        try: d = datetime.fromisoformat(pred.get("created_at", "").replace("Z", "+00:00")).astimezone(ZoneInfo("Europe/Rome")).date().isoformat()
-        except Exception: continue
-        if d == today and pred.get("status") == "EVALUATED": evaluated.append(pred)
-    if not evaluated:
-        return None
-    correct = sum(p.get("verdict") == "CORRETTA" for p in evaluated)
-    wrong = sum(p.get("verdict") == "ERRATA" for p in evaluated)
-    ambiguous = sum(p.get("verdict") == "AMBIGUA" for p in evaluated)
-    accuracy = correct / (correct + wrong) * 100.0 if correct + wrong else 0.0
-    lines = ["📊 COMMODITIES BOT v2.4 — TEST FINE GIORNATA", "", f"📅 {local_now.strftime('%d/%m/%Y')}", "━━━━━━━━━━━━━━━━━━━━", "🎯 ACCURATEZZA PREVISIONI", f"Previsioni valutate: {len(evaluated)}", f"✅ Corrette: {correct}", f"❌ Errate: {wrong}", f"⚪ Ambigue: {ambiguous}", f"🎯 Accuratezza: {accuracy:.1f}%", "", "🧭 PER DIREZIONE"]
-    for direction, icon in (("LONG", "🟢"), ("SHORT", "🔴"), ("WAIT", "🟡")):
-        rows = [p for p in evaluated if p.get("direction") == direction]
-        d = sum(x.get("verdict") == "CORRETTA" for x in rows); w = sum(x.get("verdict") == "ERRATA" for x in rows)
-        acc = d / (d + w) * 100.0 if d + w else 0.0
-        lines.append(f"{icon} {direction}: {len(rows)} | {acc:.1f}%")
-    by_name = {}
-    for pred in evaluated: by_name.setdefault(pred["name"], []).append(pred)
-    ranking = []
-    for name, rows in by_name.items():
-        d = sum(x.get("verdict") == "CORRETTA" for x in rows); w = sum(x.get("verdict") == "ERRATA" for x in rows)
-        if d + w: ranking.append((d / (d + w) * 100.0, name, len(rows)))
-    ranking.sort(reverse=True)
-    lines += ["", "🏆 MIGLIORI COMMODITY"]
-    for i, (acc, name, n) in enumerate(ranking[:3]): lines.append(f"{('🥇','🥈','🥉')[i]} {name}: {acc:.1f}% ({n})")
-    lines += ["", "🔒 STATO: PAPER TRADING", "🚫 ORDINI REALI: DISATTIVATI"]
-    state = _json_load(DAILY_REPORT_FILE, {})
-    if state.get("last_report_date") == today and not force: return None
-    state.update({"last_report_date": today, "accuracy": accuracy, "evaluated": len(evaluated)})
-    _json_save(DAILY_REPORT_FILE, state)
-    return "\n".join(lines)
-
-# ============================================================
 # POSITION MANAGEMENT
 # ============================================================
 
@@ -3858,193 +3414,6 @@ def manage_position(position, current_analysis, current_price):
         return {"action": "HOLD", "reason": "SHORT — TENERE", "new_stop": stop}
 
     return {"action": "EXIT", "reason": "DIREZIONE NON RICONOSCIUTA", "new_stop": stop}
-
-
-# ============================================================
-# v2.5 WEATHER + NATURAL DISASTER INTELLIGENCE
-# ============================================================
-
-def _cache_get(path, max_age_hours):
-    try:
-        obj = _json_load(path, {})
-        ts = datetime.fromisoformat(obj.get("timestamp", "").replace("Z", "+00:00"))
-        if datetime.now(timezone.utc) - ts <= timedelta(hours=max_age_hours):
-            return obj.get("data")
-    except Exception:
-        pass
-    return None
-
-
-def _cache_put(path, data):
-    try:
-        _json_save(path, {"timestamp": datetime.now(timezone.utc).isoformat(), "data": data})
-    except Exception:
-        pass
-
-
-def _weather_json(url, params):
-    r = requests.get(url, params=params, timeout=WEATHER_TIMEOUT)
-    r.raise_for_status()
-    return r.json()
-
-
-def _weather_region_snapshot(name, lat, lon):
-    """Free forecast + recent observations from Open-Meteo.
-
-    This is an intelligence layer, not a direct trading signal. We keep source,
-    timestamps and raw metrics so later backtests can audit the decision.
-    """
-    forecast = _weather_json(
-        "https://api.open-meteo.com/v1/forecast",
-        {"latitude": lat, "longitude": lon,
-         "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max",
-         "forecast_days": 10, "timezone": "UTC"}
-    )
-    # Recent history is used for anomaly context. Open-Meteo archive is a
-    # climate-history source; the model treats it as context, not as a future leak.
-    end = (datetime.now(timezone.utc) - timedelta(days=2)).date().isoformat()
-    start = (datetime.now(timezone.utc) - timedelta(days=32)).date().isoformat()
-    history = _weather_json(
-        "https://archive-api.open-meteo.com/v1/archive",
-        {"latitude": lat, "longitude": lon, "start_date": start, "end_date": end,
-         "daily": "temperature_2m_mean,precipitation_sum,wind_speed_10m_max",
-         "timezone": "UTC"}
-    )
-    fd=forecast.get("daily", {})
-    hd=history.get("daily", {})
-    temps=[x for x in (fd.get("temperature_2m_max") or []) if isinstance(x,(int,float))]
-    mins=[x for x in (fd.get("temperature_2m_min") or []) if isinstance(x,(int,float))]
-    rain=[x for x in (fd.get("precipitation_sum") or []) if isinstance(x,(int,float))]
-    winds=[x for x in (fd.get("wind_speed_10m_max") or []) if isinstance(x,(int,float))]
-    htemps=[x for x in (hd.get("temperature_2m_mean") or []) if isinstance(x,(int,float))]
-    hrain=[x for x in (hd.get("precipitation_sum") or []) if isinstance(x,(int,float))]
-    hwinds=[x for x in (hd.get("wind_speed_10m_max") or []) if isinstance(x,(int,float))]
-    return {
-        "region": name, "lat": lat, "lon": lon, "source": "Open-Meteo",
-        "forecast_days": len(temps),
-        "forecast_max_mean": sum(temps)/len(temps) if temps else None,
-        "forecast_min_mean": sum(mins)/len(mins) if mins else None,
-        "forecast_rain_total": sum(rain),
-        "forecast_wind_max": max(winds) if winds else None,
-        "recent_temp_mean": sum(htemps)/len(htemps) if htemps else None,
-        "recent_rain_total": sum(hrain),
-        "recent_wind_max": max(hwinds) if hwinds else None,
-        "raw_forecast_dates": fd.get("time", []),
-    }
-
-
-def weather_intelligence(commodity):
-    if not WEATHER_ENABLED or commodity not in WEATHER_REGIONS:
-        return {"enabled": False, "score": 0.0, "label": "N/D", "confidence": 0.0, "regions": []}
-    cached = _cache_get(WEATHER_CACHE_FILE, WEATHER_CACHE_HOURS)
-    if isinstance(cached, dict) and commodity in cached:
-        return cached[commodity]
-    regions=[]
-    for label,lat,lon in WEATHER_REGIONS.get(commodity, []):
-        try:
-            regions.append(_weather_region_snapshot(label,lat,lon))
-        except Exception as e:
-            regions.append({"region":label,"error":str(e),"source":"Open-Meteo"})
-    valid=[r for r in regions if not r.get("error")]
-    if not valid:
-        return {"enabled": True, "score": 0.0, "label": "DATI METEO NON DISPONIBILI", "confidence": 0.0, "regions": regions}
-    p=WEATHER_PRIORS.get(commodity,{})
-    raw=0.0
-    anomaly=[]
-    for r in valid:
-        # Recent-vs-forecast change is a "surprise" proxy. It is not a climate
-        # normal; this deliberately avoids pretending 30 days of history is a 30-year climatology.
-        if r.get("forecast_max_mean") is not None and r.get("recent_temp_mean") is not None:
-            dt=r["forecast_max_mean"]-r["recent_temp_mean"]
-            raw += max(-3,min(3,dt/5.0))*p.get("hot",0)
-            anomaly.append(dt)
-        if r.get("forecast_rain_total") is not None:
-            raw += max(-2,min(2,(r["forecast_rain_total"]-r.get("recent_rain_total",0))/100.0))*p.get("wet",0)
-        if r.get("forecast_wind_max") is not None:
-            raw += max(-1.5,min(1.5,(r["forecast_wind_max"]-r.get("recent_wind_max",0))/20.0))*p.get("wind",0)
-    score=max(-100,min(100,raw*25))
-    if score >= 15: label="BULLISH"
-    elif score <= -15: label="BEARISH"
-    else: label="NEUTRALE"
-    confidence=min(95,40+len(valid)*12)
-    out={"enabled":True,"score":round(score,1),"label":label,"confidence":round(confidence,1),"regions":regions,
-         "temperature_change_mean":round(sum(anomaly)/len(anomaly),2) if anomaly else None,
-         "historical_context":"recent 30-day observations + 10-day forecast"}
-    cache = _cache_get(WEATHER_CACHE_FILE, WEATHER_CACHE_HOURS) or {}
-    cache[commodity]=out
-    _cache_put(WEATHER_CACHE_FILE,cache)
-    return out
-
-
-def natural_disaster_intelligence(commodity):
-    if not DISASTER_ENABLED:
-        return {"enabled":False,"score":0.0,"count":0,"events":[]}
-    events=[]
-    # Global news engine is already configured for disasters. We use RSS search
-    # only as an extra event layer, not as a replacement for official feeds.
-    for q in DISASTER_QUERIES.get(commodity,[]):
-        try:
-            url="https://news.google.com/rss/search"
-            r=requests.get(url,params={"q":q,"hl":"en-US","gl":"US","ceid":"US:en"},timeout=8)
-            r.raise_for_status()
-            parser=RSSParser()
-            parser.feed(r.text)
-            for item in parser.items[:3]:
-                events.append({"query":q,"title":item.get("title",""),"source":item.get("source","Google News RSS")})
-        except Exception:
-            continue
-    # Keep only a bounded event score; relevance is further checked by the model.
-    count=len(events)
-    score=max(-20.0,min(20.0,count*1.5)) if count else 0.0
-    return {"enabled":True,"score":score,"count":count,"events":events[:12]}
-
-
-def apply_weather_and_disaster_layers(analysis, weather, disasters):
-    """Bounded fundamental nudge. No weather/disaster layer can override risk gates."""
-    analysis["weather"] = weather
-    analysis["natural_disasters"] = disasters
-    w=float(weather.get("score",0) or 0)
-    # Disaster events are risk/context first. They only become directional if
-    # weather/fundamental direction agrees with the current setup.
-    dscore=float(disasters.get("score",0) or 0)
-    direction=analysis.get("setup_direction")
-    if direction == "LONG":
-        nudge=(w+dscore)*0.08
-    elif direction == "SHORT":
-        nudge=(-w+dscore)*0.08
-    else:
-        nudge=0.0
-    nudge=max(-WEATHER_IMPACT_CAP,min(WEATHER_IMPACT_CAP,nudge))
-    analysis["weather_disaster_nudge"] = round(nudge,2)
-    analysis["score"] = clamp(analysis.get("score",0)+nudge,0,100)
-    if abs(w) >= 20 and analysis.get("confidence",0) < 70 and direction in ("LONG","SHORT"):
-        analysis["weather_confirmation"]="DEBOLE — conferma meteo insufficiente"
-    else:
-        analysis["weather_confirmation"]="OK"
-
-
-def demo_execution_adapter(results, position):
-    """Paper/demo execution adapter. No real broker API is called here.
-
-    It writes a proposed order only when DEMO_TRADING_ENABLED=1 and the normal
-    trade gates say the best setup is executable. A future Pepperstone/MT5
-    adapter can consume this exact order schema without changing the model.
-    """
-    if not DEMO_TRADING_ENABLED:
-        return {"enabled":False,"executed":False,"reason":"DEMO_TRADING_ENABLED=0"}
-    candidates=[x for x in results if x.get("available") and x.get("analysis",{}).get("signal") in ("LONG","SHORT")]
-    if not candidates:
-        return {"enabled":True,"executed":False,"reason":"NESSUN SEGNALE ESEGUIBILE"}
-    best=max(candidates,key=lambda x:x.get("ranking_score",-1))
-    a=best["analysis"]
-    if not a.get("ensemble_gate",False):
-        return {"enabled":True,"executed":False,"reason":"ENSEMBLE GATE BLOCCATO"}
-    order={"timestamp":datetime.now(timezone.utc).isoformat(),"commodity":best["name"],"symbol":best["symbol"],
-           "side":a["signal"],"price":a.get("price"),"entry":a.get("entry"),"stop":a.get("stop"),
-           "tp1":a.get("tp1"),"tp2":a.get("tp2"),"tp3":a.get("tp3"),"mode":"DEMO/PAPER"}
-    orders=_json_load(DEMO_ORDERS_FILE,[])
-    orders.append(order); _json_save(DEMO_ORDERS_FILE,orders[-500:])
-    return {"enabled":True,"executed":True,"order":order}
 
 
 # ============================================================
@@ -4173,7 +3542,7 @@ def build_reversal_alert(position, analysis):
 def build_telegram(ranked, best, position_message=None, position=None):
     """Telegram operativo V8: niente dettagli tecnici interni."""
     available=[x for x in ranked if x.get('available')][:3]
-    lines=['🌍 COMMODITIES BOT v2.4','', '🏆 CLASSIFICA']
+    lines=['🌍 COMMODITIES BOT v2.1','', '🏆 CLASSIFICA']
     medals=['🥇','🥈','🥉']
     for i,item in enumerate(available):
         a=item['analysis']; action=a.get('action_label')
@@ -4195,9 +3564,7 @@ def build_telegram(ranked, best, position_message=None, position=None):
         lines += ['', '━━━━━━━━━━━━━━━━━━━━', f'{medal} {item["name"]}', '━━━━━━━━━━━━━━━━━━━━',
                   f'🎯 AZIONE: {action}', f'🧭 DIREZIONE: {direction}',
                   f'💰 PREZZO ATTUALE: {price:.4f}' if price is not None else '💰 PREZZO ATTUALE: N/D',
-                  f'📥 ENTRATA: {entry:.4f}' if entry is not None else '📥 ENTRATA: N/D', f'📌 SETUP: {a.get("entry_method","N/D")}', f'🕯️ PATTERN: {pattern}', f'📚 STORICO SETUP: {a.get("pattern_backtest",{}).get("win_rate",0)*100:.0f}% successo' if a.get("pattern_backtest",{}).get("samples",0)>=5 else '📚 STORICO SETUP: dati insufficienti',
-                  f'🧠 ENSEMBLE: {a.get("ensemble_alignment","N/D")} | RANK {a.get("ensemble_rank","N/D")} | {a.get("cross_sectional_score",50):.0f}/100',
-                  f'🌡️ REGIME: {a.get("institutional",{}).get("regime","N/D")} | VOLUME/FLOW PROXY: {a.get("institutional",{}).get("volume_confirmation",0):+.2f}']
+                  f'📥 ENTRATA: {entry:.4f}' if entry is not None else '📥 ENTRATA: N/D', f'📌 SETUP: {a.get("entry_method","N/D")}', f'🕯️ PATTERN: {pattern}', f'📚 STORICO SETUP: {a.get("pattern_backtest",{}).get("win_rate",0)*100:.0f}% successo' if a.get("pattern_backtest",{}).get("samples",0)>=5 else '📚 STORICO SETUP: dati insufficienti']
         item_mode=a.get('risk',{}).get('mode', global_mode)
         if item_mode=='SHOCK':
             lines.append('🚨 ENTRATA BLOCCATA — SHOCK MODE')
@@ -4243,8 +3610,8 @@ def analysis_direction_hint(timeframes):
 def main():
     print()
     print("=" * 70)
-    print("🌍 COMMODITIES BOT v2.5")
-    print("RANKING + LEARNING + GLOBAL INTELLIGENCE + WEATHER/DISASTER ENGINE + COT/ENSEMBLE READY + PAPER/DEMO GATE")
+    print("🌍 COMMODITIES BOT v2.2")
+    print("RANKING + LEARNING ENGINE + KNOWLEDGE ENGINE + REVERSAL ENGINE + GOLD ENGINE LOGIC + GLOBAL INTELLIGENCE + SESSION ENGINE + RISK ENGINE")
     print("=" * 70)
     print()
 
@@ -4315,10 +3682,6 @@ def main():
             if analysis is None:
                 raise RuntimeError("Analisi Gold Engine non disponibile")
 
-            weather = weather_intelligence(name)
-            disasters = natural_disaster_intelligence(name)
-            apply_weather_and_disaster_layers(analysis, weather, disasters)
-
             results.append({
                 "name": name,
                 "symbol": symbol,
@@ -4377,21 +3740,6 @@ def main():
     if not results:
         raise RuntimeError("Nessuna materia prima analizzata.")
 
-    # v2.4: cross-sectional multi-horizon ensemble + volatility/flow proxies.
-    apply_cross_sectional_ensemble(results)
-    for _item in results:
-        if _item.get("available"):
-            _ok, _reason = ensemble_trade_gate(_item["analysis"])
-            _item["analysis"]["ensemble_gate"] = _ok
-            _item["analysis"]["ensemble_gate_reason"] = _reason
-            if not _ok and _item["analysis"].get("signal") in ("LONG", "SHORT"):
-                _item["analysis"]["signal"] = "WAIT"
-                _item["analysis"]["action_label"] = "ATTENDERE"
-                _item["analysis"]["strong_confirmation"] = False
-
-    new_predictions, _prediction_log = record_predictions(results)
-    print(f"📝 Prediction Journal: {new_predictions} nuove previsioni registrate")
-
     # ========================================================
     # RANKING
     # ========================================================
@@ -4409,9 +3757,6 @@ def main():
     if not available_ranked:
         raise RuntimeError("Nessuna commodity dispone di dati sufficienti per il Gold Engine. Controllare simboli/API quota.")
     best = available_ranked[0]
-
-    demo_execution = demo_execution_adapter(results, position)
-    print(f"🤖 Demo adapter: {demo_execution.get('reason', 'ordine registrato')}" if not demo_execution.get('executed') else f"🤖 DEMO ORDER: {demo_execution['order']['commodity']} {demo_execution['order']['side']}")
 
     # ========================================================
     # GESTIONE POSIZIONE ESISTENTE
@@ -4569,12 +3914,6 @@ def main():
     )
 
     send_telegram(message)
-
-    # Fine giornata: valuta le previsioni maturate e invia il report una sola volta.
-    eod_report = run_end_of_day_test()
-    if eod_report:
-        send_telegram(eod_report)
-        print(eod_report)
 
     # Separate alert: only for the commodity currently held.
     if position:
