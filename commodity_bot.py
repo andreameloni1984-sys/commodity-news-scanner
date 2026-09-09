@@ -75,7 +75,7 @@ FUTURES_CACHE_HOURS = int(os.getenv("FUTURES_CACHE_HOURS", "2"))
 # (for example by GitHub Actions cron */15); it does not sleep inside a run.
 MONITOR_INTERVAL_MINUTES = int(os.getenv("MONITOR_INTERVAL_MINUTES", "15"))
 MONITOR_TOP_N = int(os.getenv("MONITOR_TOP_N", "3"))
-MONITOR_SEND_FULL = os.getenv("MONITOR_SEND_FULL", "0") == "1"
+MONITOR_SEND_FULL = os.getenv("MONITOR_SEND_FULL", "1") == "1"
 
 # v3.6 — Morning / USA / Event Driven communication. Internal analysis can run often,
 # but Telegram is intentionally quiet except for scheduled decision points,
@@ -87,7 +87,7 @@ USA_REPORT_HOUR = int(os.getenv("USA_REPORT_HOUR", "14"))
 USA_REPORT_MINUTE = int(os.getenv("USA_REPORT_MINUTE", "30"))
 EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "21"))
 EVENT_ALERTS_ENABLED = os.getenv("EVENT_ALERTS_ENABLED", "1") == "1"
-SILENT_INTERNAL_ANALYSIS = os.getenv("SILENT_INTERNAL_ANALYSIS", "1") == "1"
+SILENT_INTERNAL_ANALYSIS = os.getenv("SILENT_INTERNAL_ANALYSIS", "0") == "1"
 MONITOR_STATE_FILE = "commodities_monitor_state.json"
 MIN_ENTRY_PROBABILITY = float(os.getenv("MIN_ENTRY_PROBABILITY", "62"))
 MIN_ENTRY_QUALITY = float(os.getenv("MIN_ENTRY_QUALITY", "55"))
@@ -4672,22 +4672,25 @@ def demo_execution_adapter(results, position):
 # ============================================================
 
 def send_telegram(message):
+    """Send a Telegram message and explicitly report API success/failure."""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("⚠️ Telegram non configurato.")
-        return
+        print("❌ Telegram non configurato: token o chat_id mancanti.")
+        return False
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": message,
-    }
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
 
     try:
         response = requests.post(url, json=payload, timeout=20)
-        response.raise_for_status()
+        data = response.json()
+        if response.ok and data.get("ok") is True:
+            print("✅ Telegram: messaggio inviato.")
+            return True
+        print(f"❌ Telegram API: HTTP {response.status_code} | {data}")
+        return False
     except Exception as error:
-        print(f"⚠️ Errore Telegram: {error}")
+        print(f"❌ Errore Telegram: {error}")
+        return False
 
 
 def icon_for_signal(signal):
