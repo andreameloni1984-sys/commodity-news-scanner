@@ -52,4 +52,4 @@ jobs:
 
           EOD_REPORT_HOUR: '21'
 
-        run: python commodity_bot_v3_6.py
+        run: python commodity_bot.py
