@@ -11,7 +11,7 @@ import requests
 
 
 # ============================================================
-# COMMODITY TRADING BOT v3.0
+# COMMODITY TRADING BOT v3.1
 # QUANT MODEL + MULTI-TIMEFRAME + NEWS + USD + SEASONALITY
 # + RANKING + POSITION MANAGEMENT
 #
@@ -35,7 +35,7 @@ EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "23"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "3.0.1"
+BOT_VERSION = "3.1"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -4922,17 +4922,32 @@ def apply_early_opportunity(results):
             continue
         a = item.get("analysis", {})
         history = []
+        history_source = "MONTHLY"
         try:
-            # Monthly Yahoo history is requested with range=max, giving the
-            # engine the longest series the provider makes available.
+            # Prefer monthly history when the provider supplies enough data.
             history = get_data(item["symbol"], EARLY_HISTORY_INTERVAL, 1000)
         except Exception as exc:
-            print(f"   ⚠️ Early history {item['name']}: {exc}")
+            print(f"   ⚠️ Early history monthly {item['name']}: {exc}")
+        # v3.1: Yahoo often exposes less than 120 monthly observations for
+        # individual futures. Use the already downloaded daily series instead
+        # of returning a misleading N/D. The forward tests then operate in
+        # trading days (3/7/14/30), which is exactly what the labels mean.
         if len(history) < EARLY_HISTORY_MIN_MONTHS:
-            history = item.get("candles") or []
+            daily = item.get("candles") or []
+            if len(daily) >= 120:
+                history = daily
+                history_source = "DAILY_FALLBACK"
+            else:
+                history_source = "INSUFFICIENT"
 
         early = early_opportunity_engine(item["name"], history, a)
+        early["history_source"] = history_source
         a["early_opportunity"] = early
+        print(
+            f"   🔭 {item['name']}: Early {history_source} | "
+            f"{early.get('state')} {early.get('direction')} | "
+            f"score={early.get('score',0):.1f} prob={early.get('probability',50):.1f}%"
+        )
 
         setup = a.get("setup_direction") or a.get("model_signal")
         if early.get("direction") in ("LONG", "SHORT") and early.get("direction") == setup:
@@ -4971,7 +4986,7 @@ def build_early_telegram(ranked):
             f"{icon} {e.get('state','N/D')} | {d}",
             f"🔭 Early Score: {e.get('score',0):.0f}/100 | Prob. {e.get('probability',50):.0f}%",
             f"📚 {hist}",
-            f"⏳ Orizzonte: {e.get('horizon','N/D')}",
+            f"⏳ Orizzonte: {e.get('horizon','N/D')} | Storico: {e.get('history_source','N/D')}",
         ]
         if e.get("reasons"):
             lines.append("🧠 " + " | ".join(e["reasons"][:3]))
@@ -5303,7 +5318,7 @@ def v3_context_summary(analysis):
 
 def build_v3_header():
     return [
-        "🌍 COMMODITIES BOT v3.0",
+        "🌍 COMMODITIES BOT v3.1",
         "🧪 PAPER / ANALISI — ORDINI REALI DISABILITATI",
         "━━━━━━━━━━━━━━━━━━━━",
         "🔭 EARLY OPPORTUNITY | ⚡ TRADING OGGI | 🧠 POLITICAL IMPACT | 📈 FUTURES CURVE",
@@ -5317,7 +5332,7 @@ def build_v3_header():
 def main():
     print()
     print("=" * 70)
-    print("🌍 COMMODITIES BOT v3.0")
+    print("🌍 COMMODITIES BOT v3.1")
     print("5-MIN SMART MONITOR + EARLY OPPORTUNITY + POLITICAL IMPACT + FUTURES STRUCTURE + PAPER GATE")
     print("=" * 70)
     print()
@@ -5405,8 +5420,9 @@ def main():
             # v3.0: optional futures curve context. No data -> no invented signal.
             _curve = futures_structure_engine(name)
             apply_futures_structure(analysis, _curve)
-            analysis["v3_context"] = v3_context_summary(analysis)
-
+            # v3.1: esegui realmente l'Early Opportunity Engine.
+            # In v3.0/v3.0.1 la funzione era definita ma non veniva invocata
+            # nel main, quindi Telegram mostrava sempre N/D.
             results.append({
                 "name": name,
                 "symbol": symbol,
@@ -5465,6 +5481,17 @@ def main():
     if not results:
         raise RuntimeError("Nessuna materia prima analizzata.")
 
+    # v3.1: Early Opportunity deve essere calcolato dopo aver costruito tutte
+    # le analisi live, ma prima della finalizzazione/ranking.
+    if EARLY_OPPORTUNITY_ENABLED:
+        print("\n🔭 Aggiornamento Early Opportunity Engine...")
+        apply_early_opportunity(results)
+        for _item in results:
+            if _item.get("available"):
+                _item["analysis"]["v3_context"] = v3_context_summary(_item["analysis"])
+    else:
+        print("\n🔭 Early Opportunity Engine: DISABILITATO")
+
     # v2.4: cross-sectional multi-horizon ensemble + volatility/flow proxies.
     apply_cross_sectional_ensemble(results)
     for _item in results:
@@ -5498,7 +5525,7 @@ def main():
         _a=_it["analysis"]; _v=_a.get("v3_context",{}) or {}; _p=_a.get("political",{}) or {}; _f=_a.get("futures_structure",{}) or {}
         print(f"   {_it['name']}: EARLY={_v.get('early')} {_v.get('early_direction')} | POL={_p.get('direction')} { _p.get('mechanism','N/D')} { _p.get('horizon','N/D')} | CURVE={_f.get('state')} | REV={_v.get('reversal')}")
 
-    print("\n🔭 EARLY OPPORTUNITY ENGINE v3.0")
+    print("\n🔭 EARLY OPPORTUNITY ENGINE v3.1")
     for _it in sorted(
         [x for x in results if x.get("available")],
         key=lambda x: safe_float(x.get("analysis",{}).get("early_opportunity",{}).get("score"),0) or 0,
