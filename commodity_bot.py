@@ -4441,6 +4441,274 @@ def build_reversal_alert(position, analysis):
         action,
     ])
 
+
+def _historical_forward_stats(rows, horizons=(3, 7, 14, 30)):
+    """Anti-lookahead forward-return statistics on a historical series."""
+    if not rows or len(rows) < 40:
+        return {}
+    closes = [safe_float(x.get("close")) for x in rows]
+    out = {}
+    for h in horizons:
+        samples = []
+        for i in range(20, len(rows) - h):
+            p0, pf = closes[i], closes[i + h]
+            if p0 in (None, 0) or pf is None:
+                continue
+            samples.append(pf / p0 - 1.0)
+        if samples:
+            out[str(h)] = {
+                "samples": len(samples),
+                "up_rate": sum(r > 0 for r in samples) / len(samples),
+                "down_rate": sum(r < 0 for r in samples) / len(samples),
+                "avg_return": sum(samples) / len(samples),
+            }
+    return out
+
+
+def _historical_regime_stats(rows):
+    """Finds past configurations resembling today's 3/7/14-period regime."""
+    if not rows or len(rows) < 60:
+        return {"similar": 0, "up_rate_7": 0.5, "avg_7": 0.0}
+
+    c = [safe_float(x.get("close")) for x in rows]
+    c = [x for x in c if x is not None]
+    if len(c) < 60:
+        return {"similar": 0, "up_rate_7": 0.5, "avg_7": 0.0}
+
+    def mom(i, n):
+        return c[i] / c[i-n] - 1 if c[i-n] else 0.0
+
+    i = len(c) - 1
+    now = (mom(i, 3), mom(i, 7), mom(i, 14))
+    lo, hi = min(c[-60:]), max(c[-60:])
+    now_pos = (c[-1] - lo) / (hi - lo) if hi > lo else 0.5
+
+    candidates = []
+    for j in range(20, len(c) - 7):
+        vals = (mom(j, 3), mom(j, 7), mom(j, 14))
+        lo_j, hi_j = min(c[max(0, j-59):j+1]), max(c[max(0, j-59):j+1])
+        pos_j = (c[j] - lo_j) / (hi_j - lo_j) if hi_j > lo_j else 0.5
+        dist = (
+            abs(vals[0]-now[0])/0.03 +
+            abs(vals[1]-now[1])/0.05 +
+            abs(vals[2]-now[2])/0.08 +
+            abs(pos_j-now_pos)
+        )
+        if dist <= 3.0:
+            candidates.append(c[j+7] / c[j] - 1 if c[j] else 0.0)
+
+    if not candidates:
+        return {"similar": 0, "up_rate_7": 0.5, "avg_7": 0.0}
+    return {
+        "similar": len(candidates),
+        "up_rate_7": sum(r > 0 for r in candidates) / len(candidates),
+        "avg_7": sum(candidates) / len(candidates),
+    }
+
+
+def _seasonality_stats(rows):
+    """Historical month-of-year tendency."""
+    if not rows:
+        return {"samples": 0, "up_rate": 0.5, "avg_return": 0.0}
+    try:
+        current_month = datetime.fromtimestamp(
+            int(rows[-1].get("timestamp", 0)), tz=timezone.utc
+        ).month
+    except Exception:
+        current_month = datetime.now(timezone.utc).month
+
+    vals = []
+    for i in range(1, len(rows)):
+        try:
+            month = datetime.fromtimestamp(
+                int(rows[i].get("timestamp", 0)), tz=timezone.utc
+            ).month
+        except Exception:
+            continue
+        if month != current_month:
+            continue
+        p0, p1 = safe_float(rows[i-1].get("close")), safe_float(rows[i].get("close"))
+        if p0 not in (None, 0) and p1 is not None:
+            vals.append(p1 / p0 - 1.0)
+
+    if not vals:
+        return {"samples": 0, "up_rate": 0.5, "avg_return": 0.0}
+    return {
+        "samples": len(vals),
+        "up_rate": sum(r > 0 for r in vals) / len(vals),
+        "avg_return": sum(vals) / len(vals),
+    }
+
+
+def _early_context_bias(analysis):
+    """Bounded live-context contribution; it cannot force an entry."""
+    vals = []
+    for key in ("political", "global_impact", "usd", "weather", "news"):
+        obj = analysis.get(key, {}) or {}
+        d = obj.get("direction")
+        if d == "LONG":
+            vals.append(1.0)
+        elif d == "SHORT":
+            vals.append(-1.0)
+        else:
+            sc = safe_float(obj.get("score"), None)
+            if sc is not None:
+                vals.append(clamp(sc / 100.0, -1, 1))
+    return clamp(sum(vals) / len(vals), -1, 1) if vals else 0.0
+
+
+def early_opportunity_engine(name, history_rows, analysis):
+    """
+    Long-horizon intelligence. It never changes signal/action and never opens
+    a trade. Historical tests use only information available before each
+    historical forward window, avoiding look-ahead leakage.
+    """
+    result = {
+        "state": "NO_EARLY_EDGE",
+        "direction": "NONE",
+        "score": 0.0,
+        "probability": 50.0,
+        "horizon": "3-14 giorni",
+        "history_years_target": EARLY_HISTORY_YEARS_TARGET,
+        "history_observations": len(history_rows or []),
+        "forward": {},
+        "regime": {},
+        "seasonality": {},
+        "context_bias": 0.0,
+        "reasons": [],
+    }
+    if not history_rows or len(history_rows) < EARLY_HISTORY_MIN_MONTHS:
+        result["risk"] = "INSUFFICIENT_HISTORY"
+        return result
+
+    forward = _historical_forward_stats(history_rows, EARLY_TARGET_DAYS)
+    regime = _historical_regime_stats(history_rows)
+    season = _seasonality_stats(history_rows)
+    ctx = _early_context_bias(analysis)
+
+    biases = []
+    for h in ("3", "7", "14", "30"):
+        x = forward.get(h)
+        if x and x["samples"] >= 20:
+            biases.append((x["up_rate"] - 0.5) * 2)
+    hist_bias = sum(biases) / len(biases) if biases else 0.0
+    regime_bias = clamp((regime.get("up_rate_7", 0.5)-0.5)*2, -1, 1)
+    season_bias = clamp((season.get("up_rate", 0.5)-0.5)*2, -1, 1)
+
+    combined = clamp(
+        0.50*hist_bias + 0.25*regime_bias + 0.10*season_bias + 0.15*ctx,
+        -1, 1
+    )
+    direction = "LONG" if combined > 0.12 else "SHORT" if combined < -0.12 else "NONE"
+
+    score = clamp(50 + abs(combined)*50, 0, 100)
+    score += min(20, max(0, regime.get("similar", 0)-5)*0.5)
+    score = clamp(score, 0, 100)
+    probability = clamp(50 + combined*35, 5, 95)
+
+    if direction != "NONE" and score >= 70:
+        state = "OPPORTUNITA_ANTICIPATA"
+    elif direction != "NONE" and score >= 58:
+        state = "MONITOR"
+    else:
+        state = "NO_EARLY_EDGE"
+
+    best_h = max(
+        (h for h, x in forward.items() if x.get("samples", 0) >= 20),
+        key=lambda h: abs(forward[h].get("up_rate", 0.5)-0.5),
+        default="7"
+    )
+
+    reasons = []
+    if abs(hist_bias) >= 0.15:
+        reasons.append("storico forward favorevole " + ("LONG" if hist_bias > 0 else "SHORT"))
+    if regime.get("similar", 0) >= 5:
+        reasons.append(f"{regime['similar']} configurazioni storiche simili")
+    if abs(season_bias) >= 0.15:
+        reasons.append("stagionalità " + ("LONG" if season_bias > 0 else "SHORT"))
+    if abs(ctx) >= 0.15:
+        reasons.append("contesto live " + ("LONG" if ctx > 0 else "SHORT"))
+
+    result.update({
+        "state": state,
+        "direction": direction,
+        "score": score,
+        "probability": probability,
+        "horizon": f"{best_h} periodi",
+        "forward": forward,
+        "regime": regime,
+        "seasonality": season,
+        "context_bias": ctx,
+        "reasons": reasons[:4],
+        "risk": "NORMAL",
+    })
+    return result
+
+
+def apply_early_opportunity(results):
+    """Adds long-horizon intelligence without changing operational signals."""
+    for item in results:
+        if not item.get("available"):
+            continue
+        a = item.get("analysis", {})
+        history = []
+        try:
+            # Monthly Yahoo history is requested with range=max, giving the
+            # engine the longest series the provider makes available.
+            history = get_data(item["symbol"], EARLY_HISTORY_INTERVAL, 1000)
+        except Exception as exc:
+            print(f"   ⚠️ Early history {item['name']}: {exc}")
+        if len(history) < EARLY_HISTORY_MIN_MONTHS:
+            history = item.get("candles") or []
+
+        early = early_opportunity_engine(item["name"], history, a)
+        a["early_opportunity"] = early
+
+        setup = a.get("setup_direction") or a.get("model_signal")
+        if early.get("direction") in ("LONG", "SHORT") and early.get("direction") == setup:
+            a["early_alignment_bonus"] = min(8.0, max(0.0, (early["score"]-50)*0.16))
+        else:
+            a["early_alignment_bonus"] = 0.0
+
+
+def build_early_telegram(ranked):
+    available = [
+        x for x in ranked
+        if x.get("available") and x.get("analysis", {}).get("early_opportunity")
+    ]
+    available.sort(
+        key=lambda x: safe_float(
+            x["analysis"]["early_opportunity"].get("score"), 0
+        ) or 0,
+        reverse=True
+    )
+    available = available[:EARLY_TOP_N]
+    lines = ["🔭 OPPORTUNITÀ IN ANTICIPO", "━━━━━━━━━━━━━━━━━━━━"]
+    medals = ["🥇", "🥈", "🥉"]
+
+    for i, item in enumerate(available):
+        e = item["analysis"]["early_opportunity"]
+        d = e.get("direction", "NONE")
+        icon = "🟠" if e.get("state") == "OPPORTUNITA_ANTICIPATA" else "🟡" if e.get("state") == "MONITOR" else "⚪"
+        h7 = e.get("forward", {}).get("7", {})
+        hist = (
+            f"Storico 7p: {h7.get('up_rate', 0.5)*100:.0f}% LONG"
+            if h7.get("samples", 0) >= 20 else "Storico: campione limitato"
+        )
+        lines += [
+            "",
+            f"{medals[i]} {item['name']}",
+            f"{icon} {e.get('state','N/D')} | {d}",
+            f"🔭 Early Score: {e.get('score',0):.0f}/100 | Prob. {e.get('probability',50):.0f}%",
+            f"📚 {hist}",
+            f"⏳ Orizzonte: {e.get('horizon','N/D')}",
+        ]
+        if e.get("reasons"):
+            lines.append("🧠 " + " | ".join(e["reasons"][:3]))
+        lines.append("⚠️ Anticipazione: NON è un ingresso automatico.")
+    return "\n".join(lines)
+
+
 def _monitor_context_line(a):
     """Compact context: fundamentals/global factors inform, but do not decide entry."""
     weather = a.get("weather", {}) or {}
@@ -4457,11 +4725,15 @@ def _monitor_context_line(a):
 def build_telegram_5m(ranked, best, position_message=None, position=None):
     """v2.7: concise operational monitor intended for a 5-minute schedule."""
     available = [x for x in ranked if x.get("available")][:MONITOR_TOP_N]
+    early_block = build_early_telegram(ranked)
     lines = [
-        "🌍 COMMODITIES BOT v2.7",
+        "🌍 COMMODITIES BOT v2.8",
         f"⏱️ MONITORAGGIO OGNI {MONITOR_INTERVAL_MINUTES} MINUTI",
         "",
-        "🏆 MIGLIORI SETUP",
+        early_block,
+        "",
+        "⚡ TRADING OGGI",
+        "━━━━━━━━━━━━━━━━━━━━",
     ]
     medals = ["🥇", "🥈", "🥉"]
     for i, item in enumerate(available):
@@ -4531,7 +4803,7 @@ def save_monitor_state(ranked, best, position):
 def build_telegram(ranked, best, position_message=None, position=None):
     """Telegram operativo V8: niente dettagli tecnici interni."""
     available=[x for x in ranked if x.get('available')][:3]
-    lines=['🌍 COMMODITIES BOT v2.7','', '🏆 CLASSIFICA']
+    lines=['🌍 COMMODITIES BOT v2.8','', '🏆 CLASSIFICA']
     medals=['🥇','🥈','🥉']
     for i,item in enumerate(available):
         a=item['analysis']; action=a.get('action_label')
@@ -4601,7 +4873,7 @@ def analysis_direction_hint(timeframes):
 def main():
     print()
     print("=" * 70)
-    print("🌍 COMMODITIES BOT v2.7")
+    print("🌍 COMMODITIES BOT v2.8")
     print("5-MIN SMART MONITOR + TECHNICAL ENTRY + FUNDAMENTAL CONTEXT + GLOBAL RISK + PAPER/DEMO GATE")
     print("=" * 70)
     print()
@@ -4766,6 +5038,19 @@ def main():
     new_predictions, _prediction_log = record_predictions(results)
     print(f"📝 Prediction Journal: {new_predictions} nuove previsioni registrate")
 
+    print("\n🔭 EARLY OPPORTUNITY ENGINE v2.8")
+    for _it in sorted(
+        [x for x in results if x.get("available")],
+        key=lambda x: safe_float(x.get("analysis",{}).get("early_opportunity",{}).get("score"),0) or 0,
+        reverse=True
+    )[:5]:
+        _e = _it["analysis"].get("early_opportunity", {})
+        print(
+            f"   {_it['name']}: {_e.get('state')} | {_e.get('direction')} | "
+            f"score={_e.get('score',0):.1f} prob={_e.get('probability',50):.1f}% | "
+            f"simili={_e.get('regime',{}).get('similar',0)}"
+        )
+
     # ========================================================
     # RANKING
     # ========================================================
@@ -4779,7 +5064,7 @@ def main():
             conf = safe_float(item["analysis"].get("confidence"), 0) or 0
             # Ranking coerente: opportunità + qualità + confidenza, senza
             # permettere a una sola metrica di dominare.
-            item["ranking_score"] = clamp(base_rb * 0.60 + q * 0.25 + conf * 0.15, 0, 100)
+            item["ranking_score"] = clamp(base_rb * 0.60 + q * 0.25 + conf * 0.15 + safe_float(item["analysis"].get("early_alignment_bonus"), 0), 0, 100)
         else:
             item["ranking_score"] = -1
 
