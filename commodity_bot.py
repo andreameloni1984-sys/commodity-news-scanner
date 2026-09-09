@@ -5177,7 +5177,7 @@ def main():
 
             source_check = compare_sources(name, symbol, candles)
             dataset = build_dataset(candles)
-            print(f"   🧮 Dataset: {len(dataset)} | Fonte: {DATA_SOURCE_STATS.get(name, {}).get("1day", "N/D")}")
+            print(f"   🧮 Dataset: {len(dataset)} | Fonte: {DATA_SOURCE_STATS.get(name, {}).get('1day', 'N/D')}")
 
             if len(dataset) < 80:
                 raise RuntimeError(f"Dataset insufficiente ({len(dataset)}/80)")
