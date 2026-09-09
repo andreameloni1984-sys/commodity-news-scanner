@@ -11,7 +11,7 @@ import requests
 
 
 # ============================================================
-# COMMODITY TRADING BOT v2.9
+# COMMODITY TRADING BOT v3.0
 # QUANT MODEL + MULTI-TIMEFRAME + NEWS + USD + SEASONALITY
 # + RANKING + POSITION MANAGEMENT
 #
@@ -33,6 +33,28 @@ DAILY_REPORT_FILE = "commodities_daily_report_state.json"
 PREDICTION_HORIZON_HOURS = 24
 EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "23"))
 
+# v3.0 — multi-horizon research and market-structure layer.
+# Real/demo order execution remains OFF by default.
+BOT_VERSION = "3.0"
+PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
+FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
+POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
+EARLY_OPPORTUNITY_ENABLED = os.getenv("EARLY_OPPORTUNITY_ENABLED", "1") == "1"
+
+# Optional explicit front/next futures symbols. Example:
+# FUTURES_SYMBOLS_JSON='{"Oro":["GC1!","GC2!"],"Rame":["HG1!","HG2!"]}'
+# Leave empty when the data provider does not expose futures symbols.
+try:
+    FUTURES_SYMBOLS = json.loads(os.getenv("FUTURES_SYMBOLS_JSON", "{}"))
+    if not isinstance(FUTURES_SYMBOLS, dict):
+        FUTURES_SYMBOLS = {}
+except Exception:
+    FUTURES_SYMBOLS = {}
+
+FUTURES_CACHE_FILE = "commodities_futures_structure_cache.json"
+FUTURES_CACHE_HOURS = int(os.getenv("FUTURES_CACHE_HOURS", "2"))
+
+
 # v2.7 — 5-minute smart monitoring. The bot is scheduled externally
 # (for example by GitHub Actions cron */5); it does not sleep inside a run.
 MONITOR_INTERVAL_MINUTES = int(os.getenv("MONITOR_INTERVAL_MINUTES", "5"))
@@ -48,7 +70,7 @@ WEATHER_ENABLED = os.getenv("WEATHER_ENABLED", "1") == "1"
 DISASTER_ENABLED = os.getenv("DISASTER_ENABLED", "1") == "1"
 # Automatic broker/demo execution is deliberately OFF. Enable only after
 # forward/paper validation and a broker-specific adapter is configured.
-DEMO_TRADING_ENABLED = os.getenv("DEMO_TRADING_ENABLED", "0") == "1"
+DEMO_TRADING_ENABLED = (os.getenv("DEMO_TRADING_ENABLED", "0") == "1") and (not PAPER_TRADING_ONLY)
 DEMO_ORDERS_FILE = "commodities_demo_orders.json"
 WEATHER_IMPACT_CAP = 8.0
 
@@ -5043,7 +5065,7 @@ def save_monitor_state(ranked, best, position):
 def build_telegram(ranked, best, position_message=None, position=None):
     """Telegram operativo V8: niente dettagli tecnici interni."""
     available=[x for x in ranked if x.get('available')][:3]
-    lines=['🌍 COMMODITIES BOT v2.9','', '🏆 CLASSIFICA']
+    lines=['🌍 COMMODITIES BOT v3.0','', '🏆 CLASSIFICA']
     medals=['🥇','🥈','🥉']
     for i,item in enumerate(available):
         a=item['analysis']; action=a.get('action_label')
@@ -5067,6 +5089,8 @@ def build_telegram(ranked, best, position_message=None, position=None):
                   f'💰 PREZZO ATTUALE: {price:.4f}' if price is not None else '💰 PREZZO ATTUALE: N/D',
                   f'📥 ENTRATA: {entry:.4f}' if entry is not None else '📥 ENTRATA: N/D', f'📌 SETUP: {a.get("entry_method","N/D")}', f'⚡ TRIGGER: {a.get("entry_trigger",{}).get("kind","N/D")} {a.get("entry_trigger",{}).get("timeframe","")}'.strip(), f'🕯️ PATTERN: {pattern}', f'📚 STORICO SETUP: {a.get("pattern_backtest",{}).get("win_rate",0)*100:.0f}% successo' if a.get("pattern_backtest",{}).get("samples",0)>=5 else '📚 STORICO SETUP: dati insufficienti',
                   f'🧠 ENSEMBLE: {a.get("ensemble_alignment","N/D")} | RANK {a.get("ensemble_rank","N/D")} | {a.get("cross_sectional_score",50):.0f}/100',
+                  f'🧭 V3: EARLY {a.get("early_opportunity",{}).get("state","N/D")} {a.get("early_opportunity",{}).get("direction","N/D")} | POL {a.get("political",{}).get("direction","N/D")} | CURVE {a.get("futures_structure",{}).get("state","N/D")}',
+                  f'🔄 REVERSAL: {a.get("reversal",{}).get("label","N/D")}',
                   f'🌡️ REGIME: {a.get("institutional",{}).get("regime","N/D")} | VOLUME/FLOW PROXY: {a.get("institutional",{}).get("volume_confirmation",0):+.2f}']
         item_mode=a.get('risk',{}).get('mode', global_mode)
         if item_mode=='SHOCK':
@@ -5107,14 +5131,185 @@ def analysis_direction_hint(timeframes):
 
 
 # ============================================================
+# v3.0 FUTURES STRUCTURE / CONTANGO-BACKWARDATION ENGINE
+# ============================================================
+
+def futures_structure_engine(name):
+    """Optional front-vs-next futures curve signal.
+
+    The engine is intentionally conservative: without explicit provider symbols
+    it returns N/D rather than inventing a curve. When symbols are supplied,
+    it computes the annualized-ish front/next slope proxy from the latest closes.
+    """
+    base = {"enabled": FUTURES_STRUCTURE_ENABLED, "status": "N/D", "state": "N/D",
+            "score": 0.0, "front": None, "next": None, "spread_pct": None,
+            "symbol_front": None, "symbol_next": None}
+    if not FUTURES_STRUCTURE_ENABLED:
+        base["status"] = "DISABLED"
+        return base
+    syms = FUTURES_SYMBOLS.get(name)
+    if not isinstance(syms, (list, tuple)) or len(syms) < 2:
+        base["status"] = "SYMBOLS_NOT_CONFIGURED"
+        return base
+    try:
+        front_sym, next_sym = str(syms[0]), str(syms[1])
+        front = get_data(front_sym, "1day", 30)
+        nxt = get_data(next_sym, "1day", 30)
+        if not front or not nxt:
+            base["status"] = "DATA_UNAVAILABLE"
+            return base
+        f = safe_float(front[-1].get("close"), None)
+        n = safe_float(nxt[-1].get("close"), None)
+        if f is None or n is None or f <= 0:
+            base["status"] = "DATA_INVALID"
+            return base
+        spread_pct = (n / f - 1.0) * 100.0
+        # Positive next>front = contango; negative = backwardation.
+        if spread_pct > 0.35:
+            state, score = "CONTANGO", -min(8.0, spread_pct * 2.0)
+        elif spread_pct < -0.35:
+            state, score = "BACKWARDATION", min(8.0, abs(spread_pct) * 2.0)
+        else:
+            state, score = "FLAT", 0.0
+        return {**base, "status": "OK", "state": state, "score": round(score,2),
+                "front": f, "next": n, "spread_pct": round(spread_pct,3),
+                "symbol_front": front_sym, "symbol_next": next_sym}
+    except Exception as exc:
+        base["status"] = f"ERROR: {exc}"
+        return base
+
+
+def apply_futures_structure(analysis, structure):
+    analysis["futures_structure"] = structure or {}
+    if not structure or structure.get("status") != "OK":
+        return
+    # Curve information is a bounded context adjustment, never a standalone trade.
+    delta = float(structure.get("score", 0.0) or 0.0)
+    direction = analysis.get("setup_direction") or analysis.get("model_signal")
+    if direction == "SHORT":
+        delta = -delta
+    analysis["score"] = clamp(float(analysis.get("score", 0.0)) + delta, 0, 100)
+    analysis["futures_structure_delta"] = round(delta, 2)
+
+
+# ============================================================
+# v3.0 POLITICAL EVENT -> MECHANISM -> COMMODITY -> HORIZON
+# ============================================================
+
+POLITICAL_RULES = {
+    "tariff": {"mechanism": "trade_flow", "horizon": "1-14d"},
+    "tariffs": {"mechanism": "trade_flow", "horizon": "1-14d"},
+    "sanction": {"mechanism": "supply_disruption", "horizon": "1-30d"},
+    "sanctions": {"mechanism": "supply_disruption", "horizon": "1-30d"},
+    "export ban": {"mechanism": "supply_disruption", "horizon": "1-30d"},
+    "trade war": {"mechanism": "trade_flow", "horizon": "3-30d"},
+    "opec": {"mechanism": "energy_supply", "horizon": "1-14d"},
+    "ceasefire": {"mechanism": "risk_premium", "horizon": "1-14d"},
+    "war": {"mechanism": "risk_premium", "horizon": "1-30d"},
+    "conflict": {"mechanism": "risk_premium", "horizon": "1-30d"},
+    "fed": {"mechanism": "rates_usd", "horizon": "1-14d"},
+}
+
+POLITICAL_COMMODITY_MAP = {
+    "Oro": ["tariff", "sanction", "war", "conflict", "fed", "rates", "dollar", "geopolit"],
+    "Argento": ["tariff", "trade", "china", "industrial", "war", "sanction"],
+    "Rame": ["tariff", "china", "trade", "sanction", "mine", "export", "critical mineral"],
+    "Petrolio WTI": ["opec", "sanction", "iran", "russia", "war", "tariff", "export"],
+    "Petrolio Brent": ["opec", "sanction", "iran", "russia", "war", "tariff", "export"],
+    "Gas Naturale": ["lng", "russia", "ukraine", "sanction", "pipeline", "war", "europe"],
+    "Grano": ["ukraine", "russia", "black sea", "tariff", "export", "sanction", "war"],
+    "Mais": ["tariff", "china", "trade", "export", "agriculture"],
+    "Caffè": ["tariff", "brazil", "vietnam", "export", "trade"],
+}
+
+
+def political_impact_v3(name, base=None):
+    """Turn political headlines into bounded, explainable event context."""
+    if not POLITICAL_IMPACT_ENABLED:
+        return base or {"direction":"NEUTRALE", "score":0.0, "count":0, "status":"DISABLED"}
+    base = dict(base or political_impact(name) or {})
+    try:
+        query_terms = POLITICAL_COMMODITY_MAP.get(name, [name])
+        query = "(" + " OR ".join(query_terms[:8]) + ") (Trump OR tariff OR sanctions OR geopolitics OR OPEC OR Fed)"
+        articles = _fetch_rss_articles(query, limit=30)
+    except Exception:
+        articles = []
+    if not articles:
+        base.update({"v3_status":"NO_EVENT_FEED", "mechanism":"N/D", "horizon":"N/D"})
+        return base
+    weights = []
+    mechanisms = {}
+    for a in articles:
+        text = f"{a.get('title','')} {a.get('description','')}".lower()
+        matched = [k for k in POLITICAL_RULES if k in text]
+        if not matched:
+            continue
+        sign = 0
+        # Conservative polarity: supply shock/risk escalation positive for oil/gold,
+        # while tariffs are not automatically bullish/bearish across commodities.
+        if any(k in text for k in ("escalation", "sanction", "sanctions", "attack", "war", "conflict", "export ban", "opec cut")):
+            sign = 1
+        if any(k in text for k in ("ceasefire", "peace", "de-escalation", "supply increase", "opec increase")):
+            sign = -1
+        for k in matched:
+            rule = POLITICAL_RULES[k]
+            mechanisms[rule["mechanism"]] = mechanisms.get(rule["mechanism"], 0) + 1
+        weights.append(sign)
+    if weights:
+        raw = sum(weights) / len(weights)
+    else:
+        raw = float(base.get("score", 0.0) or 0.0)
+    raw = clamp(raw, -1, 1)
+    # Keep political influence bounded; it cannot override the price engine.
+    if abs(raw) < 0.20:
+        direction = "NEUTRALE"
+    elif raw > 0:
+        direction = "FAVOREVOLE"
+    else:
+        direction = "SFAVOREVOLE"
+    mechanism = max(mechanisms, key=mechanisms.get) if mechanisms else "N/D"
+    horizon = "1-3d" if len(articles) < 8 else "1-14d" if len(articles) < 18 else "1-30d"
+    out = dict(base)
+    out.update({"score": round(raw,3), "direction": direction, "count": len(articles),
+                "v3_status":"OK", "mechanism":mechanism, "horizon":horizon,
+                "event_count":len(weights)})
+    return out
+
+
+def v3_context_summary(analysis):
+    early = analysis.get("early_opportunity", {}) or {}
+    political = analysis.get("political", {}) or {}
+    fs = analysis.get("futures_structure", {}) or {}
+    rev = analysis.get("reversal", {}) or {}
+    return {
+        "early": early.get("state", "N/D"),
+        "early_direction": early.get("direction", "N/D"),
+        "political": political.get("direction", "N/D"),
+        "political_mechanism": political.get("mechanism", "N/D"),
+        "political_horizon": political.get("horizon", "N/D"),
+        "curve": fs.get("state", "N/D"),
+        "reversal": rev.get("label", "N/D"),
+    }
+
+
+def build_v3_header():
+    return [
+        "🌍 COMMODITIES BOT v3.0",
+        "🧪 PAPER / ANALISI — ORDINI REALI DISABILITATI",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "🔭 EARLY OPPORTUNITY | ⚡ TRADING OGGI | 🧠 POLITICAL IMPACT | 📈 FUTURES CURVE",
+    ]
+
+
+# ============================================================
 # MAIN
 # ============================================================
 
 def main():
     print()
     print("=" * 70)
-    print("🌍 COMMODITIES BOT v2.9")
-    print("5-MIN SMART MONITOR + TECHNICAL ENTRY + FUNDAMENTAL CONTEXT + GLOBAL RISK + PAPER/DEMO GATE")
+    print("🌍 COMMODITIES BOT v3.0")
+    print("5-MIN SMART MONITOR + EARLY OPPORTUNITY + POLITICAL IMPACT + FUTURES STRUCTURE + PAPER GATE")
     print("=" * 70)
     print()
 
@@ -5157,7 +5352,7 @@ def main():
 
             timeframes = get_multitimeframe(symbol)
             news = analyze_news(name)
-            political = political_impact(name)
+            political = political_impact_v3(name, political_impact(name))
             global_impact = commodity_global_impact(name, global_intel)
             session = session_engine(name, symbol, "LONG" if analysis_direction_hint(timeframes) == "LONG" else "SHORT" if analysis_direction_hint(timeframes) == "SHORT" else "NONE")
 
@@ -5197,6 +5392,11 @@ def main():
                 analysis, commodity_name=name, candles=candles,
                 pattern_timeframes=pattern_timeframes
             )
+
+            # v3.0: optional futures curve context. No data -> no invented signal.
+            _curve = futures_structure_engine(name)
+            apply_futures_structure(analysis, _curve)
+            analysis["v3_context"] = v3_context_summary(analysis)
 
             results.append({
                 "name": name,
@@ -5284,7 +5484,12 @@ def main():
     new_predictions, _prediction_log = record_predictions(results)
     print(f"📝 Prediction Journal: {new_predictions} nuove previsioni registrate")
 
-    print("\n🔭 EARLY OPPORTUNITY ENGINE v2.9")
+    print("\n🧠 V3 CONTEXT")
+    for _it in sorted([x for x in results if x.get("available")], key=lambda x: safe_float(x.get("analysis",{}).get("score"),0) or 0, reverse=True)[:5]:
+        _a=_it["analysis"]; _v=_a.get("v3_context",{}) or {}; _p=_a.get("political",{}) or {}; _f=_a.get("futures_structure",{}) or {}
+        print(f"   {_it['name']}: EARLY={_v.get('early')} {_v.get('early_direction')} | POL={_p.get('direction')} { _p.get('mechanism','N/D')} { _p.get('horizon','N/D')} | CURVE={_f.get('state')} | REV={_v.get('reversal')}")
+
+    print("\n🔭 EARLY OPPORTUNITY ENGINE v3.0")
     for _it in sorted(
         [x for x in results if x.get("available")],
         key=lambda x: safe_float(x.get("analysis",{}).get("early_opportunity",{}).get("score"),0) or 0,
@@ -5498,7 +5703,7 @@ def main():
 
     print()
     print("=" * 70)
-    print("⚠️ Analisi quantitativa, non garanzia di profitto.")
+    print("⚠️ v3.0: analisi quantitativa, non garanzia di profitto. PAPER ONLY.")
     print("=" * 70)
 
 
