@@ -12,17 +12,13 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: Install dependencies
         run: pip install requests
-
       - name: Run Commodities Bot
         env:
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
@@ -32,5 +28,4 @@ jobs:
           PAPER_TRADING_ONLY: '1'
           DEMO_TRADING_ENABLED: '0'
           MONITOR_INTERVAL_MINUTES: '15'
-
-        run: python commodity_bot.py
+        run: python commodity_bot_v3_5.py
