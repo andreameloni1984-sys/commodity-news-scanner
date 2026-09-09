@@ -30,12 +30,19 @@ POSITION_FILE = "position.json"
 DIRECTION_STATE_FILE = "commodities_direction_state.json"
 PREDICTION_LOG_FILE = "commodities_prediction_log.json"
 DAILY_REPORT_FILE = "commodities_daily_report_state.json"
-PREDICTION_HORIZON_HOURS = 24
+PREDICTION_HORIZON_HOURS = int(os.getenv("PREDICTION_HORIZON_HOURS", "6"))
+INTRADAY_ALERT_MIN_SCORE = float(os.getenv("INTRADAY_ALERT_MIN_SCORE", "70"))
+PERFORMANCE_RETENTION_DAYS = int(os.getenv("PERFORMANCE_RETENTION_DAYS", "90"))
+REGIME_ENABLED = os.getenv("REGIME_ENABLED", "1") == "1"
+PRICE_ACTION_ENABLED = os.getenv("PRICE_ACTION_ENABLED", "1") == "1"
+CANDLE_ENGINE_ENABLED = os.getenv("CANDLE_ENGINE_ENABLED", "1") == "1"
+ADAPTIVE_RISK_ENABLED = os.getenv("ADAPTIVE_RISK_ENABLED", "1") == "1"
+EXIT_ENGINE_ENABLED = os.getenv("EXIT_ENGINE_ENABLED", "1") == "1"
 EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "23"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "3.3"
+BOT_VERSION = "3.5"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -120,6 +127,13 @@ KNOWLEDGE_SOURCES.extend(WORLDWIDE_KNOWLEDGE_SOURCES)
 # Sono fonti di metodologia/educazione: non vengono trattate come prove di
 # redditività. Le regole derivate devono essere validate sullo storico.
 KNOWLEDGE_SOURCES.extend([
+    {"name": "Unger Academy - Metodo e Sistema", "url": "https://ungeracademy.com/it/blog/metodo-o-sistema", "type": "web"},
+    {"name": "Unger Academy - Backtest Strategia", "url": "https://ungeracademy.com/it/blog/backtest-strategia-trading", "type": "web"},
+    {"name": "Unger Academy - Stop Loss", "url": "https://ungeracademy.com/it/blog/come-impostare-lo-stop-loss-nei-trading-system", "type": "web"},
+    {"name": "Unger Academy - Trailing Stop", "url": "https://ungeracademy.com/it/blog/trailing-stop-loss-e-trading-systems-come-si-usa-e-funziona-davvero", "type": "web"},
+    {"name": "GOAT Money - Orso Giordi Locatelli", "url": "https://goatmoney.it/workshop-3giorni", "type": "web"},
+    {"name": "GOAT Money - Preparazione del Trade", "url": "https://www.linkedin.com/pulse/come-preparo-un-trade-dalla-lavagna-al-mercato-goat-money-xcbpf", "type": "web"},
+    {"name": "Alfio Bardolla - Commodity Spread Trading", "url": "https://www.alfiobardolla.com/corsi-premium/corso-online-in-commodity-spread-trading/", "type": "web"},
     {"name": "Capital.com Commodities", "url": "https://capital.com/it-it/markets/commodities", "type": "web"},
     {"name": "Capital.com Trading Academy", "url": "https://capital.com/it-it/learn", "type": "web"},
     {"name": "IG Academy Technical Analysis", "url": "https://www.ig.com/it/scuola-di-trading/ig-academy/basi-analisi-tecnica", "type": "web"},
@@ -137,7 +151,12 @@ KNOWLEDGE_CONCEPTS = {
     "volatility": ["volatility", "volatilità", "atr", "average true range"],
     "risk": ["risk management", "risk/reward", "stop loss", "take profit", "money management"],
     "fundamental": ["fundamental", "supply", "demand", "inflation", "interest rate", "macro"],
+    "candlestick": ["candlestick", "candle", "doji", "hammer", "engulfing", "morning star", "evening star", "shooting star", "japanese"],
+    "levels": ["level to level", "key level", "support", "resistance", "livelli chiave"],
+    "entry_exit": ["entry", "entrata", "exit", "uscita", "trigger", "breakout", "retest"],
+    "retracement": ["retracement", "pullback", "ritracciamento", "fibonacci"],
 }
+
 
 HISTORY_SIZE = 4000
 HORIZON = 5
@@ -3865,6 +3884,227 @@ def entry_trigger_engine(analysis):
             "candidates": [{"tf":x[1],"kind":x[2],"score":round(x[0],1),"age_bars":x[6]} for x in candidates]}
 
 
+def market_regime_engine(analysis):
+    """Classify the current market regime using only data already in analysis.
+
+    This is a descriptive regime classifier, not a predictive guarantee.
+    It deliberately stays simple so each regime can later be validated
+    independently in the Daily Performance Engine.
+    """
+    if not REGIME_ENABLED:
+        return {"state": "N/D", "score": 0.0, "strategy_bias": "N/D", "reason": "DISATTIVATO"}
+    tfs = analysis.get("timeframes", {}) or {}
+    rev = analysis.get("reversal", {}) or {}
+    risk = analysis.get("risk", {}) or {}
+    if risk.get("mode") == "SHOCK":
+        return {"state":"SHOCK", "score":100.0, "strategy_bias":"BLOCK", "reason":"SHOCK GLOBALE"}
+    if rev.get("stage") == "CONFIRMED":
+        return {"state":"REVERSAL", "score":90.0, "strategy_bias":"WAIT/REVERSAL", "reason":"INVERSIONE CONFERMATA"}
+    dirs=[tfs.get(tf,{}).get("direction") for tf in ("4H","1H","15m") if tfs.get(tf,{}).get("direction") in ("LONG","SHORT")]
+    long_n=dirs.count("LONG"); short_n=dirs.count("SHORT")
+    mq=safe_float(risk.get("market_quality"),50) or 50
+    atr=safe_float(analysis.get("atr"),0) or 0
+    price=safe_float(analysis.get("price"),0) or 0
+    vol_pct=(atr/price*100) if atr>0 and price>0 else 0.0
+    if len(dirs)>=2 and long_n==len(dirs) and len(dirs)>=2:
+        state="TREND UP"; bias="BREAKOUT/PULLBACK LONG"; score=70+10*long_n
+    elif len(dirs)>=2 and short_n==len(dirs) and len(dirs)>=2:
+        state="TREND DOWN"; bias="BREAKOUT/PULLBACK SHORT"; score=70+10*short_n
+    elif mq < 45 or vol_pct >= 4.0:
+        state="HIGH VOLATILITY"; bias="CONFIRMATION FORTE"; score=65
+    elif len(dirs)>=2 and long_n==short_n:
+        state="RANGE"; bias="MEAN REVERSION / LEVELS"; score=60
+    else:
+        state="TRANSITION"; bias="SELECTIVE"; score=55
+    return {"state":state,"score":round(clamp(score,0,100),1),"strategy_bias":bias,
+            "reason":f"MTF {long_n}L/{short_n}S | MQ {mq:.0f} | ATR% {vol_pct:.2f}"}
+
+
+
+# ============================================================
+# v3.5 PRICE ACTION / LEVEL / RETRACEMENT / BREAKOUT ENGINE
+# ============================================================
+
+def _directional_candle_score(candles, direction):
+    if direction not in ("LONG", "SHORT") or not candles or len(candles) < 3:
+        return {"score": 0.0, "patterns": [], "label": "N/D"}
+    ce = candle_engine(candles, direction)
+    wp = world_pattern_engine(candles, direction)
+    # Candlestick score is deliberately bounded: it confirms price action,
+    # but never creates a trade by itself.
+    raw = safe_float(ce.get("score"), 0) or 0
+    world = safe_float(wp.get("score"), 0) or 0
+    score = clamp(50 + raw * 10 + world * 8, 0, 100)
+    return {
+        "score": round(score, 1),
+        "patterns": list(dict.fromkeys((ce.get("patterns") or []) + (wp.get("patterns") or [])))[:8],
+        "label": ce.get("label") if ce.get("label") not in (None, "NESSUN PATTERN FORTE") else (" + ".join((wp.get("patterns") or [])[:2]) or "NESSUN PATTERN FORTE"),
+        "raw_score": round(raw, 2),
+        "world_score": round(world, 2),
+    }
+
+
+def retracement_engine(candles, direction):
+    """Classifies pullback depth without assuming that every pullback is a reversal."""
+    if direction not in ("LONG", "SHORT") or not candles or len(candles) < 30:
+        return {"state": "N/D", "score": 50.0, "depth": None, "level": None, "reason": "DATI INSUFFICIENTI"}
+    closes = [safe_float(c.get("close")) for c in candles if safe_float(c.get("close")) is not None]
+    price = closes[-1]
+    e9, e21, e50 = ema(closes, 9), ema(closes, 21), ema(closes, 50)
+    e9 = e9 if e9 is not None else price
+    e21 = e21 if e21 is not None else price
+    e50 = e50 if e50 is not None else e21
+    a = atr(candles, 14) or price * 0.01
+    window = candles[-40:]
+    hi = max((safe_float(c.get("high")) for c in window if safe_float(c.get("high")) is not None), default=price)
+    lo = min((safe_float(c.get("low")) for c in window if safe_float(c.get("low")) is not None), default=price)
+    span = max(hi-lo, a)
+    if direction == "LONG":
+        depth = (hi-price)/span
+        aligned = e9 >= e21 >= e50
+        zone = e21
+        # Healthy pullback: price returns toward EMA21 but remains above the
+        # broader structure. Deep penetration becomes a warning, not an auto-block.
+        near = abs(price-e21) <= 0.75*a
+        deep = price < e21 - 1.25*a
+        state = "PULLBACK FORTE" if near and aligned else "PULLBACK PROFONDO" if deep else "PULLBACK LEGGERO" if depth < .35 else "NESSUN PULLBACK"
+        score = 78 if near and aligned else 62 if aligned and not deep else 45 if deep else 52
+    else:
+        depth = (price-lo)/span
+        aligned = e9 <= e21 <= e50
+        zone = e21
+        near = abs(price-e21) <= 0.75*a
+        deep = price > e21 + 1.25*a
+        state = "PULLBACK FORTE" if near and aligned else "PULLBACK PROFONDO" if deep else "PULLBACK LEGGERO" if depth < .35 else "NESSUN PULLBACK"
+        score = 78 if near and aligned else 62 if aligned and not deep else 45 if deep else 52
+    return {"state": state, "score": float(score), "depth": round(depth, 3), "level": round(zone, 6),
+            "ema9": round(e9, 6), "ema21": round(e21, 6), "ema50": round(e50, 6),
+            "atr": round(a, 6), "reason": "EMA21 + struttura swing"}
+
+
+def breakout_retest_engine(candles, direction):
+    """Detects a recent breakout and whether price is successfully retesting it."""
+    if direction not in ("LONG", "SHORT") or not candles or len(candles) < 30:
+        return {"state": "N/D", "score": 50.0, "breakout": False, "retest": False, "level": None}
+    rows = candles[-35:]
+    highs = [safe_float(c.get("high")) for c in rows]
+    lows = [safe_float(c.get("low")) for c in rows]
+    closes = [safe_float(c.get("close")) for c in rows]
+    a = atr(rows, 14) or closes[-1]*0.01
+    look = 20
+    level = max(x for x in highs[-look-1:-1] if x is not None) if direction == "LONG" else min(x for x in lows[-look-1:-1] if x is not None)
+    recent = rows[-5:]
+    breakout = False
+    retest = False
+    for c in recent:
+        cm = _candle_metrics(c)
+        if not cm: continue
+        if direction == "LONG" and cm["close"] > level and cm["bull"] and cm["body"] >= cm["range"]*0.35:
+            breakout = True
+        if direction == "SHORT" and cm["close"] < level and cm["bear"] and cm["body"] >= cm["range"]*0.35:
+            breakout = True
+    if breakout:
+        last = _candle_metrics(rows[-1])
+        if last:
+            if direction == "LONG":
+                retest = last["low"] <= level + 0.45*a and last["close"] >= level
+            else:
+                retest = last["high"] >= level - 0.45*a and last["close"] <= level
+    state = "BREAKOUT + RETEST" if breakout and retest else "BREAKOUT" if breakout else "NESSUN BREAKOUT"
+    score = 88 if breakout and retest else 76 if breakout else 50
+    return {"state": state, "score": float(score), "breakout": breakout, "retest": retest,
+            "level": round(level, 6), "atr": round(a, 6)}
+
+
+def price_action_context_engine(analysis):
+    """Combines candles, levels, retracement and breakout/retest into one bounded confirmation layer."""
+    if not PRICE_ACTION_ENABLED:
+        return {"enabled": False, "score": 50.0, "direction": "NONE", "patterns": []}
+    d = analysis.get("setup_direction") or analysis.get("model_signal")
+    if d not in ("LONG", "SHORT"):
+        return {"enabled": True, "score": 50.0, "direction": "NONE", "patterns": []}
+    pts = analysis.get("pattern_timeframes", {}) or {}
+    tf_scores=[]; patterns=[]
+    for tf in ("4H","1H","15m","5m","1m"):
+        rows=pts.get(tf)
+        if rows and len(rows)>=5:
+            c=_directional_candle_score(rows,d)
+            tf_scores.append((tf,c["score"]))
+            patterns.extend([f"{tf}:{x}" for x in c["patterns"][:3]])
+    base_candle=mean([x[1] for x in tf_scores]) if tf_scores else 50.0
+    rows15=pts.get("15m") or pts.get("1H") or []
+    ret=retracement_engine(rows15,d) if rows15 else {"score":50,"state":"N/D"}
+    br=breakout_retest_engine(rows15,d) if rows15 else {"score":50,"state":"N/D"}
+    l2l=analysis.get("level_to_level",{}) or {}
+    l2l_score=safe_float(l2l.get("score"),50) or 50
+    # Location is more important than the candle name: a candle at a key level
+    # gets more weight than the same candle in the middle of a range.
+    location = clamp(l2l_score, 0, 100)
+    combo = clamp(base_candle*0.30 + ret.get("score",50)*0.20 + br.get("score",50)*0.25 + location*0.25,0,100)
+    return {"enabled": True, "score": round(combo,1), "direction": d,
+            "candle_score": round(base_candle,1), "retracement": ret,
+            "breakout_retest": br, "patterns": patterns[:10],
+            "level_score": round(location,1)}
+
+
+def adaptive_risk_levels(analysis, candles, direction):
+    """Adaptive SL/TP: structure first, ATR second, percentage profile as fallback."""
+    if not ADAPTIVE_RISK_ENABLED or direction not in ("LONG","SHORT") or not candles:
+        return {"available": False}
+    price=safe_float(analysis.get("price"))
+    if not price: return {"available": False}
+    a=atr(candles,14) or price*0.01
+    l2l=analysis.get("level_to_level",{}) or {}
+    support=safe_float(l2l.get("support")); resistance=safe_float(l2l.get("resistance"))
+    lows=[safe_float(x.get("low")) for x in candles[-30:] if safe_float(x.get("low")) is not None]
+    highs=[safe_float(x.get("high")) for x in candles[-30:] if safe_float(x.get("high")) is not None]
+    swing_low=min(lows) if lows else None; swing_high=max(highs) if highs else None
+    profile=LEVEL_PROFILES.get(analysis.get("commodity_name") or "", {})
+    sl_pct=profile.get("sl_pct", min(STOP_ATR*a/max(price,1e-9),0.025))
+    tp1_pct=profile.get("tp1_pct", min(TP1_ATR*a/max(price,1e-9),0.035))
+    tp2_pct=profile.get("tp2_pct", min(TP2_ATR*a/max(price,1e-9),0.055))
+    tp3_pct=profile.get("tp3_pct", min(TP3_ATR*a/max(price,1e-9),0.08))
+    if direction=="LONG":
+        candidates=[x for x in (support,swing_low,price-sl_pct*price) if x is not None and x < price]
+        stop=max(candidates) if candidates else price-sl_pct*price
+        stop=min(stop, price-0.55*a)
+        risk=max(price-stop,0.35*a)
+        tps=[price+max(tp1_pct*price,1.35*risk), price+max(tp2_pct*price,2.0*risk), price+max(tp3_pct*price,2.7*risk)]
+    else:
+        candidates=[x for x in (resistance,swing_high,price+sl_pct*price) if x is not None and x > price]
+        stop=min(candidates) if candidates else price+sl_pct*price
+        stop=max(stop, price+0.55*a)
+        risk=max(stop-price,0.35*a)
+        tps=[price-max(tp1_pct*price,1.35*risk), price-max(tp2_pct*price,2.0*risk), price-max(tp3_pct*price,2.7*risk)]
+    return {"available": True, "atr": round(a,6), "stop": _price_round(stop), "tp1": _price_round(tps[0]), "tp2": _price_round(tps[1]), "tp3": _price_round(tps[2]),
+            "risk_distance": round(risk,6), "method": "STRUCTURA + ATR + PROFILE FALLBACK"}
+
+
+def exit_engine(position, analysis, current_price):
+    """Early exit logic based on structure/reversal/price action; targets and SL remain primary."""
+    if not EXIT_ENGINE_ENABLED or not position:
+        return {"action":"HOLD","score":0.0,"reason":"DISATTIVATO"}
+    d=position.get("direction")
+    opposite="SHORT" if d=="LONG" else "LONG"
+    rev=analysis.get("reversal",{}) or {}
+    if rev.get("stage")=="CONFIRMED" and (analysis.get("signal")==opposite or analysis.get("setup_direction")==opposite):
+        return {"action":"EXIT","score":100.0,"reason":"INVERSIONE CONFERMATA"}
+    pa=analysis.get("price_action",{}) or {}
+    patterns=[]
+    for p in pa.get("patterns",[]): patterns.append(str(p).upper())
+    adverse_names=("BEARISH ENGULFING","SHOOTING STAR","EVENING STAR","SUPPORT BREAKDOWN") if d=="LONG" else ("BULLISH ENGULFING","HAMMER","MORNING STAR","RESISTANCE BREAKOUT")
+    adverse=sum(1 for p in patterns if any(x in p for x in adverse_names))
+    tfs=analysis.get("timeframes",{}) or {}
+    structural_opposite=sum(1 for tf in ("4H","1H","15m") if tfs.get(tf,{}).get("direction")==opposite)
+    score=adverse*28 + structural_opposite*18
+    if pa.get("breakout_retest",{}).get("state") in ("BREAKOUT", "BREAKOUT + RETEST") and d==opposite:
+        score+=20
+    score=clamp(score,0,100)
+    if score>=70:
+        return {"action":"EXIT","score":round(score,1),"reason":"PRICE ACTION CONTRARIA + STRUTTURA"}
+    return {"action":"HOLD","score":round(score,1),"reason":"NESSUN SEGNALE DI USCITA FORTE"}
+
+
 def smart_entry_engine(analysis):
     """v3.3: permissive intraday decision engine.
 
@@ -3899,6 +4139,8 @@ def smart_entry_engine(analysis):
     trigger = entry_trigger_engine(analysis)
     l2l = analysis.get("level_to_level", {}) or {}
     l2l_score = safe_float(l2l.get("score"), 50) or 50
+    price_action = price_action_context_engine(analysis)
+    pa_score = safe_float(price_action.get("score"), 50) or 50
     ensemble_ok = bool(analysis.get("ensemble_gate", True))
     source_status = str(analysis.get("source_check", {}).get("status", ""))
     source_discrepancy = "DISCREPANZA" in source_status.upper()
@@ -3912,6 +4154,7 @@ def smart_entry_engine(analysis):
     intraday += 4 if fast_same >= 2 else 2 if fast_same == 1 else 0
     intraday -= min(6, fast_opp * 3)
     intraday += clamp((l2l_score - 50) * 0.10, -5, 5)
+    intraday += clamp((pa_score - 50) * 0.16, -8, 8)
     intraday += 4 if trigger.get("confirmed") else 2 if trigger.get("kind") not in (None, "NONE") else 0
     intraday += 2 if ensemble_ok else -2
     intraday += clamp((market_q - 55) * 0.08, -4, 4)
@@ -3922,12 +4165,13 @@ def smart_entry_engine(analysis):
     intraday = clamp(intraday, 0, 100)
 
     blockers=[]
+    warnings=[]
     if risk.get("mode") == "SHOCK": blockers.append("SHOCK")
     if rev.get("stage") == "CONFIRMED": blockers.append("INVERSIONE CONFERMATA")
     if fast_opp > 0: blockers.append("CONFLITTO RAPIDO")
     if structural_same < 2: blockers.append("MTF PARZIALE")
     if source_discrepancy: blockers.append("DISCREPANZA FONTI")
-    if not l2l.get("gate", True): blockers.append("L2L CONTRARIO")
+    if not l2l.get("gate", True): warnings.append("L2L CONTRARIO")
 
     # Safety gates only. Everything else is graded by score.
     safety_block = risk.get("mode") == "SHOCK" or rev.get("stage") == "CONFIRMED"
@@ -3942,9 +4186,11 @@ def smart_entry_engine(analysis):
     else:
         state, action, signal = "WEAK_SETUP", "NON ENTRARE", "WAIT"
 
+    analysis["price_action"] = price_action
     analysis["entry_trigger"] = trigger
     analysis["entry_state"] = state
     analysis["entry_blockers"] = blockers[:6]
+    analysis["entry_warnings"] = warnings[:6]
     analysis["action_label"] = action
     analysis["signal"] = signal
     analysis["strong_confirmation"] = bool(state == "ENTRY_CONFIRMED")
@@ -3957,6 +4203,7 @@ def smart_entry_engine(analysis):
         "fast_opposite": fast_opp,
         "trigger": trigger.get("kind", "NONE"),
         "l2l_score": round(l2l_score, 1),
+        "price_action_score": round(pa_score, 1),
     }
     return analysis
 
@@ -3989,143 +4236,132 @@ def _prediction_direction(item):
 
 
 def record_predictions(results):
-    """Record auditable forecasts without looking at future candles."""
-    log = _json_load(PREDICTION_LOG_FILE, [])
-    if not isinstance(log, list):
-        log = []
-    now = datetime.now(timezone.utc)
-    cutoff = now - timedelta(days=45)
-    new_items = 0
-    for item in results:
-        if not item.get("available"):
-            continue
-        a = item.get("analysis", {})
-        price = safe_float(a.get("price"))
-        if price is None:
-            continue
-        direction = _prediction_direction(item)
-        rec = {
-            "id": f"{item['name']}|{now.strftime('%Y-%m-%dT%H:%M:%SZ')}|{direction}|{price:.8f}",
-            "created_at": now.isoformat(), "name": item["name"], "symbol": item["symbol"],
-            "direction": direction, "action": a.get("action_label", "ATTENDERE"), "price": price,
-            "entry": safe_float(a.get("entry")), "stop": safe_float(a.get("stop")),
-            "tp1": safe_float(a.get("tp1")), "tp2": safe_float(a.get("tp2")), "tp3": safe_float(a.get("tp3")),
-            "atr": safe_float(a.get("atr")) or 0.0, "score": safe_float(a.get("score")) or 0.0,
-            "confidence": safe_float(a.get("confidence")) or 0.0, "quality": safe_float(a.get("quality")) or 0.0,
-            "setup": a.get("entry_method", "N/D"),
-            "l2l": a.get("level_to_level", {}),
-            "validated_rules": list(a.get("learning_current_hits", [])) if isinstance(a.get("learning_current_hits", []), list) else [],
-            "status": "PENDING"
-        }
-        if not any(x.get("id") == rec["id"] for x in log):
-            log.append(rec); new_items += 1
-    log = [x for x in log if x.get("created_at", "") >= cutoff.isoformat()]
-    _json_save(PREDICTION_LOG_FILE, log)
-    return new_items, log
+    """Record actionable intraday alerts for later objective evaluation.
 
+    We only journal actionable LONG/SHORT alerts (ENTRARE or ENTRATA POSSIBILE),
+    because a WAIT is not a trade prediction. Each record contains the regime,
+    trigger and score so the EOD report can identify which setups work.
+    """
+    log = _json_load(PREDICTION_LOG_FILE, [])
+    if not isinstance(log, list): log=[]
+    now=datetime.now(timezone.utc)
+    cutoff=now-timedelta(days=PERFORMANCE_RETENTION_DAYS)
+    new_items=0
+    for item in results:
+        if not item.get("available"): continue
+        a=item.get("analysis",{}) or {}
+        action=str(a.get("action_label",""))
+        direction=a.get("setup_direction") or a.get("model_signal")
+        if direction not in ("LONG","SHORT") or action not in ("COMPRA ORA","VENDI ORA","ENTRATA POSSIBILE"):
+            continue
+        price=safe_float(a.get("price"))
+        if price is None: continue
+        trig=a.get("entry_trigger",{}) or {}
+        score=safe_float(a.get("intraday_score"),0) or 0
+        bucket="80-100" if score>=80 else "70-79"
+        # One alert per commodity/direction/trigger/15-minute cycle.
+        cycle=now.replace(minute=(now.minute//15)*15,second=0,microsecond=0).isoformat()
+        rec={
+            "id":f"{item['name']}|{cycle}|{direction}|{trig.get('kind','SETUP')}",
+            "created_at":now.isoformat(),"name":item["name"],"symbol":item["symbol"],
+            "direction":direction,"action":action,"price":price,
+            "entry":safe_float(a.get("entry")),"stop":safe_float(a.get("stop")),
+            "tp1":safe_float(a.get("tp1")),"tp2":safe_float(a.get("tp2")),
+            "tp3":safe_float(a.get("tp3")),"atr":safe_float(a.get("atr")) or 0.0,
+            "score":score,"score_bucket":bucket,"probability":safe_float(a.get("entry_probability"),0) or 0,
+            "confidence":safe_float(a.get("confidence"),0) or 0,"quality":safe_float(a.get("quality"),0) or 0,
+            "setup":trig.get("kind") or a.get("entry_method","N/D"),"trigger_tf":trig.get("timeframe","N/D"),
+            "regime":(a.get("market_regime",{}) or {}).get("state","N/D"),
+            "status":"PENDING"
+        }
+        if not any(x.get("id")==rec["id"] for x in log):
+            log.append(rec); new_items+=1
+    log=[x for x in log if x.get("created_at","")>=cutoff.isoformat()]
+    _json_save(PREDICTION_LOG_FILE,log)
+    return new_items,log
 
 def _future_candles_for_prediction(prediction):
-    created = datetime.fromisoformat(prediction["created_at"].replace("Z", "+00:00"))
-    if datetime.now(timezone.utc) < created + timedelta(hours=PREDICTION_HORIZON_HOURS):
-        return []
-    try:
-        rows = get_data(prediction["symbol"], "1h", 1200)
-    except Exception:
-        return []
-    end = created + timedelta(hours=PREDICTION_HORIZON_HOURS)
-    out = []
+    created=datetime.fromisoformat(prediction["created_at"].replace("Z","+00:00"))
+    if datetime.now(timezone.utc) < created+timedelta(hours=PREDICTION_HORIZON_HOURS): return []
+    try: rows=get_data(prediction["symbol"],"1h",1200)
+    except Exception: return []
+    end=created+timedelta(hours=PREDICTION_HORIZON_HOURS)
+    out=[]
     for row in rows:
-        try:
-            dt = datetime.fromisoformat(str(row["datetime"]).replace("Z", "+00:00"))
-        except Exception:
-            continue
-        if created < dt <= end:
-            out.append(row)
+        try: dt=datetime.fromisoformat(str(row["datetime"]).replace("Z","+00:00"))
+        except Exception: continue
+        if created < dt <= end: out.append(row)
     return out
 
-
-def evaluate_prediction(prediction, future):
-    if not future:
-        return None
-    p = safe_float(prediction.get("price"))
-    if p is None:
-        return None
-    direction = prediction.get("direction", "WAIT")
-    sl, tp1 = safe_float(prediction.get("stop")), safe_float(prediction.get("tp1"))
-    close_end = safe_float(future[-1].get("close"))
-    if close_end is None:
-        return None
-    first_hit = "NONE"
-    if direction in ("LONG", "SHORT"):
-        for c in future:
-            hi, lo = safe_float(c.get("high")), safe_float(c.get("low"))
-            if hi is None or lo is None:
-                continue
-            hit_tp = (tp1 is not None and (hi >= tp1 if direction == "LONG" else lo <= tp1))
-            hit_sl = (sl is not None and (lo <= sl if direction == "LONG" else hi >= sl))
-            if hit_tp and hit_sl: first_hit = "AMBIGUO"; break
-            if hit_tp: first_hit = "TP1"; break
-            if hit_sl: first_hit = "SL"; break
-        close_correct = close_end > p if direction == "LONG" else close_end < p
-        verdict = "CORRETTA" if first_hit == "TP1" or (first_hit == "NONE" and close_correct) else "ERRATA"
-        if first_hit == "AMBIGUO": verdict = "AMBIGUA"
-    else:
-        atr = safe_float(prediction.get("atr")) or 0.0
-        band = max(abs(p) * 0.003, atr * 0.75)
-        max_high = max((safe_float(c.get("high")) or p) for c in future)
-        min_low = min((safe_float(c.get("low")) or p) for c in future)
-        verdict = "CORRETTA" if max_high <= p + band and min_low >= p - band else "ERRATA"
-        first_hit = "NEUTRALE" if verdict == "CORRETTA" else "MOVIMENTO"
-    return {"verdict": verdict, "first_hit": first_hit, "close_end": close_end, "move_pct": (close_end / p - 1.0) * 100.0, "evaluated_at": datetime.now(timezone.utc).isoformat()}
-
+def evaluate_prediction(prediction,future):
+    if not future: return None
+    p=safe_float(prediction.get("price")); direction=prediction.get("direction","WAIT")
+    if p is None or direction not in ("LONG","SHORT"): return None
+    sl=safe_float(prediction.get("stop")); tp1=safe_float(prediction.get("tp1")); close_end=safe_float(future[-1].get("close"))
+    if close_end is None: return None
+    first_hit="NONE"
+    for c in future:
+        hi,lo=safe_float(c.get("high")),safe_float(c.get("low"))
+        if hi is None or lo is None: continue
+        hit_tp=tp1 is not None and (hi>=tp1 if direction=="LONG" else lo<=tp1)
+        hit_sl=sl is not None and (lo<=sl if direction=="LONG" else hi>=sl)
+        if hit_tp and hit_sl: first_hit="AMBIGUO"; break
+        if hit_tp: first_hit="TP1"; break
+        if hit_sl: first_hit="SL"; break
+    close_correct=close_end>p if direction=="LONG" else close_end<p
+    verdict="CORRETTA" if first_hit=="TP1" or (first_hit=="NONE" and close_correct) else "ERRATA"
+    if first_hit=="AMBIGUO": verdict="AMBIGUA"
+    return {"verdict":verdict,"first_hit":first_hit,"close_end":close_end,
+            "move_pct":(close_end/p-1)*100,"evaluated_at":datetime.now(timezone.utc).isoformat()}
 
 def run_end_of_day_test(force=False):
-    log = _json_load(PREDICTION_LOG_FILE, [])
-    if not isinstance(log, list) or not log:
-        return None
-    local_now = datetime.now(ZoneInfo("Europe/Rome"))
-    if not force and local_now.hour < EOD_REPORT_HOUR:
-        return None
-    changed = False
+    log=_json_load(PREDICTION_LOG_FILE,[])
+    if not isinstance(log,list) or not log: return None
+    local_now=datetime.now(ZoneInfo("Europe/Rome"))
+    if not force and local_now.hour<EOD_REPORT_HOUR: return None
+    changed=False
     for pred in log:
-        if pred.get("status") != "PENDING":
-            continue
-        result = evaluate_prediction(pred, _future_candles_for_prediction(pred))
+        if pred.get("status")!="PENDING": continue
+        result=evaluate_prediction(pred,_future_candles_for_prediction(pred))
         if result:
-            pred.update(result); pred["status"] = "EVALUATED"; changed = True
-    if changed: _json_save(PREDICTION_LOG_FILE, log)
-    today = local_now.date().isoformat()
-    evaluated = []
+            pred.update(result); pred["status"]="EVALUATED"; changed=True
+    if changed: _json_save(PREDICTION_LOG_FILE,log)
+    today=local_now.date().isoformat()
+    evaluated=[]; pending=[]
     for pred in log:
-        try: d = datetime.fromisoformat(pred.get("created_at", "").replace("Z", "+00:00")).astimezone(ZoneInfo("Europe/Rome")).date().isoformat()
+        try: d=datetime.fromisoformat(pred.get("created_at","").replace("Z","+00:00")).astimezone(ZoneInfo("Europe/Rome")).date().isoformat()
         except Exception: continue
-        if d == today and pred.get("status") == "EVALUATED": evaluated.append(pred)
-    if not evaluated:
-        return None
-    correct = sum(p.get("verdict") == "CORRETTA" for p in evaluated)
-    wrong = sum(p.get("verdict") == "ERRATA" for p in evaluated)
-    ambiguous = sum(p.get("verdict") == "AMBIGUA" for p in evaluated)
-    accuracy = correct / (correct + wrong) * 100.0 if correct + wrong else 0.0
-    lines = ["📊 COMMODITIES BOT v3.3 — TEST FINE GIORNATA", "", f"📅 {local_now.strftime('%d/%m/%Y')}", "━━━━━━━━━━━━━━━━━━━━", "🎯 ACCURATEZZA PREVISIONI", f"Previsioni valutate: {len(evaluated)}", f"✅ Corrette: {correct}", f"❌ Errate: {wrong}", f"⚪ Ambigue: {ambiguous}", f"🎯 Accuratezza: {accuracy:.1f}%", "", "🧭 PER DIREZIONE"]
-    for direction, icon in (("LONG", "🟢"), ("SHORT", "🔴"), ("WAIT", "🟡")):
-        rows = [p for p in evaluated if p.get("direction") == direction]
-        d = sum(x.get("verdict") == "CORRETTA" for x in rows); w = sum(x.get("verdict") == "ERRATA" for x in rows)
-        acc = d / (d + w) * 100.0 if d + w else 0.0
-        lines.append(f"{icon} {direction}: {len(rows)} | {acc:.1f}%")
-    by_name = {}
-    for pred in evaluated: by_name.setdefault(pred["name"], []).append(pred)
-    ranking = []
-    for name, rows in by_name.items():
-        d = sum(x.get("verdict") == "CORRETTA" for x in rows); w = sum(x.get("verdict") == "ERRATA" for x in rows)
-        if d + w: ranking.append((d / (d + w) * 100.0, name, len(rows)))
-    ranking.sort(reverse=True)
-    lines += ["", "🏆 MIGLIORI COMMODITY"]
-    for i, (acc, name, n) in enumerate(ranking[:3]): lines.append(f"{('🥇','🥈','🥉')[i]} {name}: {acc:.1f}% ({n})")
-    lines += ["", "🔒 STATO: PAPER TRADING", "🚫 ORDINI REALI: DISATTIVATI"]
-    state = _json_load(DAILY_REPORT_FILE, {})
-    if state.get("last_report_date") == today and not force: return None
-    state.update({"last_report_date": today, "accuracy": accuracy, "evaluated": len(evaluated)})
-    _json_save(DAILY_REPORT_FILE, state)
+        if d==today:
+            (evaluated if pred.get("status")=="EVALUATED" else pending).append(pred)
+    if not evaluated and not pending: return None
+    correct=sum(p.get("verdict")=="CORRETTA" for p in evaluated); wrong=sum(p.get("verdict")=="ERRATA" for p in evaluated); ambiguous=sum(p.get("verdict")=="AMBIGUA" for p in evaluated)
+    accuracy=correct/(correct+wrong)*100 if correct+wrong else 0.0
+    lines=[f"📊 COMMODITIES BOT v{BOT_VERSION} — PERFORMANCE INTRADAY", "", f"📅 {local_now.strftime('%d/%m/%Y')}","━━━━━━━━━━━━━━━━━━━━",
+           f"🎯 Segnali valutati: {len(evaluated)}",f"✅ Azzeccati: {correct}",f"❌ Sbagliati: {wrong}",f"⚪ Ambigui: {ambiguous}",f"🟡 Ancora in valutazione: {len(pending)}",f"📈 Accuratezza: {accuracy:.1f}%"]
+    for bucket in ("80-100","70-79"):
+        rows=[p for p in evaluated if p.get("score_bucket")==bucket]; c=sum(p.get("verdict")=="CORRETTA" for p in rows); w=sum(p.get("verdict")=="ERRATA" for p in rows); acc=c/(c+w)*100 if c+w else 0
+        lines.append(f"⭐ Score {bucket}: {len(rows)} | {acc:.1f}%")
+    by_setup={}
+    for p in evaluated: by_setup.setdefault(p.get("setup","N/D"),[]).append(p)
+    if by_setup:
+        lines += ["","🔥 PER SETUP"]
+        rows=[]
+        for name,vals in by_setup.items():
+            c=sum(x.get("verdict")=="CORRETTA" for x in vals); w=sum(x.get("verdict")=="ERRATA" for x in vals); acc=c/(c+w)*100 if c+w else 0; rows.append((acc,name,len(vals)))
+        for acc,name,n in sorted(rows,reverse=True)[:5]: lines.append(f"• {name}: {acc:.1f}% ({n})")
+    by_name={}
+    for p in evaluated: by_name.setdefault(p["name"],[]).append(p)
+    if by_name:
+        lines += ["","🏆 PER COMMODITY"]
+        rows=[]
+        for name,vals in by_name.items():
+            c=sum(x.get("verdict")=="CORRETTA" for x in vals); w=sum(x.get("verdict")=="ERRATA" for x in vals); acc=c/(c+w)*100 if c+w else 0; rows.append((acc,name,len(vals)))
+        for acc,name,n in sorted(rows,reverse=True)[:5]: lines.append(f"• {name}: {acc:.1f}% ({n})")
+    lines += ["","🔒 PAPER ONLY — nessun ordine reale"]
+    state=_json_load(DAILY_REPORT_FILE,{})
+    if state.get("last_report_date")==today and not force: return None
+    state.update({"last_report_date":today,"accuracy":accuracy,"evaluated":len(evaluated),"pending":len(pending)})
+    _json_save(DAILY_REPORT_FILE,state)
     return "\n".join(lines)
 
 # ============================================================
@@ -4147,6 +4383,10 @@ def manage_position(position, current_analysis, current_price):
         current_analysis.get("reversal", {}).get("stage") == "CONFIRMED"
         and current_analysis.get("signal") == ("SHORT" if direction == "LONG" else "LONG")
     )
+
+    exit_signal = exit_engine(position, current_analysis, current_price)
+    if exit_signal.get("action") == "EXIT":
+        return {"action": "EXIT", "reason": exit_signal.get("reason", "EXIT ENGINE"), "new_stop": stop}
 
     if direction == "LONG":
         if current_price <= stop:
@@ -4851,9 +5091,18 @@ def build_intraday_alert(ranked, position_message=None):
     if a.get("stop") is not None: lines.append(f"🛑 SL {_fmt_price(a.get('stop'))}")
     if a.get("tp1") is not None: lines.append(f"🎯 TP1 {_fmt_price(a.get('tp1'))}")
     if a.get("tp2") is not None: lines.append(f"🎯 TP2 {_fmt_price(a.get('tp2'))}")
+    pa=a.get("price_action",{}) or {}
     lines += ["",f"📊 Score {s:.0f}/100 | Prob. {a.get('entry_probability',0):.0f}%",f"🔥 {trigger} {trig.get('timeframe','')}"]
+    if pa.get("patterns"):
+        lines.append("🕯️ " + " + ".join(pa.get("patterns",[])[:2]))
+    if pa.get("retracement",{}).get("state") not in (None, "N/D"):
+        lines.append("↩️ " + str(pa.get("retracement",{}).get("state")))
+    if pa.get("breakout_retest",{}).get("state") not in (None, "N/D", "NESSUN BREAKOUT"):
+        lines.append("📍 " + str(pa.get("breakout_retest",{}).get("state")))
     if action in ("ATTENDERE","NON ENTRARE") and a.get("entry_blockers"):
         lines.append("⏳ " + " | ".join(a["entry_blockers"][:2]))
+    if a.get("entry_warnings"):
+        lines.append("ℹ️ " + " | ".join(a["entry_warnings"][:2]))
     if position_message:
         lines += ["", "📌 POSIZIONE", position_message]
     lines += ["",f"🔄 Aggiornamento ogni {MONITOR_INTERVAL_MINUTES} minuti"]
@@ -4864,6 +5113,7 @@ def build_ranking_alert(ranked):
     lines=["🏆 OPPORTUNITÀ","━━━━━━━━━━━━━━━━━━━━"]
     medals=["🥇","🥈","🥉"]
     shown=0
+    ranked=sorted([x for x in ranked if x.get("available")], key=lambda x: safe_float(x.get("analysis",{}).get("intraday_score"),0) or 0, reverse=True)
     for item in ranked:
         if not item.get("available"): continue
         a=item["analysis"]; d=a.get("setup_direction") or a.get("model_signal") or "NONE"; sc=a.get("intraday_score",a.get("score",0));
@@ -5380,6 +5630,7 @@ def finalize_v26_analysis(analysis):
         except Exception as exc:
             print(f"⚠️ Ricalcolo rischio v2.7: {exc}")
     smart_entry_engine(analysis)
+    analysis["market_regime"] = market_regime_engine(analysis)
     return analysis
 
 # ============================================================
@@ -5396,7 +5647,7 @@ def main():
     print()
     print("=" * 70)
     print(f"🌍 COMMODITIES BOT v{BOT_VERSION}")
-    print("15-MIN INTRADAY + FORECAST ALERTS + POLITICAL IMPACT + FUTURES STRUCTURE + PAPER GATE")
+    print("15-MIN INTRADAY + PRICE ACTION + LEVELS + FORECAST + DAILY PERFORMANCE + PAPER ONLY")
     print("=" * 70)
     print()
 
@@ -5479,6 +5730,15 @@ def main():
                 analysis, commodity_name=name, candles=candles,
                 pattern_timeframes=pattern_timeframes
             )
+
+            # v3.5: price action + adaptive structure/ATR levels. These layers
+            # are confirmations and fallbacks; missing risk data never deletes a setup.
+            analysis["commodity_name"] = name
+            analysis["price_action"] = price_action_context_engine(analysis)
+            adaptive_levels = adaptive_risk_levels(analysis, candles, analysis.get("setup_direction") or analysis.get("model_signal"))
+            if adaptive_levels.get("available"):
+                analysis.update({k: adaptive_levels[k] for k in ("stop","tp1","tp2","tp3")})
+                analysis["adaptive_risk"] = adaptive_levels
 
             # v3.0: optional futures curve context. No data -> no invented signal.
             _curve = futures_structure_engine(name)
@@ -5570,10 +5830,10 @@ def main():
     # v2.7: diagnostica trasparente dei blocchi di ingresso per le migliori 5.
     _diag = [x for x in results if x.get("available") and x.get("analysis",{}).get("setup_direction") in ("LONG","SHORT")]
     _diag.sort(key=lambda x: safe_float(x.get("analysis",{}).get("score"),0) or 0, reverse=True)
-    print("\n🔬 DIAGNOSTICA ENTRY v3.3")
+    print("\n🔬 DIAGNOSTICA ENTRY v3.5")
     for _it in _diag[:5]:
         _a=_it["analysis"]; _t=_a.get("entry_trigger",{}) or {}; _r=_a.get("risk",{}) or {}; _l=_a.get("level_to_level",{}) or {}
-        print(f"   {_it['name']}: {_a.get('setup_direction')} | score={_a.get('score',0):.1f} q={_a.get('quality',0):.1f} conf={_a.get('confidence',0):.1f} prob={_a.get('entry_probability',0):.1f}% | L2L={_l.get('score',0):.1f} {_l.get('behaviour','-')} gate={_l.get('gate')} | MTF={_a.get('structural_same',0)} | fast_opp={_a.get('fast_conflicts',0)} | risk={_r.get('mode')} mq={_r.get('market_quality',0):.1f} rb={safe_float(_a.get('risk_benefit',{}).get('score'),0) or 0:.1f} | trigger={_t.get('kind')} {_t.get('timeframe','-')} {_t.get('score',0):.1f} confirmed={_t.get('confirmed')} | state={_a.get('entry_state')} | blockers={','.join(_a.get('entry_blockers',[])) or 'NESSUNO'}")
+        print(f"   {_it['name']}: {_a.get('setup_direction')} | score={_a.get('score',0):.1f} q={_a.get('quality',0):.1f} conf={_a.get('confidence',0):.1f} prob={_a.get('entry_probability',0):.1f}% | L2L={_l.get('score',0):.1f} {_l.get('behaviour','-')} gate={_l.get('gate')} | MTF={_a.get('structural_same',0)} | fast_opp={_a.get('fast_conflicts',0)} | risk={_r.get('mode')} mq={_r.get('market_quality',0):.1f} rb={safe_float(_a.get('risk_benefit',{}).get('score'),0) or 0:.1f} | trigger={_t.get('kind')} {_t.get('timeframe','-')} {_t.get('score',0):.1f} confirmed={_t.get('confirmed')} | state={_a.get('entry_state')} | regime={(_a.get('market_regime',{}) or {}).get('state','N/D')} | blockers={','.join(_a.get('entry_blockers',[])) or 'NESSUNO'} | warnings={','.join(_a.get('entry_warnings',[])) or 'NESSUNO'}")
 
     new_predictions, _prediction_log = record_predictions(results)
     print(f"📝 Prediction Journal: {new_predictions} nuove previsioni registrate")
@@ -5583,7 +5843,7 @@ def main():
         _a=_it["analysis"]; _v=_a.get("v3_context",{}) or {}; _p=_a.get("political",{}) or {}; _f=_a.get("futures_structure",{}) or {}
         print(f"   {_it['name']}: EARLY={_v.get('early')} {_v.get('early_direction')} | POL={_p.get('direction')} { _p.get('mechanism','N/D')} { _p.get('horizon','N/D')} | CURVE={_f.get('state')} | REV={_v.get('reversal')}")
 
-    print("\n🔭 EARLY OPPORTUNITY ENGINE v3.3")
+    print("\n🔭 EARLY OPPORTUNITY ENGINE v3.5")
     for _it in sorted(
         [x for x in results if x.get("available")],
         key=lambda x: safe_float(x.get("analysis",{}).get("early_opportunity",{}).get("score"),0) or 0,
@@ -5719,8 +5979,7 @@ def main():
             )
         else:
             position_message = (
-                "🟡 NESSUNA APERTURA AUTOMATICA — "
-                "setup non abbastanza selettivo."
+                "🟡 SEGNALE VALIDO — esecuzione automatica disattivata."
             )
     elif not position:
         position_message = "🟡 NESSUNA ENTRATA."
@@ -5797,7 +6056,7 @@ def main():
 
     print()
     print("=" * 70)
-    print("⚠️ v3.3: analisi quantitativa, non garanzia di profitto. PAPER ONLY.")
+    print("⚠️ v3.4: analisi quantitativa, non garanzia di profitto. PAPER ONLY.")
     print("=" * 70)
 
 
