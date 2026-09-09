@@ -38,11 +38,11 @@ PRICE_ACTION_ENABLED = os.getenv("PRICE_ACTION_ENABLED", "1") == "1"
 CANDLE_ENGINE_ENABLED = os.getenv("CANDLE_ENGINE_ENABLED", "1") == "1"
 ADAPTIVE_RISK_ENABLED = os.getenv("ADAPTIVE_RISK_ENABLED", "1") == "1"
 EXIT_ENGINE_ENABLED = os.getenv("EXIT_ENGINE_ENABLED", "1") == "1"
-EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "23"))
+EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "21"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "3.5"
+BOT_VERSION = "3.6"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -75,7 +75,19 @@ FUTURES_CACHE_HOURS = int(os.getenv("FUTURES_CACHE_HOURS", "2"))
 # (for example by GitHub Actions cron */15); it does not sleep inside a run.
 MONITOR_INTERVAL_MINUTES = int(os.getenv("MONITOR_INTERVAL_MINUTES", "15"))
 MONITOR_TOP_N = int(os.getenv("MONITOR_TOP_N", "3"))
-MONITOR_SEND_FULL = os.getenv("MONITOR_SEND_FULL", "1") == "1"
+MONITOR_SEND_FULL = os.getenv("MONITOR_SEND_FULL", "0") == "1"
+
+# v3.6 — Morning / USA / Event Driven communication. Internal analysis can run often,
+# but Telegram is intentionally quiet except for scheduled decision points,
+# material scenario changes, and the daily statistical report.
+COMMUNICATION_MODE = os.getenv("COMMUNICATION_MODE", "MORNING_USA_EVENT")
+MORNING_REPORT_HOUR = int(os.getenv("MORNING_REPORT_HOUR", "5"))
+MORNING_REPORT_MINUTE = int(os.getenv("MORNING_REPORT_MINUTE", "30"))
+USA_REPORT_HOUR = int(os.getenv("USA_REPORT_HOUR", "14"))
+USA_REPORT_MINUTE = int(os.getenv("USA_REPORT_MINUTE", "30"))
+EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "21"))
+EVENT_ALERTS_ENABLED = os.getenv("EVENT_ALERTS_ENABLED", "1") == "1"
+SILENT_INTERNAL_ANALYSIS = os.getenv("SILENT_INTERNAL_ANALYSIS", "1") == "1"
 MONITOR_STATE_FILE = "commodities_monitor_state.json"
 
 # v2.5 GLOBAL COMMODITY INTELLIGENCE
@@ -5640,6 +5652,49 @@ def finalize_v26_analysis(analysis):
 
 
 # ============================================================
+# v3.6 COMMUNICATION ENGINE
+# ============================================================
+def _communication_state():
+    return _json_load("commodities_communication_state.json", {}) or {}
+
+def _save_communication_state(state):
+    _json_save("commodities_communication_state.json", state)
+
+def _session_message(label, ranked, best, position_message=None):
+    a=best.get("analysis",{}) or {}
+    direction=a.get("setup_direction") or a.get("model_signal") or "NONE"
+    action=a.get("action_label") or a.get("signal") or "ATTENDERE"
+    icon="🟢" if direction=="LONG" else "🔴" if direction=="SHORT" else "🟡"
+    lines=[f"{label}","",f"🥇 {best.get('name','N/D')}",f"{icon} {direction} — {action}","",f"💰 Prezzo: {_fmt_price(a.get('price'))}",f"📊 Score: {safe_float(a.get('score'),0) or 0:.0f}/100",f"📈 Probabilità: {safe_float(a.get('entry_probability'),0) or 0:.1f}%",f"🧠 Confidenza: {safe_float(a.get('confidence'),0) or 0:.1f}/100"]
+    if a.get("entry") is not None: lines.append(f"🎯 Entry: {_fmt_price(a.get('entry'))}")
+    if a.get("stop") is not None: lines.append(f"🛑 Stop: {_fmt_price(a.get('stop'))}")
+    if a.get("tp1") is not None: lines.append(f"🎯 TP1: {_fmt_price(a.get('tp1'))}")
+    if a.get("tp2") is not None: lines.append(f"🎯 TP2: {_fmt_price(a.get('tp2'))}")
+    if a.get("tp3") is not None: lines.append(f"🎯 TP3: {_fmt_price(a.get('tp3'))}")
+    reg=(a.get("market_regime",{}) or {}).get("state")
+    if reg: lines.append(f"🌍 Regime: {reg}")
+    blockers=a.get("entry_blockers",[]) or []
+    if blockers: lines.append("⚠️ " + " | ".join(blockers[:3]))
+    pa=a.get("price_action",{}) or {}
+    patterns=pa.get("patterns",[]) or []
+    if patterns: lines.append("🕯️ " + " + ".join(patterns[:3]))
+    if position_message: lines += ["", "📌 POSIZIONE", position_message]
+    lines += ["", "🧪 PAPER ONLY — nessun ordine reale"]
+    return "\n".join(lines)
+
+def maybe_send_session_reports(ranked, best, position_message=None):
+    if COMMUNICATION_MODE != "MORNING_USA_EVENT": return
+    now=datetime.now(ZoneInfo("Europe/Rome")); today=now.date().isoformat(); state=_communication_state()
+    sent=state.setdefault("sent", {})
+    if now.hour==MORNING_REPORT_HOUR and MORNING_REPORT_MINUTE <= now.minute < MORNING_REPORT_MINUTE+30 and sent.get("morning") != today:
+        send_telegram(_session_message("🌅 MORNING SIGNAL", ranked, best, position_message))
+        sent["morning"]=today
+    if now.hour==USA_REPORT_HOUR and USA_REPORT_MINUTE <= now.minute < USA_REPORT_MINUTE+30 and sent.get("usa") != today:
+        send_telegram(_session_message("🇺🇸 USA SESSION UPDATE", ranked, best, position_message))
+        sent["usa"]=today
+    _save_communication_state(state)
+
+# ============================================================
 # MAIN
 # ============================================================
 
@@ -5647,7 +5702,8 @@ def main():
     print()
     print("=" * 70)
     print(f"🌍 COMMODITIES BOT v{BOT_VERSION}")
-    print("15-MIN INTRADAY + PRICE ACTION + LEVELS + FORECAST + DAILY PERFORMANCE + PAPER ONLY")
+    print("MORNING + USA + EVENT-DRIVEN + DAILY STATS | PAPER ONLY")
+    print("COMMUNICATION: MORNING + USA + MATERIAL EVENTS | INTERNAL ANALYSIS SILENT")
     print("=" * 70)
     print()
 
@@ -6037,7 +6093,8 @@ def main():
     if MONITOR_SEND_FULL:
         send_telegram(monitor_message)
     else:
-        print(monitor_message)
+        print("📡 Internal monitor: Telegram alert periodico DISATTIVATO.")
+    maybe_send_session_reports(ranked, best, position_message)
     save_monitor_state(ranked, best, position)
 
     # Fine giornata: valuta le previsioni maturate e invia il report una sola volta.
@@ -6051,8 +6108,14 @@ def main():
         held = next((x for x in results if x.get("name") == position.get("name") and x.get("available")), None)
         if held:
             alert = build_reversal_alert(position, held.get("analysis", {}))
-            if alert:
-                send_telegram(alert)
+            if alert and EVENT_ALERTS_ENABLED:
+                _st = _communication_state()
+                _key = f"reversal:{position.get('name')}:{position.get('direction')}"
+                _sig = alert.replace("\n", "|")
+                if _st.get("last_event_signature", {}).get(_key) != _sig:
+                    send_telegram(alert)
+                    ev = _st.setdefault("last_event_signature", {}); ev[_key] = _sig
+                    _save_communication_state(_st)
 
     print()
     print("=" * 70)
