@@ -42,7 +42,7 @@ EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "21"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "3.6"
+BOT_VERSION = "3.8"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -89,6 +89,13 @@ EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "21"))
 EVENT_ALERTS_ENABLED = os.getenv("EVENT_ALERTS_ENABLED", "1") == "1"
 SILENT_INTERNAL_ANALYSIS = os.getenv("SILENT_INTERNAL_ANALYSIS", "1") == "1"
 MONITOR_STATE_FILE = "commodities_monitor_state.json"
+MIN_ENTRY_PROBABILITY = float(os.getenv("MIN_ENTRY_PROBABILITY", "62"))
+MIN_ENTRY_QUALITY = float(os.getenv("MIN_ENTRY_QUALITY", "55"))
+MIN_ENTRY_CONFIDENCE = float(os.getenv("MIN_ENTRY_CONFIDENCE", "60"))
+MIN_ENTRY_RR = float(os.getenv("MIN_ENTRY_RR", "2.5"))
+MIN_ENTRY_RR_TP1 = float(os.getenv("MIN_ENTRY_RR_TP1", "1.5"))
+MIN_ENTRY_RR_TP2 = float(os.getenv("MIN_ENTRY_RR_TP2", "2.0"))
+MAX_ENTRY_STOP_ATR = float(os.getenv("MAX_ENTRY_STOP_ATR", "2.5"))
 
 # v2.5 GLOBAL COMMODITY INTELLIGENCE
 WEATHER_CACHE_FILE = "commodities_weather_cache.json"
@@ -4185,18 +4192,57 @@ def smart_entry_engine(analysis):
     if source_discrepancy: blockers.append("DISCREPANZA FONTI")
     if not l2l.get("gate", True): warnings.append("L2L CONTRARIO")
 
-    # Safety gates only. Everything else is graded by score.
-    safety_block = risk.get("mode") == "SHOCK" or rev.get("stage") == "CONFIRMED"
+    # v3.8: strict confluence gate. Telegram may say COMPRA/VENDI ORA
+    # only when ALL critical conditions are satisfied.
+    entry_price = safe_float(analysis.get("entry"), safe_float(analysis.get("price"), 0)) or 0
+    stop_price = safe_float(analysis.get("stop"), 0) or 0
+    tp1_price = safe_float(analysis.get("tp1"), 0) or 0
+    tp2_price = safe_float(analysis.get("tp2"), 0) or 0
+    tp3_price = safe_float(analysis.get("tp3"), 0) or 0
+    risk_distance = abs(entry_price-stop_price) if entry_price and stop_price else 0
+    rr1 = abs(tp1_price-entry_price) / risk_distance if risk_distance else 0
+    rr2 = abs(tp2_price-entry_price) / risk_distance if risk_distance else 0
+    rr3 = abs(tp3_price-entry_price) / risk_distance if risk_distance else 0
+    atr_value = safe_float(analysis.get("atr"), 0) or 0
+    stop_atr = risk_distance / atr_value if atr_value > 0 else 999.0
+    rr1_ok = rr1 >= MIN_ENTRY_RR_TP1
+    rr2_ok = rr2 >= MIN_ENTRY_RR_TP2
+    rr3_ok = rr3 >= MIN_ENTRY_RR
+    stop_ok = stop_atr <= MAX_ENTRY_STOP_ATR
+    l2l_ok = bool(l2l.get("gate", False))
+    structural_ok = structural_same >= 2
+    fast_ok = fast_opp == 0
+    prob_ok = prob >= MIN_ENTRY_PROBABILITY
+    quality_ok = quality >= MIN_ENTRY_QUALITY
+    confidence_ok = conf >= MIN_ENTRY_CONFIDENCE
+    trigger_ok = bool(trigger.get("confirmed"))
+    safety_block = (risk.get("mode") in ("SHOCK", "ALERT") or
+                    rev.get("stage") == "CONFIRMED")
+    confluence_ok = (structural_ok and fast_ok and l2l_ok and trigger_ok and
+                     rr1_ok and rr2_ok and rr3_ok and stop_ok and
+                     prob_ok and quality_ok and confidence_ok and not safety_block)
     if safety_block:
         state, action, signal = "SAFETY_BLOCK", "NON ENTRARE", "WAIT"
-    elif intraday >= 80 and (trigger.get("confirmed") or fast_same >= 1 or structural_same >= 2):
+    elif intraday >= 80 and confluence_ok:
         state, action, signal = "ENTRY_CONFIRMED", ("COMPRA ORA" if d == "LONG" else "VENDI ORA"), d
-    elif intraday >= 70:
-        state, action, signal = "ACTIVE_SETUP", "ENTRATA POSSIBILE", d
-    elif intraday >= 60:
-        state, action, signal = "WATCH", "ATTENDERE", "WAIT"
+    elif intraday >= 65 and not safety_block:
+        state, action, signal = "ACTIVE_SETUP", ("LONG — ASPETTARE CONFERMA" if d == "LONG" else "SHORT — ASPETTARE CONFERMA"), "WAIT"
     else:
-        state, action, signal = "WEAK_SETUP", "NON ENTRARE", "WAIT"
+        state, action, signal = "WATCH", "ATTENDERE", "WAIT"
+    if not confluence_ok:
+        missing=[]
+        if not structural_ok: missing.append("MTF")
+        if not fast_ok: missing.append("5m/1m")
+        if not l2l_ok: missing.append("L2L")
+        if not trigger_ok: missing.append("TRIGGER")
+        if not rr1_ok: missing.append("RR TP1")
+        if not rr2_ok: missing.append("RR TP2")
+        if not rr3_ok: missing.append("RR TP3")
+        if not stop_ok: missing.append("STOP/ATR")
+        if not prob_ok: missing.append("PROB")
+        if not quality_ok: missing.append("QUALITÀ")
+        if not confidence_ok: missing.append("CONFIDENZA")
+        if missing: blockers.append("CONFLUENZA INCOMPLETA: " + ",".join(missing))
 
     analysis["price_action"] = price_action
     analysis["entry_trigger"] = trigger
@@ -4216,6 +4262,11 @@ def smart_entry_engine(analysis):
         "trigger": trigger.get("kind", "NONE"),
         "l2l_score": round(l2l_score, 1),
         "price_action_score": round(pa_score, 1),
+        "rr_tp1": round(rr1, 2),
+        "rr_tp2": round(rr2, 2),
+        "rr_tp3": round(rr3, 2),
+        "stop_atr": round(stop_atr, 2),
+        "confluence_ok": confluence_ok,
     }
     return analysis
 
@@ -5661,22 +5712,38 @@ def _save_communication_state(state):
     _json_save("commodities_communication_state.json", state)
 
 def _session_message(label, ranked, best, position_message=None):
-    a=best.get("analysis",{}) or {}
-    direction=a.get("setup_direction") or a.get("model_signal") or "NONE"
-    action=a.get("action_label") or a.get("signal") or "ATTENDERE"
-    icon="🟢" if direction=="LONG" else "🔴" if direction=="SHORT" else "🟡"
-    lines=[f"{label}","",f"🥇 {best.get('name','N/D')}",f"{icon} {direction} — {action}","",f"💰 Prezzo: {_fmt_price(a.get('price'))}",f"📊 Score: {safe_float(a.get('score'),0) or 0:.0f}/100",f"📈 Probabilità: {safe_float(a.get('entry_probability'),0) or 0:.1f}%",f"🧠 Confidenza: {safe_float(a.get('confidence'),0) or 0:.1f}/100"]
+    a = best.get("analysis", {}) or {}
+    direction = a.get("setup_direction") or a.get("model_signal") or "NONE"
+    state = a.get("entry_state", "WATCH")
+    confluence_ok = bool((a.get("intraday_core", {}) or {}).get("confluence_ok", False))
+    if state == "ENTRY_CONFIRMED" and confluence_ok and direction in ("LONG", "SHORT"):
+        action = "COMPRA ORA" if direction == "LONG" else "VENDI ORA"
+        icon = "🟢" if direction == "LONG" else "🔴"
+        display_signal = f"{icon} {direction} — {action}"
+    elif direction in ("LONG", "SHORT") and state not in ("SAFETY_BLOCK",):
+        icon = "🟡"
+        display_signal = f"{icon} {direction} — ASPETTARE CONFERMA"
+    else:
+        display_signal = "⚪ NO TRADE"
+    lines = [f"{label}", "", f"🥇 {best.get('name','N/D')}", display_signal, "",
+             f"💰 Prezzo: {_fmt_price(a.get('price'))}",
+             f"📊 Score: {safe_float(a.get('score'),0) or 0:.0f}/100",
+             f"📈 Probabilità modello: {safe_float(a.get('entry_probability'),0) or 0:.1f}%",
+             f"🧠 Confidenza: {safe_float(a.get('confidence'),0) or 0:.1f}/100"]
     if a.get("entry") is not None: lines.append(f"🎯 Entry: {_fmt_price(a.get('entry'))}")
     if a.get("stop") is not None: lines.append(f"🛑 Stop: {_fmt_price(a.get('stop'))}")
     if a.get("tp1") is not None: lines.append(f"🎯 TP1: {_fmt_price(a.get('tp1'))}")
     if a.get("tp2") is not None: lines.append(f"🎯 TP2: {_fmt_price(a.get('tp2'))}")
     if a.get("tp3") is not None: lines.append(f"🎯 TP3: {_fmt_price(a.get('tp3'))}")
-    reg=(a.get("market_regime",{}) or {}).get("state")
+    core = a.get("intraday_core", {}) or {}
+    if core.get("rr_tp1") is not None: lines.append(f"📐 R/R: TP1 {core.get('rr_tp1'):.2f} | TP2 {core.get('rr_tp2'):.2f} | TP3 {core.get('rr_tp3'):.2f}")
+    if core.get("stop_atr") is not None and core.get("stop_atr") < 900: lines.append(f"🛡️ Stop/ATR: {core.get('stop_atr'):.2f}x")
+    reg = (a.get("market_regime", {}) or {}).get("state")
     if reg: lines.append(f"🌍 Regime: {reg}")
-    blockers=a.get("entry_blockers",[]) or []
-    if blockers: lines.append("⚠️ " + " | ".join(blockers[:3]))
-    pa=a.get("price_action",{}) or {}
-    patterns=pa.get("patterns",[]) or []
+    blockers = a.get("entry_blockers", []) or []
+    if blockers: lines.append("⚠️ " + " | ".join(blockers[:4]))
+    pa = a.get("price_action", {}) or {}
+    patterns = pa.get("patterns", []) or []
     if patterns: lines.append("🕯️ " + " + ".join(patterns[:3]))
     if position_message: lines += ["", "📌 POSIZIONE", position_message]
     lines += ["", "🧪 PAPER ONLY — nessun ordine reale"]
@@ -5703,6 +5770,7 @@ def main():
     print("=" * 70)
     print(f"🌍 COMMODITIES BOT v{BOT_VERSION}")
     print("MORNING + USA + EVENT-DRIVEN + DAILY STATS | PAPER ONLY")
+    print("v3.8 STRICT CONFLUENCE: ENTER solo con MTF + trigger + L2L + R/R + qualità/confidenza/probabilità")
     print("COMMUNICATION: MORNING + USA + MATERIAL EVENTS | INTERNAL ANALYSIS SILENT")
     print("=" * 70)
     print()
@@ -5886,7 +5954,7 @@ def main():
     # v2.7: diagnostica trasparente dei blocchi di ingresso per le migliori 5.
     _diag = [x for x in results if x.get("available") and x.get("analysis",{}).get("setup_direction") in ("LONG","SHORT")]
     _diag.sort(key=lambda x: safe_float(x.get("analysis",{}).get("score"),0) or 0, reverse=True)
-    print("\n🔬 DIAGNOSTICA ENTRY v3.5")
+    print(f"\n🔬 DIAGNOSTICA ENTRY v{BOT_VERSION}")
     for _it in _diag[:5]:
         _a=_it["analysis"]; _t=_a.get("entry_trigger",{}) or {}; _r=_a.get("risk",{}) or {}; _l=_a.get("level_to_level",{}) or {}
         print(f"   {_it['name']}: {_a.get('setup_direction')} | score={_a.get('score',0):.1f} q={_a.get('quality',0):.1f} conf={_a.get('confidence',0):.1f} prob={_a.get('entry_probability',0):.1f}% | L2L={_l.get('score',0):.1f} {_l.get('behaviour','-')} gate={_l.get('gate')} | MTF={_a.get('structural_same',0)} | fast_opp={_a.get('fast_conflicts',0)} | risk={_r.get('mode')} mq={_r.get('market_quality',0):.1f} rb={safe_float(_a.get('risk_benefit',{}).get('score'),0) or 0:.1f} | trigger={_t.get('kind')} {_t.get('timeframe','-')} {_t.get('score',0):.1f} confirmed={_t.get('confirmed')} | state={_a.get('entry_state')} | regime={(_a.get('market_regime',{}) or {}).get('state','N/D')} | blockers={','.join(_a.get('entry_blockers',[])) or 'NESSUNO'} | warnings={','.join(_a.get('entry_warnings',[])) or 'NESSUNO'}")
@@ -5899,7 +5967,7 @@ def main():
         _a=_it["analysis"]; _v=_a.get("v3_context",{}) or {}; _p=_a.get("political",{}) or {}; _f=_a.get("futures_structure",{}) or {}
         print(f"   {_it['name']}: EARLY={_v.get('early')} {_v.get('early_direction')} | POL={_p.get('direction')} { _p.get('mechanism','N/D')} { _p.get('horizon','N/D')} | CURVE={_f.get('state')} | REV={_v.get('reversal')}")
 
-    print("\n🔭 EARLY OPPORTUNITY ENGINE v3.5")
+    print(f"\n🔭 EARLY OPPORTUNITY ENGINE v{BOT_VERSION}")
     for _it in sorted(
         [x for x in results if x.get("available")],
         key=lambda x: safe_float(x.get("analysis",{}).get("early_opportunity",{}).get("score"),0) or 0,
@@ -6119,7 +6187,7 @@ def main():
 
     print()
     print("=" * 70)
-    print("⚠️ v3.4: analisi quantitativa, non garanzia di profitto. PAPER ONLY.")
+    print(f"⚠️ v{BOT_VERSION}: analisi quantitativa, non garanzia di profitto. PAPER ONLY.")
     print("=" * 70)
 
 
