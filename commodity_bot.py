@@ -35,7 +35,7 @@ EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "23"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "3.2"
+BOT_VERSION = "3.3"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -64,9 +64,9 @@ FUTURES_CACHE_FILE = "commodities_futures_structure_cache.json"
 FUTURES_CACHE_HOURS = int(os.getenv("FUTURES_CACHE_HOURS", "2"))
 
 
-# v2.7 — 5-minute smart monitoring. The bot is scheduled externally
-# (for example by GitHub Actions cron */5); it does not sleep inside a run.
-MONITOR_INTERVAL_MINUTES = int(os.getenv("MONITOR_INTERVAL_MINUTES", "5"))
+# v3.3 — 15-minute smart monitoring. The bot is scheduled externally
+# (for example by GitHub Actions cron */15); it does not sleep inside a run.
+MONITOR_INTERVAL_MINUTES = int(os.getenv("MONITOR_INTERVAL_MINUTES", "15"))
 MONITOR_TOP_N = int(os.getenv("MONITOR_TOP_N", "3"))
 MONITOR_SEND_FULL = os.getenv("MONITOR_SEND_FULL", "1") == "1"
 MONITOR_STATE_FILE = "commodities_monitor_state.json"
@@ -3866,326 +3866,98 @@ def entry_trigger_engine(analysis):
 
 
 def smart_entry_engine(analysis):
-    """Trade gate v2.7: direzione e trigger di ingresso sono separati."""
+    """v3.3: permissive intraday decision engine.
+
+    Core signal = trend + momentum + price/structure. Secondary filters add
+    or subtract points instead of becoming hard blockers. Only confirmed
+    reversal and material shock remain safety blocks. This prevents a valid
+    LONG/SHORT from disappearing simply because one fast timeframe disagrees.
+    """
     d = analysis.get("setup_direction") or analysis.get("model_signal")
     if d not in ("LONG", "SHORT"):
         analysis.update({"entry_state":"NO_SETUP", "action_label":"NON ENTRARE",
-                         "signal":"WAIT", "strong_confirmation":False})
+                         "signal":"WAIT", "strong_confirmation":False,
+                         "intraday_score":0.0})
         return analysis
 
     tfs = analysis.get("timeframes", {}) or {}
     structural = [tfs.get(tf, {}).get("direction", "NONE") for tf in ("4H", "1H", "15m")]
     fast = [tfs.get(tf, {}).get("direction", "NONE") for tf in ("5m", "1m")]
     structural_same = sum(x == d for x in structural)
-    fast_opp = sum(x == ("SHORT" if d=="LONG" else "LONG") for x in fast)
     fast_same = sum(x == d for x in fast)
+    fast_opp = sum(x == ("SHORT" if d == "LONG" else "LONG") for x in fast)
     rev = analysis.get("reversal", {}) or {}
     risk = analysis.get("risk", {}) or {}
-    ensemble_ok = bool(analysis.get("ensemble_gate", True))
     score = safe_float(analysis.get("score"), 0) or 0
     quality = safe_float(analysis.get("quality"), 0) or 0
     conf = safe_float(analysis.get("confidence"), 0) or 0
     entry_q = safe_float(analysis.get("entry_quality"), 0) or 0
     rb = safe_float(analysis.get("risk_benefit", {}).get("score"), 0) or 0
-    prob = safe_float(analysis.get("long_probability" if d=="LONG" else "short_probability"), 0) or 0
+    prob = safe_float(analysis.get("long_probability" if d == "LONG" else "short_probability"), 0) or 0
     prob *= 100 if prob <= 1 else 1
-    source_status = str(analysis.get("source_check",{}).get("status", ""))
-    source_discrepancy = "DISCREPANZA" in source_status.upper()
+    market_q = safe_float(risk.get("market_quality"), 50) or 50
     trigger = entry_trigger_engine(analysis)
     l2l = analysis.get("level_to_level", {}) or {}
-    l2l_gate = bool(l2l.get("gate", True))
+    l2l_score = safe_float(l2l.get("score"), 50) or 50
+    ensemble_ok = bool(analysis.get("ensemble_gate", True))
+    source_status = str(analysis.get("source_check", {}).get("status", ""))
+    source_discrepancy = "DISCREPANZA" in source_status.upper()
+
+    # Secondary filters are scoring components, not hard gates.
+    intraday = score
+    intraday += clamp((quality - 50) * 0.12, -6, 6)
+    intraday += clamp((conf - 55) * 0.10, -5, 5)
+    intraday += clamp((prob - 55) * 0.16, -7, 7)
+    intraday += 4 if structural_same >= 2 else 2 if structural_same == 1 else -2
+    intraday += 4 if fast_same >= 2 else 2 if fast_same == 1 else 0
+    intraday -= min(6, fast_opp * 3)
+    intraday += clamp((l2l_score - 50) * 0.10, -5, 5)
+    intraday += 4 if trigger.get("confirmed") else 2 if trigger.get("kind") not in (None, "NONE") else 0
+    intraday += 2 if ensemble_ok else -2
+    intraday += clamp((market_q - 55) * 0.08, -4, 4)
+    if source_discrepancy:
+        intraday -= 4
+    if risk.get("mode") == "ALERT":
+        intraday -= 3
+    intraday = clamp(intraday, 0, 100)
 
     blockers=[]
     if risk.get("mode") == "SHOCK": blockers.append("SHOCK")
-    if not ensemble_ok: blockers.append(analysis.get("ensemble_gate_reason", "ENSEMBLE"))
     if rev.get("stage") == "CONFIRMED": blockers.append("INVERSIONE CONFERMATA")
-    if fast_opp > 0: blockers.append("CONFLITTO 1m/5m")
-    if structural_same < 2: blockers.append("MTF STRUTTURALE")
+    if fast_opp > 0: blockers.append("CONFLITTO RAPIDO")
+    if structural_same < 2: blockers.append("MTF PARZIALE")
     if source_discrepancy: blockers.append("DISCREPANZA FONTI")
-    if not l2l_gate: blockers.append("LEVEL-TO-LEVEL")
+    if not l2l.get("gate", True): blockers.append("L2L CONTRARIO")
 
-    hard = (
-        score >= 62 and quality >= 45 and conf >= 52 and prob >= 55
-        and structural_same >= 2 and fast_opp == 0 and ensemble_ok
-        and risk.get("mode") in ("NORMAL", "ALERT")
-        and safe_float(risk.get("market_quality"),0) >= 50
-        and (entry_q >= 55 or trigger.get("confirmed",False))
-        and safe_float(risk.get("risk_pct"),0) > 0
-        and rev.get("stage") != "CONFIRMED"
-        and not source_discrepancy
-        and l2l_gate
-        and trigger.get("confirmed",False)
-        and (rb >= 40 or trigger.get("score",0) >= 65)
-    )
-
-    near = (
-        score >= 50 and quality >= 38 and conf >= 45 and prob >= 51
-        and structural_same >= 2 and fast_opp <= 1
-    )
-
-    if risk.get("mode") == "SHOCK" or rev.get("stage") == "CONFIRMED":
-        state, action = "NON_ENTRARE", "NON ENTRARE"
-    elif hard:
-        state, action = "ENTRY_CONFIRMED", ("COMPRA ORA" if d == "LONG" else "VENDI ORA")
-    elif near and (trigger.get("kind") != "NONE" or fast_same >= 1):
-        state, action = "PREPARAZIONE", "ATTENDERE"
-    elif near:
-        state, action = "CONFERMA_RICHIESTA", "ATTENDERE"
+    # Safety gates only. Everything else is graded by score.
+    safety_block = risk.get("mode") == "SHOCK" or rev.get("stage") == "CONFIRMED"
+    if safety_block:
+        state, action, signal = "SAFETY_BLOCK", "NON ENTRARE", "WAIT"
+    elif intraday >= 80 and (trigger.get("confirmed") or fast_same >= 1 or structural_same >= 2):
+        state, action, signal = "ENTRY_CONFIRMED", ("COMPRA ORA" if d == "LONG" else "VENDI ORA"), d
+    elif intraday >= 70:
+        state, action, signal = "ACTIVE_SETUP", "ENTRATA POSSIBILE", d
+    elif intraday >= 60:
+        state, action, signal = "WATCH", "ATTENDERE", "WAIT"
     else:
-        state, action = "WEAK_SETUP", "NON ENTRARE"
+        state, action, signal = "WEAK_SETUP", "NON ENTRARE", "WAIT"
 
     analysis["entry_trigger"] = trigger
     analysis["entry_state"] = state
     analysis["entry_blockers"] = blockers[:6]
     analysis["action_label"] = action
-    # CRITICO: signal è operativo. La previsione resta in setup_direction.
-    analysis["signal"] = d if state == "ENTRY_CONFIRMED" else "WAIT"
+    analysis["signal"] = signal
     analysis["strong_confirmation"] = bool(state == "ENTRY_CONFIRMED")
-    analysis["entry_probability"] = round(prob,2)
-    return analysis
-
-
-# ============================================================
-# v2.9 LEVEL-TO-LEVEL ENGINE
-# Trend -> Level -> Behaviour -> Confirmation -> Risk/Reward
-# Derived from the studied educational material (L2L / IG / Capital.com /
-# Borsa Italiana). The engine is deliberately quantitative and bounded:
-# it nudges the model and can block weak entries, but never claims prediction.
-# ============================================================
-def _l2l_pivots(candles, atr_value):
-    """Find clustered swing levels without future-looking beyond the candle window."""
-    if not candles or len(candles) < 20:
-        return [], []
-    c = safe_float(candles[-1].get("close")) or 0.0
-    atrv = safe_float(atr_value) or (c * 0.01 if c else 1.0)
-    left_right = 2
-    highs, lows = [], []
-    for i in range(left_right, len(candles) - left_right):
-        h = safe_float(candles[i].get("high")); lo = safe_float(candles[i].get("low"))
-        if h is None or lo is None:
-            continue
-        local_h = [safe_float(candles[j].get("high")) for j in range(i-left_right, i+left_right+1)]
-        local_l = [safe_float(candles[j].get("low")) for j in range(i-left_right, i+left_right+1)]
-        if all(v is not None for v in local_h) and h >= max(local_h):
-            highs.append((h, i))
-        if all(v is not None for v in local_l) and lo <= min(local_l):
-            lows.append((lo, i))
-
-    tol = max(0.22 * atrv, c * 0.0012 if c else 0.0)
-    def cluster(points):
-        clusters = []
-        for value, idx in sorted(points, key=lambda x: x[0]):
-            hit = None
-            for cl in clusters:
-                if abs(value - cl["level"]) <= tol:
-                    hit = cl; break
-            if hit is None:
-                clusters.append({"level": value, "tests": 1, "last_idx": idx, "values": [value]})
-            else:
-                hit["values"].append(value)
-                hit["tests"] += 1
-                hit["last_idx"] = max(hit["last_idx"], idx)
-                hit["level"] = sum(hit["values"]) / len(hit["values"])
-        for cl in clusters:
-            recency = 1.0 - max(0, len(candles) - 1 - cl["last_idx"]) / max(len(candles), 1)
-            cl["strength"] = round(clamp(cl["tests"] * 18 + recency * 28, 0, 100), 1)
-        return clusters
-    return cluster(lows), cluster(highs)
-
-
-def level_to_level_engine(analysis, commodity_name=None, candles=None, pattern_timeframes=None):
-    """Quantify the Level-to-Level sequence for a commodity.
-
-    The engine looks for:
-      1) structural trend,
-      2) objective support/resistance zones,
-      3) approach strength/weakness,
-      4) breakout/retest/fakeout or reaction,
-      5) a confirmation gate and R/R feasibility.
-
-    It does not invent order-book data or volume if the source does not provide it.
-    """
-    d = analysis.get("setup_direction") or analysis.get("model_signal")
-    if d not in ("LONG", "SHORT"):
-        analysis["level_to_level"] = {"available": False, "state": "NO_SETUP", "score": 50.0, "gate": True}
-        return analysis
-    candles = candles or analysis.get("_candles") or []
-    if len(candles) < 30:
-        analysis["level_to_level"] = {"available": False, "state": "DATI INSUFFICIENTI", "score": 50.0, "gate": True}
-        return analysis
-
-    price = safe_float(candles[-1].get("close")) or safe_float(analysis.get("price"))
-    atrv = safe_float(analysis.get("atr")) or atr(candles, 14) or (price * 0.01 if price else 1.0)
-    supports, resistances = _l2l_pivots(candles[-160:], atrv)
-    supports = [x for x in supports if x["level"] <= price * 1.002]
-    resistances = [x for x in resistances if x["level"] >= price * 0.998]
-    support = max(supports, key=lambda x: x["level"], default=None)
-    resistance = min(resistances, key=lambda x: x["level"], default=None)
-    zone = max(0.22 * atrv, price * 0.0015 if price else 0.0)
-
-    # Structural trend from recent swing sequence / moving averages.
-    closes = [safe_float(x.get("close")) for x in candles[-40:]]
-    closes = [x for x in closes if x is not None]
-    trend_score = 50.0
-    trend = "RANGE"
-    if len(closes) >= 20:
-        ma_fast = sum(closes[-10:]) / 10
-        ma_slow = sum(closes[-20:]) / 20
-        slope = (closes[-1] - closes[-10]) / max(atrv, 1e-12)
-        if ma_fast > ma_slow and slope > 0.35:
-            trend, trend_score = "LONG", 92.0
-        elif ma_fast < ma_slow and slope < -0.35:
-            trend, trend_score = "SHORT", 92.0
-        elif ma_fast > ma_slow:
-            trend, trend_score = "LONG", 68.0
-        elif ma_fast < ma_slow:
-            trend, trend_score = "SHORT", 68.0
-
-    # Approach: strong directional candle vs quiet/weak approach into a level.
-    recent = candles[-6:]
-    body_ratios = []
-    for row in recent:
-        o = safe_float(row.get("open")); h = safe_float(row.get("high")); lo = safe_float(row.get("low")); c = safe_float(row.get("close"))
-        if None in (o, h, lo, c) or h <= lo:
-            continue
-        body_ratios.append(abs(c-o) / max(h-lo, 1e-12))
-    body = sum(body_ratios) / len(body_ratios) if body_ratios else 0.5
-    recent_move = ((closes[-1] - closes[-6]) / max(atrv, 1e-12)) if len(closes) >= 6 else 0.0
-    approach = "FORTE" if abs(recent_move) >= 1.0 and body >= 0.55 else ("DEBOLE" if abs(recent_move) <= 0.35 else "NORMALE")
-
-    # Detect current interaction with the nearest relevant level.
-    near_support = bool(support and abs(price - support["level"]) <= 1.35 * zone)
-    near_resistance = bool(resistance and abs(price - resistance["level"]) <= 1.35 * zone)
-    prev = candles[-2] if len(candles) >= 2 else candles[-1]
-    prev_close = safe_float(prev.get("close")) or price
-    current_high = safe_float(candles[-1].get("high")) or price
-    current_low = safe_float(candles[-1].get("low")) or price
-
-    breakout = False; retest = False; fakeout = False; reaction = False
-    trigger_level = None; behaviour = "NESSUNA"
-    if resistance and d == "LONG":
-        lvl = resistance["level"]
-        breakout = price > lvl + 0.12 * zone and prev_close > lvl
-        retest = breakout and current_low <= lvl + 0.35 * zone and price > lvl
-        fakeout = current_high > lvl + 0.10 * zone and price < lvl - 0.05 * zone
-        reaction = near_resistance and price > prev_close and current_low <= lvl + zone
-        trigger_level = lvl
-    elif support and d == "SHORT":
-        lvl = support["level"]
-        breakout = price < lvl - 0.12 * zone and prev_close < lvl
-        retest = breakout and current_high >= lvl - 0.35 * zone and price < lvl
-        fakeout = current_low < lvl - 0.10 * zone and price > lvl + 0.05 * zone
-        reaction = near_support and price < prev_close and current_high >= lvl - zone
-        trigger_level = lvl
-    elif d == "LONG" and near_support:
-        reaction = price > prev_close and current_low <= support["level"] + zone
-        trigger_level = support["level"]
-    elif d == "SHORT" and near_resistance:
-        reaction = price < prev_close and current_high >= resistance["level"] - zone
-        trigger_level = resistance["level"]
-
-    if retest:
-        behaviour = "BREAKOUT_RETEST"
-    elif breakout:
-        behaviour = "BREAKOUT"
-    elif fakeout:
-        behaviour = "FAKEOUT"
-    elif reaction:
-        behaviour = "REACTION"
-    elif near_support or near_resistance:
-        behaviour = "APPROCCIO_AL_LIVELLO"
-
-    trend_component = trend_score if trend == d else (35.0 if trend == "RANGE" else 20.0)
-    level_component = 70.0
-    if d == "LONG" and support:
-        level_component = 55.0 + support["strength"] * 0.35 if near_support else 50.0
-    if d == "SHORT" and resistance:
-        level_component = 55.0 + resistance["strength"] * 0.35 if near_resistance else 50.0
-    if trigger_level is not None:
-        level_component = max(level_component, 62.0)
-
-    behaviour_component = {
-        "BREAKOUT_RETEST": 95.0, "BREAKOUT": 82.0, "REACTION": 76.0,
-        "APPROCCIO_AL_LIVELLO": 58.0, "FAKEOUT": 18.0, "NESSUNA": 42.0,
-    }.get(behaviour, 42.0)
-    approach_component = 82.0 if approach == "DEBOLE" and (near_support or near_resistance) else (72.0 if approach == "NORMALE" else 58.0)
-    if approach == "FORTE" and behaviour in ("BREAKOUT", "BREAKOUT_RETEST"):
-        approach_component = 92.0
-    if approach == "FORTE" and behaviour == "APPROCCIO_AL_LIVELLO":
-        approach_component = 48.0  # aggressive approach into resistance/support without confirmation
-
-    # Risk/reward feasibility uses the existing risk engine outputs where available.
-    rb = safe_float(analysis.get("risk_benefit", {}).get("score"), 0) or 0
-    rr_component = clamp(rb + 20.0, 0, 100)
-    l2l_score = clamp(
-        trend_component * 0.25 + level_component * 0.20 + behaviour_component * 0.30
-        + approach_component * 0.15 + rr_component * 0.10, 0, 100
-    )
-
-    confirmations = 0
-    if trend == d: confirmations += 1
-    if behaviour in ("BREAKOUT", "BREAKOUT_RETEST", "REACTION"): confirmations += 1
-    if (d == "LONG" and (near_support or breakout or retest)) or (d == "SHORT" and (near_resistance or breakout or retest)):
-        confirmations += 1
-    if analysis.get("fast_conflicts", 0) == 0: confirmations += 1
-
-    gate = bool(
-        not fakeout and l2l_score >= 58 and confirmations >= 2
-        and behaviour not in ("NESSUNA", "APPROCCIO_AL_LIVELLO") or
-        (not fakeout and behaviour == "BREAKOUT_RETEST" and l2l_score >= 52)
-    )
-    if behaviour == "APPROCCIO_AL_LIVELLO" and approach == "FORTE":
-        gate = False
-
-    # Bounded score contribution: L2L can help/hurt but cannot dominate the model.
-    signed_bonus = clamp((l2l_score - 50.0) * 0.20, -10.0, 10.0)
-    if trend not in (d, "RANGE"):
-        signed_bonus = min(signed_bonus, -4.0)
-    analysis["score"] = clamp((safe_float(analysis.get("score"), 0) or 0) + signed_bonus, 0, 100)
-    analysis["level_to_level"] = {
-        "available": True,
-        "state": "CONFERMATO" if gate else ("IN FORMAZIONE" if l2l_score >= 50 else "DEBOLE"),
-        "score": round(l2l_score, 1),
-        "trend": trend,
-        "trend_score": round(trend_component, 1),
-        "support": round(support["level"], 6) if support else None,
-        "support_strength": round(support["strength"], 1) if support else 0.0,
-        "resistance": round(resistance["level"], 6) if resistance else None,
-        "resistance_strength": round(resistance["strength"], 1) if resistance else 0.0,
-        "level": round(trigger_level, 6) if trigger_level is not None else None,
-        "approach": approach,
-        "behaviour": behaviour,
-        "breakout": bool(breakout),
-        "retest": bool(retest),
-        "fakeout": bool(fakeout),
-        "reaction": bool(reaction),
-        "confirmations": confirmations,
-        "rr_component": round(rr_component, 1),
-        "bonus": round(signed_bonus, 2),
-        "gate": gate,
-        "source_logic": "L2L + IG + Capital.com + Borsa Italiana",
+    analysis["entry_probability"] = round(prob, 2)
+    analysis["intraday_score"] = round(intraday, 1)
+    analysis["intraday_core"] = {
+        "trend": d,
+        "structural_same": structural_same,
+        "fast_same": fast_same,
+        "fast_opposite": fast_opp,
+        "trigger": trigger.get("kind", "NONE"),
+        "l2l_score": round(l2l_score, 1),
     }
-    return analysis
-
-def finalize_v26_analysis(analysis):
-    normalize_analysis_metrics(analysis)
-    # Ricalcolo del rischio DOPO tutti i layer che possono aver modificato score
-    # e contesto. Per la qualità del rischio usiamo la direzione del setup, non
-    # il signal operativo WAIT/ENTRARE.
-    d = analysis.get("setup_direction") or analysis.get("model_signal")
-    if d in ("LONG", "SHORT"):
-        risk_input = dict(analysis)
-        risk_input["signal"] = d
-        try:
-            analysis["risk"] = risk_engine(
-                risk_input,
-                analysis.get("session", {}) or {},
-                analysis.get("global_impact", {}) or {}
-            )
-            analysis["risk_benefit"] = risk_benefit_engine(analysis, analysis.get("cyclical", {}) or {})
-        except Exception as exc:
-            print(f"⚠️ Ricalcolo rischio v2.7: {exc}")
-    smart_entry_engine(analysis)
     return analysis
 
 # ============================================================
@@ -4334,7 +4106,7 @@ def run_end_of_day_test(force=False):
     wrong = sum(p.get("verdict") == "ERRATA" for p in evaluated)
     ambiguous = sum(p.get("verdict") == "AMBIGUA" for p in evaluated)
     accuracy = correct / (correct + wrong) * 100.0 if correct + wrong else 0.0
-    lines = ["📊 COMMODITIES BOT v2.4 — TEST FINE GIORNATA", "", f"📅 {local_now.strftime('%d/%m/%Y')}", "━━━━━━━━━━━━━━━━━━━━", "🎯 ACCURATEZZA PREVISIONI", f"Previsioni valutate: {len(evaluated)}", f"✅ Corrette: {correct}", f"❌ Errate: {wrong}", f"⚪ Ambigue: {ambiguous}", f"🎯 Accuratezza: {accuracy:.1f}%", "", "🧭 PER DIREZIONE"]
+    lines = ["📊 COMMODITIES BOT v3.3 — TEST FINE GIORNATA", "", f"📅 {local_now.strftime('%d/%m/%Y')}", "━━━━━━━━━━━━━━━━━━━━", "🎯 ACCURATEZZA PREVISIONI", f"Previsioni valutate: {len(evaluated)}", f"✅ Corrette: {correct}", f"❌ Errate: {wrong}", f"⚪ Ambigue: {ambiguous}", f"🎯 Accuratezza: {accuracy:.1f}%", "", "🧭 PER DIREZIONE"]
     for direction, icon in (("LONG", "🟢"), ("SHORT", "🔴"), ("WAIT", "🟡")):
         rows = [p for p in evaluated if p.get("direction") == direction]
         d = sum(x.get("verdict") == "CORRETTA" for x in rows); w = sum(x.get("verdict") == "ERRATA" for x in rows)
@@ -4940,6 +4712,7 @@ def apply_early_opportunity(results):
             history = []
 
         early = early_opportunity_engine(item["name"], history, a)
+        early["timing"] = early_timing_engine(history, early)
         a["early_opportunity"] = early
 
         setup = a.get("setup_direction") or a.get("model_signal")
@@ -4949,42 +4722,95 @@ def apply_early_opportunity(results):
             a["early_alignment_bonus"] = 0.0
 
 
-def build_early_telegram(ranked):
-    available = [
-        x for x in ranked
-        if x.get("available") and x.get("analysis", {}).get("early_opportunity")
-    ]
-    available.sort(
-        key=lambda x: safe_float(
-            x["analysis"]["early_opportunity"].get("score"), 0
-        ) or 0,
-        reverse=True
-    )
-    available = available[:EARLY_TOP_N]
-    lines = ["🔭 OPPORTUNITÀ IN ANTICIPO", "━━━━━━━━━━━━━━━━━━━━"]
-    medals = ["🥇", "🥈", "🥉"]
+def early_timing_engine(history, early):
+    """Estimate when a historical move typically starts, without look-ahead.
 
-    for i, item in enumerate(available):
-        e = item["analysis"]["early_opportunity"]
-        d = e.get("direction", "NONE")
-        icon = "🟠" if e.get("state") == "OPPORTUNITA_ANTICIPATA" else "🟡" if e.get("state") == "MONITOR" else "⚪"
-        h7 = e.get("forward", {}).get("7", {})
-        hist = (
-            f"Storico 7p: {h7.get('up_rate', 0.5)*100:.0f}% LONG"
-            if h7.get("samples", 0) >= 20 else "Storico: campione limitato"
-        )
-        lines += [
-            "",
-            f"{medals[i]} {item['name']}",
-            f"{icon} {e.get('state','N/D')} | {d}",
-            f"🔭 Early Score: {e.get('score',0):.0f}/100 | Prob. {e.get('probability',50):.0f}%",
-            f"📚 {hist}",
-            f"⏳ Orizzonte: {e.get('horizon','N/D')}",
-        ]
-        if e.get("reasons"):
-            lines.append("🧠 " + " | ".join(e["reasons"][:3]))
-        lines.append("⚠️ Anticipazione: NON è un ingresso automatico.")
-    return "\n".join(lines)
+    For each historical anchor we calculate the first future day on which the
+    close reaches a direction-specific ATR-normalised move. Only past candles
+    are used to create the anchor; future candles are used strictly as labels.
+    """
+    rows=[]
+    for r in history or []:
+        c=safe_float(r.get("close"))
+        h=safe_float(r.get("high"))
+        l=safe_float(r.get("low"))
+        if c is not None: rows.append((c,h,l))
+    if len(rows) < 80:
+        return {"available":False,"reason":"CAMPIONE STORICO INSUFFICIENTE"}
+    closes=[x[0] for x in rows]
+    trs=[]
+    for i in range(1,len(rows)):
+        c,h,l=rows[i]
+        pc=closes[i-1]
+        if h is None or l is None: trs.append(abs(c-pc)); continue
+        trs.append(max(h-l, abs(h-pc), abs(l-pc)))
+    atr_window=20
+    hits={"LONG":[],"SHORT":[]}
+    # 1.25 ATR is a deliberately moderate event threshold; results are
+    # descriptive statistics, not a guarantee of a future move.
+    for i in range(atr_window, len(rows)-30):
+        atr=sum(trs[max(0,i-atr_window):i])/atr_window
+        if atr <= 0: continue
+        base=closes[i]
+        threshold=1.25*atr
+        for d in ("LONG","SHORT"):
+            first=None
+            for k in range(1,31):
+                future=closes[i+k]
+                move=(future-base) if d=="LONG" else (base-future)
+                if move >= threshold:
+                    first=k; break
+            if first is not None: hits[d].append(first)
+    d=early.get("direction")
+    if d not in hits or len(hits[d]) < 20:
+        return {"available":False,"reason":"CAMPIONE TIMING INSUFFICIENTE","samples":len(hits.get(d,[]))}
+    vals=sorted(hits[d])
+    def pct(q):
+        return vals[min(len(vals)-1, max(0, int(round((len(vals)-1)*q))))]
+    q25,q50,q75=pct(.25),pct(.50),pct(.75)
+    # Window labels are intentionally broad: historical start-time dispersion
+    # is more honest than a single predicted day.
+    start=max(1,q25-2); end=min(30,q75+2)
+    entry_start=max(1,start-3); entry_end=max(entry_start, q50)
+    horizon_start=max(1,q50-2); horizon_end=min(30,q75+3)
+    return {
+        "available":True,"direction":d,"samples":len(vals),
+        "first_move_days_median":q50,"first_move_days_p25":q25,"first_move_days_p75":q75,
+        "move_window_start":start,"move_window_end":end,
+        "entry_window_start":entry_start,"entry_window_end":entry_end,
+        "holding_window_start":horizon_start,"holding_window_end":horizon_end,
+        "timing_confidence":round(clamp(50 + min(30,len(vals)-20)*0.8 - max(0,q75-q25)*0.5,0,90),1),
+        "threshold_atr":1.25,
+    }
+
+def build_forecast_alert(ranked):
+    available=[x for x in ranked if x.get("available") and x.get("analysis",{}).get("early_opportunity")]
+    available.sort(key=lambda x:safe_float(x["analysis"]["early_opportunity"].get("score"),0) or 0, reverse=True)
+    available=available[:EARLY_TOP_N]
+    if not available:
+        return "🔭 FORECAST\n\n⚪ Nessuna opportunità anticipata affidabile disponibile."
+    item=available[0]; a=item["analysis"]; e=a.get("early_opportunity",{}) or {}; d=e.get("direction","NONE")
+    icon="🟢" if d=="LONG" else "🔴" if d=="SHORT" else "🟡"
+    timing=e.get("timing",{}) or {}
+    if timing.get("available"):
+        move=f"{timing['move_window_start']}–{timing['move_window_end']} giorni"
+        entry=f"{timing['entry_window_start']}–{timing['entry_window_end']} giorni"
+        hold=f"{timing['holding_window_start']}–{timing['holding_window_end']} giorni"
+        active=timing['entry_window_start'] <= 1 <= timing['entry_window_end']
+        status="⚡ FINESTRA ATTIVA" if active else "⏳ PREPARARSI"
+    else:
+        move=e.get("horizon","N/D"); entry="N/D"; hold="N/D"; status="⏳ MONITORARE"
+    return "\n".join([
+        "🔭 FORECAST", "", f"🥇 {item['name']}", f"{icon} {d}", "",
+        f"📈 Movimento atteso: {move}", f"🎯 Finestra entrata: {entry}",
+        f"⏳ Holding indicativo: {hold}", f"📊 Probabilità {e.get('probability',50):.0f}% | Score {e.get('score',0):.0f}/100",
+        f"{status}", "", "⚡ L'ingresso viene cercato e confermato dal motore intraday.",
+    ])
+
+
+def build_early_telegram(ranked):
+    """Compatibility wrapper: forecast-only, compact Telegram block."""
+    return build_forecast_alert(ranked)
 
 
 def _monitor_context_line(a):
@@ -5000,65 +4826,59 @@ def _monitor_context_line(a):
         f"💵 USD {usd.get('direction', 'N/D')}"
     )
 
-def build_telegram_5m(ranked, best, position_message=None, position=None):
-    """v2.7: concise operational monitor intended for a 5-minute schedule."""
-    available = [x for x in ranked if x.get("available")][:MONITOR_TOP_N]
-    early_block = build_early_telegram(ranked)
-    lines = [
-        f"🌍 COMMODITIES BOT v{BOT_VERSION}",
-        f"⏱️ MONITORAGGIO OGNI {MONITOR_INTERVAL_MINUTES} MINUTI",
-        "",
-        early_block,
-        "",
-        "⚡ TRADING OGGI",
-        "━━━━━━━━━━━━━━━━━━━━",
-    ]
-    medals = ["🥇", "🥈", "🥉"]
-    for i, item in enumerate(available):
-        a = item["analysis"]
-        action = a.get("action_label", "ATTENDERE")
-        direction = a.get("setup_direction") or a.get("model_signal") or "N/D"
-        icon = "🟢" if action == "COMPRA ORA" else "🔴" if action == "VENDI ORA" else "🟡" if direction in ("LONG", "SHORT") else "⚪"
-        trig = a.get("entry_trigger", {}) or {}
-        prob = a.get("entry_probability", a.get("probability", 0) * 100)
-        lines += [
-            "",
-            f"{medals[i]} {item['name']}",
-            f"{icon} {action} | {direction}",
-            f"📊 Score {a.get('score',0):.0f} | Prob {prob:.1f}% | Q {a.get('quality',0):.0f}",
-            f"📚 L2L: {(a.get('level_to_level',{}) or {}).get('state','N/D')} | {(a.get('level_to_level',{}) or {}).get('behaviour','N/D')} | {(a.get('level_to_level',{}) or {}).get('score',50):.0f}/100",
-            f"⚡ Trigger: {trig.get('kind','N/D')} {trig.get('timeframe','')}".strip(),
-            f"🧭 1H {a.get('timeframes',{}).get('1H',{}).get('direction','N/D')} | 15m {a.get('timeframes',{}).get('15m',{}).get('direction','N/D')} | 5m {a.get('timeframes',{}).get('5m',{}).get('direction','N/D')} | 1m {a.get('timeframes',{}).get('1m',{}).get('direction','N/D')}",
-            _monitor_context_line(a),
-        ]
-        if action in ("COMPRA ORA", "VENDI ORA"):
-            if a.get("price") is not None:
-                lines.append(f"💰 Prezzo {a['price']:.4f}")
-            if a.get("entry") is not None:
-                lines.append(f"📥 Entry {a['entry']:.4f}")
-            if a.get("stop") is not None:
-                lines.append(f"🛑 SL {a['stop']:.4f}")
-            lines.append(
-                f"🎯 TP1 {a.get('tp1',0):.4f} | TP2 {a.get('tp2',0):.4f} | TP3 {a.get('tp3',0):.4f}"
-            )
-        else:
-            blockers = a.get("entry_blockers", []) or []
-            if blockers:
-                lines.append("⛔ " + " | ".join(blockers[:3]))
-            if a.get("price") is not None:
-                lines.append(f"💰 Prezzo {a['price']:.4f}")
+def _fmt_price(v):
+    try:
+        return f"{float(v):,.4f}".replace(",","X").replace(".",",").replace("X",".")
+    except Exception:
+        return "N/D"
 
-    gm = best.get("analysis", {}).get("global_impact", {}) or {}
-    if gm.get("mode") == "SHOCK":
-        lines += ["", "🚨 GLOBAL SHOCK — nuove entrate solo con conferma completa."]
-    elif gm.get("mode") == "ALERT":
-        lines += ["", "⚠️ GLOBAL ALERT — contesto volatile."]
 
+def build_intraday_alert(ranked, position_message=None):
+    candidates=[x for x in ranked if x.get("available") and x.get("analysis",{}).get("setup_direction") in ("LONG","SHORT")]
+    candidates.sort(key=lambda x:safe_float(x["analysis"].get("intraday_score",0),0) or 0, reverse=True)
+    if not candidates:
+        return "⚡ INTRADAY ALERT\n\n⚪ Nessun setup operativo disponibile."
+    item=candidates[0]; a=item["analysis"]; d=a.get("setup_direction"); s=a.get("intraday_score",a.get("score",0)); action=a.get("action_label","ATTENDERE")
+    icon="🟢" if d=="LONG" else "🔴"; action_icon="🟢" if "COMPRA" in action or "ENTRATA" in action else "🔴" if "VENDI" in action else "🟡"
+    trig=a.get("entry_trigger",{}) or {}; trigger=trig.get("kind","SETUP")
+    if action=="NON ENTRARE": status="NON ENTRARE"
+    elif action=="ATTENDERE": status="ATTENDERE"
+    elif action=="ENTRATA POSSIBILE": status="ENTRATA POSSIBILE"
+    else: status="ENTRARE"
+    lines=["⚡ INTRADAY ALERT","",f"🥇 {item['name']}",f"{icon} {d} — {action_icon} {status}",""]
+    lines.append(f"💰 {_fmt_price(a.get('price'))}")
+    if a.get("entry") is not None: lines.append(f"🎯 Entry {_fmt_price(a.get('entry'))}")
+    if a.get("stop") is not None: lines.append(f"🛑 SL {_fmt_price(a.get('stop'))}")
+    if a.get("tp1") is not None: lines.append(f"🎯 TP1 {_fmt_price(a.get('tp1'))}")
+    if a.get("tp2") is not None: lines.append(f"🎯 TP2 {_fmt_price(a.get('tp2'))}")
+    lines += ["",f"📊 Score {s:.0f}/100 | Prob. {a.get('entry_probability',0):.0f}%",f"🔥 {trigger} {trig.get('timeframe','')}"]
+    if action in ("ATTENDERE","NON ENTRARE") and a.get("entry_blockers"):
+        lines.append("⏳ " + " | ".join(a["entry_blockers"][:2]))
     if position_message:
-        lines += ["", "━━━━━━━━━━━━━━━━━━━━", "📌 POSIZIONE", position_message]
-
-    lines += ["", f"🔄 Prossimo controllo: ~{MONITOR_INTERVAL_MINUTES} minuti"]
+        lines += ["", "📌 POSIZIONE", position_message]
+    lines += ["",f"🔄 Aggiornamento ogni {MONITOR_INTERVAL_MINUTES} minuti"]
     return "\n".join(lines)
+
+
+def build_ranking_alert(ranked):
+    lines=["🏆 OPPORTUNITÀ","━━━━━━━━━━━━━━━━━━━━"]
+    medals=["🥇","🥈","🥉"]
+    shown=0
+    for item in ranked:
+        if not item.get("available"): continue
+        a=item["analysis"]; d=a.get("setup_direction") or a.get("model_signal") or "NONE"; sc=a.get("intraday_score",a.get("score",0));
+        state=a.get("action_label","ATTENDERE")
+        icon="🟢" if d=="LONG" else "🔴" if d=="SHORT" else "⚪"
+        lines.append(f"{medals[shown] if shown<3 else str(shown+1)+'️⃣'} {item['name']}  {icon} {d}  {sc:.0f}")
+        shown+=1
+        if shown>=5: break
+    return "\n".join(lines)
+
+
+def build_telegram_5m(ranked, best, position_message=None, position=None):
+    """Compatibility wrapper for the new compact v3.3 two-alert interface."""
+    return "\n\n".join([build_intraday_alert(ranked, position_message), build_forecast_alert(ranked), build_ranking_alert(ranked), "⚠️ PAPER ONLY — nessun ordine reale."])
+
 
 def save_monitor_state(ranked, best, position):
     """Persist the latest monitor snapshot when the runner persists workspace files."""
@@ -5326,7 +5146,7 @@ def main():
     print()
     print("=" * 70)
     print(f"🌍 COMMODITIES BOT v{BOT_VERSION}")
-    print("5-MIN SMART MONITOR + EARLY OPPORTUNITY + POLITICAL IMPACT + FUTURES STRUCTURE + PAPER GATE")
+    print("15-MIN INTRADAY + FORECAST ALERTS + POLITICAL IMPACT + FUTURES STRUCTURE + PAPER GATE")
     print("=" * 70)
     print()
 
@@ -5490,15 +5310,17 @@ def main():
         if _item.get("available"):
             finalize_v26_analysis(_item["analysis"])
 
-    # v3.1: Early Opportunity must be executed after all live context layers
-    # are finalized, otherwise Telegram will show None/N/D for every asset.
+    # v3.3: Early Opportunity runs after live layers are finalized.
     if EARLY_OPPORTUNITY_ENABLED:
         apply_early_opportunity(results)
+        for _item in results:
+            if _item.get("available"):
+                _item["analysis"]["v3_context"] = v3_context_summary(_item["analysis"])
 
     # v2.7: diagnostica trasparente dei blocchi di ingresso per le migliori 5.
     _diag = [x for x in results if x.get("available") and x.get("analysis",{}).get("setup_direction") in ("LONG","SHORT")]
     _diag.sort(key=lambda x: safe_float(x.get("analysis",{}).get("score"),0) or 0, reverse=True)
-    print("\n🔬 DIAGNOSTICA ENTRY v2.7")
+    print("\n🔬 DIAGNOSTICA ENTRY v3.3")
     for _it in _diag[:5]:
         _a=_it["analysis"]; _t=_a.get("entry_trigger",{}) or {}; _r=_a.get("risk",{}) or {}; _l=_a.get("level_to_level",{}) or {}
         print(f"   {_it['name']}: {_a.get('setup_direction')} | score={_a.get('score',0):.1f} q={_a.get('quality',0):.1f} conf={_a.get('confidence',0):.1f} prob={_a.get('entry_probability',0):.1f}% | L2L={_l.get('score',0):.1f} {_l.get('behaviour','-')} gate={_l.get('gate')} | MTF={_a.get('structural_same',0)} | fast_opp={_a.get('fast_conflicts',0)} | risk={_r.get('mode')} mq={_r.get('market_quality',0):.1f} rb={safe_float(_a.get('risk_benefit',{}).get('score'),0) or 0:.1f} | trigger={_t.get('kind')} {_t.get('timeframe','-')} {_t.get('score',0):.1f} confirmed={_t.get('confirmed')} | state={_a.get('entry_state')} | blockers={','.join(_a.get('entry_blockers',[])) or 'NESSUNO'}")
@@ -5511,7 +5333,7 @@ def main():
         _a=_it["analysis"]; _v=_a.get("v3_context",{}) or {}; _p=_a.get("political",{}) or {}; _f=_a.get("futures_structure",{}) or {}
         print(f"   {_it['name']}: EARLY={_v.get('early')} {_v.get('early_direction')} | POL={_p.get('direction')} { _p.get('mechanism','N/D')} { _p.get('horizon','N/D')} | CURVE={_f.get('state')} | REV={_v.get('reversal')}")
 
-    print("\n🔭 EARLY OPPORTUNITY ENGINE v3.1")
+    print("\n🔭 EARLY OPPORTUNITY ENGINE v3.3")
     for _it in sorted(
         [x for x in results if x.get("available")],
         key=lambda x: safe_float(x.get("analysis",{}).get("early_opportunity",{}).get("score"),0) or 0,
@@ -5700,8 +5522,8 @@ def main():
             f"storico {x['repetition']['direction']} | fonte {item.get('source_check', {}).get('status', 'N/D')}"
         )
 
-    # v2.7: messaggio Telegram compatto e operativo ad ogni esecuzione.
-    # Il job esterno deve essere schedulato ogni 5 minuti.
+    # v3.3: due alert separati e compatti ad ogni esecuzione.
+    # Il job esterno deve essere schedulato ogni 15 minuti.
     monitor_message = build_telegram_5m(ranked, best, position_message, position)
     if MONITOR_SEND_FULL:
         send_telegram(monitor_message)
@@ -5725,7 +5547,7 @@ def main():
 
     print()
     print("=" * 70)
-    print("⚠️ v3.1: analisi quantitativa, non garanzia di profitto. PAPER ONLY.")
+    print("⚠️ v3.3: analisi quantitativa, non garanzia di profitto. PAPER ONLY.")
     print("=" * 70)
 
 
