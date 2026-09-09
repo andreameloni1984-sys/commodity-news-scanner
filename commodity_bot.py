@@ -35,11 +35,20 @@ EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "23"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "3.0"
+BOT_VERSION = "3.0.1"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
 EARLY_OPPORTUNITY_ENABLED = os.getenv("EARLY_OPPORTUNITY_ENABLED", "1") == "1"
+
+# v3.0 — Early Opportunity Engine configuration.
+# These defaults restore the v2.8/v2.9 research horizon settings.
+EARLY_HISTORY_INTERVAL = os.getenv("EARLY_HISTORY_INTERVAL", "1mo")
+EARLY_HISTORY_MIN_MONTHS = int(os.getenv("EARLY_HISTORY_MIN_MONTHS", "120"))
+EARLY_TARGET_DAYS = (3, 7, 14, 30)
+EARLY_REFRESH_MINUTES = int(os.getenv("EARLY_REFRESH_MINUTES", "15"))
+EARLY_TOP_N = int(os.getenv("EARLY_TOP_N", "3"))
+EARLY_HISTORY_YEARS_TARGET = int(os.getenv("EARLY_HISTORY_YEARS_TARGET", "30"))
 
 # Optional explicit front/next futures symbols. Example:
 # FUTURES_SYMBOLS_JSON='{"Oro":["GC1!","GC2!"],"Rame":["HG1!","HG2!"]}'
@@ -5708,4 +5717,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main() 
+    main()
