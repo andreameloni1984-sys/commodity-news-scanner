@@ -42,7 +42,7 @@ EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "21"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "4.1"
+BOT_VERSION = "4.3"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -86,8 +86,8 @@ MORNING_REPORT_MINUTE = int(os.getenv("MORNING_REPORT_MINUTE", "0"))
 USA_REPORT_HOUR = int(os.getenv("USA_REPORT_HOUR", "14"))
 USA_REPORT_MINUTE = int(os.getenv("USA_REPORT_MINUTE", "30"))
 EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "21"))
-EVENT_ALERTS_ENABLED = os.getenv("EVENT_ALERTS_ENABLED", "1") == "1"
-SILENT_INTERNAL_ANALYSIS = os.getenv("SILENT_INTERNAL_ANALYSIS", "0") == "1"
+EVENT_ALERTS_ENABLED = os.getenv("EVENT_ALERTS_ENABLED", "0") == "1"
+SILENT_INTERNAL_ANALYSIS = os.getenv("SILENT_INTERNAL_ANALYSIS", "1") == "1"
 MONITOR_STATE_FILE = "commodities_monitor_state.json"
 MIN_ENTRY_PROBABILITY = float(os.getenv("MIN_ENTRY_PROBABILITY", "62"))
 MIN_ENTRY_QUALITY = float(os.getenv("MIN_ENTRY_QUALITY", "55"))
@@ -96,6 +96,19 @@ MIN_ENTRY_RR = float(os.getenv("MIN_ENTRY_RR", "2.5"))
 MIN_ENTRY_RR_TP1 = float(os.getenv("MIN_ENTRY_RR_TP1", "1.5"))
 MIN_ENTRY_RR_TP2 = float(os.getenv("MIN_ENTRY_RR_TP2", "2.0"))
 MAX_ENTRY_STOP_ATR = float(os.getenv("MAX_ENTRY_STOP_ATR", "2.5"))
+
+# v4.3 — Intelligence fusion + long-term forecast journal.
+ELECTION_IMPACT_ENABLED = os.getenv("ELECTION_IMPACT_ENABLED", "1") == "1"
+ELECTION_LOOKBACK_DAYS = int(os.getenv("ELECTION_LOOKBACK_DAYS", "21"))
+ELECTION_CACHE_FILE = "commodities_election_cache.json"
+ELECTION_CACHE_HOURS = int(os.getenv("ELECTION_CACHE_HOURS", "3"))
+LONG_TERM_ENABLED = os.getenv("LONG_TERM_ENABLED", "1") == "1"
+LONG_TERM_FORECAST_FILE = "commodities_long_term_forecasts.json"
+LONG_TERM_RETENTION_DAYS = int(os.getenv("LONG_TERM_RETENTION_DAYS", "450"))
+LONG_TERM_HORIZONS_DAYS = (30, 90, 180, 365)
+INTRADAY_JOURNAL_ALL = os.getenv("INTRADAY_JOURNAL_ALL", "1") == "1"
+INTRADAY_JOURNAL_RETENTION_DAYS = int(os.getenv("INTRADAY_JOURNAL_RETENTION_DAYS", "120"))
+INTRADAY_EVAL_HOURS = int(os.getenv("INTRADAY_EVAL_HOURS", "6"))
 
 # v2.5 GLOBAL COMMODITY INTELLIGENCE
 WEATHER_CACHE_FILE = "commodities_weather_cache.json"
@@ -1904,15 +1917,15 @@ def political_impact(name):
     import xml.etree.ElementTree as ET
 
     queries = {
-        "Oro": "gold Trump tariffs Fed geopolitics sanctions war",
-        "Argento": "silver Trump tariffs industrial demand geopolitics",
-        "Petrolio WTI": "oil WTI OPEC Trump sanctions war tariffs",
-        "Petrolio Brent": "Brent oil OPEC Trump sanctions war tariffs",
-        "Gas Naturale": "natural gas geopolitics LNG sanctions Europe Trump",
-        "Rame": "copper Trump tariffs China geopolitics mining",
-        "Grano": "wheat grain Trump tariffs Russia Ukraine geopolitics",
-        "Mais": "corn maize Trump tariffs agriculture geopolitics",
-        "Caffè": "coffee Brazil tariffs Trump trade weather geopolitics",
+        "Oro": "gold White House tariffs Fed geopolitics sanctions war",
+        "Argento": "silver White House tariffs industrial demand geopolitics",
+        "Petrolio WTI": "oil WTI OPEC White House sanctions war tariffs",
+        "Petrolio Brent": "Brent oil OPEC White House sanctions war tariffs",
+        "Gas Naturale": "natural gas geopolitics LNG sanctions Europe White House",
+        "Rame": "copper White House tariffs China geopolitics mining",
+        "Grano": "wheat grain White House tariffs Russia Ukraine geopolitics",
+        "Mais": "corn maize White House tariffs agriculture geopolitics",
+        "Caffè": "coffee Brazil tariffs White House trade weather geopolitics",
     }
     query = queries.get(name, name)
     positive = {"tariff", "tariffs", "sanction", "sanctions", "war", "conflict", "attack", "shortage", "disruption", "embargo", "opec cut", "cut production", "trade war", "escalation"}
@@ -4271,6 +4284,134 @@ def smart_entry_engine(analysis):
     return analysis
 
 # ============================================================
+# v4.3 LONG-TERM FORECAST ENGINE + JOURNAL
+# ============================================================
+def _daily_momentum(rows, bars):
+    closes=[safe_float(x.get("close")) for x in rows or []]; closes=[x for x in closes if x is not None]
+    if len(closes)<=bars or closes[-bars-1]==0: return 0.0
+    return closes[-1]/closes[-bars-1]-1.0
+
+def long_term_forecast(name, candles, analysis):
+    """Create frozen 30/90/180/365-day directional forecasts from current data.
+    This is a research forecast, not a promise or price target.
+    """
+    if not LONG_TERM_ENABLED or len(candles or [])<120:
+        return {"enabled":False,"status":"INSUFFICIENT_DATA"}
+    closes=[safe_float(x.get("close")) for x in candles if safe_float(x.get("close")) is not None]
+    if len(closes)<120: return {"enabled":False,"status":"INSUFFICIENT_DATA"}
+    m20=_daily_momentum(candles,20); m60=_daily_momentum(candles,60); m120=_daily_momentum(candles,120)
+    base=0.50
+    model_dir=analysis.get("setup_direction") or analysis.get("model_signal")
+    model_prob=safe_float(analysis.get("long_probability"),0.5) or 0.5
+    if model_dir=="LONG": base += (model_prob-0.5)*0.22
+    elif model_dir=="SHORT": base -= (0.5-(1-model_prob))*0.22
+    trend=0.40*math.tanh(m20*18)+0.35*math.tanh(m60*10)+0.25*math.tanh(m120*7)
+    structural=0.0
+    reg=(analysis.get("market_regime",{}) or {}).get("state","")
+    if "UP" in reg.upper(): structural=0.08
+    elif "DOWN" in reg.upper(): structural=-0.08
+    fs=(analysis.get("futures_structure",{}) or {}).get("score",0) or 0
+    cyc=(analysis.get("cyclical",{}) or {}).get("score",0) or 0
+    political=(analysis.get("political",{}) or {}).get("score",0) or 0
+    election=(analysis.get("elections",{}) or {}).get("score",0) or 0
+    weather=(analysis.get("weather",{}) or {}).get("score",0) or 0
+    # Context is capped so long-term direction cannot be hijacked by one news feed.
+    context=clamp((fs*0.012)+(cyc*0.06)+(political*0.012)+(election*0.006)+(weather*0.003),-0.15,0.15)
+    signal=clamp((base-0.5)*0.55 + trend*0.30 + structural*0.10 + context*0.05,-0.45,0.45)
+    out={}
+    for d in LONG_TERM_HORIZONS_DAYS:
+        horizon_weight=1.0 if d<=30 else 0.85 if d<=90 else 0.70 if d<=180 else 0.55
+        p_long=clamp(0.50+signal*horizon_weight,0.05,0.95)
+        p_short=1-p_long
+        direction="LONG" if p_long>=0.56 else "SHORT" if p_short>=0.56 else "NEUTRALE"
+        confidence=clamp(abs(p_long-0.5)*200,0,100)
+        out[str(d)]={"direction":direction,"long_probability":round(p_long*100,1),"short_probability":round(p_short*100,1),"confidence":round(confidence,1)}
+    return {"enabled":True,"status":"OK","price":safe_float(analysis.get("price")),"generated_at":datetime.now(timezone.utc).isoformat(),"horizons":out,
+            "drivers":{"momentum20":round(m20*100,2),"momentum60":round(m60*100,2),"momentum120":round(m120*100,2),"regime":reg,"futures":fs,"cyclical":cyc,"political":political,"elections":election,"weather":weather}}
+
+def record_long_term_forecasts(results):
+    if not LONG_TERM_ENABLED: return 0
+    log=_json_load(LONG_TERM_FORECAST_FILE,[])
+    if not isinstance(log,list): log=[]
+    now=datetime.now(timezone.utc); today=now.date().isoformat(); new=0
+    cutoff=now-timedelta(days=LONG_TERM_RETENTION_DAYS)
+    for item in results:
+        if not item.get("available"): continue
+        a=item.get("analysis",{}); f=a.get("long_term") or long_term_forecast(item["name"],item.get("candles",[]),a)
+        a["long_term"]=f
+        if not f.get("enabled"): continue
+        # Exactly one frozen forecast per commodity/day.
+        if any(x.get("name")==item["name"] and x.get("forecast_date")==today for x in log): continue
+        log.append({"id":f'{item["name"]}|{today}',"name":item["name"],"symbol":item["symbol"],"forecast_date":today,
+                    "created_at":now.isoformat(),"price":f.get("price"),"horizons":f.get("horizons",{}),"drivers":f.get("drivers",{}),"status":"OPEN"})
+        new+=1
+    kept=[]
+    for x in log:
+        try:
+            dt=datetime.fromisoformat(str(x.get("created_at")).replace("Z","+00:00"))
+            if dt>=cutoff: kept.append(x)
+        except Exception: kept.append(x)
+    _json_save(LONG_TERM_FORECAST_FILE,kept)
+    return new
+
+def _evaluate_long_term_entry(rec, horizon_days):
+    created=datetime.fromisoformat(str(rec["created_at"]).replace("Z","+00:00")); target=created+timedelta(days=horizon_days)
+    if datetime.now(timezone.utc)<target: return None
+    try: rows=get_data(rec["symbol"],"1day",500)
+    except Exception: return None
+    if not rows: return None
+    best=None
+    for r in rows:
+        try: dt=datetime.fromisoformat(str(r["datetime"]).replace("Z","+00:00"))
+        except Exception: continue
+        if dt.date()>=target.date(): best=r; break
+    if best is None: return None
+    p=safe_float(rec.get("price")); c=safe_float(best.get("close"))
+    if p is None or c is None: return None
+    h=rec.get("horizons",{}).get(str(horizon_days),{}); d=h.get("direction")
+    move=(c/p-1)*100
+    if d=="LONG": verdict="CORRETTA" if move>0 else "ERRATA"
+    elif d=="SHORT": verdict="CORRETTA" if move<0 else "ERRATA"
+    else: verdict="NEUTRALE"
+    return {"verdict":verdict,"target_price":c,"move_pct":round(move,3),"evaluated_at":datetime.now(timezone.utc).isoformat()}
+
+def evaluate_long_term_forecasts():
+    log=_json_load(LONG_TERM_FORECAST_FILE,[])
+    if not isinstance(log,list): return log,False
+    changed=False
+    for rec in log:
+        ev=rec.setdefault("evaluations",{})
+        for d in LONG_TERM_HORIZONS_DAYS:
+            k=str(d)
+            if k in ev: continue
+            result=_evaluate_long_term_entry(rec,d)
+            if result: ev[k]=result; changed=True
+    if changed: _json_save(LONG_TERM_FORECAST_FILE,log)
+    return log,changed
+
+def long_term_report():
+    log,_=evaluate_long_term_forecasts()
+    if not log: return "🧠 LONG-TERM FORECAST — nessun dato storico disponibile."
+    now=datetime.now(ZoneInfo("Europe/Rome")); lines=["🧠 LONG-TERM FORECAST REPORT",f"📅 {now.strftime('%d/%m/%Y')}","━━━━━━━━━━━━━━━━━━━━"]
+    for d in LONG_TERM_HORIZONS_DAYS:
+        rows=[r for r in log if r.get("evaluations",{}).get(str(d)) and r.get("horizons",{}).get(str(d),{}).get("direction") in ("LONG","SHORT")]
+        c=sum(r["evaluations"][str(d)].get("verdict")=="CORRETTA" for r in rows); w=sum(r["evaluations"][str(d)].get("verdict")=="ERRATA" for r in rows); acc=c/(c+w)*100 if c+w else 0
+        pending=sum(1 for r in log if str(d) not in r.get("evaluations",{}))
+        lines.append(f"⏳ {d} GIORNI: {c} ✅ | {w} ❌ | Accuracy {acc:.1f}% | Aperte {pending}")
+    # Current directional outlook for the most recent forecast of each commodity.
+    latest={}
+    for r in log:
+        latest[r.get("name")]=r
+    lines += ["","🔮 OUTLOOK ATTUALE"]
+    for name,r in sorted(latest.items()):
+        h=r.get("horizons",{}); parts=[]
+        for d in LONG_TERM_HORIZONS_DAYS:
+            x=h.get(str(d),{}); parts.append(f"{d}g {x.get('direction','N/D')} {safe_float(x.get('long_probability'),0) or 0:.0f}%L")
+        lines.append(f"• {name}: " + " | ".join(parts))
+    lines.append("🔒 Previsioni storiche congelate: non vengono riscritte.")
+    return "\n".join(lines)
+
+# ============================================================
 # v2.3 PREDICTION JOURNAL + END-OF-DAY TEST
 # ============================================================
 
@@ -4299,56 +4440,37 @@ def _prediction_direction(item):
 
 
 def record_predictions(results):
-    """Record actionable intraday alerts for later objective evaluation.
-
-    We only journal actionable LONG/SHORT alerts (ENTRARE or ENTRATA POSSIBILE),
-    because a WAIT is not a trade prediction. Each record contains the regime,
-    trigger and score so the EOD report can identify which setups work.
+    """Journal every 15-minute commodity reading, while scoring only directional forecasts.
+    WAIT/NEUTRAL are retained but are not counted as LONG/SHORT wins/losses.
     """
-    log = _json_load(PREDICTION_LOG_FILE, [])
-    if not isinstance(log, list): log=[]
-    now=datetime.now(timezone.utc)
-    cutoff=now-timedelta(days=PERFORMANCE_RETENTION_DAYS)
-    new_items=0
+    log=_json_load(PREDICTION_LOG_FILE,[])
+    if not isinstance(log,list): log=[]
+    now=datetime.now(timezone.utc); cutoff=now-timedelta(days=INTRADAY_JOURNAL_RETENTION_DAYS); new=0
+    cycle=now.replace(minute=(now.minute//15)*15,second=0,microsecond=0).isoformat()
     for item in results:
         if not item.get("available"): continue
         a=item.get("analysis",{}) or {}
-        action=str(a.get("action_label",""))
         direction=a.get("setup_direction") or a.get("model_signal")
-        if direction not in ("LONG","SHORT") or action not in ("COMPRA ORA","VENDI ORA","ENTRATA POSSIBILE"):
-            continue
-        price=safe_float(a.get("price"))
+        if direction not in ("LONG","SHORT"): direction="NEUTRALE"
+        price=safe_float(a.get("price"));
         if price is None: continue
-        trig=a.get("entry_trigger",{}) or {}
-        score=safe_float(a.get("intraday_score"),0) or 0
-        bucket="80-100" if score>=80 else "70-79"
-        # One alert per commodity/direction/trigger/15-minute cycle.
-        cycle=now.replace(minute=(now.minute//15)*15,second=0,microsecond=0).isoformat()
-        rec={
-            "id":f"{item['name']}|{cycle}|{direction}|{trig.get('kind','SETUP')}",
-            "created_at":now.isoformat(),"name":item["name"],"symbol":item["symbol"],
-            "direction":direction,"action":action,"price":price,
-            "entry":safe_float(a.get("entry")),"stop":safe_float(a.get("stop")),
-            "tp1":safe_float(a.get("tp1")),"tp2":safe_float(a.get("tp2")),
-            "tp3":safe_float(a.get("tp3")),"atr":safe_float(a.get("atr")) or 0.0,
-            "score":score,"score_bucket":bucket,"probability":safe_float(a.get("entry_probability"),0) or 0,
-            "confidence":safe_float(a.get("confidence"),0) or 0,"quality":safe_float(a.get("quality"),0) or 0,
-            "setup":trig.get("kind") or a.get("entry_method","N/D"),"trigger_tf":trig.get("timeframe","N/D"),
-            "regime":(a.get("market_regime",{}) or {}).get("state","N/D"),
-            "status":"PENDING"
-        }
-        if not any(x.get("id")==rec["id"] for x in log):
-            log.append(rec); new_items+=1
+        rec={"id":f'{item["name"]}|{cycle}',"created_at":now.isoformat(),"cycle":cycle,"name":item["name"],"symbol":item["symbol"],
+             "direction":direction,"operational_signal":a.get("signal","WAIT"),"action":a.get("action_label",""),"price":price,
+             "entry":safe_float(a.get("entry")),"stop":safe_float(a.get("stop")),"tp1":safe_float(a.get("tp1")),
+             "score":safe_float(a.get("score"),0) or 0,"probability":safe_float(a.get("entry_probability"),0) or safe_float(a.get("long_probability"),0.5)*100,
+             "confidence":safe_float(a.get("confidence"),0) or 0,"quality":safe_float(a.get("quality"),0) or 0,
+             "regime":(a.get("market_regime",{}) or {}).get("state","N/D"),"status":"PENDING" if direction in ("LONG","SHORT") else "NEUTRALE"}
+        if not any(x.get("id")==rec["id"] for x in log): log.append(rec); new+=1
     log=[x for x in log if x.get("created_at","")>=cutoff.isoformat()]
     _json_save(PREDICTION_LOG_FILE,log)
-    return new_items,log
+    return new,log
 
 def _future_candles_for_prediction(prediction):
     created=datetime.fromisoformat(prediction["created_at"].replace("Z","+00:00"))
-    if datetime.now(timezone.utc) < created+timedelta(hours=PREDICTION_HORIZON_HOURS): return []
+    if datetime.now(timezone.utc) < created+timedelta(hours=INTRADAY_EVAL_HOURS): return []
     try: rows=get_data(prediction["symbol"],"1h",1200)
     except Exception: return []
-    end=created+timedelta(hours=PREDICTION_HORIZON_HOURS)
+    end=created+timedelta(hours=INTRADAY_EVAL_HOURS)
     out=[]
     for row in rows:
         try: dt=datetime.fromisoformat(str(row["datetime"]).replace("Z","+00:00"))
@@ -4377,11 +4499,51 @@ def evaluate_prediction(prediction,future):
     return {"verdict":verdict,"first_hit":first_hit,"close_end":close_end,
             "move_pct":(close_end/p-1)*100,"evaluated_at":datetime.now(timezone.utc).isoformat()}
 
+def _periodic_intraday_summary(log, start_date, end_date):
+    rows=[]
+    for p in log:
+        try: d=datetime.fromisoformat(str(p.get("created_at")).replace("Z","+00:00")).astimezone(ZoneInfo("Europe/Rome")).date()
+        except Exception: continue
+        if start_date<=d<=end_date and p.get("status")=="EVALUATED" and p.get("direction") in ("LONG","SHORT"): rows.append(p)
+    c=sum(x.get("verdict")=="CORRETTA" for x in rows); w=sum(x.get("verdict")=="ERRATA" for x in rows); a=c/(c+w)*100 if c+w else 0
+    return len(rows),c,w,a
+
+def _periodic_long_term_summary(log, start_date, end_date):
+    out=[]
+    for d in LONG_TERM_HORIZONS_DAYS:
+        rows=[]
+        for r in log:
+            try: fd=datetime.fromisoformat(str(r.get("forecast_date"))).date()
+            except Exception: continue
+            ev=r.get("evaluations",{}).get(str(d),{}); direction=r.get("horizons",{}).get(str(d),{}).get("direction")
+            if start_date<=fd<=end_date and direction in ("LONG","SHORT") and ev: rows.append(ev)
+        c=sum(x.get("verdict")=="CORRETTA" for x in rows); w=sum(x.get("verdict")=="ERRATA" for x in rows); a=c/(c+w)*100 if c+w else 0
+        out.append((d,c,w,a))
+    return out
+
+def periodic_performance_appendix():
+    now=datetime.now(ZoneInfo("Europe/Rome")); log=_json_load(PREDICTION_LOG_FILE,[]) or []
+    ltlog,_=_evaluate_long_term_placeholder() if False else (None,None)
+    lines=[]
+    # Weekly report on Friday; month report on the last calendar day.
+    if now.weekday()==4:
+        start=now.date()-timedelta(days=4); n,c,w,a=_periodic_intraday_summary(log,start,now.date())
+        lines += ["","📅 REPORT SETTIMANALE",f"⚡ Intraday: {c} ✅ | {w} ❌ | Accuracy {a:.1f}% ({n} valutate)"]
+        ltlog,_=evaluate_long_term_forecasts();
+        for d,c,w,a in _periodic_long_term_summary(ltlog,start,now.date()): lines.append(f"🧠 {d}g: {c} ✅ | {w} ❌ | {a:.1f}%")
+    tomorrow=now.date()+timedelta(days=1)
+    if tomorrow.month!=now.month:
+        start=now.date().replace(day=1); n,c,w,a=_periodic_intraday_summary(log,start,now.date())
+        lines += ["","📆 REPORT MENSILE",f"⚡ Intraday: {c} ✅ | {w} ❌ | Accuracy {a:.1f}% ({n} valutate)"]
+        ltlog,_=evaluate_long_term_forecasts();
+        for d,c,w,a in _periodic_long_term_summary(ltlog,start,now.date()): lines.append(f"🧠 {d}g: {c} ✅ | {w} ❌ | {a:.1f}%")
+    return lines
+
 def run_end_of_day_test(force=False):
     log=_json_load(PREDICTION_LOG_FILE,[])
-    if not isinstance(log,list) or not log: return None
+    if not isinstance(log,list): log=[]
     local_now=datetime.now(ZoneInfo("Europe/Rome"))
-    if not force and local_now.hour<EOD_REPORT_HOUR: return None
+    if not force and not (local_now.hour==EOD_REPORT_HOUR and 0<=local_now.minute<30): return None
     changed=False
     for pred in log:
         if pred.get("status")!="PENDING": continue
@@ -4389,42 +4551,35 @@ def run_end_of_day_test(force=False):
         if result:
             pred.update(result); pred["status"]="EVALUATED"; changed=True
     if changed: _json_save(PREDICTION_LOG_FILE,log)
-    today=local_now.date().isoformat()
-    evaluated=[]; pending=[]
+    today=local_now.date().isoformat(); rows=[]
     for pred in log:
         try: d=datetime.fromisoformat(pred.get("created_at","").replace("Z","+00:00")).astimezone(ZoneInfo("Europe/Rome")).date().isoformat()
         except Exception: continue
-        if d==today:
-            (evaluated if pred.get("status")=="EVALUATED" else pending).append(pred)
-    if not evaluated and not pending: return None
-    correct=sum(p.get("verdict")=="CORRETTA" for p in evaluated); wrong=sum(p.get("verdict")=="ERRATA" for p in evaluated); ambiguous=sum(p.get("verdict")=="AMBIGUA" for p in evaluated)
-    accuracy=correct/(correct+wrong)*100 if correct+wrong else 0.0
-    lines=[f"📊 COMMODITIES BOT v{BOT_VERSION} — PERFORMANCE INTRADAY", "", f"📅 {local_now.strftime('%d/%m/%Y')}","━━━━━━━━━━━━━━━━━━━━",
-           f"🎯 Segnali valutati: {len(evaluated)}",f"✅ Azzeccati: {correct}",f"❌ Sbagliati: {wrong}",f"⚪ Ambigui: {ambiguous}",f"🟡 Ancora in valutazione: {len(pending)}",f"📈 Accuratezza: {accuracy:.1f}%"]
-    for bucket in ("80-100","70-79"):
-        rows=[p for p in evaluated if p.get("score_bucket")==bucket]; c=sum(p.get("verdict")=="CORRETTA" for p in rows); w=sum(p.get("verdict")=="ERRATA" for p in rows); acc=c/(c+w)*100 if c+w else 0
-        lines.append(f"⭐ Score {bucket}: {len(rows)} | {acc:.1f}%")
-    by_setup={}
-    for p in evaluated: by_setup.setdefault(p.get("setup","N/D"),[]).append(p)
-    if by_setup:
-        lines += ["","🔥 PER SETUP"]
-        rows=[]
-        for name,vals in by_setup.items():
-            c=sum(x.get("verdict")=="CORRETTA" for x in vals); w=sum(x.get("verdict")=="ERRATA" for x in vals); acc=c/(c+w)*100 if c+w else 0; rows.append((acc,name,len(vals)))
-        for acc,name,n in sorted(rows,reverse=True)[:5]: lines.append(f"• {name}: {acc:.1f}% ({n})")
+        if d==today: rows.append(pred)
+    directional=[p for p in rows if p.get("direction") in ("LONG","SHORT") and p.get("status")=="EVALUATED"]
+    correct=sum(p.get("verdict")=="CORRETTA" for p in directional); wrong=sum(p.get("verdict")=="ERRATA" for p in directional); amb=sum(p.get("verdict")=="AMBIGUA" for p in directional)
+    pending=sum(p.get("status")=="PENDING" for p in rows); neutral=sum(p.get("direction")=="NEUTRALE" for p in rows)
+    acc=correct/(correct+wrong)*100 if correct+wrong else 0.0
+    lines=[f"🌙 COMMODITIES DAILY REPORT v{BOT_VERSION}",f"📅 {local_now.strftime('%d/%m/%Y')}","━━━━━━━━━━━━━━━━━━━━",
+           "⚡ INTRADAY — RILEVAMENTI OGNI 15 MINUTI",f"🔎 Rilevamenti totali: {len(rows)}",f"🎯 Previsioni direzionali valutate: {len(directional)}",
+           f"✅ Azzeccate: {correct}",f"❌ Sbagliate: {wrong}",f"⚪ Ambigue: {amb}",f"🟡 Ancora aperte: {pending}",f"⚪ Neutrali/WAIT: {neutral}",f"📈 Accuracy direzionale: {acc:.1f}%"]
     by_name={}
-    for p in evaluated: by_name.setdefault(p["name"],[]).append(p)
+    for p in directional: by_name.setdefault(p["name"],[]).append(p)
     if by_name:
-        lines += ["","🏆 PER COMMODITY"]
-        rows=[]
-        for name,vals in by_name.items():
-            c=sum(x.get("verdict")=="CORRETTA" for x in vals); w=sum(x.get("verdict")=="ERRATA" for x in vals); acc=c/(c+w)*100 if c+w else 0; rows.append((acc,name,len(vals)))
-        for acc,name,n in sorted(rows,reverse=True)[:5]: lines.append(f"• {name}: {acc:.1f}% ({n})")
-    lines += ["","🔒 PAPER ONLY — nessun ordine reale"]
+        lines += ["","🏆 ACCURACY PER COMMODITY"]
+        vals=[]
+        for name,rs in by_name.items():
+            c=sum(x.get("verdict")=="CORRETTA" for x in rs); w=sum(x.get("verdict")=="ERRATA" for x in rs); a=c/(c+w)*100 if c+w else 0; vals.append((a,name,len(rs)))
+        for a,name,n in sorted(vals,reverse=True): lines.append(f"• {name}: {a:.1f}% ({n})")
     state=_json_load(DAILY_REPORT_FILE,{})
     if state.get("last_report_date")==today and not force: return None
-    state.update({"last_report_date":today,"accuracy":accuracy,"evaluated":len(evaluated),"pending":len(pending)})
-    _json_save(DAILY_REPORT_FILE,state)
+    state.update({"last_report_date":today,"accuracy":acc,"evaluated":len(directional),"total_readings":len(rows),"pending":pending}); _json_save(DAILY_REPORT_FILE,state)
+    # Long-term is part of the same evening report.
+    lines += ["","🧠 LUNGO TERMINE"]
+    lt=long_term_report()
+    lines.extend(lt.splitlines()[3:] if len(lt.splitlines())>3 else lt.splitlines())
+    lines += periodic_performance_appendix()
+    lines += ["","🔒 PAPER ONLY — nessun ordine reale"]
     return "\n".join(lines)
 
 # ============================================================
@@ -5343,6 +5498,86 @@ def apply_futures_structure(analysis, structure):
 
 
 # ============================================================
+# v4.3 GLOBAL ELECTION INTELLIGENCE
+# ============================================================
+ELECTION_COMMODITY_MAP = {
+    "Oro": ["gold", "safe haven", "central bank", "tariff", "sanction", "war", "rates", "dollar"],
+    "Argento": ["silver", "industrial demand", "china", "tariff", "trade", "mine"],
+    "Rame": ["copper", "china", "infrastructure", "manufacturing", "mine", "export", "tariff"],
+    "Petrolio WTI": ["oil", "opec", "energy", "iran", "russia", "sanction", "production", "tariff"],
+    "Petrolio Brent": ["oil", "opec", "energy", "iran", "russia", "sanction", "production", "tariff"],
+    "Gas Naturale": ["natural gas", "lng", "pipeline", "energy", "russia", "europe", "storage"],
+    "Grano": ["wheat", "grain", "ukraine", "russia", "black sea", "export", "tariff", "agriculture"],
+    "Mais": ["corn", "maize", "ethanol", "china", "export", "agriculture", "tariff"],
+    "Soia": ["soybean", "china", "brazil", "export", "agriculture", "tariff"],
+    "Caffè": ["coffee", "brazil", "vietnam", "export", "tariff", "agriculture"],
+    "Zucchero": ["sugar", "brazil", "ethanol", "export", "agriculture", "tariff"],
+}
+
+ELECTION_EVENT_TERMS = (
+    "election", "elections", "presidential election", "general election", "parliamentary election",
+    "vote", "voting", "ballot", "poll", "runoff", "referendum", "coalition", "government",
+)
+
+def _election_cache():
+    return _json_load(ELECTION_CACHE_FILE, {}) or {}
+
+def _save_election_cache(data):
+    _json_save(ELECTION_CACHE_FILE, data)
+
+def election_impact(name):
+    if not ELECTION_IMPACT_ENABLED:
+        return {"enabled": False, "direction": "NEUTRALE", "score": 0.0, "count": 0, "events": []}
+    cache=_election_cache(); now=datetime.now(timezone.utc)
+    key=name
+    old=cache.get(key)
+    try:
+        if old:
+            dt=datetime.fromisoformat(str(old.get("updated_at")).replace("Z","+00:00"))
+            if now-dt < timedelta(hours=ELECTION_CACHE_HOURS): return old.get("value", old)
+    except Exception: pass
+    terms=ELECTION_COMMODITY_MAP.get(name,[name])
+    q='("election" OR "elections" OR "vote" OR "runoff" OR "referendum") ('+' OR '.join(terms[:8])+')'
+    articles=[]
+    try:
+        articles=_fetch_rss_articles(q, limit=30)
+    except Exception:
+        articles=[]
+    relevant=[]; raw=0.0
+    for a in articles:
+        text=(str(a.get("title",''))+' '+str(a.get("description",''))).lower()
+        if not any(t in text for t in ELECTION_EVENT_TERMS): continue
+        rel=sum(1 for t in terms if t.lower() in text)
+        if rel<=0: continue
+        # Conservative mechanism-based direction. Elections are not inherently bullish/bearish.
+        sign=0.0
+        if any(k in text for k in ("sanction","export ban","production cut","infrastructure spending","stimulus","military escalation","war")):
+            sign=1.0
+        elif any(k in text for k in ("production increase","export increase","ceasefire","de-escalation","fiscal tightening")):
+            sign=-1.0
+        # Election uncertainty is useful for gold but not automatically for every commodity.
+        if name=="Oro" and any(k in text for k in ("uncertainty","tight race","political risk","instability")):
+            sign=max(sign,0.6)
+        raw += sign * min(2.0, rel*0.35)
+        relevant.append({"title":a.get("title",""),"publishedAt":a.get("publishedAt",a.get("published",'')),"url":a.get("url","")})
+    score=clamp(raw/max(len(relevant),1)*8.0,-8.0,8.0) if relevant else 0.0
+    direction="FAVOREVOLE" if score>=1.0 else "SFAVOREVOLE" if score<=-1.0 else "NEUTRALE"
+    value={"enabled":True,"direction":direction,"score":round(score,2),"count":len(relevant),"events":relevant[:8],"updated_at":now.isoformat()}
+    cache[key]={"updated_at":now.isoformat(),"value":value}; _save_election_cache(cache)
+    return value
+
+def apply_election_layer(analysis, election):
+    analysis["elections"]=election or {}
+    if not election: return
+    direction=analysis.get("setup_direction") or analysis.get("model_signal")
+    e=safe_float(election.get("score"),0) or 0
+    if direction=="SHORT": e=-e
+    # Very small bounded adjustment: election data informs, price engine decides.
+    delta=clamp(e*0.45,-3.0,3.0)
+    analysis["election_nudge"]=round(delta,2)
+    analysis["score"]=clamp(safe_float(analysis.get("score"),0) + delta,0,100)
+
+# ============================================================
 # v3.0 POLITICAL EVENT -> MECHANISM -> COMMODITY -> HORIZON
 # ============================================================
 
@@ -5380,7 +5615,7 @@ def political_impact_v3(name, base=None):
     base = dict(base or political_impact(name) or {})
     try:
         query_terms = POLITICAL_COMMODITY_MAP.get(name, [name])
-        query = "(" + " OR ".join(query_terms[:8]) + ") (Trump OR tariff OR sanctions OR geopolitics OR OPEC OR Fed)"
+        query = "(" + " OR ".join(query_terms[:8]) + ") (White House OR U.S. president OR US administration OR tariff OR sanctions OR geopolitics OR OPEC OR Fed)"
         articles = _fetch_rss_articles(query, limit=30)
     except Exception:
         articles = []
@@ -5703,207 +5938,66 @@ def finalize_v26_analysis(analysis):
 
 
 # ============================================================
-# v4.1 COMMUNICATION ENGINE — 08:00 / USA / EOD + WEEKLY + MONTHLY
-# Internal analysis remains every 15 minutes; Telegram only at the three
-# decision/report moments. One commodity is selected and locked each day.
+# v3.6 COMMUNICATION ENGINE
 # ============================================================
-DAILY_SELECTION_FILE = "commodities_daily_selection.json"
-COMMUNICATION_STATE_FILE = "commodities_communication_state.json"
-
-
 def _communication_state():
-    return _json_load(COMMUNICATION_STATE_FILE, {}) or {}
-
+    return _json_load("commodities_communication_state.json", {}) or {}
 
 def _save_communication_state(state):
-    _json_save(COMMUNICATION_STATE_FILE, state)
-
+    _json_save("commodities_communication_state.json", state)
 
 def _daily_selection_state():
-    return _json_load(DAILY_SELECTION_FILE, {}) or {}
-
+    return _json_load("commodities_daily_selection.json", {}) or {}
 
 def _save_daily_selection_state(state):
-    _json_save(DAILY_SELECTION_FILE, state)
+    _json_save("commodities_daily_selection.json", state)
 
+def _selection_for_today(ranked):
+    now=datetime.now(ZoneInfo("Europe/Rome")); today=now.date().isoformat(); state=_daily_selection_state()
+    if state.get("date")==today and state.get("name"): return state
+    if not ranked: return {}
+    candidates=[x for x in ranked if x.get("available")]
+    if not candidates: return {}
+    best=candidates[0]; a=best.get("analysis",{})
+    state={"date":today,"name":best.get("name"),"symbol":best.get("symbol"),"direction":a.get("setup_direction") or a.get("model_signal"),"locked_at":datetime.now(timezone.utc).isoformat()}
+    _save_daily_selection_state(state); return state
 
-def _find_ranked(ranked, name):
-    for item in ranked:
-        if item.get("name") == name and item.get("available"):
-            return item
-    return None
+def _find_selected(ranked, selection):
+    name=selection.get("name") if selection else None
+    return next((x for x in ranked if x.get("name")==name and x.get("available")), None) or (ranked[0] if ranked else {})
 
-
-def _operational_view(item):
-    a=item.get("analysis",{}) or {}
-    direction=a.get("setup_direction") or a.get("model_signal") or "NONE"
-    state=a.get("entry_state", "WATCH")
-    conf=bool((a.get("intraday_core",{}) or {}).get("confluence_ok",False))
-    if state == "ENTRY_CONFIRMED" and conf and direction in ("LONG","SHORT"):
-        return ("🟢 ENTRARE ORA" if direction=="LONG" else "🔴 ENTRARE ORA")
-    if direction in ("LONG","SHORT"):
-        return f"🟡 {direction} — ASPETTARE CONFERMA"
-    return "⚪ NO TRADE"
-
-
-def _selection_message(item, label="🌅 SCELTA COMMODITY DEL GIORNO"):
-    a=item.get("analysis",{}) or {}
-    direction=a.get("setup_direction") or a.get("model_signal") or "NONE"
-    lines=[label,"",f"🏆 {item.get('name','N/D')}",
-           f"🎯 {_operational_view(item)}","",
-           f"💰 Prezzo: {_fmt_price(a.get('price'))}",
-           f"📊 Score: {safe_float(a.get('score'),0) or 0:.1f}/100",
-           f"📈 Probabilità: {safe_float(a.get('entry_probability'),0) or 0:.1f}%",
-           f"🧠 Confidenza: {safe_float(a.get('confidence'),0) or 0:.1f}/100",
-           f"⭐ Qualità: {safe_float(a.get('quality'),0) or 0:.1f}/100",
-           f"🧭 Direzione: {direction}"]
-    for key,lab in (("entry","📍 Entry"),("stop","🛑 SL"),("tp1","🎯 TP1"),("tp2","🎯 TP2"),("tp3","🎯 TP3")):
-        if a.get(key) is not None: lines.append(f"{lab}: {_fmt_price(a.get(key))}")
-    core=a.get("intraday_core",{}) or {}
-    if core.get("rr_tp1") is not None:
-        lines.append(f"📐 R/R: TP1 {core.get('rr_tp1'):.2f} | TP2 {core.get('rr_tp2'):.2f}")
-    reg=(a.get("market_regime",{}) or {}).get("state")
+def _session_message(label, item, position_message=None):
+    a=item.get("analysis",{}) or {}; direction=a.get("setup_direction") or a.get("model_signal") or "NONE"; state=a.get("entry_state","WATCH"); confluence_ok=bool((a.get("intraday_core",{}) or {}).get("confluence_ok",False))
+    if state=="ENTRY_CONFIRMED" and confluence_ok and direction in ("LONG","SHORT"):
+        action="COMPRA ORA" if direction=="LONG" else "VENDI ORA"; icon="🟢" if direction=="LONG" else "🔴"; display=f"{icon} {direction} — {action}"
+    elif direction in ("LONG","SHORT"):
+        display=f"🟡 {direction} — ASPETTARE CONFERMA"
+    else: display="⚪ NO TRADE"
+    lines=[label,"",f"🥇 {item.get('name','N/D')}",display,"",f"💰 Prezzo: {_fmt_price(a.get('price'))}",f"📊 Score: {safe_float(a.get('score'),0) or 0:.0f}/100",f"📈 Probabilità: {safe_float(a.get('entry_probability'),0) or safe_float(a.get('long_probability'),0.5)*100:.1f}%",f"🧠 Confidenza: {safe_float(a.get('confidence'),0) or 0:.1f}/100"]
+    for key,lab in (("entry","Entry"),("stop","Stop"),("tp1","TP1"),("tp2","TP2"),("tp3","TP3")):
+        if a.get(key) is not None: lines.append(f"{'🎯' if key!='stop' else '🛑'} {lab}: {_fmt_price(a.get(key))}")
+    reg=(a.get("market_regime",{}) or {}).get("state");
     if reg: lines.append(f"🌍 Regime: {reg}")
-    blockers=a.get("entry_blockers",[]) or []
-    if blockers: lines.append("⚠️ Conferma richiesta: " + " | ".join(blockers[:4]))
-    pa=a.get("price_action",{}) or {}
-    patterns=pa.get("patterns",[]) or []
-    if patterns: lines.append("🕯️ " + " + ".join(patterns[:3]))
-    lines += ["","🔒 Una sola commodity selezionata oggi","🧪 PAPER ONLY — nessun ordine reale"]
-    return "\n".join(lines)
-
-
-def _usa_message(item):
-    a=item.get("analysis",{}) or {}
-    lines=["🇺🇸 SESSIONE AMERICANA — CHECK OPERATIVO","",f"🏆 {item.get('name','N/D')}",
-           f"🎯 {_operational_view(item)}","",
-           f"💰 Prezzo: {_fmt_price(a.get('price'))}",
-           f"🧭 Direzione: {a.get('setup_direction') or a.get('model_signal') or 'NONE'}",
-           f"📊 Score: {safe_float(a.get('score'),0) or 0:.1f}/100",
-           f"📈 Probabilità: {safe_float(a.get('entry_probability'),0) or 0:.1f}%",
-           f"🧠 Confidenza: {safe_float(a.get('confidence'),0) or 0:.1f}/100",
-           f"⭐ Qualità: {safe_float(a.get('quality'),0) or 0:.1f}/100"]
-    for key,lab in (("entry","📍 Entry"),("stop","🛑 SL"),("tp1","🎯 TP1"),("tp2","🎯 TP2"),("tp3","🎯 TP3")):
-        if a.get(key) is not None: lines.append(f"{lab}: {_fmt_price(a.get(key))}")
-    usd=a.get("usd",{}) or {}
-    if usd: lines.append(f"💵 Dollaro: {usd.get('label', usd.get('state','N/D'))}")
-    news=a.get("news",{}) or {}
-    if news: lines.append(f"📰 News score: {safe_float(news.get('score'),0) or 0:+.1f}")
-    core=a.get("intraday_core",{}) or {}
-    if core.get("buy_pressure") is not None or core.get("sell_pressure") is not None:
-        lines.append(f"🟢 Acquisti: {safe_float(core.get('buy_pressure'),0) or 0:.1f} | 🔴 Vendite: {safe_float(core.get('sell_pressure'),0) or 0:.1f}")
-    blockers=a.get("entry_blockers",[]) or []
-    if blockers: lines.append("⚠️ " + " | ".join(blockers[:4]))
-    lines += ["","📌 Il segnale delle 08:00 è CONFERMATO/AGGIORNATO con la sessione USA.","🧪 PAPER ONLY — nessun ordine reale"]
-    return "\n".join(lines)
-
-
-def _stats_from_selection_history(history, start_date=None, end_date=None):
-    rows=[]
-    for day,rec in history.items() if isinstance(history,dict) else []:
-        if start_date and day < start_date: continue
-        if end_date and day > end_date: continue
-        result=rec.get("result")
-        if result in ("CORRETTA","ERRATA","AMBIGUA"): rows.append(rec)
-    c=sum(r.get("result")=="CORRETTA" for r in rows); w=sum(r.get("result")=="ERRATA" for r in rows); amb=sum(r.get("result")=="AMBIGUA" for r in rows)
-    acc=c/(c+w)*100 if c+w else 0
-    return rows,c,w,amb,acc
-
-
-def _daily_selection_report(now, ranked=None):
-    hist=_daily_selection_state(); today=now.date().isoformat(); rec=hist.get(today)
-    if not rec: return None
-    # Evaluate the locked morning call against the current end-of-day price.
-    # This is a directional paper result, not a broker P/L claim.
-    result=rec.get("result","IN VALUTAZIONE")
-    if result == "IN VALUTAZIONE" and ranked:
-        selected=_find_ranked(ranked, rec.get("name"))
-        if selected:
-            cur=safe_float((selected.get("analysis",{}) or {}).get("price"))
-            op=safe_float(rec.get("price"))
-            direction=rec.get("direction")
-            if cur is not None and op is not None and direction in ("LONG","SHORT"):
-                if cur == op: result="NEUTRALE"
-                elif (direction=="LONG" and cur>op) or (direction=="SHORT" and cur<op): result="CORRETTA"
-                else: result="ERRATA"
-                rec["result"]=result; rec["close_price"]=cur; rec["evaluated_at"]=datetime.now(timezone.utc).isoformat()
-                hist[today]=rec; _save_daily_selection_state(hist)
-    return "\n".join([
-        "📊 RESOCONTO GIORNALIERO COMMODITIES","",
-        f"🏆 Scelta del giorno: {rec.get('name','N/D')}",
-        f"🎯 Previsione: {rec.get('direction','NONE')}",
-        f"📌 Risultato: {result}",
-        f"💰 Prezzo scelta: {_fmt_price(rec.get('price'))}",
-        f"📈 Probabilità iniziale: {safe_float(rec.get('probability'),0) or 0:.1f}%",
-        "",
-        "🔎 Il risultato viene aggiornato quando la finestra di valutazione è maturata.",
-        "🧪 PAPER ONLY — nessun ordine reale"
-    ])
-
-
-def _periodic_selection_report(kind, now):
-    hist=_daily_selection_state()
-    if kind=="SETTIMANALE":
-        start=now.date()-timedelta(days=6); end=now.date()
-    else:
-        first=now.date().replace(day=1)
-        start=first; end=now.date()
-    rows,c,w,amb,acc=_stats_from_selection_history(hist,start.isoformat(),end.isoformat())
-    if not rows:
-        return None
-    best=max(rows,key=lambda r:safe_float(r.get("probability"),0) or 0)
-    lines=[f"📊 RESOCONTO {kind} COMMODITIES","",f"📅 {start.isoformat()} → {end.isoformat()}",
-           f"🎯 Previsioni valutate: {len(rows)}",f"✅ Azzeccate: {c}",f"❌ Sbagliate: {w}",f"⚪ Ambigue: {amb}",f"📈 Accuratezza: {acc:.1f}%",""]
-    lines.append(f"🏆 Migliore probabilità: {best.get('name','N/D')} | {safe_float(best.get('probability'),0) or 0:.1f}%")
-    counts={}
-    for r in rows: counts[r.get("name","N/D")]=counts.get(r.get("name","N/D"),0)+1
-    if counts:
-        lines.append("📌 Commodity selezionate: " + ", ".join(f"{k} ({v})" for k,v in sorted(counts.items(),key=lambda x:(-x[1],x[0]))))
+    pa=a.get("price_action",{}) or {}; patterns=pa.get("patterns",[]) or []
+    if patterns: lines.append("🕯️ "+" + ".join(patterns[:3]))
+    e=a.get("elections",{}) or {}; p=a.get("political",{}) or {}
+    lines.append(f"🗳️ Elezioni globali: {e.get('direction','N/D')} ({e.get('count',0)} eventi)")
+    lines.append(f"🇺🇸 Presidente degli Stati Uniti: {p.get('direction','N/D')}")
+    lt=a.get("long_term",{}).get("horizons",{}) if isinstance(a.get("long_term"),dict) else {}
+    if lt:
+        lines.append(f"🔮 LT: 30g {lt.get('30',{}).get('direction','N/D')} | 90g {lt.get('90',{}).get('direction','N/D')} | 180g {lt.get('180',{}).get('direction','N/D')}")
+    if position_message: lines += ["","📌 POSIZIONE",position_message]
     lines += ["","🧪 PAPER ONLY — nessun ordine reale"]
     return "\n".join(lines)
 
-
 def maybe_send_session_reports(ranked, best, position_message=None):
-    if COMMUNICATION_MODE != "MORNING_USA_EVENT": return
-    now=datetime.now(ZoneInfo("Europe/Rome")); today=now.date().isoformat()
-    state=_communication_state(); sent=state.setdefault("sent",{})
-    hist=_daily_selection_state()
-
-    # 08:00: select and lock ONE commodity after Asia + early Europe.
-    if now.hour==MORNING_REPORT_HOUR and MORNING_REPORT_MINUTE <= now.minute < MORNING_REPORT_MINUTE+30 and sent.get("morning") != today:
-        if best.get("available"):
-            a=best.get("analysis",{}) or {}
-            hist[today]={"name":best.get("name"),"symbol":best.get("symbol"),
-                         "direction":a.get("setup_direction") or a.get("model_signal") or "NONE",
-                         "price":safe_float(a.get("price")),"probability":safe_float(a.get("entry_probability"),0) or 0,
-                         "created_at":datetime.now(timezone.utc).isoformat(),"result":"IN VALUTAZIONE"}
-            _save_daily_selection_state(hist)
-            send_telegram(_selection_message(best))
-            sent["morning"]=today
-
-    # USA: re-check the LOCKED morning selection, never pick a new commodity.
-    if now.hour==USA_REPORT_HOUR and USA_REPORT_MINUTE <= now.minute < USA_REPORT_MINUTE+30 and sent.get("usa") != today:
-        rec=hist.get(today); selected=_find_ranked(ranked,rec.get("name")) if rec else None
-        if selected:
-            send_telegram(_usa_message(selected)); sent["usa"]=today
-
-    # EOD: all-commodities statistical report + selection result.
-    if now.hour==EOD_REPORT_HOUR and now.minute < 30 and sent.get("eod") != today:
-        report=run_end_of_day_test()
-        daily=_daily_selection_report(now, ranked)
-        if report: send_telegram(report)
-        if daily: send_telegram(daily)
-        if report or daily: sent["eod"]=today
-
-    # Friday weekly report and last calendar day monthly report.
-    if now.hour==EOD_REPORT_HOUR and now.minute < 30 and now.weekday()==4 and sent.get("weekly") != today:
-        report=_periodic_selection_report("SETTIMANALE",now)
-        if report: send_telegram(report); sent["weekly"]=today
-    tomorrow=now.date()+timedelta(days=1)
-    if now.hour==EOD_REPORT_HOUR and now.minute < 30 and tomorrow.month != now.month and sent.get("monthly") != today:
-        report=_periodic_selection_report("MENSILE",now)
-        if report: send_telegram(report); sent["monthly"]=today
-
+    if COMMUNICATION_MODE!="MORNING_USA_EVENT": return
+    now=datetime.now(ZoneInfo("Europe/Rome")); today=now.date().isoformat(); state=_communication_state(); sent=state.setdefault("sent",{})
+    selection=_selection_for_today(ranked); selected=_find_selected(ranked,selection)
+    if now.hour==MORNING_REPORT_HOUR and MORNING_REPORT_MINUTE<=now.minute<MORNING_REPORT_MINUTE+30 and sent.get("morning")!=today and selected:
+        send_telegram(_session_message("🌅 COMMODITY DEL GIORNO — INTRADAY",selected,position_message)); sent["morning"]=today
+    if now.hour==USA_REPORT_HOUR and USA_REPORT_MINUTE<=now.minute<USA_REPORT_MINUTE+30 and sent.get("usa")!=today and selected:
+        send_telegram(_session_message("🇺🇸 USA SESSION UPDATE — RECHECK",selected,position_message)); sent["usa"]=today
     _save_communication_state(state)
 
 # ============================================================
@@ -5914,9 +6008,9 @@ def main():
     print()
     print("=" * 70)
     print(f"🌍 COMMODITIES BOT v{BOT_VERSION}")
-    print("MORNING + USA + EVENT-DRIVEN + DAILY STATS | PAPER ONLY")
-    print("v3.8 STRICT CONFLUENCE: ENTER solo con MTF + trigger + L2L + R/R + qualità/confidenza/probabilità")
-    print("COMMUNICATION: MORNING + USA + MATERIAL EVENTS | INTERNAL ANALYSIS SILENT")
+    print("MORNING 08:00 + USA 14:30 + EOD 21:00 | INTRADAY 15m + LONG TERM JOURNAL | PAPER ONLY")
+    print("v4.3 INTELLIGENCE FUSION: ENTER solo con MTF + trigger + L2L + R/R + qualità/confidenza/probabilità")
+    print("COMMUNICATION: MORNING + USA + EOD | INTERNAL ANALYSIS EVERY 15m")
     print("=" * 70)
     print()
 
@@ -5994,6 +6088,10 @@ def main():
             disasters = natural_disaster_intelligence(name)
             apply_weather_and_disaster_layers(analysis, weather, disasters)
 
+            # v4.3: global election intelligence is commodity-specific and bounded.
+            elections = election_impact(name)
+            apply_election_layer(analysis, elections)
+
             # v2.9: Level-to-Level technical structure after all current context layers.
             level_to_level_engine(
                 analysis, commodity_name=name, candles=candles,
@@ -6013,6 +6111,9 @@ def main():
             _curve = futures_structure_engine(name)
             apply_futures_structure(analysis, _curve)
             analysis["v3_context"] = v3_context_summary(analysis)
+
+            # v4.3: long-term forecast is calculated from daily structure plus bounded context.
+            analysis["long_term"] = long_term_forecast(name, candles, analysis)
 
             results.append({
                 "name": name,
@@ -6104,8 +6205,10 @@ def main():
         _a=_it["analysis"]; _t=_a.get("entry_trigger",{}) or {}; _r=_a.get("risk",{}) or {}; _l=_a.get("level_to_level",{}) or {}
         print(f"   {_it['name']}: {_a.get('setup_direction')} | score={_a.get('score',0):.1f} q={_a.get('quality',0):.1f} conf={_a.get('confidence',0):.1f} prob={_a.get('entry_probability',0):.1f}% | L2L={_l.get('score',0):.1f} {_l.get('behaviour','-')} gate={_l.get('gate')} | MTF={_a.get('structural_same',0)} | fast_opp={_a.get('fast_conflicts',0)} | risk={_r.get('mode')} mq={_r.get('market_quality',0):.1f} rb={safe_float(_a.get('risk_benefit',{}).get('score'),0) or 0:.1f} | trigger={_t.get('kind')} {_t.get('timeframe','-')} {_t.get('score',0):.1f} confirmed={_t.get('confirmed')} | state={_a.get('entry_state')} | regime={(_a.get('market_regime',{}) or {}).get('state','N/D')} | blockers={','.join(_a.get('entry_blockers',[])) or 'NESSUNO'} | warnings={','.join(_a.get('entry_warnings',[])) or 'NESSUNO'}")
 
+    new_long = record_long_term_forecasts(results)
+    print(f"🧠 Long-Term Journal: {new_long} nuove previsioni congelate")
     new_predictions, _prediction_log = record_predictions(results)
-    print(f"📝 Prediction Journal: {new_predictions} nuove previsioni registrate")
+    print(f"📝 Intraday Journal: {new_predictions} nuovi rilevamenti registrati")
 
     print("\n🧠 V3 CONTEXT")
     for _it in sorted([x for x in results if x.get("available")], key=lambda x: safe_float(x.get("analysis",{}).get("score"),0) or 0, reverse=True)[:5]:
@@ -6303,12 +6406,18 @@ def main():
     # v3.3: due alert separati e compatti ad ogni esecuzione.
     # Il job esterno deve essere schedulato ogni 15 minuti.
     monitor_message = build_telegram_5m(ranked, best, position_message, position)
-    if MONITOR_SEND_FULL and not SILENT_INTERNAL_ANALYSIS:
+    if MONITOR_SEND_FULL:
         send_telegram(monitor_message)
     else:
-        print("📡 Internal monitor: Telegram periodico DISATTIVATO.")
+        print("📡 Internal monitor: Telegram alert periodico DISATTIVATO.")
     maybe_send_session_reports(ranked, best, position_message)
     save_monitor_state(ranked, best, position)
+
+    # Fine giornata: valuta le previsioni maturate e invia il report una sola volta.
+    eod_report = run_end_of_day_test()
+    if eod_report:
+        send_telegram(eod_report)
+        print(eod_report)
 
     # Separate alert: only for the commodity currently held.
     if position:
