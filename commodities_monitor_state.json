@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-09-10T20:49:58.556051+00:00",
+  "timestamp": "2026-09-10T21:01:34.823855+00:00",
   "best": "Benzina RBOB",
   "direction": "LONG",
   "action": "COMPRA ORA",
@@ -21,9 +21,9 @@
         "entry_probability": 95.38,
         "probability_validated": null,
         "probability_status": "NON_VALIDATA",
-        "entry": 3.2259,
-        "stop": 3.1883,
-        "tp2": 3.3545,
+        "entry": 3.225,
+        "stop": 3.1871,
+        "tp2": 3.3543,
         "statistical_risk": {
           "available": true,
           "status": "VALIDATA",
@@ -47,13 +47,13 @@
         "setup_direction": "LONG",
         "model_signal": "LONG",
         "action_label": "LONG — ASPETTARE CONFERMA",
-        "score": 86.17,
+        "score": 85.67,
         "entry_probability": 88.75,
         "probability_validated": null,
         "probability_status": "NON_VALIDATA",
-        "entry": 5.1273,
-        "stop": 5.0332,
-        "tp2": 5.4538,
+        "entry": 5.1332,
+        "stop": 5.0383,
+        "tp2": 5.4617,
         "statistical_risk": {
           "available": true,
           "status": "VALIDATA",
@@ -70,36 +70,6 @@
       }
     },
     {
-      "name": "Soia",
-      "symbol": "SOYBEAN/USD",
-      "analysis": {
-        "signal": "WAIT",
-        "setup_direction": "LONG",
-        "model_signal": "LONG",
-        "action_label": "LONG — ASPETTARE CONFERMA",
-        "score": 74.43,
-        "entry_probability": 82.89,
-        "probability_validated": null,
-        "probability_status": "NON_VALIDATA",
-        "entry": 1326.42,
-        "stop": 1322.68,
-        "tp2": 1349.89,
-        "statistical_risk": {
-          "available": true,
-          "status": "VALIDATA",
-          "sl_atr": 2.0,
-          "tp_atr": 4.0,
-          "train_expectancy": 0.152,
-          "train_win_rate": 51.6,
-          "train_samples": 345,
-          "validation_expectancy": 0.583,
-          "validation_win_rate": 58.0,
-          "validation_samples": 231,
-          "method": "WALK_FORWARD_ATR_GRID"
-        }
-      }
-    },
-    {
       "name": "Olio di soia",
       "symbol": "SOYBEAN_OIL/USD",
       "analysis": {
@@ -107,7 +77,7 @@
         "setup_direction": "LONG",
         "model_signal": "SHORT",
         "action_label": "LONG — ASPETTARE CONFERMA",
-        "score": 71.08,
+        "score": 70.83,
         "entry_probability": 74.36,
         "probability_validated": null,
         "probability_status": "NON_VALIDATA",
@@ -130,6 +100,36 @@
       }
     },
     {
+      "name": "Soia",
+      "symbol": "SOYBEAN/USD",
+      "analysis": {
+        "signal": "WAIT",
+        "setup_direction": "LONG",
+        "model_signal": "LONG",
+        "action_label": "LONG — ASPETTARE CONFERMA",
+        "score": 73.5,
+        "entry_probability": 82.89,
+        "probability_validated": null,
+        "probability_status": "NON_VALIDATA",
+        "entry": 1326.42,
+        "stop": 1322.68,
+        "tp2": 1349.89,
+        "statistical_risk": {
+          "available": true,
+          "status": "VALIDATA",
+          "sl_atr": 2.0,
+          "tp_atr": 4.0,
+          "train_expectancy": 0.152,
+          "train_win_rate": 51.6,
+          "train_samples": 345,
+          "validation_expectancy": 0.583,
+          "validation_win_rate": 58.0,
+          "validation_samples": 231,
+          "method": "WALK_FORWARD_ATR_GRID"
+        }
+      }
+    },
+    {
       "name": "Avena",
       "symbol": "OATS/USD",
       "analysis": {
@@ -137,7 +137,7 @@
         "setup_direction": "LONG",
         "model_signal": "LONG",
         "action_label": "LONG — ASPETTARE CONFERMA",
-        "score": 63.72,
+        "score": 63.47,
         "entry_probability": 82.78,
         "probability_validated": null,
         "probability_status": "NON_VALIDATA",
