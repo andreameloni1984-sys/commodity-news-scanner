@@ -42,7 +42,7 @@ EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "21"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "4.3"
+BOT_VERSION = "5.0"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -173,6 +173,17 @@ KNOWLEDGE_SOURCES.extend([
     {"name": "IG Breakout Fakeout", "url": "https://www.ig.com/it/ig-academy/basi-analisi-tecnica/breakouts-and-fakeouts", "type": "web"},
     {"name": "Borsa Italiana Commodity", "url": "https://www.borsaitaliana.it/notizie/sotto-la-lente/commodity.htm", "type": "web"},
 ])
+# v5.0 — Research sources and methodology map. These sources inform concepts only;
+# no source is treated as proof of profitability. Every derived rule is validated on market data.
+KNOWLEDGE_SOURCES.extend([
+    {"name": "Gianluca Defendi - Trading con i volumi", "url": "https://www.hoeplieditore.it/hoepli-editore/articolo/trading-con-i-volumi-gianluca-defendi/9788836020317/3261", "type": "web"},
+    {"name": "Andrea Salari - Trading Intraday", "url": "https://www.andreasalari.it/", "type": "web"},
+    {"name": "PoliTO - Commodities + AI", "url": "https://webthesis.biblio.polito.it/20297/", "type": "web"},
+    {"name": "PoliTO - Trading System e Reti Neurali", "url": "https://webthesis.biblio.polito.it/17701/", "type": "web"},
+    {"name": "PoliTO - AI e Deep Learning nel mercato finanziario", "url": "https://webthesis.biblio.polito.it/25393/", "type": "web"},
+    {"name": "PoliTO - Intraday classification + pattern recognition", "url": "https://webthesis.biblio.polito.it/7654/", "type": "web"},
+])
+
 KNOWLEDGE_CONCEPTS = {
     "trend": ["trend", "trending", "trendline", "higher high", "lower low"],
     "reversal": ["reversal", "inversion", "inversione", "turning point"],
@@ -5363,6 +5374,22 @@ def save_monitor_state(ranked, best, position):
             "trigger_tf": t.get("timeframe"),
             "position": (position or {}).get("name"),
             "position_direction": (position or {}).get("direction"),
+            "ranked": [
+                {"name": x.get("name"), "symbol": x.get("symbol"), "analysis": {
+                    "signal": (x.get("analysis",{}) or {}).get("signal"),
+                    "setup_direction": (x.get("analysis",{}) or {}).get("setup_direction"),
+                    "model_signal": (x.get("analysis",{}) or {}).get("model_signal"),
+                    "action_label": (x.get("analysis",{}) or {}).get("action_label"),
+                    "score": (x.get("analysis",{}) or {}).get("score",0),
+                    "entry_probability": (x.get("analysis",{}) or {}).get("entry_probability",0),
+                    "probability_validated": (x.get("analysis",{}) or {}).get("probability_validated"),
+                    "probability_status": (x.get("analysis",{}) or {}).get("probability_status"),
+                    "entry": (x.get("analysis",{}) or {}).get("entry"),
+                    "stop": (x.get("analysis",{}) or {}).get("stop"),
+                    "tp2": (x.get("analysis",{}) or {}).get("tp2"),
+                    "statistical_risk": (x.get("analysis",{}) or {}).get("statistical_risk",{}),
+                }} for x in ranked[:5]
+            ],
         })
     except Exception as exc:
         print(f"⚠️ Monitor state non salvato: {exc}")
@@ -5390,7 +5417,7 @@ def build_telegram(ranked, best, position_message=None, position=None):
         timing=a.get('timing',{}); pattern=a.get('candle_pattern','N/D')
         action=a.get('action_label','ATTENDERE')
         lines += ['', '━━━━━━━━━━━━━━━━━━━━', f'{medal} {item["name"]}', '━━━━━━━━━━━━━━━━━━━━',
-                  f'🎯 AZIONE: {action}', f'🧭 DIREZIONE: {direction}', f'🧩 STATO ENTRY: {a.get("entry_state","N/D")}', f'📊 SCORE/QUALITÀ/CONF: {a.get("score",0):.0f}/{a.get("quality",0):.0f}/{a.get("confidence",0):.0f}',
+                  f'🎯 AZIONE: {action}', f'🧭 DIREZIONE: {direction}', f'🧩 STATO ENTRY: {a.get("entry_state","N/D")}', f'📊 SCORE/QUALITÀ/CONF: {a.get("score",0):.0f}/{a.get("quality",0):.0f}/{a.get("confidence",0):.0f}', f'🧪 PROB. VALIDATA: {a.get("probability_validated"):.1f}%' if isinstance(a.get("probability_validated"),(int,float)) else '🧪 PROB. VALIDATA: non ancora validata',
                   f'💰 PREZZO ATTUALE: {price:.4f}' if price is not None else '💰 PREZZO ATTUALE: N/D',
                   f'📥 ENTRATA: {entry:.4f}' if entry is not None else '📥 ENTRATA: N/D', f'📌 SETUP: {a.get("entry_method","N/D")}', f'⚡ TRIGGER: {a.get("entry_trigger",{}).get("kind","N/D")} {a.get("entry_trigger",{}).get("timeframe","")}'.strip(), f'🕯️ PATTERN: {pattern}', f'📚 STORICO SETUP: {a.get("pattern_backtest",{}).get("win_rate",0)*100:.0f}% successo' if a.get("pattern_backtest",{}).get("samples",0)>=5 else '📚 STORICO SETUP: dati insufficienti',
                   f'🧠 ENSEMBLE: {a.get("ensemble_alignment","N/D")} | RANK {a.get("ensemble_rank","N/D")} | {a.get("cross_sectional_score",50):.0f}/100',
@@ -5406,7 +5433,7 @@ def build_telegram(ranked, best, position_message=None, position=None):
             f'🛑 STOP LOSS: {stop:.4f}' if stop is not None else '🛑 STOP LOSS: N/D',
             f'🎯 TP1: {tp1:.4f}' if tp1 is not None else '🎯 TP1: N/D',
             f'🎯 TP2: {tp2:.4f}' if tp2 is not None else '🎯 TP2: N/D',
-            f'🎯 TP3: {tp3:.4f}' if tp3 is not None else '🎯 TP3: N/D',
+            f'🎯 TP3: {tp3:.4f}' if tp3 is not None else '🎯 TP3: N/D', f'📐 TP/SL STATISTICO: {(a.get("statistical_risk",{}) or {}).get("status","N/D")} | SL {(a.get("statistical_risk",{}) or {}).get("sl_atr","-")} ATR | TP {(a.get("statistical_risk",{}) or {}).get("tp_atr","-")} ATR',
             f'⏰ ORARIO MIGLIORE: {timing.get("best_time","N/D")}',
             f'⏳ FINESTRA: {timing.get("window","N/D")}',
         ]
@@ -6000,6 +6027,345 @@ def maybe_send_session_reports(ranked, best, position_message=None):
         send_telegram(_session_message("🇺🇸 USA SESSION UPDATE — RECHECK",selected,position_message)); sent["usa"]=today
     _save_communication_state(state)
 
+
+# ============================================================
+# v5.0 PREDICTIVE VALIDATION / SMART-MONEY PROXY / STATISTICAL RISK
+# ============================================================
+V5_MIN_CALIBRATION_SAMPLES = int(os.getenv("V5_MIN_CALIBRATION_SAMPLES", "30"))
+V5_MIN_RISK_TRADES = int(os.getenv("V5_MIN_RISK_TRADES", "25"))
+V5_REQUIRE_VALIDATED_PROB = os.getenv("V5_REQUIRE_VALIDATED_PROB", "0") == "1"
+V5_RISK_HORIZON_BARS = int(os.getenv("V5_RISK_HORIZON_BARS", "8"))
+
+
+def _v5_directional_log():
+    log = _json_load(PREDICTION_LOG_FILE, []) or []
+    return [x for x in log if x.get("status") == "EVALUATED" and x.get("direction") in ("LONG", "SHORT")]
+
+
+def v5_probability_calibration(name, direction):
+    """Calibrate the model probability using only already evaluated paper predictions.
+    Uses empirical-Bayes shrinkage toward 50% so tiny samples cannot create fake certainty.
+    """
+    rows = [x for x in _v5_directional_log()
+            if x.get("name") == name and x.get("direction") == direction]
+    wins = sum(x.get("verdict") == "CORRETTA" for x in rows)
+    losses = sum(x.get("verdict") == "ERRATA" for x in rows)
+    n = wins + losses
+    # Twelve neutral pseudo-observations keep early estimates conservative.
+    pseudo = 12
+    empirical = (wins + pseudo * 0.5) / (n + pseudo) if n + pseudo else 0.5
+    status = "VALIDATA" if n >= V5_MIN_CALIBRATION_SAMPLES else "NON_VALIDATA"
+    return {
+        "samples": n,
+        "wins": wins,
+        "losses": losses,
+        "raw_rate": round(wins / n * 100, 1) if n else None,
+        "calibrated_probability": round(empirical * 100, 1),
+        "status": status,
+        "method": "EMPIRICAL_BAYES_SHRINKAGE_50",
+    }
+
+
+def _v5_obv(candles):
+    if not candles:
+        return 0.0
+    obv = 0.0
+    prev = safe_float(candles[0].get("close"))
+    for c in candles[1:]:
+        close = safe_float(c.get("close")); vol = safe_float(c.get("volume"), 0.0) or 0.0
+        if close is None or prev is None:
+            continue
+        if close > prev: obv += vol
+        elif close < prev: obv -= vol
+        prev = close
+    return obv
+
+
+def v5_smart_money_proxy(candles, direction):
+    """Conservative price/volume proxy inspired by liquidity, pressure and Wyckoff concepts.
+    It does not pretend to observe institutional order flow when the provider exposes no order book.
+    """
+    if not candles or direction not in ("LONG", "SHORT"):
+        return {"score": 50.0, "state": "N/D", "available": False}
+    rows = candles[-80:]
+    closes = [safe_float(x.get("close")) for x in rows]
+    vols = [safe_float(x.get("volume"), 0.0) or 0.0 for x in rows]
+    closes = [x for x in closes if x is not None]
+    if len(closes) < 20:
+        return {"score": 50.0, "state": "DATI INSUFFICIENTI", "available": False}
+    last = closes[-1]
+    e20 = ema(closes, 20) or last
+    avg_vol = mean(vols[-20:])
+    last_vol = vols[-1] if vols else 0.0
+    vol_ratio = last_vol / avg_vol if avg_vol > 0 else 1.0
+    recent_ret = (closes[-1] / closes[-6] - 1.0) if len(closes) >= 6 and closes[-6] else 0.0
+    obv = _v5_obv(rows)
+    obv_prev = _v5_obv(rows[:-10]) if len(rows) > 30 else 0.0
+    obv_delta = obv - obv_prev
+    direction_sign = 1 if direction == "LONG" else -1
+    trend_component = 1 if (last > e20) == (direction == "LONG") else -1
+    momentum_component = 1 if recent_ret * direction_sign > 0 else -1
+    flow_component = 1 if obv_delta * direction_sign > 0 else -1
+    volume_component = 1 if vol_ratio >= 1.15 and momentum_component > 0 else 0
+    raw = 50 + 12 * trend_component + 15 * momentum_component + 15 * flow_component + 8 * volume_component
+    score = clamp(raw, 0, 100)
+    state = "ACCUMULAZIONE/PRESSIONE" if score >= 65 else "DISTRIBUZIONE/CONTROPRESSIONE" if score <= 35 else "MISTA"
+    return {"available": True, "score": round(score, 1), "state": state,
+            "volume_ratio": round(vol_ratio, 2), "recent_return": round(recent_ret * 100, 3),
+            "obv_delta": round(obv_delta, 2), "method": "PRICE_VOLUME_PROXY"}
+
+
+def v5_statistical_risk_engine(candles, direction):
+    """Select SL/TP from a small, walk-forward historical grid.
+    Uses only completed historical bars and a conservative same-bar rule.
+    """
+    if direction not in ("LONG", "SHORT") or len(candles or []) < 160:
+        return {"available": False, "status": "DATI INSUFFICIENTI"}
+    rows = candles[-900:]
+    atr_values = []
+    for i in range(len(rows)):
+        atr_values.append(atr(rows[:i+1], 14) if i >= 20 else None)
+    candidates = []
+    sl_mults = (1.0, 1.25, 1.5, 1.75, 2.0)
+    tp_mults = (1.5, 2.0, 2.5, 3.0, 3.5, 4.0)
+    start = max(30, int(len(rows) * 0.35))
+    end = max(start + 1, len(rows) - V5_RISK_HORIZON_BARS - 1)
+    split = start + int((end - start) * 0.60)
+
+    def evaluate_grid(a, b):
+        outcomes = []
+        for i in range(a, b):
+            av = atr_values[i]
+            entry = safe_float(rows[i].get("close"))
+            if av is None or entry is None or av <= 0:
+                continue
+            for sm in sl_mults:
+                for tm in tp_mults:
+                    stop = entry - sm * av if direction == "LONG" else entry + sm * av
+                    target = entry + tm * av if direction == "LONG" else entry - tm * av
+                    result = None
+                    for j in range(i + 1, min(i + 1 + V5_RISK_HORIZON_BARS, len(rows))):
+                        hi = safe_float(rows[j].get("high")); lo = safe_float(rows[j].get("low"))
+                        if hi is None or lo is None: continue
+                        hit_stop = lo <= stop if direction == "LONG" else hi >= stop
+                        hit_target = hi >= target if direction == "LONG" else lo <= target
+                        if hit_stop and hit_target:
+                            result = -sm
+                            break
+                        if hit_target:
+                            result = tm
+                            break
+                        if hit_stop:
+                            result = -sm
+                            break
+                    if result is None:
+                        last = safe_float(rows[min(i + V5_RISK_HORIZON_BARS, len(rows)-1)].get("close"))
+                        if last is None: continue
+                        result = (last-entry)/av if direction == "LONG" else (entry-last)/av
+                        result = clamp(result, -sm, tm)
+                    outcomes.append((sm, tm, result))
+        return outcomes
+
+    train = evaluate_grid(start, split)
+    valid = evaluate_grid(split, end)
+    if not train or not valid:
+        return {"available": False, "status": "NESSUN CAMPIONE"}
+
+    def rank_grid(data):
+        best = None
+        for sm in sl_mults:
+            for tm in tp_mults:
+                vals = [r for a,b,r in data if a == sm and b == tm]
+                if len(vals) < V5_MIN_RISK_TRADES: continue
+                expectancy = mean(vals)
+                win = sum(v > 0 for v in vals) / len(vals)
+                score = expectancy * 100 + win * 10 - abs(tm / sm - 2.0) * 2
+                candidate = (score, sm, tm, expectancy, win, len(vals))
+                if best is None or candidate[0] > best[0]: best = candidate
+        return best
+
+    train_best = rank_grid(train)
+    if not train_best:
+        return {"available": False, "status": "CAMPIONE TRAIN INSUFFICIENTE"}
+    sm, tm = train_best[1], train_best[2]
+    valid_vals = [r for a,b,r in valid if a == sm and b == tm]
+    if len(valid_vals) < V5_MIN_RISK_TRADES:
+        return {"available": False, "status": "VALIDAZIONE INSUFFICIENTE"}
+    valid_expectancy = mean(valid_vals)
+    valid_win = sum(v > 0 for v in valid_vals) / len(valid_vals)
+    robust = valid_expectancy > 0
+    return {"available": True, "status": "VALIDATA" if robust else "NON_VALIDATA",
+            "sl_atr": sm, "tp_atr": tm, "train_expectancy": round(train_best[3], 3),
+            "train_win_rate": round(train_best[4] * 100, 1), "train_samples": train_best[5],
+            "validation_expectancy": round(valid_expectancy, 3),
+            "validation_win_rate": round(valid_win * 100, 1), "validation_samples": len(valid_vals),
+            "method": "WALK_FORWARD_ATR_GRID"}
+
+
+def v5_enhance_analysis(name, analysis, candles, intraday_candles=None):
+    """Final v5 layer: calibrated probability, smart-money proxy and statistical risk."""
+    a = analysis
+    direction = a.get("setup_direction") or a.get("model_signal")
+    if direction not in ("LONG", "SHORT"):
+        return a
+    sm = v5_smart_money_proxy(intraday_candles or candles, direction)
+    a["smart_money_proxy"] = sm
+    # Smart-money proxy is deliberately bounded to avoid turning volume into a fake oracle.
+    sm_delta = ((sm.get("score", 50.0) - 50.0) * 0.10) if sm.get("available") else 0.0
+    a["score"] = clamp((safe_float(a.get("score"), 0) or 0) + sm_delta, 0, 100)
+
+    cal = v5_probability_calibration(name, direction)
+    raw_prob = safe_float(a.get("entry_probability"), None)
+    if raw_prob is None:
+        raw_prob = (safe_float(a.get("long_probability"), 0.5) or 0.5) * 100
+    if direction == "SHORT":
+        raw_direction_prob = 100 - raw_prob
+    else:
+        raw_direction_prob = raw_prob
+    if cal["status"] == "VALIDATA":
+        final_prob = 0.45 * raw_direction_prob + 0.55 * cal["calibrated_probability"]
+    else:
+        final_prob = raw_direction_prob
+    a["probability_raw"] = round(raw_direction_prob, 1)
+    a["probability_validated"] = round(final_prob, 1) if cal["status"] == "VALIDATA" else None
+    a["probability_validation"] = cal
+    a["probability_status"] = cal["status"]
+
+    risk = v5_statistical_risk_engine(intraday_candles or candles, direction)
+    a["statistical_risk"] = risk
+    if risk.get("available") and risk.get("status") == "VALIDATA":
+        price = safe_float(a.get("price")); av = safe_float(risk.get("sl_atr")); tv = safe_float(risk.get("tp_atr"))
+        atr_now = atr(intraday_candles or candles, 14) if (intraday_candles or candles) else None
+        if price and atr_now and av and tv:
+            if direction == "LONG":
+                a["stop"] = _price_round(price - av * atr_now); a["tp1"] = _price_round(price + max(1.5, tv*0.65) * atr_now); a["tp2"] = _price_round(price + tv * atr_now); a["tp3"] = _price_round(price + (tv + 1.0) * atr_now)
+            else:
+                a["stop"] = _price_round(price + av * atr_now); a["tp1"] = _price_round(price - max(1.5, tv*0.65) * atr_now); a["tp2"] = _price_round(price - tv * atr_now); a["tp3"] = _price_round(price - (tv + 1.0) * atr_now)
+            a["risk_method"] = "STATISTICO WALK-FORWARD"
+    # Hard entry gate only if explicitly enabled; default preserves paper research flow.
+    if V5_REQUIRE_VALIDATED_PROB and cal["status"] != "VALIDATA" and a.get("signal") in ("LONG", "SHORT"):
+        a["signal"] = "WAIT"; a["action_label"] = "ATTENDERE"
+        a.setdefault("entry_blockers", []).append("PROBABILITA_NON_VALIDATA")
+    return a
+
+
+
+def long_term_forecast(name, candles, analysis):
+    """v5 long-term forecast: commodity-specific, regime-conditioned and explicitly validated."""
+    if not LONG_TERM_ENABLED or len(candles or []) < 160:
+        return {"enabled": False, "status": "INSUFFICIENT_DATA"}
+    rows = candles[-1200:]
+    closes = [safe_float(x.get("close")) for x in rows]
+    closes = [x for x in closes if x is not None]
+    if len(closes) < 160:
+        return {"enabled": False, "status": "INSUFFICIENT_DATA"}
+    m20 = _daily_momentum(rows,20); m60 = _daily_momentum(rows,60); m120 = _daily_momentum(rows,120)
+    model_prob = safe_float(analysis.get("long_probability"),0.5) or 0.5
+    model_dir = analysis.get("setup_direction") or analysis.get("model_signal")
+    # Current momentum regime: use the sign and rough magnitude of 20d momentum.
+    current_sign = 1 if m20 > 0 else -1 if m20 < 0 else 0
+    out = {}
+    for d in LONG_TERM_HORIZONS_DAYS:
+        horizon = min(int(d), 365)
+        samples=[]
+        # Conditional historical analogues: same 20d momentum sign, then evaluate forward return.
+        max_i = len(rows)-horizon-1
+        for i in range(30, max_i):
+            c0 = safe_float(rows[i].get("close"))
+            c1 = safe_float(rows[i+horizon].get("close"))
+            if c0 is None or c1 is None or c0 <= 0: continue
+            m20_i = _daily_momentum(rows[:i+1],20)
+            sign_i = 1 if m20_i > 0 else -1 if m20_i < 0 else 0
+            if current_sign == 0 or sign_i == current_sign:
+                samples.append(1 if c1 > c0 else 0)
+        n=len(samples)
+        empirical=(sum(samples)+10*0.5)/(n+10) if n else 0.5
+        # Model + trend + conditional analogue. No claim of validation until sample threshold.
+        trend_bias = clamp(0.5 + 0.18*math.tanh(m20*18) + 0.10*math.tanh(m60*10) + 0.06*math.tanh(m120*7), 0.05, 0.95)
+        if model_dir == "SHORT": model_long = 1-model_prob
+        else: model_long = model_prob
+        if n >= 20:
+            p_long = clamp(0.35*model_long + 0.25*trend_bias + 0.40*empirical, 0.05, 0.95)
+            status="VALIDATA"
+        else:
+            p_long = clamp(0.55*model_long + 0.45*trend_bias, 0.10, 0.90)
+            status="NON_VALIDATA"
+        p_short=1-p_long
+        direction="LONG" if p_long>=0.56 else "SHORT" if p_short>=0.56 else "NEUTRALE"
+        out[str(d)]={"direction":direction,"long_probability":round(p_long*100,1),"short_probability":round(p_short*100,1),
+                     "confidence":round(abs(p_long-0.5)*200,1),"status":status,"historical_samples":n,
+                     "historical_hit_rate":round(empirical*100,1) if n else None}
+    return {"enabled":True,"status":"OK","price":safe_float(analysis.get("price")),
+            "generated_at":datetime.now(timezone.utc).isoformat(),"horizons":out,
+            "drivers":{"momentum20":round(m20*100,2),"momentum60":round(m60*100,2),"momentum120":round(m120*100,2),
+                        "model_probability":round(model_prob*100,1),"regime":(analysis.get("market_regime",{}) or {}).get("state","N/D"),
+                        "futures":(analysis.get("futures_structure",{}) or {}).get("score",0),
+                        "cyclical":(analysis.get("cyclical",{}) or {}).get("score",0),
+                        "political":(analysis.get("political",{}) or {}).get("score",0),
+                        "weather":(analysis.get("weather",{}) or {}).get("score",0)},
+            "method":"MODEL + MOMENTUM + CONDITIONAL HISTORICAL ANALOGUES"}
+
+def v5_daily_report():
+    """Actionable EOD report: ranking, validated probability, statistical risk and learning status."""
+    local_now = datetime.now(ZoneInfo("Europe/Rome"))
+    log = _json_load(PREDICTION_LOG_FILE, []) or []
+    if not isinstance(log, list): log = []
+    changed = False
+    for pred in log:
+        if pred.get("status") != "PENDING": continue
+        result = evaluate_prediction(pred, _future_candles_for_prediction(pred))
+        if result:
+            pred.update(result); pred["status"] = "EVALUATED"; changed = True
+    if changed: _json_save(PREDICTION_LOG_FILE, log)
+    today = local_now.date().isoformat()
+    rows = []
+    for p in log:
+        try: d = datetime.fromisoformat(str(p.get("created_at","")).replace("Z","+00:00")).astimezone(ZoneInfo("Europe/Rome")).date().isoformat()
+        except Exception: continue
+        if d == today: rows.append(p)
+    directional = [p for p in rows if p.get("direction") in ("LONG","SHORT") and p.get("status") == "EVALUATED"]
+    correct = sum(p.get("verdict") == "CORRETTA" for p in directional)
+    wrong = sum(p.get("verdict") == "ERRATA" for p in directional)
+    amb = sum(p.get("verdict") == "AMBIGUA" for p in directional)
+    pending = sum(p.get("status") == "PENDING" for p in rows)
+    accuracy = correct/(correct+wrong)*100 if correct+wrong else 0.0
+    state = _json_load(DAILY_REPORT_FILE,{}) or {}
+    if state.get("last_report_date") == today: return None
+    lines = [f"🌙 COMMODITIES DAILY REPORT v{BOT_VERSION}", f"📅 {local_now.strftime('%d/%m/%Y')}", "━━━━━━━━━━━━━━━━━━━━",
+             f"🎯 INTRADAY: {len(directional)} valutate | {correct} ✅ | {wrong} ❌ | {amb} ⚪ | {pending} aperte",
+             f"📈 Accuracy: {accuracy:.1f}%" if directional else "📈 Accuracy: NON ANCORA VALIDABILE", ""]
+    # Historical calibration snapshot.
+    calib = []
+    for p in _v5_directional_log():
+        calib.append(p)
+    if calib:
+        wins = sum(x.get("verdict") == "CORRETTA" for x in calib); total = sum(x.get("verdict") in ("CORRETTA","ERRATA") for x in calib)
+        lines.append(f"🧠 VALIDAZIONE STORICA: {wins}/{total} corretti | {wins/total*100:.1f}%" if total else "🧠 VALIDAZIONE STORICA: dati insufficienti")
+    else:
+        lines.append("🧠 VALIDAZIONE STORICA: in formazione — nessun campione valutato")
+    lines += ["", "🏆 COSA OSSERVARE DOMANI"]
+    # This section is populated by the latest persisted ranking state when available.
+    monitor = _json_load(MONITOR_STATE_FILE,{}) or {}
+    ranked = monitor.get("ranked", []) if isinstance(monitor, dict) else []
+    if ranked:
+        for i, item in enumerate(ranked[:5], 1):
+            a = item.get("analysis", {}) or {}; d = a.get("setup_direction") or a.get("model_signal") or "NONE"
+            prob = a.get("probability_validated")
+            prob_txt = f"{prob:.1f}% VALIDATA" if isinstance(prob,(int,float)) else "non validata"
+            risk = a.get("statistical_risk", {}) or {}
+            rr = 0.0
+            entry, stop, tp2 = a.get("entry") or a.get("price"), a.get("stop"), a.get("tp2")
+            if entry and stop and tp2 and abs(entry-stop)>0: rr = abs(tp2-entry)/abs(entry-stop)
+            lines.append(f"{i}. {item.get('name','N/D')} | {a.get('signal','WAIT')} | {d} | P {prob_txt} | Score {a.get('score',0):.0f} | R/R {rr:.2f}")
+            lines.append(f"   Entry {_fmt_price(entry)} | SL {_fmt_price(stop)} | TP2 {_fmt_price(tp2)} | rischio {risk.get('status','N/D')}")
+    else:
+        lines.append("Nessun ranking persistito disponibile in questa esecuzione.")
+    lines += ["", "🧪 Nota: le probabilità non validate NON vengono presentate come statisticamente dimostrate.", "🔒 PAPER ONLY — nessun ordine reale"]
+    state.update({"last_report_date": today, "accuracy": accuracy, "evaluated": len(directional), "total_readings": len(rows), "pending": pending})
+    _json_save(DAILY_REPORT_FILE, state)
+    return "\n".join(lines)
+
+
 # ============================================================
 # MAIN
 # ============================================================
@@ -6112,7 +6478,10 @@ def main():
             apply_futures_structure(analysis, _curve)
             analysis["v3_context"] = v3_context_summary(analysis)
 
-            # v4.3: long-term forecast is calculated from daily structure plus bounded context.
+            # v5.0: calibrated probability + smart-money proxy + walk-forward statistical risk.
+            analysis = v5_enhance_analysis(name, analysis, candles, intraday_candles)
+
+            # v5.0: long-term forecast uses the enhanced current state.
             analysis["long_term"] = long_term_forecast(name, candles, analysis)
 
             results.append({
@@ -6414,7 +6783,7 @@ def main():
     save_monitor_state(ranked, best, position)
 
     # Fine giornata: valuta le previsioni maturate e invia il report una sola volta.
-    eod_report = run_end_of_day_test()
+    eod_report = v5_daily_report() if (datetime.now(ZoneInfo("Europe/Rome")).hour == EOD_REPORT_HOUR and 0 <= datetime.now(ZoneInfo("Europe/Rome")).minute < 30) else None
     if eod_report:
         send_telegram(eod_report)
         print(eod_report)
