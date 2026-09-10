@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-09-10T23:15:16.078284+00:00",
+  "timestamp": "2026-09-10T23:31:42.211305+00:00",
   "data": {
     "Oro": {
       "enabled": true,
@@ -303,6 +303,104 @@
         }
       ],
       "temperature_change_mean": 1.56,
+      "historical_context": "recent 30-day observations + 10-day forecast"
+    },
+    "Petrolio WTI": {
+      "enabled": true,
+      "score": -2.4,
+      "label": "NEUTRALE",
+      "confidence": 52,
+      "regions": [
+        {
+          "region": "US Gulf",
+          "lat": 29.0,
+          "lon": -95.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 29.779999999999994,
+          "forecast_min_mean": 28.32,
+          "forecast_rain_total": 41.03,
+          "forecast_wind_max": 52.7,
+          "recent_temp_mean": 29.48709677419355,
+          "recent_rain_total": 85.8,
+          "recent_wind_max": 32.3,
+          "raw_forecast_dates": [
+            "2026-09-10",
+            "2026-09-11",
+            "2026-09-12",
+            "2026-09-13",
+            "2026-09-14",
+            "2026-09-15",
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19"
+          ]
+        }
+      ],
+      "temperature_change_mean": 0.29,
+      "historical_context": "recent 30-day observations + 10-day forecast"
+    },
+    "Caffè": {
+      "enabled": true,
+      "score": -42.9,
+      "label": "BEARISH",
+      "confidence": 64,
+      "regions": [
+        {
+          "region": "Brazil",
+          "lat": -20.0,
+          "lon": -47.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 26.5,
+          "forecast_min_mean": 16.689999999999998,
+          "forecast_rain_total": 42.9,
+          "forecast_wind_max": 24.0,
+          "recent_temp_mean": 22.23870967741936,
+          "recent_rain_total": 42.4,
+          "recent_wind_max": 26.5,
+          "raw_forecast_dates": [
+            "2026-09-10",
+            "2026-09-11",
+            "2026-09-12",
+            "2026-09-13",
+            "2026-09-14",
+            "2026-09-15",
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19"
+          ]
+        },
+        {
+          "region": "Vietnam",
+          "lat": 12.0,
+          "lon": 108.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 27.18,
+          "forecast_min_mean": 20.979999999999997,
+          "forecast_rain_total": 103.0,
+          "forecast_wind_max": 17.9,
+          "recent_temp_mean": 23.122580645161293,
+          "recent_rain_total": 306.5,
+          "recent_wind_max": 23.5,
+          "raw_forecast_dates": [
+            "2026-09-10",
+            "2026-09-11",
+            "2026-09-12",
+            "2026-09-13",
+            "2026-09-14",
+            "2026-09-15",
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19"
+          ]
+        }
+      ],
+      "temperature_change_mean": 4.16,
       "historical_context": "recent 30-day observations + 10-day forecast"
     }
   }
