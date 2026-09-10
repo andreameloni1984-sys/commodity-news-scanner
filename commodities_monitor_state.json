@@ -1,11 +1,163 @@
 {
-  "timestamp": "2026-09-10T19:20:56.360663+00:00",
+  "timestamp": "2026-09-10T19:48:14.564194+00:00",
   "best": "Benzina RBOB",
   "direction": "LONG",
   "action": "LONG — ASPETTARE CONFERMA",
   "entry_state": "ACTIVE_SETUP",
   "trigger": "PULLBACK + RIPARTENZA",
-  "trigger_tf": "5m",
+  "trigger_tf": "1m",
   "position": null,
-  "position_direction": null
+  "position_direction": null,
+  "ranked": [
+    {
+      "name": "Benzina RBOB",
+      "symbol": "RB/USD",
+      "analysis": {
+        "signal": "WAIT",
+        "setup_direction": "LONG",
+        "model_signal": "LONG",
+        "action_label": "LONG — ASPETTARE CONFERMA",
+        "score": 96.29,
+        "entry_probability": 95.46,
+        "probability_validated": null,
+        "probability_status": "NON_VALIDATA",
+        "entry": 3.2029,
+        "stop": 3.1658,
+        "tp2": 3.33,
+        "statistical_risk": {
+          "available": true,
+          "status": "VALIDATA",
+          "sl_atr": 1.75,
+          "tp_atr": 4.0,
+          "train_expectancy": 0.271,
+          "train_win_rate": 52.2,
+          "train_samples": 345,
+          "validation_expectancy": 0.596,
+          "validation_win_rate": 54.5,
+          "validation_samples": 231,
+          "method": "WALK_FORWARD_ATR_GRID"
+        }
+      }
+    },
+    {
+      "name": "Heating Oil",
+      "symbol": "HO/USD",
+      "analysis": {
+        "signal": "WAIT",
+        "setup_direction": "LONG",
+        "model_signal": "LONG",
+        "action_label": "LONG — ASPETTARE CONFERMA",
+        "score": 85.95,
+        "entry_probability": 88.76,
+        "probability_validated": null,
+        "probability_status": "NON_VALIDATA",
+        "entry": 5.0743,
+        "stop": 4.9447,
+        "tp2": 5.4946,
+        "statistical_risk": {
+          "available": true,
+          "status": "VALIDATA",
+          "sl_atr": 1.5,
+          "tp_atr": 4.0,
+          "train_expectancy": 0.081,
+          "train_win_rate": 38.6,
+          "train_samples": 345,
+          "validation_expectancy": 0.753,
+          "validation_win_rate": 51.5,
+          "validation_samples": 231,
+          "method": "WALK_FORWARD_ATR_GRID"
+        }
+      }
+    },
+    {
+      "name": "Petrolio Brent",
+      "symbol": "XBR/USD",
+      "analysis": {
+        "signal": "WAIT",
+        "setup_direction": "LONG",
+        "model_signal": "LONG",
+        "action_label": "LONG — ASPETTARE CONFERMA",
+        "score": 84.39,
+        "entry_probability": 87.0,
+        "probability_validated": null,
+        "probability_status": "NON_VALIDATA",
+        "entry": 107.413,
+        "stop": 105.909,
+        "tp2": 112.213,
+        "statistical_risk": {
+          "available": true,
+          "status": "VALIDATA",
+          "sl_atr": 1.5,
+          "tp_atr": 3.5,
+          "train_expectancy": 0.133,
+          "train_win_rate": 48.1,
+          "train_samples": 345,
+          "validation_expectancy": 0.513,
+          "validation_win_rate": 48.9,
+          "validation_samples": 231,
+          "method": "WALK_FORWARD_ATR_GRID"
+        }
+      }
+    },
+    {
+      "name": "Olio di soia",
+      "symbol": "SOYBEAN_OIL/USD",
+      "analysis": {
+        "signal": "WAIT",
+        "setup_direction": "LONG",
+        "model_signal": "SHORT",
+        "action_label": "LONG — ASPETTARE CONFERMA",
+        "score": 71.18,
+        "entry_probability": 74.36,
+        "probability_validated": null,
+        "probability_status": "NON_VALIDATA",
+        "entry": 71.682,
+        "stop": 71.217,
+        "tp2": 73.476,
+        "statistical_risk": {
+          "available": true,
+          "status": "VALIDATA",
+          "sl_atr": 2.0,
+          "tp_atr": 4.0,
+          "train_expectancy": 0.16,
+          "train_win_rate": 53.9,
+          "train_samples": 345,
+          "validation_expectancy": 0.085,
+          "validation_win_rate": 41.1,
+          "validation_samples": 231,
+          "method": "WALK_FORWARD_ATR_GRID"
+        }
+      }
+    },
+    {
+      "name": "Soia",
+      "symbol": "SOYBEAN/USD",
+      "analysis": {
+        "signal": "WAIT",
+        "setup_direction": "LONG",
+        "model_signal": "LONG",
+        "action_label": "LONG — ASPETTARE CONFERMA",
+        "score": 74.1,
+        "entry_probability": 82.89,
+        "probability_validated": null,
+        "probability_status": "NON_VALIDATA",
+        "entry": 1326.42,
+        "stop": 1322.68,
+        "tp2": 1349.89,
+        "statistical_risk": {
+          "available": true,
+          "status": "VALIDATA",
+          "sl_atr": 2.0,
+          "tp_atr": 4.0,
+          "train_expectancy": 0.154,
+          "train_win_rate": 51.6,
+          "train_samples": 345,
+          "validation_expectancy": 0.583,
+          "validation_win_rate": 58.0,
+          "validation_samples": 231,
+          "method": "WALK_FORWARD_ATR_GRID"
+        }
+      }
+    }
+  ]
 }
