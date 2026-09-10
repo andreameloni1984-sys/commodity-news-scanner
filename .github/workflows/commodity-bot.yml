@@ -35,24 +35,15 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
-          # ==========================================
-          # TRADING MODE
-          # ==========================================
           PAPER_TRADING_ONLY: '1'
           DEMO_TRADING_ENABLED: '0'
 
-          # ==========================================
-          # COMMUNICATION
-          # ==========================================
           COMMUNICATION_MODE: MORNING_USA_EVENT
           SILENT_INTERNAL_ANALYSIS: '1'
           EVENT_ALERTS_ENABLED: '0'
           MONITOR_SEND_FULL: '0'
           MONITOR_INTERVAL_MINUTES: '15'
 
-          # ==========================================
-          # TELEGRAM REPORTS
-          # ==========================================
           MORNING_REPORT_HOUR: '8'
           MORNING_REPORT_MINUTE: '0'
 
@@ -62,68 +53,39 @@ jobs:
           EOD_REPORT_HOUR: '21'
           EOD_REPORT_MINUTE: '0'
 
-          # ==========================================
-          # POLITICAL / GEOPOLITICAL INTELLIGENCE
-          # ==========================================
           POLITICAL_IMPACT_ENABLED: '1'
-
-          # Presidente degli Stati Uniti
           US_PRESIDENT_IMPACT_ENABLED: '1'
 
-          # Elezioni globali
           ELECTION_IMPACT_ENABLED: '1'
           ELECTION_LOOKBACK_DAYS: '21'
           ELECTION_CACHE_HOURS: '3'
 
-          # ==========================================
-          # LONG TERM FORECAST JOURNAL
-          # ==========================================
           LONG_TERM_ENABLED: '1'
           LONG_TERM_RETENTION_DAYS: '450'
           LONG_TERM_HORIZONS_DAYS: '30,90,180,365'
 
-          # ==========================================
-          # INTRADAY PREDICTION JOURNAL
-          # ==========================================
           INTRADAY_JOURNAL_ALL: '1'
           INTRADAY_JOURNAL_RETENTION_DAYS: '120'
           INTRADAY_EVAL_HOURS: '6'
 
-          # ==========================================
-          # FUTURES / MARKET STRUCTURE
-          # ==========================================
           FUTURES_STRUCTURE_ENABLED: '1'
 
-          # ==========================================
-          # WEATHER / DISASTER INTELLIGENCE
-          # ==========================================
           WEATHER_ENABLED: '1'
           DISASTER_ENABLED: '1'
 
-          # ==========================================
-          # EARLY OPPORTUNITY ENGINE
-          # ==========================================
           EARLY_OPPORTUNITY_ENABLED: '1'
 
-          # ==========================================
-          # ENTRY FILTERS
-          # ==========================================
           MIN_ENTRY_PROBABILITY: '62'
           MIN_ENTRY_QUALITY: '55'
           MIN_ENTRY_CONFIDENCE: '60'
-
           MIN_ENTRY_RR: '2.5'
           MIN_ENTRY_RR_TP1: '1.5'
           MIN_ENTRY_RR_TP2: '2.0'
-
           MAX_ENTRY_STOP_ATR: '2.5'
 
         run: |
           python commodity_bot.py
 
-      # ==========================================
-      # SAVE JOURNALS / STATE
-      # ==========================================
       - name: Persist bot journals and state
         run: |
           git config user.name 'github-actions[bot]'
