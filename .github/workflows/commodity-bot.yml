@@ -1,60 +1,107 @@
-name: Commodities Bot v3.8 Event Driven
+name: Commodities Bot v4.1
 
 on:
   schedule:
-    - cron: '*/15 * * * *'
+    # Esecuzione interna ogni 15 minuti
+    - cron: "*/15 * * * *"
   workflow_dispatch:
 
-concurrency:
-  group: commodities-bot-v3-8
-  cancel-in-progress: false
+permissions:
+  contents: write
 
 jobs:
-  run:
+  run-bot:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests
+          pip install requests pandas numpy python-dateutil
 
-      - name: Run Commodities Bot v3.8
+      - name: Run Commodities Bot
         env:
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
           NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
-          PAPER_TRADING_ONLY: '1'
-          DEMO_TRADING_ENABLED: '0'
+          # ==========================================
+          # COMUNICAZIONE
+          # ==========================================
+          COMMUNICATION_MODE: "MORNING_USA_EVENT"
+          SILENT_INTERNAL_ANALYSIS: "1"
+          EVENT_ALERTS_ENABLED: "0"
+          MONITOR_SEND_FULL: "0"
 
-          MONITOR_INTERVAL_MINUTES: '15'
+          # ==========================================
+          # ORARI REPORT — ORA ITALIANA
+          # ==========================================
+          MORNING_REPORT_HOUR: "8"
+          MORNING_REPORT_MINUTE: "0"
 
-          COMMUNICATION_MODE: 'MORNING_USA_EVENT'
-          SILENT_INTERNAL_ANALYSIS: '0'
-          EVENT_ALERTS_ENABLED: '1'
-          MONITOR_SEND_FULL: '1'
+          USA_REPORT_HOUR: "14"
+          USA_REPORT_MINUTE: "30"
 
-          MORNING_REPORT_HOUR: '5'
-          MORNING_REPORT_MINUTE: '30'
+          EOD_REPORT_HOUR: "21"
+          EOD_REPORT_MINUTE: "0"
 
-          USA_REPORT_HOUR: '14'
-          USA_REPORT_MINUTE: '30'
+          # ==========================================
+          # TRADING / PAPER MODE
+          # ==========================================
+          PAPER_TRADING_ONLY: "1"
+          DEMO_TRADING_ENABLED: "0"
 
-          EOD_REPORT_HOUR: '21'
+          # ==========================================
+          # MONITORAGGIO INTERNO
+          # ==========================================
+          MONITOR_INTERVAL_MINUTES: "15"
 
-          MIN_ENTRY_PROBABILITY: '62'
-          MIN_ENTRY_QUALITY: '55'
-          MIN_ENTRY_CONFIDENCE: '60'
-          MIN_ENTRY_RR: '2.0'
+          # ==========================================
+          # FILTRI OPERATIVI
+          # ==========================================
+          MIN_ENTRY_PROBABILITY: "62"
+          MIN_SETUP_QUALITY: "55"
+          MIN_CONFIDENCE: "60"
 
-        run: python commodity_bot.py
+          MIN_RR: "2.5"
+          TP1_RR: "1.5"
+          TP2_RR: "2.0"
+
+          MAX_STOP_ATR: "2.5"
+
+          # ==========================================
+          # PREVISIONE
+          # ==========================================
+          PREDICTION_HORIZON_HOURS: "6"
+
+        run: |
+          python commodity_bot.py
+
+      - name: Save bot state
+        run: |
+          git config user.name "commodities-bot"
+          git config user.email "commodities-bot@users.noreply.github.com"
+
+          git add \
+            commodities_communication_state.json \
+            commodities_daily_selection.json \
+            commodities_monitor_state.json \
+            2>/dev/null || true
+
+          if git diff --cached --quiet; then
+            echo "Nessun aggiornamento di stato da salvare."
+          else
+            git commit -m "Update commodities bot state" || true
+            git push || true
+          fi
