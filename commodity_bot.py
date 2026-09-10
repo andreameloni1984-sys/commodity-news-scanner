@@ -42,7 +42,7 @@ EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "21"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "3.8"
+BOT_VERSION = "4.1"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -75,14 +75,14 @@ FUTURES_CACHE_HOURS = int(os.getenv("FUTURES_CACHE_HOURS", "2"))
 # (for example by GitHub Actions cron */15); it does not sleep inside a run.
 MONITOR_INTERVAL_MINUTES = int(os.getenv("MONITOR_INTERVAL_MINUTES", "15"))
 MONITOR_TOP_N = int(os.getenv("MONITOR_TOP_N", "3"))
-MONITOR_SEND_FULL = os.getenv("MONITOR_SEND_FULL", "1") == "1"
+MONITOR_SEND_FULL = os.getenv("MONITOR_SEND_FULL", "0") == "1"
 
 # v3.6 — Morning / USA / Event Driven communication. Internal analysis can run often,
 # but Telegram is intentionally quiet except for scheduled decision points,
 # material scenario changes, and the daily statistical report.
 COMMUNICATION_MODE = os.getenv("COMMUNICATION_MODE", "MORNING_USA_EVENT")
-MORNING_REPORT_HOUR = int(os.getenv("MORNING_REPORT_HOUR", "5"))
-MORNING_REPORT_MINUTE = int(os.getenv("MORNING_REPORT_MINUTE", "30"))
+MORNING_REPORT_HOUR = int(os.getenv("MORNING_REPORT_HOUR", "8"))
+MORNING_REPORT_MINUTE = int(os.getenv("MORNING_REPORT_MINUTE", "0"))
 USA_REPORT_HOUR = int(os.getenv("USA_REPORT_HOUR", "14"))
 USA_REPORT_MINUTE = int(os.getenv("USA_REPORT_MINUTE", "30"))
 EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "21"))
@@ -4672,25 +4672,22 @@ def demo_execution_adapter(results, position):
 # ============================================================
 
 def send_telegram(message):
-    """Send a Telegram message and explicitly report API success/failure."""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("❌ Telegram non configurato: token o chat_id mancanti.")
+        print("⚠️ Telegram non configurato: controlla TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID.")
         return False
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
+
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message,
+    }
 
     try:
         response = requests.post(url, json=payload, timeout=20)
-        data = response.json()
-        if response.ok and data.get("ok") is True:
-            print("✅ Telegram: messaggio inviato.")
-            return True
-        print(f"❌ Telegram API: HTTP {response.status_code} | {data}")
-        return False
+        response.raise_for_status()
     except Exception as error:
-        print(f"❌ Errore Telegram: {error}")
-        return False
+        print(f"⚠️ Errore Telegram: {error}")
 
 
 def icon_for_signal(signal):
@@ -5706,62 +5703,207 @@ def finalize_v26_analysis(analysis):
 
 
 # ============================================================
-# v3.6 COMMUNICATION ENGINE
+# v4.1 COMMUNICATION ENGINE — 08:00 / USA / EOD + WEEKLY + MONTHLY
+# Internal analysis remains every 15 minutes; Telegram only at the three
+# decision/report moments. One commodity is selected and locked each day.
 # ============================================================
+DAILY_SELECTION_FILE = "commodities_daily_selection.json"
+COMMUNICATION_STATE_FILE = "commodities_communication_state.json"
+
+
 def _communication_state():
-    return _json_load("commodities_communication_state.json", {}) or {}
+    return _json_load(COMMUNICATION_STATE_FILE, {}) or {}
+
 
 def _save_communication_state(state):
-    _json_save("commodities_communication_state.json", state)
+    _json_save(COMMUNICATION_STATE_FILE, state)
 
-def _session_message(label, ranked, best, position_message=None):
-    a = best.get("analysis", {}) or {}
-    direction = a.get("setup_direction") or a.get("model_signal") or "NONE"
-    state = a.get("entry_state", "WATCH")
-    confluence_ok = bool((a.get("intraday_core", {}) or {}).get("confluence_ok", False))
-    if state == "ENTRY_CONFIRMED" and confluence_ok and direction in ("LONG", "SHORT"):
-        action = "COMPRA ORA" if direction == "LONG" else "VENDI ORA"
-        icon = "🟢" if direction == "LONG" else "🔴"
-        display_signal = f"{icon} {direction} — {action}"
-    elif direction in ("LONG", "SHORT") and state not in ("SAFETY_BLOCK",):
-        icon = "🟡"
-        display_signal = f"{icon} {direction} — ASPETTARE CONFERMA"
-    else:
-        display_signal = "⚪ NO TRADE"
-    lines = [f"{label}", "", f"🥇 {best.get('name','N/D')}", display_signal, "",
-             f"💰 Prezzo: {_fmt_price(a.get('price'))}",
-             f"📊 Score: {safe_float(a.get('score'),0) or 0:.0f}/100",
-             f"📈 Probabilità modello: {safe_float(a.get('entry_probability'),0) or 0:.1f}%",
-             f"🧠 Confidenza: {safe_float(a.get('confidence'),0) or 0:.1f}/100"]
-    if a.get("entry") is not None: lines.append(f"🎯 Entry: {_fmt_price(a.get('entry'))}")
-    if a.get("stop") is not None: lines.append(f"🛑 Stop: {_fmt_price(a.get('stop'))}")
-    if a.get("tp1") is not None: lines.append(f"🎯 TP1: {_fmt_price(a.get('tp1'))}")
-    if a.get("tp2") is not None: lines.append(f"🎯 TP2: {_fmt_price(a.get('tp2'))}")
-    if a.get("tp3") is not None: lines.append(f"🎯 TP3: {_fmt_price(a.get('tp3'))}")
-    core = a.get("intraday_core", {}) or {}
-    if core.get("rr_tp1") is not None: lines.append(f"📐 R/R: TP1 {core.get('rr_tp1'):.2f} | TP2 {core.get('rr_tp2'):.2f} | TP3 {core.get('rr_tp3'):.2f}")
-    if core.get("stop_atr") is not None and core.get("stop_atr") < 900: lines.append(f"🛡️ Stop/ATR: {core.get('stop_atr'):.2f}x")
-    reg = (a.get("market_regime", {}) or {}).get("state")
+
+def _daily_selection_state():
+    return _json_load(DAILY_SELECTION_FILE, {}) or {}
+
+
+def _save_daily_selection_state(state):
+    _json_save(DAILY_SELECTION_FILE, state)
+
+
+def _find_ranked(ranked, name):
+    for item in ranked:
+        if item.get("name") == name and item.get("available"):
+            return item
+    return None
+
+
+def _operational_view(item):
+    a=item.get("analysis",{}) or {}
+    direction=a.get("setup_direction") or a.get("model_signal") or "NONE"
+    state=a.get("entry_state", "WATCH")
+    conf=bool((a.get("intraday_core",{}) or {}).get("confluence_ok",False))
+    if state == "ENTRY_CONFIRMED" and conf and direction in ("LONG","SHORT"):
+        return ("🟢 ENTRARE ORA" if direction=="LONG" else "🔴 ENTRARE ORA")
+    if direction in ("LONG","SHORT"):
+        return f"🟡 {direction} — ASPETTARE CONFERMA"
+    return "⚪ NO TRADE"
+
+
+def _selection_message(item, label="🌅 SCELTA COMMODITY DEL GIORNO"):
+    a=item.get("analysis",{}) or {}
+    direction=a.get("setup_direction") or a.get("model_signal") or "NONE"
+    lines=[label,"",f"🏆 {item.get('name','N/D')}",
+           f"🎯 {_operational_view(item)}","",
+           f"💰 Prezzo: {_fmt_price(a.get('price'))}",
+           f"📊 Score: {safe_float(a.get('score'),0) or 0:.1f}/100",
+           f"📈 Probabilità: {safe_float(a.get('entry_probability'),0) or 0:.1f}%",
+           f"🧠 Confidenza: {safe_float(a.get('confidence'),0) or 0:.1f}/100",
+           f"⭐ Qualità: {safe_float(a.get('quality'),0) or 0:.1f}/100",
+           f"🧭 Direzione: {direction}"]
+    for key,lab in (("entry","📍 Entry"),("stop","🛑 SL"),("tp1","🎯 TP1"),("tp2","🎯 TP2"),("tp3","🎯 TP3")):
+        if a.get(key) is not None: lines.append(f"{lab}: {_fmt_price(a.get(key))}")
+    core=a.get("intraday_core",{}) or {}
+    if core.get("rr_tp1") is not None:
+        lines.append(f"📐 R/R: TP1 {core.get('rr_tp1'):.2f} | TP2 {core.get('rr_tp2'):.2f}")
+    reg=(a.get("market_regime",{}) or {}).get("state")
     if reg: lines.append(f"🌍 Regime: {reg}")
-    blockers = a.get("entry_blockers", []) or []
-    if blockers: lines.append("⚠️ " + " | ".join(blockers[:4]))
-    pa = a.get("price_action", {}) or {}
-    patterns = pa.get("patterns", []) or []
+    blockers=a.get("entry_blockers",[]) or []
+    if blockers: lines.append("⚠️ Conferma richiesta: " + " | ".join(blockers[:4]))
+    pa=a.get("price_action",{}) or {}
+    patterns=pa.get("patterns",[]) or []
     if patterns: lines.append("🕯️ " + " + ".join(patterns[:3]))
-    if position_message: lines += ["", "📌 POSIZIONE", position_message]
-    lines += ["", "🧪 PAPER ONLY — nessun ordine reale"]
+    lines += ["","🔒 Una sola commodity selezionata oggi","🧪 PAPER ONLY — nessun ordine reale"]
     return "\n".join(lines)
+
+
+def _usa_message(item):
+    a=item.get("analysis",{}) or {}
+    lines=["🇺🇸 SESSIONE AMERICANA — CHECK OPERATIVO","",f"🏆 {item.get('name','N/D')}",
+           f"🎯 {_operational_view(item)}","",
+           f"💰 Prezzo: {_fmt_price(a.get('price'))}",
+           f"🧭 Direzione: {a.get('setup_direction') or a.get('model_signal') or 'NONE'}",
+           f"📊 Score: {safe_float(a.get('score'),0) or 0:.1f}/100",
+           f"📈 Probabilità: {safe_float(a.get('entry_probability'),0) or 0:.1f}%",
+           f"🧠 Confidenza: {safe_float(a.get('confidence'),0) or 0:.1f}/100",
+           f"⭐ Qualità: {safe_float(a.get('quality'),0) or 0:.1f}/100"]
+    for key,lab in (("entry","📍 Entry"),("stop","🛑 SL"),("tp1","🎯 TP1"),("tp2","🎯 TP2"),("tp3","🎯 TP3")):
+        if a.get(key) is not None: lines.append(f"{lab}: {_fmt_price(a.get(key))}")
+    usd=a.get("usd",{}) or {}
+    if usd: lines.append(f"💵 Dollaro: {usd.get('label', usd.get('state','N/D'))}")
+    news=a.get("news",{}) or {}
+    if news: lines.append(f"📰 News score: {safe_float(news.get('score'),0) or 0:+.1f}")
+    core=a.get("intraday_core",{}) or {}
+    if core.get("buy_pressure") is not None or core.get("sell_pressure") is not None:
+        lines.append(f"🟢 Acquisti: {safe_float(core.get('buy_pressure'),0) or 0:.1f} | 🔴 Vendite: {safe_float(core.get('sell_pressure'),0) or 0:.1f}")
+    blockers=a.get("entry_blockers",[]) or []
+    if blockers: lines.append("⚠️ " + " | ".join(blockers[:4]))
+    lines += ["","📌 Il segnale delle 08:00 è CONFERMATO/AGGIORNATO con la sessione USA.","🧪 PAPER ONLY — nessun ordine reale"]
+    return "\n".join(lines)
+
+
+def _stats_from_selection_history(history, start_date=None, end_date=None):
+    rows=[]
+    for day,rec in history.items() if isinstance(history,dict) else []:
+        if start_date and day < start_date: continue
+        if end_date and day > end_date: continue
+        result=rec.get("result")
+        if result in ("CORRETTA","ERRATA","AMBIGUA"): rows.append(rec)
+    c=sum(r.get("result")=="CORRETTA" for r in rows); w=sum(r.get("result")=="ERRATA" for r in rows); amb=sum(r.get("result")=="AMBIGUA" for r in rows)
+    acc=c/(c+w)*100 if c+w else 0
+    return rows,c,w,amb,acc
+
+
+def _daily_selection_report(now, ranked=None):
+    hist=_daily_selection_state(); today=now.date().isoformat(); rec=hist.get(today)
+    if not rec: return None
+    # Evaluate the locked morning call against the current end-of-day price.
+    # This is a directional paper result, not a broker P/L claim.
+    result=rec.get("result","IN VALUTAZIONE")
+    if result == "IN VALUTAZIONE" and ranked:
+        selected=_find_ranked(ranked, rec.get("name"))
+        if selected:
+            cur=safe_float((selected.get("analysis",{}) or {}).get("price"))
+            op=safe_float(rec.get("price"))
+            direction=rec.get("direction")
+            if cur is not None and op is not None and direction in ("LONG","SHORT"):
+                if cur == op: result="NEUTRALE"
+                elif (direction=="LONG" and cur>op) or (direction=="SHORT" and cur<op): result="CORRETTA"
+                else: result="ERRATA"
+                rec["result"]=result; rec["close_price"]=cur; rec["evaluated_at"]=datetime.now(timezone.utc).isoformat()
+                hist[today]=rec; _save_daily_selection_state(hist)
+    return "\n".join([
+        "📊 RESOCONTO GIORNALIERO COMMODITIES","",
+        f"🏆 Scelta del giorno: {rec.get('name','N/D')}",
+        f"🎯 Previsione: {rec.get('direction','NONE')}",
+        f"📌 Risultato: {result}",
+        f"💰 Prezzo scelta: {_fmt_price(rec.get('price'))}",
+        f"📈 Probabilità iniziale: {safe_float(rec.get('probability'),0) or 0:.1f}%",
+        "",
+        "🔎 Il risultato viene aggiornato quando la finestra di valutazione è maturata.",
+        "🧪 PAPER ONLY — nessun ordine reale"
+    ])
+
+
+def _periodic_selection_report(kind, now):
+    hist=_daily_selection_state()
+    if kind=="SETTIMANALE":
+        start=now.date()-timedelta(days=6); end=now.date()
+    else:
+        first=now.date().replace(day=1)
+        start=first; end=now.date()
+    rows,c,w,amb,acc=_stats_from_selection_history(hist,start.isoformat(),end.isoformat())
+    if not rows:
+        return None
+    best=max(rows,key=lambda r:safe_float(r.get("probability"),0) or 0)
+    lines=[f"📊 RESOCONTO {kind} COMMODITIES","",f"📅 {start.isoformat()} → {end.isoformat()}",
+           f"🎯 Previsioni valutate: {len(rows)}",f"✅ Azzeccate: {c}",f"❌ Sbagliate: {w}",f"⚪ Ambigue: {amb}",f"📈 Accuratezza: {acc:.1f}%",""]
+    lines.append(f"🏆 Migliore probabilità: {best.get('name','N/D')} | {safe_float(best.get('probability'),0) or 0:.1f}%")
+    counts={}
+    for r in rows: counts[r.get("name","N/D")]=counts.get(r.get("name","N/D"),0)+1
+    if counts:
+        lines.append("📌 Commodity selezionate: " + ", ".join(f"{k} ({v})" for k,v in sorted(counts.items(),key=lambda x:(-x[1],x[0]))))
+    lines += ["","🧪 PAPER ONLY — nessun ordine reale"]
+    return "\n".join(lines)
+
 
 def maybe_send_session_reports(ranked, best, position_message=None):
     if COMMUNICATION_MODE != "MORNING_USA_EVENT": return
-    now=datetime.now(ZoneInfo("Europe/Rome")); today=now.date().isoformat(); state=_communication_state()
-    sent=state.setdefault("sent", {})
+    now=datetime.now(ZoneInfo("Europe/Rome")); today=now.date().isoformat()
+    state=_communication_state(); sent=state.setdefault("sent",{})
+    hist=_daily_selection_state()
+
+    # 08:00: select and lock ONE commodity after Asia + early Europe.
     if now.hour==MORNING_REPORT_HOUR and MORNING_REPORT_MINUTE <= now.minute < MORNING_REPORT_MINUTE+30 and sent.get("morning") != today:
-        send_telegram(_session_message("🌅 MORNING SIGNAL", ranked, best, position_message))
-        sent["morning"]=today
+        if best.get("available"):
+            a=best.get("analysis",{}) or {}
+            hist[today]={"name":best.get("name"),"symbol":best.get("symbol"),
+                         "direction":a.get("setup_direction") or a.get("model_signal") or "NONE",
+                         "price":safe_float(a.get("price")),"probability":safe_float(a.get("entry_probability"),0) or 0,
+                         "created_at":datetime.now(timezone.utc).isoformat(),"result":"IN VALUTAZIONE"}
+            _save_daily_selection_state(hist)
+            send_telegram(_selection_message(best))
+            sent["morning"]=today
+
+    # USA: re-check the LOCKED morning selection, never pick a new commodity.
     if now.hour==USA_REPORT_HOUR and USA_REPORT_MINUTE <= now.minute < USA_REPORT_MINUTE+30 and sent.get("usa") != today:
-        send_telegram(_session_message("🇺🇸 USA SESSION UPDATE", ranked, best, position_message))
-        sent["usa"]=today
+        rec=hist.get(today); selected=_find_ranked(ranked,rec.get("name")) if rec else None
+        if selected:
+            send_telegram(_usa_message(selected)); sent["usa"]=today
+
+    # EOD: all-commodities statistical report + selection result.
+    if now.hour==EOD_REPORT_HOUR and now.minute < 30 and sent.get("eod") != today:
+        report=run_end_of_day_test()
+        daily=_daily_selection_report(now, ranked)
+        if report: send_telegram(report)
+        if daily: send_telegram(daily)
+        if report or daily: sent["eod"]=today
+
+    # Friday weekly report and last calendar day monthly report.
+    if now.hour==EOD_REPORT_HOUR and now.minute < 30 and now.weekday()==4 and sent.get("weekly") != today:
+        report=_periodic_selection_report("SETTIMANALE",now)
+        if report: send_telegram(report); sent["weekly"]=today
+    tomorrow=now.date()+timedelta(days=1)
+    if now.hour==EOD_REPORT_HOUR and now.minute < 30 and tomorrow.month != now.month and sent.get("monthly") != today:
+        report=_periodic_selection_report("MENSILE",now)
+        if report: send_telegram(report); sent["monthly"]=today
+
     _save_communication_state(state)
 
 # ============================================================
@@ -6161,18 +6303,12 @@ def main():
     # v3.3: due alert separati e compatti ad ogni esecuzione.
     # Il job esterno deve essere schedulato ogni 15 minuti.
     monitor_message = build_telegram_5m(ranked, best, position_message, position)
-    if MONITOR_SEND_FULL:
+    if MONITOR_SEND_FULL and not SILENT_INTERNAL_ANALYSIS:
         send_telegram(monitor_message)
     else:
-        print("📡 Internal monitor: Telegram alert periodico DISATTIVATO.")
+        print("📡 Internal monitor: Telegram periodico DISATTIVATO.")
     maybe_send_session_reports(ranked, best, position_message)
     save_monitor_state(ranked, best, position)
-
-    # Fine giornata: valuta le previsioni maturate e invia il report una sola volta.
-    eod_report = run_end_of_day_test()
-    if eod_report:
-        send_telegram(eod_report)
-        print(eod_report)
 
     # Separate alert: only for the commodity currently held.
     if position:
