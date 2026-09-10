@@ -1,0 +1,127 @@
+{
+  "Oro": {
+    "direction": "SHORT",
+    "score": -49.45103627570028,
+    "updated_at": "2026-09-10T18:59:56.106221+00:00"
+  },
+  "Argento": {
+    "direction": "SHORT",
+    "score": -47.75436044712877,
+    "updated_at": "2026-09-10T19:00:03.991126+00:00"
+  },
+  "Platino": {
+    "direction": "SHORT",
+    "score": -41.201686085542896,
+    "updated_at": "2026-09-10T19:00:23.645738+00:00"
+  },
+  "Palladio": {
+    "direction": "SHORT",
+    "score": -55.14265832414375,
+    "updated_at": "2026-09-10T19:00:30.015431+00:00"
+  },
+  "Petrolio WTI": {
+    "direction": "LONG",
+    "score": 63.35758721393346,
+    "updated_at": "2026-09-10T19:00:36.499843+00:00"
+  },
+  "Petrolio Brent": {
+    "direction": "LONG",
+    "score": 65.2669259318769,
+    "updated_at": "2026-09-10T19:00:57.003429+00:00"
+  },
+  "Gas Naturale": {
+    "direction": "NONE",
+    "score": 0.0,
+    "updated_at": "2026-09-10T19:01:16.741734+00:00"
+  },
+  "Benzina RBOB": {
+    "direction": "LONG",
+    "score": 78.95421651581641,
+    "updated_at": "2026-09-10T19:01:48.288895+00:00"
+  },
+  "Heating Oil": {
+    "direction": "LONG",
+    "score": 64.24406778133232,
+    "updated_at": "2026-09-10T19:01:56.648225+00:00"
+  },
+  "Rame": {
+    "direction": "SHORT",
+    "score": -29.730466876372972,
+    "updated_at": "2026-09-10T19:02:03.355983+00:00"
+  },
+  "Grano": {
+    "direction": "LONG",
+    "score": 30.43556960868382,
+    "updated_at": "2026-09-10T19:02:26.812138+00:00"
+  },
+  "Mais": {
+    "direction": "LONG",
+    "score": 56.95988721420513,
+    "updated_at": "2026-09-10T19:03:10.802896+00:00"
+  },
+  "Soia": {
+    "direction": "LONG",
+    "score": 67.06144082191396,
+    "updated_at": "2026-09-10T19:03:20.467159+00:00"
+  },
+  "Farina di soia": {
+    "direction": "LONG",
+    "score": 64.64696269994876,
+    "updated_at": "2026-09-10T19:03:26.327446+00:00"
+  },
+  "Olio di soia": {
+    "direction": "LONG",
+    "score": 59.99937513735915,
+    "updated_at": "2026-09-10T19:03:31.064321+00:00"
+  },
+  "Avena": {
+    "direction": "LONG",
+    "score": 63.90329460760103,
+    "updated_at": "2026-09-10T19:03:37.443215+00:00"
+  },
+  "Riso": {
+    "direction": "LONG",
+    "score": 63.570959349258786,
+    "updated_at": "2026-09-10T19:03:42.728539+00:00"
+  },
+  "Caffè": {
+    "direction": "SHORT",
+    "score": -31.82804940420969,
+    "updated_at": "2026-09-10T19:03:47.571849+00:00"
+  },
+  "Cacao": {
+    "direction": "SHORT",
+    "score": -43.39051561338643,
+    "updated_at": "2026-09-10T19:04:18.067452+00:00"
+  },
+  "Zucchero": {
+    "direction": "LONG",
+    "score": 48.813357787979456,
+    "updated_at": "2026-09-10T19:04:25.838557+00:00"
+  },
+  "Cotone": {
+    "direction": "LONG",
+    "score": 25.53588736061302,
+    "updated_at": "2026-09-10T19:04:32.045853+00:00"
+  },
+  "Succo d'arancia": {
+    "direction": "LONG",
+    "score": 12.337040115966216,
+    "updated_at": "2026-09-10T19:04:37.293850+00:00"
+  },
+  "Bovini vivi": {
+    "direction": "LONG",
+    "score": 56.341628353616066,
+    "updated_at": "2026-09-10T19:04:41.949436+00:00"
+  },
+  "Maiali magri": {
+    "direction": "LONG",
+    "score": 2.819724060432744,
+    "updated_at": "2026-09-10T19:04:48.428237+00:00"
+  },
+  "Feeder Cattle": {
+    "direction": "LONG",
+    "score": 44.463468046649886,
+    "updated_at": "2026-09-10T19:04:53.140697+00:00"
+  }
+}
