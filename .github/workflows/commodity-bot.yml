@@ -1,9 +1,8 @@
-name: Commodities Bot v4.1
+name: Commodities Bot v4.3
 
 on:
   schedule:
-    # Esecuzione interna ogni 15 minuti
-    - cron: "*/15 * * * *"
+    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -14,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -22,12 +21,12 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests pandas numpy python-dateutil
+          pip install requests
 
       - name: Run Commodities Bot
         env:
@@ -37,71 +36,114 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
           # ==========================================
-          # COMUNICAZIONE
+          # TRADING MODE
           # ==========================================
-          COMMUNICATION_MODE: "MORNING_USA_EVENT"
-          SILENT_INTERNAL_ANALYSIS: "1"
-          EVENT_ALERTS_ENABLED: "0"
-          MONITOR_SEND_FULL: "0"
+          PAPER_TRADING_ONLY: '1'
+          DEMO_TRADING_ENABLED: '0'
 
           # ==========================================
-          # ORARI REPORT — ORA ITALIANA
+          # COMMUNICATION
           # ==========================================
-          MORNING_REPORT_HOUR: "8"
-          MORNING_REPORT_MINUTE: "0"
-
-          USA_REPORT_HOUR: "14"
-          USA_REPORT_MINUTE: "30"
-
-          EOD_REPORT_HOUR: "21"
-          EOD_REPORT_MINUTE: "0"
+          COMMUNICATION_MODE: MORNING_USA_EVENT
+          SILENT_INTERNAL_ANALYSIS: '1'
+          EVENT_ALERTS_ENABLED: '0'
+          MONITOR_SEND_FULL: '0'
+          MONITOR_INTERVAL_MINUTES: '15'
 
           # ==========================================
-          # TRADING / PAPER MODE
+          # TELEGRAM REPORTS
           # ==========================================
-          PAPER_TRADING_ONLY: "1"
-          DEMO_TRADING_ENABLED: "0"
+          MORNING_REPORT_HOUR: '8'
+          MORNING_REPORT_MINUTE: '0'
+
+          USA_REPORT_HOUR: '14'
+          USA_REPORT_MINUTE: '30'
+
+          EOD_REPORT_HOUR: '21'
+          EOD_REPORT_MINUTE: '0'
 
           # ==========================================
-          # MONITORAGGIO INTERNO
+          # POLITICAL / GEOPOLITICAL INTELLIGENCE
           # ==========================================
-          MONITOR_INTERVAL_MINUTES: "15"
+          POLITICAL_IMPACT_ENABLED: '1'
+
+          # Presidente degli Stati Uniti
+          US_PRESIDENT_IMPACT_ENABLED: '1'
+
+          # Elezioni globali
+          ELECTION_IMPACT_ENABLED: '1'
+          ELECTION_LOOKBACK_DAYS: '21'
+          ELECTION_CACHE_HOURS: '3'
 
           # ==========================================
-          # FILTRI OPERATIVI
+          # LONG TERM FORECAST JOURNAL
           # ==========================================
-          MIN_ENTRY_PROBABILITY: "62"
-          MIN_SETUP_QUALITY: "55"
-          MIN_CONFIDENCE: "60"
-
-          MIN_RR: "2.5"
-          TP1_RR: "1.5"
-          TP2_RR: "2.0"
-
-          MAX_STOP_ATR: "2.5"
+          LONG_TERM_ENABLED: '1'
+          LONG_TERM_RETENTION_DAYS: '450'
+          LONG_TERM_HORIZONS_DAYS: '30,90,180,365'
 
           # ==========================================
-          # PREVISIONE
+          # INTRADAY PREDICTION JOURNAL
           # ==========================================
-          PREDICTION_HORIZON_HOURS: "6"
+          INTRADAY_JOURNAL_ALL: '1'
+          INTRADAY_JOURNAL_RETENTION_DAYS: '120'
+          INTRADAY_EVAL_HOURS: '6'
+
+          # ==========================================
+          # FUTURES / MARKET STRUCTURE
+          # ==========================================
+          FUTURES_STRUCTURE_ENABLED: '1'
+
+          # ==========================================
+          # WEATHER / DISASTER INTELLIGENCE
+          # ==========================================
+          WEATHER_ENABLED: '1'
+          DISASTER_ENABLED: '1'
+
+          # ==========================================
+          # EARLY OPPORTUNITY ENGINE
+          # ==========================================
+          EARLY_OPPORTUNITY_ENABLED: '1'
+
+          # ==========================================
+          # ENTRY FILTERS
+          # ==========================================
+          MIN_ENTRY_PROBABILITY: '62'
+          MIN_ENTRY_QUALITY: '55'
+          MIN_ENTRY_CONFIDENCE: '60'
+
+          MIN_ENTRY_RR: '2.5'
+          MIN_ENTRY_RR_TP1: '1.5'
+          MIN_ENTRY_RR_TP2: '2.0'
+
+          MAX_ENTRY_STOP_ATR: '2.5'
 
         run: |
           python commodity_bot.py
 
-      - name: Save bot state
+      # ==========================================
+      # SAVE JOURNALS / STATE
+      # ==========================================
+      - name: Persist bot journals and state
         run: |
-          git config user.name "commodities-bot"
-          git config user.email "commodities-bot@users.noreply.github.com"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 
           git add \
+            commodities_prediction_log.json \
+            commodities_long_term_forecasts.json \
+            commodities_daily_report_state.json \
             commodities_communication_state.json \
             commodities_daily_selection.json \
+            commodities_direction_state.json \
             commodities_monitor_state.json \
+            commodities_weather_cache.json \
+            commodities_election_cache.json \
             2>/dev/null || true
 
-          if git diff --cached --quiet; then
-            echo "Nessun aggiornamento di stato da salvare."
+          if ! git diff --cached --quiet; then
+            git commit -m 'chore: update commodities bot journals and state'
+            git push
           else
-            git commit -m "Update commodities bot state" || true
-            git push || true
+            echo 'No state changes to commit.'
           fi
