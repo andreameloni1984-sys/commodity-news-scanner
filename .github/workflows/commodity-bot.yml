@@ -1,10 +1,9 @@
 name: Commodities Bot v4.2 Signal Engine
 
-"on":
-  push:
+on:
   schedule:
-    - cron: "*/5 * * * *"
-  workflow_dispatch: {}
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -26,7 +25,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Install dependencies
         run: |
@@ -44,74 +43,92 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
-          PAPER_TRADING_ONLY: "1"
-          DEMO_TRADING_ENABLED: "0"
+          PAPER_TRADING_ONLY: '1'
+          DEMO_TRADING_ENABLED: '0'
 
-          MONITOR_INTERVAL_MINUTES: "15"
-          MONITOR_TOP_N: "3"
-          MONITOR_SEND_FULL: "0"
-          COMMUNICATION_MODE: "MORNING_USA_EVENT"
-          SILENT_INTERNAL_ANALYSIS: "1"
-          EVENT_ALERTS_ENABLED: "1"
+          MONITOR_INTERVAL_MINUTES: '15'
+          MONITOR_TOP_N: '3'
+          MONITOR_SEND_FULL: '0'
+          COMMUNICATION_MODE: 'MORNING_USA_EVENT'
+          SILENT_INTERNAL_ANALYSIS: '1'
+          EVENT_ALERTS_ENABLED: '1'
 
-          CANDLE_ENGINE_ENABLED: "1"
-          PRICE_ACTION_ENABLED: "1"
-          ADAPTIVE_RISK_ENABLED: "1"
-          EXIT_ENGINE_ENABLED: "1"
-          REGIME_ENABLED: "1"
+          DAILY_BIAS_ENABLED: '1'
+          CANDLE_ENGINE_ENABLED: '1'
+          PRICE_ACTION_ENABLED: '1'
+          ADAPTIVE_RISK_ENABLED: '1'
+          EXIT_ENGINE_ENABLED: '1'
+          REGIME_ENABLED: '1'
 
-          EARLY_OPPORTUNITY_ENABLED: "1"
-          EARLY_TOP_N: "5"
-          EARLY_REFRESH_MINUTES: "60"
-          EARLY_HISTORY_MIN_MONTHS: "12"
-          EARLY_HISTORY_YEARS_TARGET: "5"
+          EARLY_OPPORTUNITY_ENABLED: '1'
+          EARLY_TOP_N: '5'
+          EARLY_REFRESH_MINUTES: '60'
+          EARLY_HISTORY_MIN_MONTHS: '12'
+          EARLY_HISTORY_YEARS_TARGET: '5'
 
-          TELEGRAM_COMMANDS_ENABLED: "1"
-          TELEGRAM_COMMAND_MAX_AGE_SECONDS: "900"
+          TELEGRAM_COMMANDS_ENABLED: '1'
+          TELEGRAM_COMMAND_MAX_AGE_SECONDS: '900'
 
-          MORNING_REPORT_HOUR: "5"
-          MORNING_REPORT_MINUTE: "30"
-          USA_REPORT_HOUR: "14"
-          USA_REPORT_MINUTE: "30"
-          EOD_REPORT_HOUR: "21"
+          MORNING_REPORT_HOUR: '5'
+          MORNING_REPORT_MINUTE: '30'
+          USA_REPORT_HOUR: '14'
+          USA_REPORT_MINUTE: '30'
+          EOD_REPORT_HOUR: '21'
 
-          MARKET_INTELLIGENCE_ENABLED: "1"
-          MARKET_INTELLIGENCE_MODE: "PRICEPEDIA_STYLE"
-          MARKET_INTELLIGENCE_OPTIONAL_SOURCES: "1"
-          POLITICAL_IMPACT_ENABLED: "1"
-          GEOPOLITICAL_IMPACT_ENABLED: "1"
-          COMMODITY_FUNDAMENTALS_ENABLED: "1"
-          MARKET_REGIME_ENABLED: "1"
-          CROSS_COMMODITY_ANALYSIS_ENABLED: "1"
-          FUTURES_STRUCTURE_ENABLED: "1"
-          VOLATILITY_CONTEXT_ENABLED: "1"
+          MARKET_INTELLIGENCE_ENABLED: '1'
+          MARKET_INTELLIGENCE_MODE: 'PRICEPEDIA_STYLE'
+          MARKET_INTELLIGENCE_OPTIONAL_SOURCES: '1'
+          POLITICAL_IMPACT_ENABLED: '1'
+          GEOPOLITICAL_IMPACT_ENABLED: '1'
+          COMMODITY_FUNDAMENTALS_ENABLED: '1'
+          MARKET_REGIME_ENABLED: '1'
+          CROSS_COMMODITY_ANALYSIS_ENABLED: '1'
+          FUTURES_STRUCTURE_ENABLED: '1'
+          VOLATILITY_CONTEXT_ENABLED: '1'
+          CME_REQUIRED: '0'
 
-          WEATHER_ENABLED: "1"
-          DISASTER_ENABLED: "1"
-          WEATHER_CACHE_HOURS: "3"
-          FUTURES_CACHE_HOURS: "3"
-          FUTURES_SYMBOLS_JSON: "{}"
-          TRADING_KNOWLEDGE_URLS: ""
+          TWELVE_DATA_COMMODITIES_ENABLED: '1'
+          TWELVE_DATA_DEBUG: '1'
+          TWELVE_DATA_TIMEOUT_SECONDS: '20'
 
-          MIN_ENTRY_PROBABILITY: "62"
-          MIN_ENTRY_QUALITY: "55"
-          MIN_ENTRY_CONFIDENCE: "60"
-          MIN_ENTRY_RR: "2.5"
-          MIN_ENTRY_RR_TP1: "1.5"
-          MIN_ENTRY_RR_TP2: "2.0"
-          MAX_ENTRY_STOP_ATR: "2.5"
-          INTRADAY_ALERT_MIN_SCORE: "70"
+          WEATHER_ENABLED: '1'
+          DISASTER_ENABLED: '1'
+          WEATHER_CACHE_HOURS: '3'
+          FUTURES_CACHE_HOURS: '3'
+          FUTURES_SYMBOLS_JSON: '{}'
+          TRADING_KNOWLEDGE_URLS: ''
 
-          PREDICTION_HORIZON_HOURS: "6"
-          PERFORMANCE_RETENTION_DAYS: "90"
+          MIN_ENTRY_PROBABILITY: '62'
+          MIN_ENTRY_QUALITY: '55'
+          MIN_ENTRY_CONFIDENCE: '60'
+          MIN_ENTRY_RR: '2.5'
+          MIN_ENTRY_RR_TP1: '1.5'
+          MIN_ENTRY_RR_TP2: '2.0'
+          MIN_ENTRY_RR_TP3: '2.5'
+          MAX_ENTRY_STOP_ATR: '2.5'
+          SL_STRUCTURE_BUFFER_ATR: '0.15'
+          SL_MIN_ATR: '0.80'
+          INTRADAY_ALERT_MIN_SCORE: '70'
 
-          INTELLIGENCE_WEIGHT: "0.20"
-          POLITICAL_IMPACT_WEIGHT: "0.20"
-          GEOPOLITICAL_IMPACT_WEIGHT: "0.20"
-          FUNDAMENTALS_WEIGHT: "0.15"
-          MARKET_REGIME_WEIGHT: "0.10"
-          CROSS_COMMODITY_WEIGHT: "0.10"
-          FUTURES_STRUCTURE_WEIGHT: "0.05"
+          STAT_SLTP_LOOKBACK: '1500'
+          STAT_SLTP_FORWARD_BARS: '6'
+          STAT_MAE_QUANTILE: '0.70'
+          STAT_MFE_Q1: '0.55'
+          STAT_MFE_Q2: '0.70'
+          STAT_MFE_Q3: '0.82'
+
+          PREDICTION_HORIZON_HOURS: '6'
+          PERFORMANCE_RETENTION_DAYS: '90'
+
+          INTELLIGENCE_WEIGHT: '0.20'
+          POLITICAL_IMPACT_WEIGHT: '0.20'
+          GEOPOLITICAL_IMPACT_WEIGHT: '0.20'
+          FUNDAMENTALS_WEIGHT: '0.15'
+          MARKET_REGIME_WEIGHT: '0.10'
+          CROSS_COMMODITY_WEIGHT: '0.10'
+          FUTURES_STRUCTURE_WEIGHT: '0.05'
+
+        run: python commodity_bot.py
 
       - name: Persist bot state
         if: always()
