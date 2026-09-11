@@ -60,7 +60,6 @@ jobs:
 
           EOD_REPORT_HOUR: '21'
 
-          # MARKET INTELLIGENCE ENGINE
           MARKET_INTELLIGENCE_ENABLED: '1'
           MARKET_INTELLIGENCE_MODE: 'PRICEPEDIA_STYLE'
           MARKET_INTELLIGENCE_OPTIONAL_SOURCES: '1'
@@ -72,11 +71,8 @@ jobs:
           CROSS_COMMODITY_ANALYSIS_ENABLED: '1'
           FUTURES_STRUCTURE_ENABLED: '1'
           VOLATILITY_CONTEXT_ENABLED: '1'
-
-          # CME NON È OBBLIGATORIO
           CME_REQUIRED: '0'
 
-          # DATA ENGINE
           TWELVE_DATA_COMMODITIES_ENABLED: '1'
           TWELVE_DATA_DEBUG: '1'
           TWELVE_DATA_TIMEOUT_SECONDS: '20'
@@ -101,7 +97,6 @@ jobs:
           STAT_MFE_Q2: '0.70'
           STAT_MFE_Q3: '0.82'
 
-          # INTELLIGENCE WEIGHTS
           INTELLIGENCE_WEIGHT: '0.20'
           POLITICAL_IMPACT_WEIGHT: '0.20'
           GEOPOLITICAL_IMPACT_WEIGHT: '0.20'
@@ -128,4 +123,4 @@ jobs:
           if ! git diff --cached --quiet; then
             git commit -m "chore: persist commodities bot v4.1 state"
             git push
-          fi 
+          fi
