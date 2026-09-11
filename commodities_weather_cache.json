@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-09-11T02:47:52.743964+00:00",
+  "timestamp": "2026-09-11T03:01:08.086135+00:00",
   "data": {
     "Oro": {
       "enabled": true,
@@ -179,6 +179,119 @@
         }
       ],
       "temperature_change_mean": 5.72,
+      "historical_context": "recent 30-day observations + 10-day forecast"
+    },
+    "Argento": {
+      "enabled": true,
+      "score": 0.0,
+      "label": "NEUTRALE",
+      "confidence": 52,
+      "regions": [
+        {
+          "region": "Mexico/US",
+          "lat": 25.0,
+          "lon": -105.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 25.78,
+          "forecast_min_mean": 14.319999999999999,
+          "forecast_rain_total": 27.919999999999998,
+          "forecast_wind_max": 30.5,
+          "recent_temp_mean": 20.62903225806452,
+          "recent_rain_total": 82.3,
+          "recent_wind_max": 16.5,
+          "raw_forecast_dates": [
+            "2026-09-11",
+            "2026-09-12",
+            "2026-09-13",
+            "2026-09-14",
+            "2026-09-15",
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20"
+          ]
+        }
+      ],
+      "temperature_change_mean": 5.15,
+      "historical_context": "recent 30-day observations + 10-day forecast"
+    },
+    "Petrolio WTI": {
+      "enabled": true,
+      "score": -0.1,
+      "label": "NEUTRALE",
+      "confidence": 52,
+      "regions": [
+        {
+          "region": "US Gulf",
+          "lat": 29.0,
+          "lon": -95.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 29.9,
+          "forecast_min_mean": 28.7,
+          "forecast_rain_total": 26.900000000000002,
+          "forecast_wind_max": 34.6,
+          "recent_temp_mean": 29.47741935483871,
+          "recent_rain_total": 86.89999999999999,
+          "recent_wind_max": 32.3,
+          "raw_forecast_dates": [
+            "2026-09-11",
+            "2026-09-12",
+            "2026-09-13",
+            "2026-09-14",
+            "2026-09-15",
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20"
+          ]
+        }
+      ],
+      "temperature_change_mean": 0.42,
+      "historical_context": "recent 30-day observations + 10-day forecast"
+    },
+    "Caffè": {
+      "enabled": true,
+      "score": -17.4,
+      "label": "BEARISH",
+      "confidence": 52,
+      "regions": [
+        {
+          "region": "Brazil",
+          "lat": -20.0,
+          "lon": -47.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 26.810000000000002,
+          "forecast_min_mean": 16.59,
+          "forecast_rain_total": 18.9,
+          "forecast_wind_max": 23.8,
+          "recent_temp_mean": 22.087096774193558,
+          "recent_rain_total": 58.3,
+          "recent_wind_max": 26.5,
+          "raw_forecast_dates": [
+            "2026-09-11",
+            "2026-09-12",
+            "2026-09-13",
+            "2026-09-14",
+            "2026-09-15",
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20"
+          ]
+        },
+        {
+          "region": "Vietnam",
+          "error": "HTTPSConnectionPool(host='api.open-meteo.com', port=443): Read timed out. (read timeout=12)",
+          "source": "Open-Meteo"
+        }
+      ],
+      "temperature_change_mean": 4.72,
       "historical_context": "recent 30-day observations + 10-day forecast"
     }
   }
