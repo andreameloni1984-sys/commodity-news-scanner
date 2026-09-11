@@ -4101,7 +4101,7 @@ def entry_trigger_engine(analysis):
             "candidates": [{"tf":x[1],"kind":x[2],"score":round(x[0],1),"age_bars":x[6]} for x in candidates]}
 
 
-def market_regime_engine(analysis):
+def core_market_regime_engine(analysis):
     """Classify the current market regime using only data already in analysis.
 
     This is a descriptive regime classifier, not a predictive guarantee.
@@ -6199,7 +6199,7 @@ def finalize_v26_analysis(analysis):
         except Exception as exc:
             print(f"⚠️ Ricalcolo rischio v2.7: {exc}")
     smart_entry_engine(analysis)
-    analysis["market_regime"] = market_regime_engine(analysis)
+    analysis["market_regime"] = core_market_regime_engine(analysis)
     return analysis
 
 # ============================================================
@@ -6892,7 +6892,7 @@ def event_risk_engine(name, news=None, global_impact=None):
 def v62_intelligence_fusion_engine(name, analysis, candles, intraday, usd, global_impact, political, futures, weather=None, disasters=None, all_results=None):
     """Bounded v6.2 fusion. New layers can improve/worsen confidence but never manufacture a trade."""
     a=analysis
-    regime=market_regime_engine(a) if callable(globals().get("market_regime_engine")) else {"state":"UNKNOWN","score":50}
+    regime=core_market_regime_engine(a) if callable(globals().get("core_market_regime_engine")) else {"state":"UNKNOWN","score":50}
     # Existing v6.1 regime returns can differ by version; normalize.
     if not isinstance(regime,dict): regime={}
     regime_state=regime.get("state") or regime.get("regime") or "UNKNOWN"
