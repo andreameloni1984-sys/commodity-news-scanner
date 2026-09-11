@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-09-11T03:01:08.086135+00:00",
+  "timestamp": "2026-09-11T03:18:05.856183+00:00",
   "data": {
     "Oro": {
       "enabled": true,
@@ -292,6 +292,135 @@
         }
       ],
       "temperature_change_mean": 4.72,
+      "historical_context": "recent 30-day observations + 10-day forecast"
+    },
+    "Gas Naturale": {
+      "enabled": true,
+      "score": 54.2,
+      "label": "BULLISH",
+      "confidence": 64,
+      "regions": [
+        {
+          "region": "US South/Central",
+          "lat": 31.0,
+          "lon": -97.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 38.27,
+          "forecast_min_mean": 25.220000000000002,
+          "forecast_rain_total": 0.9999999999999999,
+          "forecast_wind_max": 32.4,
+          "recent_temp_mean": 31.26129032258065,
+          "recent_rain_total": 21.400000000000002,
+          "recent_wind_max": 31.4,
+          "raw_forecast_dates": [
+            "2026-09-11",
+            "2026-09-12",
+            "2026-09-13",
+            "2026-09-14",
+            "2026-09-15",
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20"
+          ]
+        },
+        {
+          "region": "US Northeast",
+          "lat": 41.0,
+          "lon": -74.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 26.160000000000004,
+          "forecast_min_mean": 17.86,
+          "forecast_rain_total": 21.3,
+          "forecast_wind_max": 19.7,
+          "recent_temp_mean": 22.43225806451613,
+          "recent_rain_total": 119.2,
+          "recent_wind_max": 19.4,
+          "raw_forecast_dates": [
+            "2026-09-11",
+            "2026-09-12",
+            "2026-09-13",
+            "2026-09-14",
+            "2026-09-15",
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20"
+          ]
+        }
+      ],
+      "temperature_change_mean": 5.37,
+      "historical_context": "recent 30-day observations + 10-day forecast"
+    },
+    "Grano": {
+      "enabled": true,
+      "score": -32.7,
+      "label": "BEARISH",
+      "confidence": 64,
+      "regions": [
+        {
+          "region": "US Plains",
+          "lat": 39.0,
+          "lon": -98.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 33.779999999999994,
+          "forecast_min_mean": 21.009999999999998,
+          "forecast_rain_total": 36.57,
+          "forecast_wind_max": 37.7,
+          "recent_temp_mean": 28.499999999999996,
+          "recent_rain_total": 27.099999999999998,
+          "recent_wind_max": 33.4,
+          "raw_forecast_dates": [
+            "2026-09-11",
+            "2026-09-12",
+            "2026-09-13",
+            "2026-09-14",
+            "2026-09-15",
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20"
+          ]
+        },
+        {
+          "region": "Black Sea",
+          "lat": 47.0,
+          "lon": 35.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 24.999999999999996,
+          "forecast_min_mean": 13.64,
+          "forecast_rain_total": 11.0,
+          "forecast_wind_max": 22.7,
+          "recent_temp_mean": 22.529032258064515,
+          "recent_rain_total": 11.5,
+          "recent_wind_max": 27.5,
+          "raw_forecast_dates": [
+            "2026-09-11",
+            "2026-09-12",
+            "2026-09-13",
+            "2026-09-14",
+            "2026-09-15",
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20"
+          ]
+        },
+        {
+          "region": "EU",
+          "error": "HTTPSConnectionPool(host='archive-api.open-meteo.com', port=443): Read timed out. (read timeout=12)",
+          "source": "Open-Meteo"
+        }
+      ],
+      "temperature_change_mean": 3.88,
       "historical_context": "recent 30-day observations + 10-day forecast"
     }
   }
