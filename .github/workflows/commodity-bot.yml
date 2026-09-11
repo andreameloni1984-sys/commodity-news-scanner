@@ -1,4 +1,4 @@
-name: Commodities Bot v4.2 Signal Engine
+name: Commodities Bot v4.2
 
 on:
   schedule:
@@ -43,11 +43,9 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
-          # SICUREZZA - SOLO PAPER
           PAPER_TRADING_ONLY: '1'
           DEMO_TRADING_ENABLED: '0'
 
-          # MONITORAGGIO
           MONITOR_INTERVAL_MINUTES: '15'
           MONITOR_TOP_N: '3'
           MONITOR_SEND_FULL: '0'
@@ -55,32 +53,27 @@ jobs:
           SILENT_INTERNAL_ANALYSIS: '1'
           EVENT_ALERTS_ENABLED: '1'
 
-          # LAYER TECNICI
           CANDLE_ENGINE_ENABLED: '1'
           PRICE_ACTION_ENABLED: '1'
           ADAPTIVE_RISK_ENABLED: '1'
           EXIT_ENGINE_ENABLED: '1'
           REGIME_ENABLED: '1'
 
-          # EARLY OPPORTUNITY
           EARLY_OPPORTUNITY_ENABLED: '1'
           EARLY_TOP_N: '5'
           EARLY_REFRESH_MINUTES: '60'
           EARLY_HISTORY_MIN_MONTHS: '12'
           EARLY_HISTORY_YEARS_TARGET: '5'
 
-          # TELEGRAM ON-DEMAND
           TELEGRAM_COMMANDS_ENABLED: '1'
           TELEGRAM_COMMAND_MAX_AGE_SECONDS: '900'
 
-          # REPORT
           MORNING_REPORT_HOUR: '5'
           MORNING_REPORT_MINUTE: '30'
           USA_REPORT_HOUR: '14'
           USA_REPORT_MINUTE: '30'
           EOD_REPORT_HOUR: '21'
 
-          # MARKET INTELLIGENCE
           MARKET_INTELLIGENCE_ENABLED: '1'
           MARKET_INTELLIGENCE_MODE: 'PRICEPEDIA_STYLE'
           MARKET_INTELLIGENCE_OPTIONAL_SOURCES: '1'
@@ -92,7 +85,6 @@ jobs:
           FUTURES_STRUCTURE_ENABLED: '1'
           VOLATILITY_CONTEXT_ENABLED: '1'
 
-          # DATI E FONTI
           WEATHER_ENABLED: '1'
           DISASTER_ENABLED: '1'
           WEATHER_CACHE_HOURS: '3'
@@ -100,7 +92,6 @@ jobs:
           FUTURES_SYMBOLS_JSON: '{}'
           TRADING_KNOWLEDGE_URLS: ''
 
-          # ENTRY / RISCHIO
           MIN_ENTRY_PROBABILITY: '62'
           MIN_ENTRY_QUALITY: '55'
           MIN_ENTRY_CONFIDENCE: '60'
@@ -110,11 +101,9 @@ jobs:
           MAX_ENTRY_STOP_ATR: '2.5'
           INTRADAY_ALERT_MIN_SCORE: '70'
 
-          # STATISTICA SL / TP
           PREDICTION_HORIZON_HOURS: '6'
           PERFORMANCE_RETENTION_DAYS: '90'
 
-          # PESI MARKET INTELLIGENCE
           INTELLIGENCE_WEIGHT: '0.20'
           POLITICAL_IMPACT_WEIGHT: '0.20'
           GEOPOLITICAL_IMPACT_WEIGHT: '0.20'
@@ -146,4 +135,4 @@ jobs:
           if ! git diff --cached --quiet; then
             git commit -m "chore: persist commodities bot v4.2 state"
             git push
-          fi 
+          fi
