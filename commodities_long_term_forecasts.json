@@ -1148,5 +1148,1455 @@
       "weather": 0
     },
     "status": "OPEN"
+  },
+  {
+    "id": "Oro|2026-09-11",
+    "name": "Oro",
+    "symbol": "XAU/USD",
+    "forecast_date": "2026-09-11",
+    "created_at": "2026-09-11T00:25:34.990886+00:00",
+    "price": 4359.7001953125,
+    "horizons": {
+      "30": {
+        "direction": "LONG",
+        "long_probability": 76.6,
+        "short_probability": 23.4,
+        "confidence": 53.2,
+        "status": "VALIDATA",
+        "historical_samples": 162,
+        "historical_hit_rate": 80.2
+      },
+      "90": {
+        "direction": "LONG",
+        "long_probability": 82.6,
+        "short_probability": 17.4,
+        "confidence": 65.1,
+        "status": "VALIDATA",
+        "historical_samples": 113,
+        "historical_hit_rate": 95.1
+      },
+      "180": {
+        "direction": "LONG",
+        "long_probability": 81.5,
+        "short_probability": 18.5,
+        "confidence": 63.1,
+        "status": "VALIDATA",
+        "historical_samples": 57,
+        "historical_hit_rate": 92.5
+      },
+      "365": {
+        "direction": "LONG",
+        "long_probability": 74.8,
+        "short_probability": 25.2,
+        "confidence": 49.5,
+        "status": "NON_VALIDATA",
+        "historical_samples": 0,
+        "historical_hit_rate": null
+      }
+    },
+    "drivers": {
+      "momentum20": 59.21,
+      "momentum60": 136.0,
+      "momentum120": 241.0,
+      "model_probability": 32.8,
+      "regime": "N/D",
+      "futures": 0.0,
+      "cyclical": -0.5813953488372092,
+      "political": 0.7,
+      "weather": 0.0
+    },
+    "status": "OPEN"
+  },
+  {
+    "id": "Argento|2026-09-11",
+    "name": "Argento",
+    "symbol": "XAG/USD",
+    "forecast_date": "2026-09-11",
+    "created_at": "2026-09-11T00:25:34.990886+00:00",
+    "price": 63.970001220703125,
+    "horizons": {
+      "30": {
+        "direction": "LONG",
+        "long_probability": 72.8,
+        "short_probability": 27.2,
+        "confidence": 45.6,
+        "status": "VALIDATA",
+        "historical_samples": 133,
+        "historical_hit_rate": 69.9
+      },
+      "90": {
+        "direction": "LONG",
+        "long_probability": 70.7,
+        "short_probability": 29.3,
+        "confidence": 41.3,
+        "status": "VALIDATA",
+        "historical_samples": 103,
+        "historical_hit_rate": 64.6
+      },
+      "180": {
+        "direction": "LONG",
+        "long_probability": 81.7,
+        "short_probability": 18.3,
+        "confidence": 63.3,
+        "status": "VALIDATA",
+        "historical_samples": 53,
+        "historical_hit_rate": 92.1
+      },
+      "365": {
+        "direction": "LONG",
+        "long_probability": 75.3,
+        "short_probability": 24.7,
+        "confidence": 50.5,
+        "status": "NON_VALIDATA",
+        "historical_samples": 0,
+        "historical_hit_rate": null
+      }
+    },
+    "drivers": {
+      "momentum20": 95.91,
+      "momentum60": 137.81,
+      "momentum120": 272.09,
+      "model_probability": 31.9,
+      "regime": "N/D",
+      "futures": 0.0,
+      "cyclical": -0.3023255813953488,
+      "political": 0.619,
+      "weather": 0.0
+    },
+    "status": "OPEN"
+  },
+  {
+    "id": "Platino|2026-09-11",
+    "name": "Platino",
+    "symbol": "XPT/USD",
+    "forecast_date": "2026-09-11",
+    "created_at": "2026-09-11T00:25:34.990886+00:00",
+    "price": 1781.800048828125,
+    "horizons": {
+      "30": {
+        "direction": "LONG",
+        "long_probability": 60.6,
+        "short_probability": 39.4,
+        "confidence": 21.3,
+        "status": "VALIDATA",
+        "historical_samples": 118,
+        "historical_hit_rate": 64.1
+      },
+      "90": {
+        "direction": "NEUTRALE",
+        "long_probability": 55.0,
+        "short_probability": 45.0,
+        "confidence": 10.0,
+        "status": "VALIDATA",
+        "historical_samples": 94,
+        "historical_hit_rate": 50.0
+      },
+      "180": {
+        "direction": "LONG",
+        "long_probability": 63.3,
+        "short_probability": 36.7,
+        "confidence": 26.6,
+        "status": "VALIDATA",
+        "historical_samples": 65,
+        "historical_hit_rate": 70.7
+      },
+      "365": {
+        "direction": "LONG",
+        "long_probability": 59.8,
+        "short_probability": 40.2,
+        "confidence": 19.7,
+        "status": "NON_VALIDATA",
+        "historical_samples": 0,
+        "historical_hit_rate": null
+      }
+    },
+    "drivers": {
+      "momentum20": 79.69,
+      "momentum60": 65.63,
+      "momentum120": 43.79,
+      "model_probability": 40.1,
+      "regime": "N/D",
+      "futures": 0.0,
+      "cyclical": 0.16279069767441867,
+      "political": 0.0,
+      "weather": 0.0
+    },
+    "status": "OPEN"
+  },
+  {
+    "id": "Palladio|2026-09-11",
+    "name": "Palladio",
+    "symbol": "XPD/USD",
+    "forecast_date": "2026-09-11",
+    "created_at": "2026-09-11T00:25:34.990886+00:00",
+    "price": 1290.5,
+    "horizons": {
+      "30": {
+        "direction": "LONG",
+        "long_probability": 68.5,
+        "short_probability": 31.5,
+        "confidence": 37.0,
+        "status": "VALIDATA",
+        "historical_samples": 123,
+        "historical_hit_rate": 66.9
+      },
+      "90": {
+        "direction": "LONG",
+        "long_probability": 79.6,
+        "short_probability": 20.4,
+        "confidence": 59.1,
+        "status": "VALIDATA",
+        "historical_samples": 81,
+        "historical_hit_rate": 94.5
+      },
+      "180": {
+        "direction": "LONG",
+        "long_probability": 76.3,
+        "short_probability": 23.7,
+        "confidence": 52.7,
+        "status": "VALIDATA",
+        "historical_samples": 27,
+        "historical_hit_rate": 86.5
+      },
+      "365": {
+        "direction": "LONG",
+        "long_probability": 69.3,
+        "short_probability": 30.7,
+        "confidence": 38.5,
+        "status": "NON_VALIDATA",
+        "historical_samples": 0,
+        "historical_hit_rate": null
+      }
+    },
+    "drivers": {
+      "momentum20": 16.63,
+      "momentum60": -41.53,
+      "momentum120": 67.01,
+      "model_probability": 26.4,
+      "regime": "N/D",
+      "futures": 0.0,
+      "cyclical": -0.11111111111111116,
+      "political": 0.0,
+      "weather": 0.0
+    },
+    "status": "OPEN"
+  },
+  {
+    "id": "Petrolio WTI|2026-09-11",
+    "name": "Petrolio WTI",
+    "symbol": "WTI/USD",
+    "forecast_date": "2026-09-11",
+    "created_at": "2026-09-11T00:25:34.990886+00:00",
+    "price": 103.04000091552734,
+    "horizons": {
+      "30": {
+        "direction": "LONG",
+        "long_probability": 67.9,
+        "short_probability": 32.1,
+        "confidence": 35.9,
+        "status": "VALIDATA",
+        "historical_samples": 137,
+        "historical_hit_rate": 49.0
+      },
+      "90": {
+        "direction": "LONG",
+        "long_probability": 63.6,
+        "short_probability": 36.4,
+        "confidence": 27.2,
+        "status": "VALIDATA",
+        "historical_samples": 95,
+        "historical_hit_rate": 38.1
+      },
+      "180": {
+        "direction": "LONG",
+        "long_probability": 77.1,
+        "short_probability": 22.9,
+        "confidence": 54.2,
+        "status": "VALIDATA",
+        "historical_samples": 54,
+        "historical_hit_rate": 71.9
+      },
+      "365": {
+        "direction": "LONG",
+        "long_probability": 80.8,
+        "short_probability": 19.2,
+        "confidence": 61.6,
+        "status": "NON_VALIDATA",
+        "historical_samples": 0,
+        "historical_hit_rate": null
+      }
+    },
+    "drivers": {
+      "momentum20": 48.77,
+      "momentum60": 97.39,
+      "momentum120": 113.6,
+      "model_probability": 78.2,
+      "regime": "N/D",
+      "futures": 0.0,
+      "cyclical": 0.11627906976744186,
+      "political": 0.652,
+      "weather": -2.4
+    },
+    "status": "OPEN"
+  },
+  {
+    "id": "Petrolio Brent|2026-09-11",
+    "name": "Petrolio Brent",
+    "symbol": "XBR/USD",
+    "forecast_date": "2026-09-11",
+    "created_at": "2026-09-11T00:25:34.990886+00:00",
+    "price": 108.12999725341797,
+    "horizons": {
+      "30": {
+        "direction": "LONG",
+        "long_probability": 65.5,
+        "short_probability": 34.5,
+        "confidence": 31.1,
+        "status": "VALIDATA",
+        "historical_samples": 74,
+        "historical_hit_rate": 36.9
+      },
+      "90": {
+        "direction": "LONG",
+        "long_probability": 60.3,
+        "short_probability": 39.7,
+        "confidence": 20.6,
+        "status": "VALIDATA",
+        "historical_samples": 32,
+        "historical_hit_rate": 23.8
+      },
+      "180": {
+        "direction": "LONG",
+        "long_probability": 84.6,
+        "short_probability": 15.4,
+        "confidence": 69.2,
+        "status": "NON_VALIDATA",
+        "historical_samples": 0,
+        "historical_hit_rate": null
+      },
+      "365": {
+        "direction": "LONG",
+        "long_probability": 84.6,
+        "short_probability": 15.4,
+        "confidence": 69.2,
+        "status": "NON_VALIDATA",
+        "historical_samples": 0,
+        "historical_hit_rate": null
+      }
+    },
+    "drivers": {
+      "momentum20": 47.8,
+      "momentum60": 93.5,
+      "momentum120": 104.06,
+      "model_probability": 85.1,
+      "regime": "N/D",
+      "futures": 0.0,
+      "cyclical": -0.1333333333333333,
+      "political": 0.652,
+      "weather": -2.4
+    },
+    "status": "OPEN"
+  },
+  {
+    "id": "Gas Naturale|2026-09-11",
+    "name": "Gas Naturale",
+    "symbol": "NG/USD",
+    "forecast_date": "2026-09-11",
+    "created_at": "2026-09-11T00:25:34.990886+00:00",
+    "price": 2.8329999446868896,
+    "horizons": {
+      "30": {
+        "direction": "NEUTRALE",
+        "long_probability": 55.8,
+        "short_probability": 44.2,
+        "confidence": 11.7,
+        "status": "VALIDATA",
+        "historical_samples": 100,
+        "historical_hit_rate": 32.7
+      },
+      "90": {
+        "direction": "NEUTRALE",
+        "long_probability": 50.2,
+        "short_probability": 49.8,
+        "confidence": 0.5,
+        "status": "VALIDATA",
+        "historical_samples": 70,
+        "historical_hit_rate": 18.8
+      },
+      "180": {
+        "direction": "NEUTRALE",
+        "long_probability": 49.7,
+        "short_probability": 50.3,
+        "confidence": 0.7,
+        "status": "VALIDATA",
+        "historical_samples": 42,
+        "historical_hit_rate": 17.3
+      },
+      "365": {
+        "direction": "LONG",
+        "long_probability": 71.3,
+        "short_probability": 28.7,
+        "confidence": 42.6,
+        "status": "NON_VALIDATA",
+        "historical_samples": 0,
+        "historical_hit_rate": null
+      }
+    },
+    "drivers": {
+      "momentum20": 4.65,
+      "momentum60": 10.49,
+      "momentum120": 5.28,
+      "model_probability": 29.5,
+      "regime": "N/D",
+      "futures": 0.0,
+      "cyclical": 0.023255813953488413,
+      "political": 0.917,
+      "weather": 56.6
+    },
+    "status": "OPEN"
+  },
+  {
+    "id": "Benzina RBOB|2026-09-11",
+    "name": "Benzina RBOB",
+    "symbol": "RB/USD",
+    "forecast_date": "2026-09-11",
+    "created_at": "2026-09-11T00:25:34.990886+00:00",
+    "price": 3.2381999492645264,
+    "horizons": {
+      "30": {
+        "direction": "LONG",
+        "long_probability": 74.6,
+        "short_probability": 25.4,
+        "confidence": 49.2,
+        "status": "VALIDATA",
+        "historical_samples": 131,
+        "historical_hit_rate": 51.1
+      },
+      "90": {
+        "direction": "LONG",
+        "long_probability": 70.9,
+        "short_probability": 29.1,
+        "confidence": 41.8,
+        "status": "VALIDATA",
+        "historical_samples": 88,
+        "historical_hit_rate": 41.8
+      },
+      "180": {
+        "direction": "LONG",
+        "long_probability": 80.2,
+        "short_probability": 19.8,
+        "confidence": 60.3,
+        "status": "VALIDATA",
+        "historical_samples": 50,
+        "historical_hit_rate": 65.0
+      },
+      "365": {
+        "direction": "LONG",
+        "long_probability": 89.9,
+        "short_probability": 10.1,
+        "confidence": 79.9,
+        "status": "NON_VALIDATA",
+        "historical_samples": 0,
+        "historical_hit_rate": null
+      }
+    },
+    "drivers": {
+      "momentum20": 61.63,
+      "momentum60": 105.93,
+      "momentum120": 128.82,
+      "model_probability": 94.8,
+      "regime": "N/D",
+      "futures": 0.0,
+      "cyclical": 0.1428571428571428,
+      "political": 0.0,
+      "weather": 0.0
+    },
+    "status": "OPEN"
+  },
+  {
+    "id": "Heating Oil|2026-09-11",
+    "name": "Heating Oil",
+    "symbol": "HO/USD",
+    "forecast_date": "2026-09-11",
+    "created_at": "2026-09-11T00:25:34.990886+00:00",
+    "price": 5.119100093841553,
+    "horizons": {
+      "30": {
+        "direction": "LONG",
+        "long_probability": 71.1,
+        "short_probability": 28.9,
+        "confidence": 42.3,
+        "status": "VALIDATA",
+        "historical_samples": 131,
+        "historical_hit_rate": 47.5
+      },
+      "90": {
+        "direction": "LONG",
+        "long_probability": 68.4,
+        "short_probability": 31.6,
+        "confidence": 36.9,
+        "status": "VALIDATA",
+        "historical_samples": 88,
+        "historical_hit_rate": 40.8
+      },
+      "180": {
+        "direction": "LONG",
+        "long_probability": 83.4,
+        "short_probability": 16.6,
+        "confidence": 66.7,
+        "status": "VALIDATA",
+        "historical_samples": 54,
+        "historical_hit_rate": 78.1
+      },
+      "365": {
+        "direction": "LONG",
+        "long_probability": 86.7,
+        "short_probability": 13.3,
+        "confidence": 73.4,
+        "status": "NON_VALIDATA",
+        "historical_samples": 0,
+        "historical_hit_rate": null
+      }
+    },
+    "drivers": {
+      "momentum20": 130.64,
+      "momentum60": 219.86,
+      "momentum120": 203.57,
+      "model_probability": 88.9,
+      "regime": "N/D",
+      "futures": 0.0,
+      "cyclical": 0.11627906976744186,
+      "political": 0.714,
+      "weather": 0.0
+    },
+    "status": "OPEN"
+  },
+  {
+    "id": "Rame|2026-09-11",
+    "name": "Rame",
+    "symbol": "HG1",
+    "forecast_date": "2026-09-11",
+    "created_at": "2026-09-11T00:25:34.990886+00:00",
+    "price": 6.5289998054504395,
+    "horizons": {
+      "30": {
+        "direction": "LONG",
+        "long_probability": 59.4,
+        "short_probability": 40.6,
+        "confidence": 18.9,
+        "status": "VALIDATA",
+        "historical_samples": 121,
+        "historical_hit_rate": 58.0
+      },
+      "90": {
+        "direction": "LONG",
+        "long_probability": 56.5,
+        "short_probability": 43.5,
+        "confidence": 12.9,
+        "status": "VALIDATA",
+        "historical_samples": 81,
+        "historical_hit_rate": 50.5
+      },
+      "180": {
+        "direction": "LONG",
+        "long_probability": 73.0,
+        "short_probability": 27.0,
+        "confidence": 45.9,
+        "status": "VALIDATA",
+        "historical_samples": 51,
+        "historical_hit_rate": 91.8
+      },
+      "365": {
+        "direction": "LONG",
+        "long_probability": 61.7,
+        "short_probability": 38.3,
+        "confidence": 23.5,
+        "status": "NON_VALIDATA",
+        "historical_samples": 0,
+        "historical_hit_rate": null
+      }
+    },
+    "drivers": {
+      "momentum20": 51.36,
+      "momentum60": 82.71,
+      "momentum120": 158.27,
+      "model_probability": 43.5,
+      "regime": "N/D",
+      "futures": 0.0,
+      "cyclical": 0.16279069767441867,
+      "political": 0.0,
+      "weather": 4.0
+    },
+    "status": "OPEN"
+  },
+  {
+    "id": "Grano|2026-09-11",
+    "name": "Grano",
+    "symbol": "WHEAT/USD",
+    "forecast_date": "2026-09-11",
+    "created_at": "2026-09-11T00:25:34.990886+00:00",
+    "price": 737.5,
+    "horizons": {
+      "30": {
+        "direction": "LONG",
+        "long_probability": 59.4,
+        "short_probability": 40.6,
+        "confidence": 18.7,
+        "status": "VALIDATA",
+        "historical_samples": 120,
+        "historical_hit_rate": 44.6
+      },
+      "90": {
+        "direction": "LONG",
+        "long_probability": 58.6,
+        "short_probability": 41.4,
+        "confidence": 17.2,
+        "status": "VALIDATA",
+        "historical_samples": 72,
+        "historical_hit_rate": 42.7
+      },
+      "180": {
+        "direction": "LONG",
+        "long_probability": 66.6,
+        "short_probability": 33.4,
+        "confidence": 33.2,
+        "status": "VALIDATA",
+        "historical_samples": 41,
+        "historical_hit_rate": 62.7
+      },
+      "365": {
+        "direction": "LONG",
+        "long_probability": 69.9,
+        "short_probability": 30.1,
+        "confidence": 39.8,
+        "status": "NON_VALIDATA",
+        "historical_samples": 0,
+        "historical_hit_rate": null
+      }
+    },
+    "drivers": {
+      "momentum20": 29.27,
+      "momentum60": 11.24,
+      "momentum120": 46.69,
+      "model_probability": 60.0,
+      "regime": "N/D",
+      "futures": 0.0,
+      "cyclical": 0.11627906976744186,
+      "political": 0.84,
+      "weather": -19.9
+    },
+    "status": "OPEN"
+  },
+  {
+    "id": "Mais|2026-09-11",
+    "name": "Mais",
+    "symbol": "CORN/USD",
+    "forecast_date": "2026-09-11",
+    "created_at": "2026-09-11T00:25:34.990886+00:00",
+    "price": 531.25,
+    "horizons": {
+      "30": {
+        "direction": "NEUTRALE",
+        "long_probability": 54.2,
+        "short_probability": 45.8,
+        "confidence": 8.4,
+        "status": "VALIDATA",
+        "historical_samples": 118,
+        "historical_hit_rate": 49.2
+      },
+      "90": {
+        "direction": "NEUTRALE",
+        "long_probability": 50.7,
+        "short_probability": 49.3,
+        "confidence": 1.4,
+        "status": "VALIDATA",
+        "historical_samples": 74,
+        "historical_hit_rate": 40.5
+      },
+      "180": {
+        "direction": "LONG",
+        "long_probability": 61.2,
+        "short_probability": 38.8,
+        "confidence": 22.4,
+        "status": "VALIDATA",
+        "historical_samples": 38,
+        "historical_hit_rate": 66.7
+      },
+      "365": {
+        "direction": "LONG",
+        "long_probability": 58.3,
+        "short_probability": 41.7,
+        "confidence": 16.7,
+        "status": "NON_VALIDATA",
+        "historical_samples": 0,
+        "historical_hit_rate": null
+      }
+    },
+    "drivers": {
+      "momentum20": 29.34,
+      "momentum60": -2.88,
+      "momentum120": 43.58,
+      "model_probability": 47.8,
+      "regime": "N/D",
+      "futures": 0.0,
+      "cyclical": 0.16279069767441867,
+      "political": 0.421,
+      "weather": -15.1
+    },
+    "status": "OPEN"
+  },
+  {
+    "id": "Soia|2026-09-11",
+    "name": "Soia",
+    "symbol": "SOYBEAN/USD",
+    "forecast_date": "2026-09-11",
+    "created_at": "2026-09-11T00:25:34.990886+00:00",
+    "price": 1331.0,
+    "horizons": {
+      "30": {
+        "direction": "LONG",
+        "long_probability": 64.5,
+        "short_probability": 35.5,
+        "confidence": 29.1,
+        "status": "VALIDATA",
+        "historical_samples": 126,
+        "historical_hit_rate": 44.1
+      },
+      "90": {
+        "direction": "LONG",
+        "long_probability": 69.3,
+        "short_probability": 30.7,
+        "confidence": 38.6,
+        "status": "VALIDATA",
+        "historical_samples": 90,
+        "historical_hit_rate": 56.0
+      },
+      "180": {
+        "direction": "LONG",
+        "long_probability": 75.7,
+        "short_probability": 24.3,
+        "confidence": 51.4,
+        "status": "VALIDATA",
+        "historical_samples": 40,
+        "historical_hit_rate": 72.0
+      },
+      "365": {
+        "direction": "LONG",
+        "long_probability": 77.8,
+        "short_probability": 22.2,
+        "confidence": 55.5,
+        "status": "NON_VALIDATA",
+        "historical_samples": 0,
+        "historical_hit_rate": null
+      }
+    },
+    "drivers": {
+      "momentum20": 35.47,
+      "momentum60": -2.85,
+      "momentum120": 38.5,
+      "model_probability": 83.1,
+      "regime": "N/D",
+      "futures": 0.0,
+      "cyclical": 0.1904761904761905,
+      "political": 0.1,
+      "weather": 0.0
+    },
+    "status": "OPEN"
+  },
+  {
+    "id": "Farina di soia|2026-09-11",
+    "name": "Farina di soia",
+    "symbol": "SOYBEAN_MEAL/USD",
+    "forecast_date": "2026-09-11",
+    "created_at": "2026-09-11T00:25:34.990886+00:00",
+    "price": 355.20001220703125,
+    "horizons": {
+      "30": {
+        "direction": "LONG",
+        "long_probability": 62.1,
+        "short_probability": 37.9,
+        "confidence": 24.1,
+        "status": "VALIDATA",
+        "historical_samples": 128,
+        "historical_hit_rate": 47.1
+      },
+      "90": {
+        "direction": "LONG",
+        "long_probability": 68.2,
+        "short_probability": 31.8,
+        "confidence": 36.3,
+        "status": "VALIDATA",
+        "historical_samples": 91,
+        "historical_hit_rate": 62.4
+      },
+      "180": {
+        "direction": "LONG",
+        "long_probability": 73.6,
+        "short_probability": 26.4,
+        "confidence": 47.2,
+        "status": "VALIDATA",
+        "historical_samples": 44,
+        "historical_hit_rate": 75.9
+      },
+      "365": {
+        "direction": "LONG",
+        "long_probability": 71.4,
+        "short_probability": 28.6,
+        "confidence": 42.8,
+        "status": "NON_VALIDATA",
+        "historical_samples": 0,
+        "historical_hit_rate": null
+      }
+    },
+    "drivers": {
+      "momentum20": 18.6,
+      "momentum60": -17.59,
+      "momentum120": 7.67,
+      "model_probability": 79.5,
+      "regime": "N/D",
+      "futures": 0.0,
+      "cyclical": 0.16279069767441867,
+      "political": 0.0,
+      "weather": 0.0
+    },
+    "status": "OPEN"
+  },
+  {
+    "id": "Olio di soia|2026-09-11",
+    "name": "Olio di soia",
+    "symbol": "SOYBEAN_OIL/USD",
+    "forecast_date": "2026-09-11",
+    "created_at": "2026-09-11T00:25:34.990886+00:00",
+    "price": 72.06999969482422,
+    "horizons": {
+      "30": {
+        "direction": "LONG",
+        "long_probability": 65.3,
+        "short_probability": 34.7,
+        "confidence": 30.5,
+        "status": "VALIDATA",
+        "historical_samples": 118,
+        "historical_hit_rate": 46.1
+      },
+      "90": {
+        "direction": "LONG",
+        "long_probability": 68.9,
+        "short_probability": 31.1,
+        "confidence": 37.8,
+        "status": "VALIDATA",
+        "historical_samples": 86,
+        "historical_hit_rate": 55.2
+      },
+      "180": {
+        "direction": "LONG",
+        "long_probability": 79.4,
+        "short_probability": 20.6,
+        "confidence": 58.7,
+        "status": "VALIDATA",
+        "historical_samples": 49,
+        "historical_hit_rate": 81.4
+      },
+      "365": {
+        "direction": "LONG",
+        "long_probability": 78.4,
+        "short_probability": 21.6,
+        "confidence": 56.7,
+        "status": "NON_VALIDATA",
+        "historical_samples": 0,
+        "historical_hit_rate": null
+      }
+    },
+    "drivers": {
+      "momentum20": 59.66,
+      "momentum60": 61.52,
+      "momentum120": 140.23,
+      "model_probability": 73.8,
+      "regime": "N/D",
+      "futures": 0.0,
+      "cyclical": 0.20930232558139528,
+      "political": -0.5,
+      "weather": 0.0
+    },
+    "status": "OPEN"
+  },
+  {
+    "id": "Avena|2026-09-11",
+    "name": "Avena",
+    "symbol": "OATS/USD",
+    "forecast_date": "2026-09-11",
+    "created_at": "2026-09-11T00:25:34.990886+00:00",
+    "price": 378.75,
+    "horizons": {
+      "30": {
+        "direction": "LONG",
+        "long_probability": 70.3,
+        "short_probability": 29.7,
+        "confidence": 40.5,
+        "status": "VALIDATA",
+        "historical_samples": 76,
+        "historical_hit_rate": 70.9
+      },
+      "90": {
+        "direction": "LONG",
+        "long_probability": 77.2,
+        "short_probability": 22.8,
+        "confidence": 54.3,
+        "status": "VALIDATA",
+        "historical_samples": 66,
+        "historical_hit_rate": 88.2
+      },
+      "180": {
+        "direction": "LONG",
+        "long_probability": 68.8,
+        "short_probability": 31.2,
+        "confidence": 37.6,
+        "status": "NON_VALIDATA",
+        "historical_samples": 17,
+        "historical_hit_rate": 81.5
+      },
+      "365": {
+        "direction": "LONG",
+        "long_probability": 68.8,
+        "short_probability": 31.2,
+        "confidence": 37.6,
+        "status": "NON_VALIDATA",
+        "historical_samples": 0,
+        "historical_hit_rate": null
+      }
+    },
+    "drivers": {
+      "momentum20": -3.99,
+      "momentum60": 8.37,
+      "momentum120": 37.48,
+      "model_probability": 82.8,
+      "regime": "N/D",
+      "futures": 0.0,
+      "cyclical": 0.33333333333333326,
+      "political": 0.0,
+      "weather": 0.0
+    },
+    "status": "OPEN"
+  },
+  {
+    "id": "Riso|2026-09-11",
+    "name": "Riso",
+    "symbol": "RICE/USD",
+    "forecast_date": "2026-09-11",
+    "created_at": "2026-09-11T00:25:34.990886+00:00",
+    "price": 16.06999969482422,
+    "horizons": {
+      "30": {
+        "direction": "LONG",
+        "long_probability": 71.3,
+        "short_probability": 28.7,
+        "confidence": 42.6,
+        "status": "VALIDATA",
+        "historical_samples": 145,
+        "historical_hit_rate": 59.4
+      },
+      "90": {
+        "direction": "LONG",
+        "long_probability": 68.0,
+        "short_probability": 32.0,
+        "confidence": 35.9,
+        "status": "VALIDATA",
+        "historical_samples": 94,
+        "historical_hit_rate": 51.0
+      },
+      "180": {
+        "direction": "LONG",
+        "long_probability": 76.9,
+        "short_probability": 23.1,
+        "confidence": 53.8,
+        "status": "VALIDATA",
+        "historical_samples": 50,
+        "historical_hit_rate": 73.3
+      },
+      "365": {
+        "direction": "LONG",
+        "long_probability": 79.5,
+        "short_probability": 20.5,
+        "confidence": 58.9,
+        "status": "NON_VALIDATA",
+        "historical_samples": 0,
+        "historical_hit_rate": null
+      }
+    },
+    "drivers": {
+      "momentum20": 9.36,
+      "momentum60": 19.39,
+      "momentum120": 52.03,
+      "model_probability": 77.1,
+      "regime": "N/D",
+      "futures": 0.0,
+      "cyclical": 0.2727272727272727,
+      "political": 0.0,
+      "weather": 0.0
+    },
+    "status": "OPEN"
+  },
+  {
+    "id": "Caffè|2026-09-11",
+    "name": "Caffè",
+    "symbol": "COFFEE/USD",
+    "forecast_date": "2026-09-11",
+    "created_at": "2026-09-11T00:25:34.990886+00:00",
+    "price": 289.95001220703125,
+    "horizons": {
+      "30": {
+        "direction": "LONG",
+        "long_probability": 71.6,
+        "short_probability": 28.4,
+        "confidence": 43.2,
+        "status": "VALIDATA",
+        "historical_samples": 138,
+        "historical_hit_rate": 69.6
+      },
+      "90": {
+        "direction": "LONG",
+        "long_probability": 67.4,
+        "short_probability": 32.6,
+        "confidence": 34.7,
+        "status": "VALIDATA",
+        "historical_samples": 107,
+        "historical_hit_rate": 59.0
+      },
+      "180": {
+        "direction": "LONG",
+        "long_probability": 80.7,
+        "short_probability": 19.3,
+        "confidence": 61.5,
+        "status": "VALIDATA",
+        "historical_samples": 56,
+        "historical_hit_rate": 92.4
+      },
+      "365": {
+        "direction": "LONG",
+        "long_probability": 73.6,
+        "short_probability": 26.4,
+        "confidence": 47.2,
+        "status": "NON_VALIDATA",
+        "historical_samples": 0,
+        "historical_hit_rate": null
+      }
+    },
+    "drivers": {
+      "momentum20": 17.91,
+      "momentum60": 135.83,
+      "momentum120": 79.09,
+      "model_probability": 34.9,
+      "regime": "N/D",
+      "futures": 0.0,
+      "cyclical": -0.4285714285714286,
+      "political": 0.381,
+      "weather": -42.9
+    },
+    "status": "OPEN"
+  },
+  {
+    "id": "Cacao|2026-09-11",
+    "name": "Cacao",
+    "symbol": "COCOA/USD",
+    "forecast_date": "2026-09-11",
+    "created_at": "2026-09-11T00:25:34.990886+00:00",
+    "price": 5941.0,
+    "horizons": {
+      "30": {
+        "direction": "LONG",
+        "long_probability": 68.9,
+        "short_probability": 31.1,
+        "confidence": 37.8,
+        "status": "VALIDATA",
+        "historical_samples": 88,
+        "historical_hit_rate": 84.7
+      },
+      "90": {
+        "direction": "LONG",
+        "long_probability": 68.2,
+        "short_probability": 31.8,
+        "confidence": 36.3,
+        "status": "VALIDATA",
+        "historical_samples": 66,
+        "historical_hit_rate": 82.9
+      },
+      "180": {
+        "direction": "LONG",
+        "long_probability": 69.1,
+        "short_probability": 30.9,
+        "confidence": 38.2,
+        "status": "VALIDATA",
+        "historical_samples": 24,
+        "historical_hit_rate": 85.3
+      },
+      "365": {
+        "direction": "LONG",
+        "long_probability": 57.7,
+        "short_probability": 42.3,
+        "confidence": 15.5,
+        "status": "NON_VALIDATA",
+        "historical_samples": 0,
+        "historical_hit_rate": null
+      }
+    },
+    "drivers": {
+      "momentum20": -18.99,
+      "momentum60": 134.73,
+      "momentum120": 120.61,
+      "model_probability": 34.3,
+      "regime": "N/D",
+      "futures": 0.0,
+      "cyclical": -0.4285714285714286,
+      "political": 0.0,
+      "weather": 0.0
+    },
+    "status": "OPEN"
+  },
+  {
+    "id": "Zucchero|2026-09-11",
+    "name": "Zucchero",
+    "symbol": "SUGAR/USD",
+    "forecast_date": "2026-09-11",
+    "created_at": "2026-09-11T00:25:34.990886+00:00",
+    "price": 19.780000686645508,
+    "horizons": {
+      "30": {
+        "direction": "LONG",
+        "long_probability": 64.0,
+        "short_probability": 36.0,
+        "confidence": 27.9,
+        "status": "VALIDATA",
+        "historical_samples": 91,
+        "historical_hit_rate": 65.3
+      },
+      "90": {
+        "direction": "LONG",
+        "long_probability": 71.1,
+        "short_probability": 28.9,
+        "confidence": 42.1,
+        "status": "VALIDATA",
+        "historical_samples": 67,
+        "historical_hit_rate": 83.1
+      },
+      "180": {
+        "direction": "LONG",
+        "long_probability": 71.9,
+        "short_probability": 28.1,
+        "confidence": 43.9,
+        "status": "VALIDATA",
+        "historical_samples": 24,
+        "historical_hit_rate": 85.3
+      },
+      "365": {
+        "direction": "LONG",
+        "long_probability": 62.2,
+        "short_probability": 37.8,
+        "confidence": 24.4,
+        "status": "NON_VALIDATA",
+        "historical_samples": 0,
+        "historical_hit_rate": null
+      }
+    },
+    "drivers": {
+      "momentum20": -13.02,
+      "momentum60": 24.95,
+      "momentum120": 33.74,
+      "model_probability": 73.7,
+      "regime": "N/D",
+      "futures": 0.0,
+      "cyclical": 0.0,
+      "political": 0.0,
+      "weather": 0.0
+    },
+    "status": "OPEN"
+  },
+  {
+    "id": "Cotone|2026-09-11",
+    "name": "Cotone",
+    "symbol": "COTTON/USD",
+    "forecast_date": "2026-09-11",
+    "created_at": "2026-09-11T00:25:34.990886+00:00",
+    "price": 88.12999725341797,
+    "horizons": {
+      "30": {
+        "direction": "NEUTRALE",
+        "long_probability": 51.6,
+        "short_probability": 48.4,
+        "confidence": 3.1,
+        "status": "VALIDATA",
+        "historical_samples": 140,
+        "historical_hit_rate": 33.3
+      },
+      "90": {
+        "direction": "LONG",
+        "long_probability": 57.6,
+        "short_probability": 42.4,
+        "confidence": 15.2,
+        "status": "VALIDATA",
+        "historical_samples": 114,
+        "historical_hit_rate": 48.4
+      },
+      "180": {
+        "direction": "LONG",
+        "long_probability": 64.1,
+        "short_probability": 35.9,
+        "confidence": 28.2,
+        "status": "VALIDATA",
+        "historical_samples": 72,
+        "historical_hit_rate": 64.6
+      },
+      "365": {
+        "direction": "LONG",
+        "long_probability": 63.7,
+        "short_probability": 36.3,
+        "confidence": 27.4,
+        "status": "NON_VALIDATA",
+        "historical_samples": 0,
+        "historical_hit_rate": null
+      }
+    },
+    "drivers": {
+      "momentum20": 37.96,
+      "momentum60": -23.27,
+      "momentum120": 27.98,
+      "model_probability": 63.5,
+      "regime": "N/D",
+      "futures": 0.0,
+      "cyclical": -0.11627906976744186,
+      "political": 0.0,
+      "weather": 0.0
+    },
+    "status": "OPEN"
+  },
+  {
+    "id": "Succo d'arancia|2026-09-11",
+    "name": "Succo d'arancia",
+    "symbol": "ORANGE_JUICE/USD",
+    "forecast_date": "2026-09-11",
+    "created_at": "2026-09-11T00:25:34.990886+00:00",
+    "price": 146.1999969482422,
+    "horizons": {
+      "30": {
+        "direction": "LONG",
+        "long_probability": 63.2,
+        "short_probability": 36.8,
+        "confidence": 26.4,
+        "status": "VALIDATA",
+        "historical_samples": 87,
+        "historical_hit_rate": 74.2
+      },
+      "90": {
+        "direction": "LONG",
+        "long_probability": 68.6,
+        "short_probability": 31.4,
+        "confidence": 37.3,
+        "status": "VALIDATA",
+        "historical_samples": 56,
+        "historical_hit_rate": 87.9
+      },
+      "180": {
+        "direction": "NEUTRALE",
+        "long_probability": 55.1,
+        "short_probability": 44.9,
+        "confidence": 10.3,
+        "status": "NON_VALIDATA",
+        "historical_samples": 17,
+        "historical_hit_rate": 81.5
+      },
+      "365": {
+        "direction": "NEUTRALE",
+        "long_probability": 55.1,
+        "short_probability": 44.9,
+        "confidence": 10.3,
+        "status": "NON_VALIDATA",
+        "historical_samples": 0,
+        "historical_hit_rate": null
+      }
+    },
+    "drivers": {
+      "momentum20": -72.4,
+      "momentum60": 32.19,
+      "momentum120": 4.43,
+      "model_probability": 64.4,
+      "regime": "N/D",
+      "futures": 0.0,
+      "cyclical": -0.1794871794871795,
+      "political": 0.0,
+      "weather": 0.0
+    },
+    "status": "OPEN"
+  },
+  {
+    "id": "Bovini vivi|2026-09-11",
+    "name": "Bovini vivi",
+    "symbol": "LIVE_CATTLE/USD",
+    "forecast_date": "2026-09-11",
+    "created_at": "2026-09-11T00:25:34.990886+00:00",
+    "price": 217.8249969482422,
+    "horizons": {
+      "30": {
+        "direction": "LONG",
+        "long_probability": 76.4,
+        "short_probability": 23.6,
+        "confidence": 52.8,
+        "status": "VALIDATA",
+        "historical_samples": 125,
+        "historical_hit_rate": 67.4
+      },
+      "90": {
+        "direction": "LONG",
+        "long_probability": 81.3,
+        "short_probability": 18.7,
+        "confidence": 62.5,
+        "status": "VALIDATA",
+        "historical_samples": 93,
+        "historical_hit_rate": 79.6
+      },
+      "180": {
+        "direction": "LONG",
+        "long_probability": 85.3,
+        "short_probability": 14.7,
+        "confidence": 70.5,
+        "status": "VALIDATA",
+        "historical_samples": 38,
+        "historical_hit_rate": 89.6
+      },
+      "365": {
+        "direction": "LONG",
+        "long_probability": 82.4,
+        "short_probability": 17.6,
+        "confidence": 64.9,
+        "status": "NON_VALIDATA",
+        "historical_samples": 0,
+        "historical_hit_rate": null
+      }
+    },
+    "drivers": {
+      "momentum20": 12.86,
+      "momentum60": 89.33,
+      "momentum120": 40.67,
+      "model_probability": 81.5,
+      "regime": "N/D",
+      "futures": 0.0,
+      "cyclical": 0.3999999999999999,
+      "political": 0.0,
+      "weather": 0.0
+    },
+    "status": "OPEN"
+  },
+  {
+    "id": "Maiali magri|2026-09-11",
+    "name": "Maiali magri",
+    "symbol": "LEAN_HOGS/USD",
+    "forecast_date": "2026-09-11",
+    "created_at": "2026-09-11T00:25:34.990886+00:00",
+    "price": 83.19999694824219,
+    "horizons": {
+      "30": {
+        "direction": "LONG",
+        "long_probability": 56.5,
+        "short_probability": 43.5,
+        "confidence": 13.1,
+        "status": "VALIDATA",
+        "historical_samples": 86,
+        "historical_hit_rate": 60.4
+      },
+      "90": {
+        "direction": "LONG",
+        "long_probability": 62.9,
+        "short_probability": 37.1,
+        "confidence": 25.8,
+        "status": "VALIDATA",
+        "historical_samples": 66,
+        "historical_hit_rate": 76.3
+      },
+      "180": {
+        "direction": "LONG",
+        "long_probability": 65.5,
+        "short_probability": 34.5,
+        "confidence": 31.1,
+        "status": "VALIDATA",
+        "historical_samples": 25,
+        "historical_hit_rate": 82.9
+      },
+      "365": {
+        "direction": "NEUTRALE",
+        "long_probability": 54.5,
+        "short_probability": 45.5,
+        "confidence": 9.0,
+        "status": "NON_VALIDATA",
+        "historical_samples": 0,
+        "historical_hit_rate": null
+      }
+    },
+    "drivers": {
+      "momentum20": -0.72,
+      "momentum60": 19.2,
+      "momentum120": 23.3,
+      "model_probability": 47.6,
+      "regime": "N/D",
+      "futures": 0.0,
+      "cyclical": 0.07317073170731714,
+      "political": 0.0,
+      "weather": 0.0
+    },
+    "status": "OPEN"
+  },
+  {
+    "id": "Feeder Cattle|2026-09-11",
+    "name": "Feeder Cattle",
+    "symbol": "FEEDER_CATTLE/USD",
+    "forecast_date": "2026-09-11",
+    "created_at": "2026-09-11T00:25:34.990886+00:00",
+    "price": 327.45001220703125,
+    "horizons": {
+      "30": {
+        "direction": "LONG",
+        "long_probability": 70.9,
+        "short_probability": 29.1,
+        "confidence": 41.7,
+        "status": "VALIDATA",
+        "historical_samples": 124,
+        "historical_hit_rate": 63.4
+      },
+      "90": {
+        "direction": "LONG",
+        "long_probability": 78.6,
+        "short_probability": 21.4,
+        "confidence": 57.2,
+        "status": "VALIDATA",
+        "historical_samples": 89,
+        "historical_hit_rate": 82.8
+      },
+      "180": {
+        "direction": "LONG",
+        "long_probability": 80.7,
+        "short_probability": 19.3,
+        "confidence": 61.4,
+        "status": "VALIDATA",
+        "historical_samples": 32,
+        "historical_hit_rate": 88.1
+      },
+      "365": {
+        "direction": "LONG",
+        "long_probability": 76.3,
+        "short_probability": 23.7,
+        "confidence": 52.5,
+        "status": "NON_VALIDATA",
+        "historical_samples": 0,
+        "historical_hit_rate": null
+      }
+    },
+    "drivers": {
+      "momentum20": 29.95,
+      "momentum60": 137.76,
+      "momentum120": 59.58,
+      "model_probability": 69.9,
+      "regime": "N/D",
+      "futures": 0.0,
+      "cyclical": 0.38461538461538464,
+      "political": 0.0,
+      "weather": 0.0
+    },
+    "status": "OPEN"
   }
 ]
