@@ -1,14 +1,35 @@
 {
-  "timestamp": "2026-09-11T06:14:49.009481+00:00",
-  "best": "Feeder Cattle",
+  "timestamp": "2026-09-11T06:23:26.176710+00:00",
+  "best": "Soia",
   "direction": "LONG",
   "action": "LONG — ASPETTARE CONFERMA",
   "entry_state": "ACTIVE_SETUP",
   "trigger": "PULLBACK + RIPARTENZA",
-  "trigger_tf": "5m",
+  "trigger_tf": "1m",
   "position": null,
   "position_direction": null,
   "ranked": [
+    {
+      "name": "Soia",
+      "symbol": "SOYBEAN/USD",
+      "analysis": {
+        "signal": "WAIT",
+        "setup_direction": "LONG",
+        "model_signal": "LONG",
+        "action_label": "LONG — ASPETTARE CONFERMA",
+        "score": 66.11,
+        "entry_probability": 83.81,
+        "probability_validated": null,
+        "probability_status": "NON_VALIDATA",
+        "entry": 1315.22,
+        "stop": 1272.86,
+        "tp2": 1415.79,
+        "statistical_risk": {
+          "available": false,
+          "status": "DATI INSUFFICIENTI"
+        }
+      }
+    },
     {
       "name": "Feeder Cattle",
       "symbol": "FEEDER_CATTLE/USD",
@@ -17,7 +38,7 @@
         "setup_direction": "LONG",
         "model_signal": "SHORT",
         "action_label": "LONG — ASPETTARE CONFERMA",
-        "score": 52.55,
+        "score": 52.53,
         "entry_probability": 69.94,
         "probability_validated": null,
         "probability_status": "NON_VALIDATA",
@@ -38,13 +59,34 @@
         "setup_direction": "LONG",
         "model_signal": "LONG",
         "action_label": "LONG — ASPETTARE CONFERMA",
-        "score": 62.27,
+        "score": 62.26,
         "entry_probability": 81.49,
         "probability_validated": null,
         "probability_status": "NON_VALIDATA",
         "entry": 216.954,
         "stop": 207.781,
         "tp2": 237.914,
+        "statistical_risk": {
+          "available": false,
+          "status": "DATI INSUFFICIENTI"
+        }
+      }
+    },
+    {
+      "name": "Heating Oil",
+      "symbol": "HO/USD",
+      "analysis": {
+        "signal": "WAIT",
+        "setup_direction": "LONG",
+        "model_signal": "LONG",
+        "action_label": "LONG — ASPETTARE CONFERMA",
+        "score": 63.8,
+        "entry_probability": 84.02,
+        "probability_validated": null,
+        "probability_status": "NON_VALIDATA",
+        "entry": 5.0439,
+        "stop": 4.7091,
+        "tp2": 5.7744,
         "statistical_risk": {
           "available": false,
           "status": "DATI INSUFFICIENTI"
@@ -59,55 +101,13 @@
         "setup_direction": "LONG",
         "model_signal": "SHORT",
         "action_label": "ATTENDERE",
-        "score": 48.43,
+        "score": 48.41,
         "entry_probability": 73.7,
         "probability_validated": null,
         "probability_status": "NON_VALIDATA",
         "entry": 19.701,
         "stop": 18.872,
         "tp2": 21.597,
-        "statistical_risk": {
-          "available": false,
-          "status": "DATI INSUFFICIENTI"
-        }
-      }
-    },
-    {
-      "name": "Heating Oil",
-      "symbol": "HO/USD",
-      "analysis": {
-        "signal": "WAIT",
-        "setup_direction": "LONG",
-        "model_signal": "LONG",
-        "action_label": "ATTENDERE",
-        "score": 57.04,
-        "entry_probability": 78.54,
-        "probability_validated": null,
-        "probability_status": "NON_VALIDATA",
-        "entry": 5.0378,
-        "stop": 4.7029,
-        "tp2": 5.7682,
-        "statistical_risk": {
-          "available": false,
-          "status": "DATI INSUFFICIENTI"
-        }
-      }
-    },
-    {
-      "name": "Mais",
-      "symbol": "CORN/USD",
-      "analysis": {
-        "signal": "WAIT",
-        "setup_direction": "SHORT",
-        "model_signal": "LONG",
-        "action_label": "ATTENDERE",
-        "score": 45.02,
-        "entry_probability": 73.59,
-        "probability_validated": null,
-        "probability_status": "NON_VALIDATA",
-        "entry": 530.112,
-        "stop": 549.43,
-        "tp2": 485.139,
         "statistical_risk": {
           "available": false,
           "status": "DATI INSUFFICIENTI"
