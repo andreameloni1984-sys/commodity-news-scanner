@@ -4711,6 +4711,95 @@ def send_telegram(message):
         print(f"⚠️ Errore Telegram: {error}")
 
 
+TELEGRAM_COMMAND_OFFSET_FILE = "telegram_update_offset.json"
+TELEGRAM_COMMAND_MAX_AGE_SECONDS = int(os.getenv("TELEGRAM_COMMAND_MAX_AGE_SECONDS", "900"))
+
+
+def _telegram_command_ranking(ranked):
+    """Build a user-facing ranking on demand, without technical debug noise."""
+    available = [x for x in ranked if x.get("available")]
+    available.sort(key=lambda x: safe_float(x.get("ranking_score", x.get("analysis", {}).get("score", 0)), 0) or 0, reverse=True)
+    lines = [f"🌍 COMMODITIES BOT v{BOT_VERSION}", "", "🏆 CLASSIFICA ATTUALE", "━━━━━━━━━━━━━━━━━━━━"]
+    medals = ["🥇", "🥈", "🥉"]
+    for i, item in enumerate(available[:10], 1):
+        a = item.get("analysis", {}) or {}
+        action = a.get("action_label", "ATTENDERE")
+        direction = a.get("setup_direction") or a.get("model_signal") or "N/D"
+        score = safe_float(a.get("score"), 0) or 0
+        prob = (safe_float(a.get("probability"), 0) or 0) * 100
+        intel = safe_float((a.get("market_intelligence_v41", {}) or {}).get("score"), 50) or 50
+        icon = "🟢" if action == "ENTRARE" else "🔴" if action == "NON ENTRARE" else "🟡"
+        rank_icon = medals[i-1] if i <= 3 else f"{i}."
+        lines.append(f"{rank_icon} {item['name']} | {icon} {action} | {direction} | Score {score:.0f} | Prob {prob:.0f}% | Intel {intel:.0f}")
+    if not available:
+        lines.append("⚪ Nessuna commodity disponibile.")
+    lines += ["", "🧪 PAPER ONLY — nessun ordine reale."]
+    return "\n".join(lines)
+
+
+def process_telegram_commands(ranked):
+    """Poll Telegram and answer on-demand commands from the configured chat."""
+    if os.getenv("TELEGRAM_COMMANDS_ENABLED", "0") != "1":
+        return
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        return
+
+    try:
+        state = _json_load(TELEGRAM_COMMAND_OFFSET_FILE, {}) or {}
+        offset = int(state.get("offset", 0) or 0)
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
+        params = {"timeout": 5, "allowed_updates": json.dumps(["message"])}
+        if offset > 0:
+            params["offset"] = offset
+        response = requests.get(url, params=params, timeout=12)
+        response.raise_for_status()
+        data = response.json()
+        if not data.get("ok"):
+            print(f"⚠️ Telegram getUpdates non OK: {data}")
+            return
+
+        updates = data.get("result", []) or []
+        if not updates:
+            return
+
+        now = datetime.now(timezone.utc)
+        newest_offset = offset
+        for update in updates:
+            update_id = int(update.get("update_id", 0) or 0)
+            newest_offset = max(newest_offset, update_id + 1)
+            message = update.get("message", {}) or {}
+            chat = message.get("chat", {}) or {}
+            chat_id = str(chat.get("id", ""))
+            if chat_id != str(TELEGRAM_CHAT_ID):
+                continue
+            text = str(message.get("text", "") or "").strip().lower()
+            if not text:
+                continue
+            ts = message.get("date")
+            if ts:
+                age = (now - datetime.fromtimestamp(int(ts), tz=timezone.utc)).total_seconds()
+                if age > TELEGRAM_COMMAND_MAX_AGE_SECONDS:
+                    print(f"ℹ️ Telegram comando ignorato: vecchio di {age:.0f}s")
+                    continue
+                if age < -60:
+                    continue
+
+            normalized = re.sub(r"\\s+", " ", text).strip()
+            is_ranking = (
+                normalized in {"classifica", "ranking", "/classifica", "/ranking", "/rank"}
+                or "mandami la classifica" in normalized
+                or "dammi la classifica" in normalized
+                or "inviami la classifica" in normalized
+            )
+            if is_ranking:
+                print("📨 Telegram: comando CLASSIFICA ricevuto")
+                send_telegram(_telegram_command_ranking(ranked))
+
+        _json_save(TELEGRAM_COMMAND_OFFSET_FILE, {"offset": newest_offset, "updated_at": now.isoformat()})
+    except Exception as exc:
+        print(f"⚠️ Telegram command handler: {exc}")
+
+
 def icon_for_signal(signal):
     return {
         "LONG": "🟢",
@@ -6412,6 +6501,7 @@ def main():
     else:
         print("📡 Internal monitor: Telegram alert periodico DISATTIVATO.")
     maybe_send_session_reports(ranked, best, position_message)
+    process_telegram_commands(ranked)
     save_monitor_state(ranked, best, position)
 
     # Fine giornata: valuta le previsioni maturate e invia il report una sola volta.
