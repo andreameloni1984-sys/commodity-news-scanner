@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-09-11T05:17:29.836297+00:00",
-  "best": "Heating Oil",
+  "timestamp": "2026-09-11T05:42:40.358870+00:00",
+  "best": "Feeder Cattle",
   "direction": "LONG",
   "action": "LONG — ASPETTARE CONFERMA",
   "entry_state": "ACTIVE_SETUP",
@@ -10,32 +10,44 @@
   "position_direction": null,
   "ranked": [
     {
-      "name": "Heating Oil",
-      "symbol": "HO/USD",
+      "name": "Feeder Cattle",
+      "symbol": "FEEDER_CATTLE/USD",
+      "analysis": {
+        "signal": "WAIT",
+        "setup_direction": "LONG",
+        "model_signal": "SHORT",
+        "action_label": "LONG — ASPETTARE CONFERMA",
+        "score": 52.91,
+        "entry_probability": 69.94,
+        "probability_validated": null,
+        "probability_status": "NON_VALIDATA",
+        "entry": 326.14,
+        "stop": 311.065,
+        "tp2": 360.22,
+        "statistical_risk": {
+          "available": false,
+          "status": "DATI INSUFFICIENTI"
+        }
+      }
+    },
+    {
+      "name": "Bovini vivi",
+      "symbol": "LIVE_CATTLE/USD",
       "analysis": {
         "signal": "WAIT",
         "setup_direction": "LONG",
         "model_signal": "LONG",
         "action_label": "LONG — ASPETTARE CONFERMA",
-        "score": 57.98,
-        "entry_probability": 83.98,
+        "score": 62.26,
+        "entry_probability": 81.49,
         "probability_validated": null,
         "probability_status": "NON_VALIDATA",
-        "entry": 5.072,
-        "stop": 5.0127,
-        "tp2": 5.3049,
+        "entry": 216.954,
+        "stop": 207.781,
+        "tp2": 237.914,
         "statistical_risk": {
-          "available": true,
-          "status": "VALIDATA",
-          "sl_atr": 1.5,
-          "tp_atr": 4.0,
-          "train_expectancy": 0.107,
-          "train_win_rate": 39.1,
-          "train_samples": 345,
-          "validation_expectancy": 0.739,
-          "validation_win_rate": 52.4,
-          "validation_samples": 231,
-          "method": "WALK_FORWARD_ATR_GRID"
+          "available": false,
+          "status": "DATI INSUFFICIENTI"
         }
       }
     },
@@ -47,115 +59,58 @@
         "setup_direction": "LONG",
         "model_signal": "LONG",
         "action_label": "LONG — ASPETTARE CONFERMA",
-        "score": 62.3,
-        "entry_probability": 84.3,
+        "score": 66.91,
+        "entry_probability": 84.31,
         "probability_validated": null,
         "probability_status": "NON_VALIDATA",
-        "entry": 3.1792,
-        "stop": 3.1549,
-        "tp2": 3.2909,
+        "entry": 3.1767,
+        "stop": 2.9347,
+        "tp2": 3.699,
         "statistical_risk": {
-          "available": true,
-          "status": "VALIDATA",
-          "sl_atr": 1.5,
-          "tp_atr": 4.0,
-          "train_expectancy": 0.33,
-          "train_win_rate": 51.6,
-          "train_samples": 345,
-          "validation_expectancy": 0.464,
-          "validation_win_rate": 50.6,
-          "validation_samples": 231,
-          "method": "WALK_FORWARD_ATR_GRID"
+          "available": false,
+          "status": "DATI INSUFFICIENTI"
         }
       }
     },
     {
-      "name": "Soia",
-      "symbol": "SOYBEAN/USD",
+      "name": "Zucchero",
+      "symbol": "SUGAR/USD",
       "analysis": {
         "signal": "WAIT",
         "setup_direction": "LONG",
-        "model_signal": "LONG",
+        "model_signal": "SHORT",
         "action_label": "ATTENDERE",
-        "score": 53.55,
-        "entry_probability": 78.87,
+        "score": 48.63,
+        "entry_probability": 73.7,
         "probability_validated": null,
         "probability_status": "NON_VALIDATA",
-        "entry": 1315.72,
-        "stop": 1310.89,
-        "tp2": 1341.21,
+        "entry": 19.701,
+        "stop": 18.872,
+        "tp2": 21.597,
         "statistical_risk": {
-          "available": true,
-          "status": "VALIDATA",
-          "sl_atr": 2.0,
-          "tp_atr": 4.0,
-          "train_expectancy": 0.162,
-          "train_win_rate": 51.6,
-          "train_samples": 345,
-          "validation_expectancy": 0.623,
-          "validation_win_rate": 58.9,
-          "validation_samples": 231,
-          "method": "WALK_FORWARD_ATR_GRID"
+          "available": false,
+          "status": "DATI INSUFFICIENTI"
         }
       }
     },
     {
-      "name": "Avena",
-      "symbol": "OATS/USD",
+      "name": "Mais",
+      "symbol": "CORN/USD",
       "analysis": {
         "signal": "WAIT",
-        "setup_direction": "LONG",
+        "setup_direction": "SHORT",
         "model_signal": "LONG",
         "action_label": "ATTENDERE",
-        "score": 47.59,
-        "entry_probability": 85.72,
+        "score": 42.17,
+        "entry_probability": 73.6,
         "probability_validated": null,
         "probability_status": "NON_VALIDATA",
-        "entry": 373.251,
-        "stop": 372.964,
-        "tp2": 381.893,
+        "entry": 530.614,
+        "stop": 549.93,
+        "tp2": 485.639,
         "statistical_risk": {
-          "available": true,
-          "status": "VALIDATA",
-          "sl_atr": 1.0,
-          "tp_atr": 4.0,
-          "train_expectancy": 0.259,
-          "train_win_rate": 41.7,
-          "train_samples": 345,
-          "validation_expectancy": 0.515,
-          "validation_win_rate": 44.6,
-          "validation_samples": 231,
-          "method": "WALK_FORWARD_ATR_GRID"
-        }
-      }
-    },
-    {
-      "name": "Petrolio Brent",
-      "symbol": "XBR/USD",
-      "analysis": {
-        "signal": "WAIT",
-        "setup_direction": "LONG",
-        "model_signal": "LONG",
-        "action_label": "ATTENDERE",
-        "score": 49.78,
-        "entry_probability": 77.02,
-        "probability_validated": null,
-        "probability_status": "NON_VALIDATA",
-        "entry": 106.705,
-        "stop": 105.478,
-        "tp2": 112.011,
-        "statistical_risk": {
-          "available": true,
-          "status": "VALIDATA",
-          "sl_atr": 1.5,
-          "tp_atr": 4.0,
-          "train_expectancy": 0.201,
-          "train_win_rate": 49.3,
-          "train_samples": 345,
-          "validation_expectancy": 0.55,
-          "validation_win_rate": 49.4,
-          "validation_samples": 231,
-          "method": "WALK_FORWARD_ATR_GRID"
+          "available": false,
+          "status": "DATI INSUFFICIENTI"
         }
       }
     }
