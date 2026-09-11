@@ -124,4 +124,4 @@ jobs:
               git commit -m "chore: persist commodities communication state"
               git push
             fi
-          fi
+          fi 
