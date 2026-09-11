@@ -1,17 +1,12 @@
 {
   "Oro": {
-    "updated_at": "2026-09-11T01:19:43.463235+00:00",
+    "updated_at": "2026-09-11T04:34:54.085668+00:00",
     "value": {
       "enabled": true,
       "direction": "NEUTRALE",
-      "score": 0.75,
-      "count": 6,
+      "score": 0.9,
+      "count": 5,
       "events": [
-        {
-          "title": "Gold drops below $4,300/oz as Fed votes 12-0 in favor of rate hold, but nearly half of policymakers see a rate hike in 2026 - KITCO",
-          "publishedAt": "Wed, 17 Jun 2026 07:00:00 GMT",
-          "url": "https://news.google.com/rss/articles/CBMisgFBVV95cUxNNWFOQUlldTlhUGtxQVNIWDc0VXJrNHdwWjNCZHZzWk96NWFCM1BUUTlaaEhHYkFDLWhkLTNoLWJQNGhvOVBtZWhfbjBwYkEwZkx2bzE0SkVqd0JzVzJQV1JjZlNMMnUtNWkyUXNVUWdHdGZqVHFVUnZVWEtRQ2VIemZJV0F2dkNhNWFpRnhMOHFkV0tXVXV6ZEZRenpIRlB6dFE5ZnE3SDVkSEZyMVJ2UnVn?oc=5"
-        },
         {
           "title": "Gold scales record peak as U.S. election jitters drive safe-haven rush - CNBC",
           "publishedAt": "Tue, 22 Oct 2024 07:00:00 GMT",
@@ -38,11 +33,11 @@
           "url": "https://news.google.com/rss/articles/CBMitgFBVV95cUxQbU5ycHVXSTlCX1RLMlpuUXgwNFNFY0xPUHNNUFpULXYtUWxYUllfeEE3Z1pja2MzVjdmSW9DbmtnMzdYOTdvYVJ4Skt6bDc2eUx3MmQyRkhCLXg0SU1iQUs4OUk4a2J1MEp5UUdpMmpyYkRJTVBaNGdVNWpUY01TWlhwYWtMYndjTlBUcWRUajdCWkFRdXpTTDVlQW1UR0M3Qmpzd21DWHhDVS1tTHk0alN4UV9JQQ?oc=5"
         }
       ],
-      "updated_at": "2026-09-11T01:19:43.463235+00:00"
+      "updated_at": "2026-09-11T04:34:54.085668+00:00"
     }
   },
   "Argento": {
-    "updated_at": "2026-09-11T01:19:50.677516+00:00",
+    "updated_at": "2026-09-11T04:35:00.911123+00:00",
     "value": {
       "enabled": true,
       "direction": "NEUTRALE",
@@ -50,7 +45,7 @@
       "count": 11,
       "events": [
         {
-          "title": "Americas Gold and Silver Corporation Announces Election of Directors and Annual Meeting Voting Results - newsfilecorp.com",
+          "title": "Americas Gold and Silver Corporation Announces Election of Directors and Annual Meeting Voting Results - TMX Newsfile",
           "publishedAt": "Tue, 23 Jun 2026 07:00:00 GMT",
           "url": "https://news.google.com/rss/articles/CBMi3gFBVV95cUxPdGUzVVQtbnZXOWRpYkJSc0Y2cnJBa0l5TF9KLThpcExUS3NSRV9EbU5fOGhCVnJfaFpxcnJ1YU5CdlJJUU9oUUdhWEFTODNzVFZyLXhsNWMzR01RdkRISVdLVDRhLU5kU1N1WklXNVdrRXdJVC1DY2RUc1ZCMjh4TjdvRGFETy13RU5Bc0IxcV9ScTJfSUkxSE5PV2xObVNwd3QyYnpqRlk2VUFfZHpYR0hweC1tc0xxcVRYTUN0R0tmb0pyZGZvQUE0cWtXODhUYXI5OGU0YmZGdm5ZS0E?oc=5"
         },
@@ -70,7 +65,7 @@
           "url": "https://news.google.com/rss/articles/CBMiqAFBVV95cUxQdEtvV2NzOF9CdWFoRzhCSDRKdHBtYTdhY1FfTWs4UUloSk9TMEJGYTBacGVjWnY2aUdmc19PNk1kM0tEQy1XQWdjVFNMdU1ybFVXTWhYZE1lbjlLUlJHOGs1cHR6a2xLQlJMMVpCSUVjTGNPLXhJaEduYldHMHBxOVhlX0F2eDExUWRqZDRldG9TaDF6T2dfTXJwSEFFT1dTOUpXMHZGdWw?oc=5"
         },
         {
-          "title": "Hunter mine workers overwhelmingly vote to take industrial action - newcastleherald.com.au",
+          "title": "Hunter mine workers overwhelmingly vote to take industrial action - Newcastle Herald",
           "publishedAt": "Tue, 02 Jun 2026 07:00:00 GMT",
           "url": "https://news.google.com/rss/articles/CBMiuwFBVV95cUxOT1dybUpDamd6MDBwOUNYSjV6M01Zb2QzLW5FdkZYeld6N3NuaURGSWl0QlBpYWlZS0s5Nnl4WlJ5YW5DSHVwTmU2RHRocXQtSktRSmFiQU1LczU2bG5UU1RONjIyejdISWw3dEFZajRBeUI1YlJFMFNXME50SXlIT2U3WU5MaDU1ZkN6ZTFtVUQzN25Id1NsNnVQWFJYVU5XQ3dGSjJvbnpjN1FGdGJpbUZndG1aLVBFV2lV?oc=5"
         },
@@ -90,38 +85,38 @@
           "url": "https://news.google.com/rss/articles/CBMickFVX3lxTFBrMWhYaXRvaGNGSDNoYzhJMTd6T21DZDJqcnRacVJ6V1lkdV9odkJHVmZVZmZNNk5iRzNVeVEtRGk0a3RUQ1ZGX0c2Rm1jb3I0OFZQVWZGbmVvOV82R29qYWdKY1ZqSUdrc2h0Ul9TN05QQQ?oc=5"
         }
       ],
-      "updated_at": "2026-09-11T01:19:50.677516+00:00"
+      "updated_at": "2026-09-11T04:35:00.911123+00:00"
     }
   },
   "Platino": {
-    "updated_at": "2026-09-11T01:19:56.997481+00:00",
+    "updated_at": "2026-09-11T04:35:07.102178+00:00",
     "value": {
       "enabled": true,
       "direction": "NEUTRALE",
       "score": 0.0,
       "count": 0,
       "events": [],
-      "updated_at": "2026-09-11T01:19:56.997481+00:00"
+      "updated_at": "2026-09-11T04:35:07.102178+00:00"
     }
   },
   "Palladio": {
-    "updated_at": "2026-09-11T01:20:05.373040+00:00",
+    "updated_at": "2026-09-11T04:35:13.691597+00:00",
     "value": {
       "enabled": true,
       "direction": "NEUTRALE",
       "score": 0.0,
       "count": 0,
       "events": [],
-      "updated_at": "2026-09-11T01:20:05.373040+00:00"
+      "updated_at": "2026-09-11T04:35:13.691597+00:00"
     }
   },
   "Petrolio WTI": {
-    "updated_at": "2026-09-11T01:20:14.883687+00:00",
+    "updated_at": "2026-09-11T04:35:21.758085+00:00",
     "value": {
       "enabled": true,
       "direction": "FAVOREVOLE",
-      "score": 2.06,
-      "count": 19,
+      "score": 2.02,
+      "count": 18,
       "events": [
         {
           "title": "Trump says oil and gas prices won't fall until 'right after' midterm election - CNBC",
@@ -134,14 +129,19 @@
           "url": "https://news.google.com/rss/articles/CBMipwFBVV95cUxNcmJvWVB5N2J4M184WjdSQTBFcDd3M3dxSGYzb3NaR1ZrWEdZaXdWaWpLSzM3Y0JCUGFEd0l5cEg2Vy1jUk9BU1FZdzJkM1piNVlxcjBNaUFrUEtlb1I3Si1fN2tLNFFPMHpYRmk5eHNpWjFVb1FISzZTblF5dUo2SC1CTHMtbG1KMTBUeHNkY2ZSVThyOWJxbjV6NkNXb0FZUWdnTHZfRdIBrAFBVV95cUxOdy1aWWFSTGtGaXpMWGM1UmNxdjRxRDhiR1lDUzZNVURlU0RqSTVwMTZIQ25lS1g3bHRYUGlULTVfd1pUbHBuRDVmalQ5ZExZLVpidlVEaEgtUk9hZXZsVWthSE5HY2tqeGFXNWk2aUZkdXRZU1dtNTE3bGRwTlZzYlJTUkhBRzZaMF93aUpRdXk4NXAtT2N5dENrd2RaYUoyWnBmSWRtZjNhWVZT?oc=5"
         },
         {
-          "title": "Trump’s Iran war now has a midterm election problem - Al Jazeera",
+          "title": "Iran war won't end until after US midterm elections, says Trump - BBC",
+          "publishedAt": "Thu, 10 Sep 2026 10:43:53 GMT",
+          "url": "https://news.google.com/rss/articles/CBMiWkFVX3lxTE1OM3F6X1RpZkkzWm1UMFFfVXlQLWFLSG5PNHZwVFN6ZnNNQzYwazlBamZzRkhoNmo3OEFNT25acm9PTWd3Y0pCLUdjWGxhZVAycnVtWEJ0UnFxQQ?oc=5"
+        },
+        {
+          "title": "Trump’s Iran war now has a midterm election problem - aljazeera.com",
           "publishedAt": "Thu, 10 Sep 2026 16:46:02 GMT",
           "url": "https://news.google.com/rss/articles/CBMilgFBVV95cUxNUjl0a2ZyQzNPa3RUbmlVNkhoS1FwMTExUHhWOFo3Y3NNdmVjcVp5QV91ZHFYb3NNZzZnNHQ2WFRnWkZNUHhzUkpEUjduZ2doWlZ6Tm9vQi0tT05KUkV6NUZlWXRQcGV5VDd3LWNOV1pKTlItcXNqMElGTW11VDBWWDl3SC1zZEM1VDdkTENqQ2VYTjVqTXfSAZsBQVVfeXFMUE1WQ2RRVlF6TkUwV0Z3c3ZRRGs4R1otcWVheGJOQ2VxMFpoWlB2NGtUMlB6eVdpOS1xN2F2MUhkTHh1bzQzMElab2xXb1F4am1MOHljVWdRNEp5Y0VkSk5BWERyMkxGUVowbnh0YjNlTGRFSTEyTzFrNmJMa2J6MkxPbGI0QUo0RHlUbnViTnB2OW9SUXdRMUlpVG8?oc=5"
         },
         {
-          "title": "Zelenskiy says no trilateral peace talks before elections in Russia - Reuters",
-          "publishedAt": "Thu, 10 Sep 2026 18:21:13 GMT",
-          "url": "https://news.google.com/rss/articles/CBMitgFBVV95cUxNMGhMelQwVy1SMWFYVTNld3RWVjJCSW5ybmR5V3hkVm5xYXFaOFRuU2t1anpTYWNaeWttTlV6VjVZT3ZjZTZVaDNnUTJ0eGpsQlBZNnRkV05RRk1NdmV1VERQdEVISVJXTWR5a3JTNjdtMDJZelotaVpHT0d0LWw2MkEtN3duNmVrQ1ZlZmdPcEJ6cVJWbUE0U1MzSlJwRnVRSkhwWUNUSUc5NnRldG1PWFE3QTJLZw?oc=5"
+          "title": "As Russians prepare to vote, anxiety over the war deepens - Reuters",
+          "publishedAt": "Thu, 10 Sep 2026 11:31:28 GMT",
+          "url": "https://news.google.com/rss/articles/CBMimwFBVV95cUxNRTNlSTZMdGdiT2hpdkhzVkpTSDVJS3FOVko5eGFJdHJvMzROSVltQVNCbHZYQXhDSERkdDQ2bXFVdlgzOG5lWlZmMW0wckt6aWpKb29JTm12Ny1VaWtuQ1prNjZkTi10aUFFcjF3SmxqR3VKV3V3ZnJwXzVPR2ZXWkIzR1Z3MEpuY2h4c1BnbTNXVEFqWm1fcXBicw?oc=5"
         },
         {
           "title": "Trump predicts Iran war will end ‘immediately after the election’ - The Hill",
@@ -157,23 +157,18 @@
           "title": "Trump Says Iran War Will End After Midterm Elections - IranWire",
           "publishedAt": "Thu, 10 Sep 2026 10:06:06 GMT",
           "url": "https://news.google.com/rss/articles/CBMikwFBVV95cUxQem5rdFB4WVhtLUpZMThPSXo4Wl9GSTJKY2V2eWRpUWdQd0ZJdkpiSXBfMmcxN1h2SUpPRHNzd1UtZ3RCbEZnYU44VVY0emlEOHNKYzNDSENweVRlVkdQWUJqSEZXWDh6REFZYW5ZTGFvSExaR1ZJcW5CeExhUDVzaVhrREM1OGpkZVl3dFlWRzNTMVE?oc=5"
-        },
-        {
-          "title": "Trump sees end to Iran war “immediately” after midterm elections - Semafor",
-          "publishedAt": "Thu, 10 Sep 2026 11:04:00 GMT",
-          "url": "https://news.google.com/rss/articles/CBMiqAFBVV95cUxPc1dMbVoybGhvUlVCaWd1NGNyX0ZmbGtKbTU3aExEUUtHcERlcjlVeC1Wb3E2UTNRV1BPcWxlT0p3ejhuQjE3M3pBVDZSbHNfSWFIWDFONVRFN1JmQjZCYm5KTGlqaFNUNTlGVkg5WG84emJFbnpqNXhFRmlMekFFOGFLeXFkUjRQQzg0MzJfbzNLVEFtWTJoZ0RKa3p6MWYtcUstbUVpRUs?oc=5"
         }
       ],
-      "updated_at": "2026-09-11T01:20:14.883687+00:00"
+      "updated_at": "2026-09-11T04:35:21.758085+00:00"
     }
   },
   "Petrolio Brent": {
-    "updated_at": "2026-09-11T01:20:23.739274+00:00",
+    "updated_at": "2026-09-11T04:35:29.083158+00:00",
     "value": {
       "enabled": true,
       "direction": "FAVOREVOLE",
-      "score": 2.06,
-      "count": 19,
+      "score": 2.02,
+      "count": 18,
       "events": [
         {
           "title": "Trump says oil and gas prices won't fall until 'right after' midterm election - CNBC",
@@ -186,14 +181,19 @@
           "url": "https://news.google.com/rss/articles/CBMipwFBVV95cUxNcmJvWVB5N2J4M184WjdSQTBFcDd3M3dxSGYzb3NaR1ZrWEdZaXdWaWpLSzM3Y0JCUGFEd0l5cEg2Vy1jUk9BU1FZdzJkM1piNVlxcjBNaUFrUEtlb1I3Si1fN2tLNFFPMHpYRmk5eHNpWjFVb1FISzZTblF5dUo2SC1CTHMtbG1KMTBUeHNkY2ZSVThyOWJxbjV6NkNXb0FZUWdnTHZfRdIBrAFBVV95cUxOdy1aWWFSTGtGaXpMWGM1UmNxdjRxRDhiR1lDUzZNVURlU0RqSTVwMTZIQ25lS1g3bHRYUGlULTVfd1pUbHBuRDVmalQ5ZExZLVpidlVEaEgtUk9hZXZsVWthSE5HY2tqeGFXNWk2aUZkdXRZU1dtNTE3bGRwTlZzYlJTUkhBRzZaMF93aUpRdXk4NXAtT2N5dENrd2RaYUoyWnBmSWRtZjNhWVZT?oc=5"
         },
         {
-          "title": "Trump’s Iran war now has a midterm election problem - Al Jazeera",
+          "title": "Iran war won't end until after US midterm elections, says Trump - BBC",
+          "publishedAt": "Thu, 10 Sep 2026 10:43:53 GMT",
+          "url": "https://news.google.com/rss/articles/CBMiWkFVX3lxTE1OM3F6X1RpZkkzWm1UMFFfVXlQLWFLSG5PNHZwVFN6ZnNNQzYwazlBamZzRkhoNmo3OEFNT25acm9PTWd3Y0pCLUdjWGxhZVAycnVtWEJ0UnFxQQ?oc=5"
+        },
+        {
+          "title": "Trump’s Iran war now has a midterm election problem - aljazeera.com",
           "publishedAt": "Thu, 10 Sep 2026 16:46:02 GMT",
           "url": "https://news.google.com/rss/articles/CBMilgFBVV95cUxNUjl0a2ZyQzNPa3RUbmlVNkhoS1FwMTExUHhWOFo3Y3NNdmVjcVp5QV91ZHFYb3NNZzZnNHQ2WFRnWkZNUHhzUkpEUjduZ2doWlZ6Tm9vQi0tT05KUkV6NUZlWXRQcGV5VDd3LWNOV1pKTlItcXNqMElGTW11VDBWWDl3SC1zZEM1VDdkTENqQ2VYTjVqTXfSAZsBQVVfeXFMUE1WQ2RRVlF6TkUwV0Z3c3ZRRGs4R1otcWVheGJOQ2VxMFpoWlB2NGtUMlB6eVdpOS1xN2F2MUhkTHh1bzQzMElab2xXb1F4am1MOHljVWdRNEp5Y0VkSk5BWERyMkxGUVowbnh0YjNlTGRFSTEyTzFrNmJMa2J6MkxPbGI0QUo0RHlUbnViTnB2OW9SUXdRMUlpVG8?oc=5"
         },
         {
-          "title": "Zelenskiy says no trilateral peace talks before elections in Russia - Reuters",
-          "publishedAt": "Thu, 10 Sep 2026 18:21:13 GMT",
-          "url": "https://news.google.com/rss/articles/CBMitgFBVV95cUxNMGhMelQwVy1SMWFYVTNld3RWVjJCSW5ybmR5V3hkVm5xYXFaOFRuU2t1anpTYWNaeWttTlV6VjVZT3ZjZTZVaDNnUTJ0eGpsQlBZNnRkV05RRk1NdmV1VERQdEVISVJXTWR5a3JTNjdtMDJZelotaVpHT0d0LWw2MkEtN3duNmVrQ1ZlZmdPcEJ6cVJWbUE0U1MzSlJwRnVRSkhwWUNUSUc5NnRldG1PWFE3QTJLZw?oc=5"
+          "title": "As Russians prepare to vote, anxiety over the war deepens - Reuters",
+          "publishedAt": "Thu, 10 Sep 2026 11:31:28 GMT",
+          "url": "https://news.google.com/rss/articles/CBMimwFBVV95cUxNRTNlSTZMdGdiT2hpdkhzVkpTSDVJS3FOVko5eGFJdHJvMzROSVltQVNCbHZYQXhDSERkdDQ2bXFVdlgzOG5lWlZmMW0wckt6aWpKb29JTm12Ny1VaWtuQ1prNjZkTi10aUFFcjF3SmxqR3VKV3V3ZnJwXzVPR2ZXWkIzR1Z3MEpuY2h4c1BnbTNXVEFqWm1fcXBicw?oc=5"
         },
         {
           "title": "Trump predicts Iran war will end ‘immediately after the election’ - The Hill",
@@ -209,18 +209,13 @@
           "title": "Trump Says Iran War Will End After Midterm Elections - IranWire",
           "publishedAt": "Thu, 10 Sep 2026 10:06:06 GMT",
           "url": "https://news.google.com/rss/articles/CBMikwFBVV95cUxQem5rdFB4WVhtLUpZMThPSXo4Wl9GSTJKY2V2eWRpUWdQd0ZJdkpiSXBfMmcxN1h2SUpPRHNzd1UtZ3RCbEZnYU44VVY0emlEOHNKYzNDSENweVRlVkdQWUJqSEZXWDh6REFZYW5ZTGFvSExaR1ZJcW5CeExhUDVzaVhrREM1OGpkZVl3dFlWRzNTMVE?oc=5"
-        },
-        {
-          "title": "Trump sees end to Iran war “immediately” after midterm elections - Semafor",
-          "publishedAt": "Thu, 10 Sep 2026 11:04:00 GMT",
-          "url": "https://news.google.com/rss/articles/CBMiqAFBVV95cUxPc1dMbVoybGhvUlVCaWd1NGNyX0ZmbGtKbTU3aExEUUtHcERlcjlVeC1Wb3E2UTNRV1BPcWxlT0p3ejhuQjE3M3pBVDZSbHNfSWFIWDFONVRFN1JmQjZCYm5KTGlqaFNUNTlGVkg5WG84emJFbnpqNXhFRmlMekFFOGFLeXFkUjRQQzg0MzJfbzNLVEFtWTJoZ0RKa3p6MWYtcUstbUVpRUs?oc=5"
         }
       ],
-      "updated_at": "2026-09-11T01:20:23.739274+00:00"
+      "updated_at": "2026-09-11T04:35:29.083158+00:00"
     }
   },
   "Gas Naturale": {
-    "updated_at": "2026-09-11T01:20:33.484938+00:00",
+    "updated_at": "2026-09-11T04:35:36.769750+00:00",
     "value": {
       "enabled": true,
       "direction": "NEUTRALE",
@@ -263,27 +258,27 @@
           "url": "https://news.google.com/rss/articles/CBMiwgFBVV95cUxOS3d1NGdVUkxYaEd2YU8zbDZUcGtfN2FLdGE2OGxmRGFGb2NuR01MU0x1UWEwUmZ0UUZUV191aXktTVVOYVVDTEp2V2lRUHJIOUpEWEFBQjE4VkZQNE9jd21Yd2VZVTg4NlVPRkZoSXJXSlBjYldzbXltLUdQUllCalN0RGRsTmc1NkRZM3JiZW9iaGZCaHFGRWRHczRmak1jX1dQanpNVElkSmh0VkI1b1ladGtFOGo4VGl4dFhLVTNXQQ?oc=5"
         },
         {
-          "title": "There Will Be No Trilateral Talks Before the Elections in Russia — Zelenskyy - UA.NEWS",
-          "publishedAt": "Thu, 10 Sep 2026 20:43:48 GMT",
-          "url": "https://news.google.com/rss/articles/CBMijwFBVV95cUxNVVRyLW5OMTg5LThsMy00dXUzTGwwZkxYSi1IY1JzWlVORVd2ZTg4ZmtaT0lyX1dadmRVNDZkTVFQR3VMMzVxY2NHcEwzeGhNa3k0cUlPaWlEX0w0Z3JtaEQ1WDZSS2ZkcENhUVN4Vm1BdzRQRlF2YkJkTDU2VkJicm5zZWhUSFoxeGRGTnRVZw?oc=5"
+          "title": "Tesla’s Cybercab Could Be Heading to Europe Soon. A Crucial EU Vote Is the Key. - Barron's",
+          "publishedAt": "Wed, 09 Sep 2026 14:21:00 GMT",
+          "url": "https://news.google.com/rss/articles/CBMihgFBVV95cUxOX3RmcjZHanFfakxmUE5pM3ZmMEFXV2Y4a0g2Q2k1WkluWGZZN0hkVm4xU3lwaGR2SDJxSkkyQ2VLR25IQ2h3RTJ6QWNjOHVTdXF2NEoydzdqWldaSUg1ZkxvWll2bklpMG5fUmNxd19Bdnh4NzZVdUJDS2o3S3pJY1dya3pkZw?oc=5"
         }
       ],
-      "updated_at": "2026-09-11T01:20:33.484938+00:00"
+      "updated_at": "2026-09-11T04:35:36.769750+00:00"
     }
   },
   "Benzina RBOB": {
-    "updated_at": "2026-09-11T01:20:40.157378+00:00",
+    "updated_at": "2026-09-11T04:35:42.588091+00:00",
     "value": {
       "enabled": true,
       "direction": "NEUTRALE",
       "score": 0.0,
       "count": 0,
       "events": [],
-      "updated_at": "2026-09-11T01:20:40.157378+00:00"
+      "updated_at": "2026-09-11T04:35:42.588091+00:00"
     }
   },
   "Heating Oil": {
-    "updated_at": "2026-09-11T01:20:47.295928+00:00",
+    "updated_at": "2026-09-11T04:35:50.605571+00:00",
     "value": {
       "enabled": true,
       "direction": "NEUTRALE",
@@ -301,16 +296,16 @@
           "url": "https://news.google.com/rss/articles/CBMiqgFBVV95cUxNU0FuZmJsTkxfTmJRMWZkdmQ3WVQ5cWR0WDdBNGRoV2M4VGtxU1N1REdkcldQT0h0RDFldFpYZmZTdi1CSkctMWxnN0RuMzdmZXA3Qy1EUE1kcXVBWHdBZk1wX25aUmI0NkF6REZldjVjU2FBQkFnMDhIWEpob3dmSngxRDhLc0FoZWJrbTVZMjlrSFJ2T05uX3J3QkR3Rk9INDNJOUE1Q2lKZw?oc=5"
         }
       ],
-      "updated_at": "2026-09-11T01:20:47.295928+00:00"
+      "updated_at": "2026-09-11T04:35:50.605571+00:00"
     }
   },
   "Rame": {
-    "updated_at": "2026-09-11T01:20:56.227605+00:00",
+    "updated_at": "2026-09-11T04:35:58.125418+00:00",
     "value": {
       "enabled": true,
       "direction": "NEUTRALE",
-      "score": 0.13,
-      "count": 21,
+      "score": 0.14,
+      "count": 20,
       "events": [
         {
           "title": "China Threat Erodes Japanese Anger Over US Bases Ahead of Vote - Bloomberg.com",
@@ -318,7 +313,7 @@
           "url": "https://news.google.com/rss/articles/CBMiswFBVV95cUxQZVBpVlVCaENmbjFKVEo1bmR2dWUyOXIwYWdFT005SDVDQmNZUGhTbTlqS1lFOTBMbUJER2lSS19OZjRWbTNGdTNTWnJDYWdwTmltZzdoMVJZWFFxMVp1UU5fbGZkODdyMVhORkpsV2RJUGRERUxnazdLdFBQd1UzdXpIOGo1U0V2cnhEbTlDdHN2SFBDYkQwdUdCRXdfb0tUQmRPbG81TDJNU3NmelRiN3NWVQ?oc=5"
         },
         {
-          "title": "Trump braces for midterms, crucial union vote as Labor Day shows 75,000 lost manufacturing jobs - Fortune",
+          "title": "Trump braces for midterms, crucial union vote as Labor Day shows 75,000 lost manufacturing jobs - fortune.com",
           "publishedAt": "Mon, 07 Sep 2026 18:24:00 GMT",
           "url": "https://news.google.com/rss/articles/CBMigAFBVV95cUxOSDl4S2stb3p5cnRkbW8xX2VjSllTM2FhaFFMNHQ4cWNPS2plcXhXYUV0ZkZsMC1SRS1TVmFXVmUybk1ubHd5SG8wdF81YnNmTjlmeEsyWHpZQm5pQ0xkd3RlWlBncEdtM2xKWm1YS0RHQXBNdDBzaElVSGR1MERUQg?oc=5"
         },
@@ -343,7 +338,7 @@
           "url": "https://news.google.com/rss/articles/CBMisgFBVV95cUxOa1Y2Rmw3Ul96SnBFXzdob1BvMWFfZ2VLQlJkZDhOa1FvQ0thS3ZpcTEwdEJXdE9qeHBRTEdldmcySjBvWTdBTHdaTGRPUkt4dlJtWXlhUE5qTkczVzQ2R3VQak1vNVZOSEhsdDJxSkk4c0ZGLUVUSWgxcURLd3VfSzh0NG9oX3Z0WVlBa0hXdmxpTHQ5Vk5mclI1TWJ3cjRIS3pCZ2JNSlo0MTJRUXRmUzJB?oc=5"
         },
         {
-          "title": "Kazakhstan's future after the elections: Russia, EU or China - DW.com",
+          "title": "Kazakhstan's future after the elections: Russia, EU or China - dw.com",
           "publishedAt": "Sun, 23 Aug 2026 07:00:00 GMT",
           "url": "https://news.google.com/rss/articles/CBMilAFBVV95cUxNOGstWmc2SnJpUk9pSjlGQ200Ump3WmVHdVQyR3phRkM1T3Z2TzVoVDFmeWVIYjFVYjBqVVJUeDBSUzdqTDFheE52M19sRXp1Y1hFZlhQZE5lNklnY0JOdlRUdFBDM3gxY3R6VFVxTHlPaXI5akE0SzJEYzMzbGlTSkFZUlgzVGlDNndkQ1RCazR0RDRZ0gGUAUFVX3lxTE03a2FxYkZFRmxRU2V1NVBpSE5XWlVCOFpLU0lBTE04MVRSZHYxOHVhaTJ2RlJKY2VRMk81ZEFuSUF3elFsVzU2VVEyVGJrNUV6c3B5ZXJVdklzWjdleWRhY0RYcVIwZ2h2UlJEVWt3TEVJUnRZbUpuSGNuWW9yYmdXWGY3YW1LTUdfZDNqUHJ1U0FVa2M?oc=5"
         },
@@ -353,11 +348,11 @@
           "url": "https://news.google.com/rss/articles/CBMiygFBVV95cUxPNVQ4TWtmODlXUXMzU0ZmY0lCblhBQ1RqSHgwQ2MzZzNlSWFITkV5dkpiM0dmNTU2V2lBRjR2OVFqcnBZVGpmTmZVV2l5V01IdHZrSUNYcV8tTXpFUHFtdjNVQ0kteGNISXduWkdWTFAwcFJaRFM4OGRESTlKUnFlTzFobkRvQlU0LTVZSmpwaWZDY0VuUW5ZWXFlU3hMMURPZmtmOFlUak5RNDBHNVBwWmV2STBXZFpiVmxrZXpMSXBCNzRVR1EwaWdR?oc=5"
         }
       ],
-      "updated_at": "2026-09-11T01:20:56.227605+00:00"
+      "updated_at": "2026-09-11T04:35:58.125418+00:00"
     }
   },
   "Grano": {
-    "updated_at": "2026-09-11T01:21:04.161370+00:00",
+    "updated_at": "2026-09-11T04:36:06.186811+00:00",
     "value": {
       "enabled": true,
       "direction": "FAVOREVOLE",
@@ -380,7 +375,7 @@
           "url": "https://news.google.com/rss/articles/CBMixAFBVV95cUxPdzNuVnlZN3lQUzhndGZDVmM3VkZoYmRZOW03bEFkZ2doTXpieFM5X0kyaFppazBYeUtaVmdib3BsRHM5dUpSN3l5TlI4a2FjRTBQZjBuTHkwV3pyQlFHQVpTay1mRVBRWW1aNVN5YUlKVmxBOFdoX3dia1lJTjBhcU5lTExHM3NVdVhaN0tpY2NuSjFjNmp6ZDhyYWRUZUNaTmdRUTl6VS04WUc1V2ptNURMR21KTmNfamZOaHYwVEtfckY3?oc=5"
         },
         {
-          "title": "India, China to face 100% tariff? US Senate to vote on Russia sanctions bill - indiatoday.in",
+          "title": "India, China to face 100% tariff? US Senate to vote on Russia sanctions bill - India Today",
           "publishedAt": "Wed, 29 Jul 2026 07:00:00 GMT",
           "url": "https://news.google.com/rss/articles/CBMixAFBVV95cUxPQ29mUjAxWXkwNFJ6Vi0wQ2FJVG1XNklKRTB1SkFfajV4M2owZTdmenkyVjdodmx3NFJCd3VWcWl3eldCNWdJUUFuS0xTZGVfYjUwYTJLWlVORll5OWZZSWxWVVZMeGMxWHJYcVlHc1Yta3hGbmp1UEpsR1hOZVJrb1NMQWRYR1JuX3o1eGVxWG0zb0FNbGpabkNISFhSMko3X01STGZ0SjJxaGtPQ2IyMmxIWlRseWRLWExMcFFSWVRMOFI40gHKAUFVX3lxTE5FclpzMl9ENmR1a2xzS2VZLXk0ZTJyb0txR0JaT1hpR0RUUEc4Z1VBT2ZaWm9WTGJsazRmYWtHZzZCOTY3UmtwdFRsbWk1TFlWQ0FmT0VCcGxVUEFKRTBWYmxvQ3VQbmNSX29XNFVSTDFwWHpnSDAtT092WUNJbjgwQm9vNFFwd19GVGJXaGw4NXNZNTVjVVFPRjk4WVduSlNkSFZkemRtRkttS09vbTlFQjBvMVh5cTFiNUtHWjM4NVR1QW91RDBGd0E?oc=5"
         },
@@ -390,7 +385,7 @@
           "url": "https://news.google.com/rss/articles/CBMiZ0FVX3lxTE9nbk9OaWs3S3l3eTBXUmtYSWlwMGFxcVdaQkpwTHdha1hIbmJfMlZ3dXVVM2JaSjlDRDJHRVJMbndoM3UxY3NrQlpCa01EZHpITnRBQnNmYmllYVoyMW5PUzZnckRVZnM?oc=5"
         },
         {
-          "title": "Aughinish Alumina in focus as the European Union vote backs the Russia export ban - AL Circle",
+          "title": "Aughinish Alumina in focus as the European Union vote backs the Russia export ban - alcircle.com",
           "publishedAt": "Wed, 08 Jul 2026 07:00:00 GMT",
           "url": "https://news.google.com/rss/articles/CBMiugFBVV95cUxPVVdMbnNNeDVOUjBnWEdMdTZxeE8yNW91MnM4Y0ZlVGk3QXdlSFE5WWQ2MEczT3NvSFNXVlExQUhIZUJmWTNfOHBYQUp3WWxFcFpER1FXRDZyRXZGVDdrb3pTRlZsN1BDUldpemlrV2hYcXB4TW1yQjNjUGtSZGt4T1c3LVpyc01XQUNmZ3NacmtWV2xYdW9GN1liUEgxSzhuV0ZEY2N1UmJIbEtBTmlOSjhMR1owYnVlWkE?oc=5"
         },
@@ -405,16 +400,16 @@
           "url": "https://news.google.com/rss/articles/CBMib0FVX3lxTE9aelNGalhpZjlrem44c01IUnhveG51RFN6MVJfVEtmOGppeDVqbGtvZVJsWXYta1ZLZ0dCVjFsNjRUMFRVLXl2WXpxTFlIclR1Q21JZmNHZ0VwZmo1alo2TmpUemh4RHpueWZ4LWhoUQ?oc=5"
         }
       ],
-      "updated_at": "2026-09-11T01:21:04.161370+00:00"
+      "updated_at": "2026-09-11T04:36:06.186811+00:00"
     }
   },
   "Mais": {
-    "updated_at": "2026-09-11T01:21:11.150432+00:00",
+    "updated_at": "2026-09-11T04:36:12.868279+00:00",
     "value": {
       "enabled": true,
       "direction": "NEUTRALE",
-      "score": 0.13,
-      "count": 21,
+      "score": 0.15,
+      "count": 19,
       "events": [
         {
           "title": "China Threat Erodes Japanese Anger Over US Bases Ahead of Vote - Bloomberg.com",
@@ -442,12 +437,12 @@
           "url": "https://news.google.com/rss/articles/CBMitwFBVV95cUxNWkl6dVZaVk5sejVjV0pHU0F6eHJsTjVZelV0UXBDbFhjODRDWGdPNlFaU0NhU2g3ZDBOQlZLcjhiTTUxSkpSWExLOGZ5Q1hLS2U4a2prRXRvem8xbVk1ek1reVM4RFJxdGVpTnA2U2Z2Z2d6SHdMQnZpbGc3ZF9VZFB0enVDZjZScjJ3R3ZfWUN1X2Z1ZlhUbjNCSU1CYTVaYUdLWmxReFZGVDNITGU2eWFNcDBINHM?oc=5"
         },
         {
-          "title": "Canada's Tariff Strategy Designed To Interfere With U.S. Midterm Elections. How many jobs will be sacrificed for Carney to win? - Energy News Beat",
+          "title": "Canada's Tariff Strategy Designed To Interfere With U.S. Midterm Elections. How many jobs will be sacrificed for Carney to win? - energynewsbeat.co",
           "publishedAt": "Wed, 09 Sep 2026 01:37:08 GMT",
           "url": "https://news.google.com/rss/articles/CBMi6wFBVV95cUxOMEV0WngxeWhDTzg5eFZ3bmhkRGcxakl6N3g4Y21ydmRHbmVJVi1DOTUzaE9fNHR6dWJKVjFzeDZFaWpPbDdaQVE2M3pyZ2V0VVNyWVFMSkdSbzg3RnJYMzJ1S3ZYOUZGUkU3dFFmclpENDBiSWdyRzdfZ3FMaUlyNnRSTjNZVGZpY3FvRUpkRlJYdkJjT2ZYRDQtZUxXLWxZN21kQmFtSFNhVm9fNjhPR1h5SzFCUFVULXNTYks0bnVnbkxxWmVlcHJaTHVFZE5CUzJEUzdDNXBqVU9RX1Z3cXdqTV9uSk16c29V?oc=5"
         },
         {
-          "title": "Kazakhstan's future after the elections: Russia, EU or China - DW.com",
+          "title": "Kazakhstan's future after the elections: Russia, EU or China - dw.com",
           "publishedAt": "Sun, 23 Aug 2026 07:00:00 GMT",
           "url": "https://news.google.com/rss/articles/CBMilAFBVV95cUxNOGstWmc2SnJpUk9pSjlGQ200Ump3WmVHdVQyR3phRkM1T3Z2TzVoVDFmeWVIYjFVYjBqVVJUeDBSUzdqTDFheE52M19sRXp1Y1hFZlhQZE5lNklnY0JOdlRUdFBDM3gxY3R6VFVxTHlPaXI5akE0SzJEYzMzbGlTSkFZUlgzVGlDNndkQ1RCazR0RDRZ0gGUAUFVX3lxTE03a2FxYkZFRmxRU2V1NVBpSE5XWlVCOFpLU0lBTE04MVRSZHYxOHVhaTJ2RlJKY2VRMk81ZEFuSUF3elFsVzU2VVEyVGJrNUV6c3B5ZXJVdklzWjdleWRhY0RYcVIwZ2h2UlJEVWt3TEVJUnRZbUpuSGNuWW9yYmdXWGY3YW1LTUdfZDNqUHJ1U0FVa2M?oc=5"
         },
@@ -457,181 +452,11 @@
           "url": "https://news.google.com/rss/articles/CBMihwJBVV95cUxQcjFZRGVyMUM3S1IxXzd2TFc4Q25lZlV5YVN5VV80R1pVUTBWNTdGYkROcTJXa3JaVVdyMXl3Sm0xTmxUYnlnaU9IZXdKN25LTFJjNXROdXhJeFlpeDFRaUd2Smc0RUE3eTIxRGVmQU52ZFhENEk3Y0xuLVBKWWZ0MmlLNDBSZk43U2wzU1BjakhPcTByRVB3V3ZTUjVxRDdORzZXU1BLamFfSm8ySUloUVhadDJRSENXQi1mUjdYdmtlVlFOUUQ5ekppWVVsUTNpODZmQ2VCVEVELS0xdGN3ZXhlbExFQWZCdFN3Wm5tM3B3M0h1dnNDU2pKbllHaWFDTUFzQXNxZw?oc=5"
         }
       ],
-      "updated_at": "2026-09-11T01:21:11.150432+00:00"
+      "updated_at": "2026-09-11T04:36:12.868279+00:00"
     }
   },
   "Soia": {
-    "updated_at": "2026-09-11T01:21:18.957198+00:00",
-    "value": {
-      "enabled": true,
-      "direction": "NEUTRALE",
-      "score": 0.0,
-      "count": 24,
-      "events": [
-        {
-          "title": "Poll Tracker: Brazil’s 2026 Presidential Election - AS/COA",
-          "publishedAt": "Tue, 08 Sep 2026 12:00:00 GMT",
-          "url": "https://news.google.com/rss/articles/CBMihgFBVV95cUxPajRZX25tMVdpMkdUcFRpR1hZRjRQZmZsQWEwaW9hcUttMzFobjExS2VfOE1WRmZSNnhieHkyaVdiZjZQZDYxTTRJeTFFS3VHOTEyTi1HeVNBVWVFLTFYYUk0MEpkWEMwN1o5eFU3Y0VnSnhDN2ZDX09qVTdlbDBoUUhFR3BjQQ?oc=5"
-        },
-        {
-          "title": "Bolsonaro, Lula statistically tied in simulated Brazil runoff, Atlas/Bloomberg poll shows - Reuters",
-          "publishedAt": "Thu, 10 Sep 2026 18:18:12 GMT",
-          "url": "https://news.google.com/rss/articles/CBMixwFBVV95cUxNYTlEVmtuNGNhLTc4U2pGV0w1bXN0eEVLb0JTQkExbWtxemxldXZnV280MTN5cHZoZUVoN3RqekNYdXF0TEI4X1RWekN5RWt6d2V4ZkJmTEZpQnFqR2dCY0dSbkNsdEp1X0RnWDJQbjdMd2d1b3N3Q1d0REVHbWdkNVFEM2luOXhxaWRlQndKNVBINEI3QlVtR3lYUE5YdmRCWEZHS3dwNTV3UzYtMTRIYXkyLTROTlhjQVlVMGJvTzdtcVVONXpj?oc=5"
-        },
-        {
-          "title": "Bolsonaro Surges in Brazil Poll as Supreme Court Crisis Weighs on Lula - Bloomberg.com",
-          "publishedAt": "Thu, 10 Sep 2026 17:30:00 GMT",
-          "url": "https://news.google.com/rss/articles/CBMiygFBVV95cUxNSEtqekdDMk00eXlMaXdfdU5uR3lLRlp2eVlqTzJ4a1BMZy1zWHF1azZXR2JDSkc3M3ZZNmEwYV9HYk05NUN1QnhJcG9DZVl3WHFJRi1WUXp1aGpNMkhqSnRYRVRHSEFjeVUxbDk0YkhRQWJ2NmxsTnh2MnZIMWFVZGpnZmpNSGNMSnViank1MUFKUXJFdHRTbnI3WTVySGQ0S0NNMHFOTjRwd1RqcXF4OHF4ZlFOQTdITi1nejl2eTlQcmhRNUswZUlB?oc=5"
-        },
-        {
-          "title": "The Evangelical Supreme Court Justice Shaping Brazil’s Election - U.S. News & World Report",
-          "publishedAt": "Thu, 10 Sep 2026 10:04:00 GMT",
-          "url": "https://news.google.com/rss/articles/CBMitwFBVV95cUxOU3p2MGJlak11Mm0wZmFKYldaN3pyUlVVTlFWUGsySlZjZzRJZHkwMjlzTzItTXlDOEJtSXhmUFd3emxxR1NtVnhSRFU2Y2JkSjNUTEhHWmNWak1hMjZfOUtYM3pNOFZfbzNzUzhycHFVRTlWRlpERERvNUltdU52aUk2aFJrMHFxS1Mzck1EeHBJYjRJWms3amFydDlPN3BYeXlNd1AyNldLNzBUTnZPdWotUDI2dXM?oc=5"
-        },
-        {
-          "title": "Brazil's Judicial Clash: Right vs Left Before Election - 조선일보",
-          "publishedAt": "Thu, 10 Sep 2026 20:30:51 GMT",
-          "url": "https://news.google.com/rss/articles/CBMihAFBVV95cUxQSDBHd3VWU3ljV0l1bGI0bTdZSVdmOS1qeVlqZ0FoN01TUVplSEEzTkpKS3BqS2U0a2N6S1pndzlJV25nejk0YTJPUHRXdXowMkR2QzZCa3JyUk9xbEdQTC1Yc1RGWWNFb2FzdUJHY0Z3cUpqSWFTWmVVQWhfNU42Y3FWLTA?oc=5"
-        },
-        {
-          "title": "Brazil’s Lula signs measures to cut fuel taxes and subsidize diesel ahead of election - AP News",
-          "publishedAt": "Wed, 09 Sep 2026 22:13:00 GMT",
-          "url": "https://news.google.com/rss/articles/CBMiowFBVV95cUxPLUJLNmV1MG45NjhFalRCb29Ba1hkYndHYTRDVHRObEs5UlA1emktVjB2emk0YWZOc1NoMHF5WTZKYmFVQnJvaGJ4ZGFLM180RjJ4N1ZNOUVxMVYtSEhZQnBlS2U3VFNHZXNrNVdYQ1VLYWQ5QnBjZGtNR2QxRVNLajZwanB2b1l2OC1SZ0ZxeEstMnZ3dWREMUdBdWFiSWxBdWsw?oc=5"
-        },
-        {
-          "title": "Brazil's Rating Will Depend On Fiscal Credibility, Upcoming Elections, Says Fitch - TradingView",
-          "publishedAt": "Thu, 10 Sep 2026 14:42:17 GMT",
-          "url": "https://news.google.com/rss/articles/CBMi4wFBVV95cUxQdlAycEcwY1pWcEhfdzMxaFAwZzVLd3E0bjY3XzZQV2Mtb2Q4Mm5UU09DQTUwSGE2NW9LT2RwYmppS3JFRHNrSE9tSTFfVnFSLUI2cjRYX3RhSXZTcGZrXzlDeHE1aEV6SUJ3cFNodDVWYy1GNnNjeXktc25LLXNqNkJsaUEwajFlVTZEc2o5X2RLblB0eGotLTdKenN3akNLRE5QQVBIMzJxR2xBbFpubEdSc19ZTGdUTTBpTEZPc2pZdlV3d0JXRFNsYWdBNTlUNER5X0M1WjZTTUJuRkxTR095WQ?oc=5"
-        },
-        {
-          "title": "Brazil Supreme Court chief suspends colleagues' rulings amid election row - France 24",
-          "publishedAt": "Wed, 09 Sep 2026 23:44:00 GMT",
-          "url": "https://news.google.com/rss/articles/CBMiswFBVV95cUxOTlhRQUpQMlRXdFZ1cV82VGx2eHJzNV9jeXR1bHN0Q3M5d3ZJVTdzeHdMMTFaT1hSX1VKMjJzMzd2Ym9aa2d0TU1GNFV2bEFuNldicVN6ek1uUkNTY0h1WE1tX2NSOUVXckFhU2RDa2VYVldmSzNTb3dxOHNPLWJFa0dCRGp2U3VxTUx3cDVhN0VmX1BubGZpel9sbS12My16amNJRkM2eER5UzRMVmxQYUdoWQ?oc=5"
-        }
-      ],
-      "updated_at": "2026-09-11T01:21:18.957198+00:00"
-    }
-  },
-  "Farina di soia": {
-    "updated_at": "2026-09-11T01:21:25.610437+00:00",
-    "value": {
-      "enabled": true,
-      "direction": "NEUTRALE",
-      "score": 0.0,
-      "count": 0,
-      "events": [],
-      "updated_at": "2026-09-11T01:21:25.610437+00:00"
-    }
-  },
-  "Olio di soia": {
-    "updated_at": "2026-09-11T01:21:31.422142+00:00",
-    "value": {
-      "enabled": true,
-      "direction": "NEUTRALE",
-      "score": 0.0,
-      "count": 0,
-      "events": [],
-      "updated_at": "2026-09-11T01:21:31.422142+00:00"
-    }
-  },
-  "Avena": {
-    "updated_at": "2026-09-11T01:21:37.224363+00:00",
-    "value": {
-      "enabled": true,
-      "direction": "NEUTRALE",
-      "score": 0.0,
-      "count": 0,
-      "events": [],
-      "updated_at": "2026-09-11T01:21:37.224363+00:00"
-    }
-  },
-  "Riso": {
-    "updated_at": "2026-09-11T01:21:42.852783+00:00",
-    "value": {
-      "enabled": true,
-      "direction": "NEUTRALE",
-      "score": 0.0,
-      "count": 2,
-      "events": [
-        {
-          "title": "PDP is going into this election as one family – Iworiso-Markson - The Guardian Nigeria News",
-          "publishedAt": "Sun, 13 Oct 2019 07:00:00 GMT",
-          "url": "https://news.google.com/rss/articles/CBMilgFBVV95cUxOY1ZzcW9qX095bTVmZEtzQnhzV2dicjVpYktxRWZDZEZiT0owb2xmaGRCblJXazdHNEt6OHhtZzRhUWlNck5yR1lJZlRCeHRUMWpIVDVIYjdXVXY3MkxrTy1BbTVoT1l3RzBIUWhnWjh0Vmx6VkVBenRLTWJOY0lDQVA5elhZUDBhOUYzSWdGWlViMzFQV2c?oc=5"
-        },
-        {
-          "title": "Iworiso-Markson: All Hands on Deck for Diri’s Reelection - THISDAYLIVE",
-          "publishedAt": "Fri, 30 Jun 2023 07:00:00 GMT",
-          "url": "https://news.google.com/rss/articles/CBMimgFBVV95cUxQbXgxcUFIOURGdkUzR2VjM3A5UFdKaHNkOTlsZUVwUnd3SmdwZ2JLSVVDZ0pyZXlsSjFuQ1RuMUZFb1JXZF9KQmZGZW5RaUNhTC0yeFJCMzI5NTcybkw1dVJTN3g5ZTJBQ3V6bGFJZHpFdzNralhsODA1SHh3VFUxVHNjSDh3a3JUWGxlY24yZFJjR0xyOUU4eW9B?oc=5"
-        }
-      ],
-      "updated_at": "2026-09-11T01:21:42.852783+00:00"
-    }
-  },
-  "Caffè": {
-    "updated_at": "2026-09-11T01:21:49.048207+00:00",
-    "value": {
-      "enabled": true,
-      "direction": "NEUTRALE",
-      "score": 0.0,
-      "count": 22,
-      "events": [
-        {
-          "title": "Poll Tracker: Brazil’s 2026 Presidential Election - AS/COA",
-          "publishedAt": "Tue, 08 Sep 2026 12:00:00 GMT",
-          "url": "https://news.google.com/rss/articles/CBMihgFBVV95cUxPajRZX25tMVdpMkdUcFRpR1hZRjRQZmZsQWEwaW9hcUttMzFobjExS2VfOE1WRmZSNnhieHkyaVdiZjZQZDYxTTRJeTFFS3VHOTEyTi1HeVNBVWVFLTFYYUk0MEpkWEMwN1o5eFU3Y0VnSnhDN2ZDX09qVTdlbDBoUUhFR3BjQQ?oc=5"
-        },
-        {
-          "title": "Bolsonaro, Lula statistically tied in simulated Brazil runoff, Atlas/Bloomberg poll shows - Reuters",
-          "publishedAt": "Thu, 10 Sep 2026 18:18:12 GMT",
-          "url": "https://news.google.com/rss/articles/CBMixwFBVV95cUxNYTlEVmtuNGNhLTc4U2pGV0w1bXN0eEVLb0JTQkExbWtxemxldXZnV280MTN5cHZoZUVoN3RqekNYdXF0TEI4X1RWekN5RWt6d2V4ZkJmTEZpQnFqR2dCY0dSbkNsdEp1X0RnWDJQbjdMd2d1b3N3Q1d0REVHbWdkNVFEM2luOXhxaWRlQndKNVBINEI3QlVtR3lYUE5YdmRCWEZHS3dwNTV3UzYtMTRIYXkyLTROTlhjQVlVMGJvTzdtcVVONXpj?oc=5"
-        },
-        {
-          "title": "Bolsonaro Surges in Brazil Poll as Supreme Court Crisis Weighs on Lula - Bloomberg.com",
-          "publishedAt": "Thu, 10 Sep 2026 17:30:00 GMT",
-          "url": "https://news.google.com/rss/articles/CBMiygFBVV95cUxNSEtqekdDMk00eXlMaXdfdU5uR3lLRlp2eVlqTzJ4a1BMZy1zWHF1azZXR2JDSkc3M3ZZNmEwYV9HYk05NUN1QnhJcG9DZVl3WHFJRi1WUXp1aGpNMkhqSnRYRVRHSEFjeVUxbDk0YkhRQWJ2NmxsTnh2MnZIMWFVZGpnZmpNSGNMSnViank1MUFKUXJFdHRTbnI3WTVySGQ0S0NNMHFOTjRwd1RqcXF4OHF4ZlFOQTdITi1nejl2eTlQcmhRNUswZUlB?oc=5"
-        },
-        {
-          "title": "Deforestation Is on the Ballot in Brazil’s Presidential Election - sentientmedia.org",
-          "publishedAt": "Wed, 09 Sep 2026 15:00:00 GMT",
-          "url": "https://news.google.com/rss/articles/CBMigwFBVV95cUxOc3BJdVVMdnFEYlNyMXVTU2s5SndPNmMzMVRYbmRTOUJxV1NfQnZCOElyb3NxM3dHb1FwUlpGcHRRc05NUG5tSi1JQXFEVTRZNTZDR1F2bEhrZ0dqV3hwWjdvakdNbnFuNFZNdjczSkoweXlPaGxOU1JtRzhiUUhXX1NWdw?oc=5"
-        },
-        {
-          "title": "The evangelical Supreme Court justice shaping Brazil’s election - Taylorville Daily News",
-          "publishedAt": "Thu, 10 Sep 2026 03:04:06 GMT",
-          "url": "https://news.google.com/rss/articles/CBMiogFBVV95cUxPUVpJVVdkaTdkMk8tVUtNdVhwSzJHMUVrM0pWUERpQ1VocVZFUG14VXNXd09Ua2xhbGJQVkxMV0FCeXdxbXBldTd1QUVtaTJvV1JrQnFmS2hqcmVXNzlvaWIwNTl3T1VCRXQxb3ZDSDZXNzdLZHhZQlNQSGIwQmxKTFEwUXhGQmtFcHV3aG5Wd29wNUxaXy15T2UwY3Q1ODBHVWc?oc=5"
-        },
-        {
-          "title": "Brazil's Judicial Clash: Right vs Left Before Election - 조선일보",
-          "publishedAt": "Thu, 10 Sep 2026 20:30:51 GMT",
-          "url": "https://news.google.com/rss/articles/CBMihAFBVV95cUxQSDBHd3VWU3ljV0l1bGI0bTdZSVdmOS1qeVlqZ0FoN01TUVplSEEzTkpKS3BqS2U0a2N6S1pndzlJV25nejk0YTJPUHRXdXowMkR2QzZCa3JyUk9xbEdQTC1Yc1RGWWNFb2FzdUJHY0Z3cUpqSWFTWmVVQWhfNU42Y3FWLTA?oc=5"
-        },
-        {
-          "title": "Voter disappointment makes Brazil election unpredictable, analyst says - Valor International",
-          "publishedAt": "Wed, 09 Sep 2026 11:25:09 GMT",
-          "url": "https://news.google.com/rss/articles/CBMi0wFBVV95cUxOSXppRXhsZ01zakZHTWhlWG90VXMwRkl1OVc5M2xhNVo4N0MtQUVaVDEzME5mQ0pxOVFjMVI5Q0IySEJCMkJTVGNvenZwV0JRZklrZndKVFBpLWIwVVAxREdCRFlZRXZnMGQzUUFGdkg5QmFJWG5QdGp6bnhET1VWV3ltdUROeW1ZX1pydUJTVnBNOWo1T2lvN21VVG4wMWN0ZnBIQjNpa2VTZXlJbTdCWS1TWVJERHktRmV5YVpjVTVMcWNBS0Z0RmY5Z2ZxZE8tR2pR0gHiAUFVX3lxTE9TYUstUm80Z1FCNHJLVkpZVTVqNUFidDhsQ3dTdEJvX0taeDZ3SmFjeTQxNmVyUXJ6LVA3OE03UFhpbTJ3Y0FoRXZsMEgxckZWYkJJVUNkMXFXdjRlRW01Sm10OF80NXAwd0thdlA5aWZLYWxtVHd0N1Bham9Vdkd4REJFeUQ2UVZSYUdPaUItMzh2S0E0QWJ3WlYxWkFyOXFabjVaVWh2U1ZNVHFpXy15MmM2dmFCd005YmJETkJKWXFZVlNPWGNJeml4TEJQUkhXZ3hZOFJhMm1hLTN5aVdWS0E?oc=5"
-        },
-        {
-          "title": "Brazil’s Lula signs measures to cut fuel taxes and subsidize diesel ahead of election - AP News",
-          "publishedAt": "Wed, 09 Sep 2026 22:13:00 GMT",
-          "url": "https://news.google.com/rss/articles/CBMiowFBVV95cUxPLUJLNmV1MG45NjhFalRCb29Ba1hkYndHYTRDVHRObEs5UlA1emktVjB2emk0YWZOc1NoMHF5WTZKYmFVQnJvaGJ4ZGFLM180RjJ4N1ZNOUVxMVYtSEhZQnBlS2U3VFNHZXNrNVdYQ1VLYWQ5QnBjZGtNR2QxRVNLajZwanB2b1l2OC1SZ0ZxeEstMnZ3dWREMUdBdWFiSWxBdWsw?oc=5"
-        }
-      ],
-      "updated_at": "2026-09-11T01:21:49.048207+00:00"
-    }
-  },
-  "Cacao": {
-    "updated_at": "2026-09-11T01:21:54.514204+00:00",
-    "value": {
-      "enabled": true,
-      "direction": "NEUTRALE",
-      "score": 0.0,
-      "count": 0,
-      "events": [],
-      "updated_at": "2026-09-11T01:21:54.514204+00:00"
-    }
-  },
-  "Zucchero": {
-    "updated_at": "2026-09-11T01:22:01.518292+00:00",
+    "updated_at": "2026-09-11T04:36:18.039628+00:00",
     "value": {
       "enabled": true,
       "direction": "NEUTRALE",
@@ -654,19 +479,19 @@
           "url": "https://news.google.com/rss/articles/CBMiygFBVV95cUxNSEtqekdDMk00eXlMaXdfdU5uR3lLRlp2eVlqTzJ4a1BMZy1zWHF1azZXR2JDSkc3M3ZZNmEwYV9HYk05NUN1QnhJcG9DZVl3WHFJRi1WUXp1aGpNMkhqSnRYRVRHSEFjeVUxbDk0YkhRQWJ2NmxsTnh2MnZIMWFVZGpnZmpNSGNMSnViank1MUFKUXJFdHRTbnI3WTVySGQ0S0NNMHFOTjRwd1RqcXF4OHF4ZlFOQTdITi1nejl2eTlQcmhRNUswZUlB?oc=5"
         },
         {
-          "title": "Deforestation Is on the Ballot in Brazil’s Presidential Election - sentientmedia.org",
-          "publishedAt": "Wed, 09 Sep 2026 15:00:00 GMT",
-          "url": "https://news.google.com/rss/articles/CBMigwFBVV95cUxOc3BJdVVMdnFEYlNyMXVTU2s5SndPNmMzMVRYbmRTOUJxV1NfQnZCOElyb3NxM3dHb1FwUlpGcHRRc05NUG5tSi1JQXFEVTRZNTZDR1F2bEhrZ0dqV3hwWjdvakdNbnFuNFZNdjczSkoweXlPaGxOU1JtRzhiUUhXX1NWdw?oc=5"
+          "title": "The Evangelical Supreme Court Justice Shaping Brazil’s Election - U.S. News & World Report",
+          "publishedAt": "Thu, 10 Sep 2026 10:04:00 GMT",
+          "url": "https://news.google.com/rss/articles/CBMitwFBVV95cUxOU3p2MGJlak11Mm0wZmFKYldaN3pyUlVVTlFWUGsySlZjZzRJZHkwMjlzTzItTXlDOEJtSXhmUFd3emxxR1NtVnhSRFU2Y2JkSjNUTEhHWmNWak1hMjZfOUtYM3pNOFZfbzNzUzhycHFVRTlWRlpERERvNUltdU52aUk2aFJrMHFxS1Mzck1EeHBJYjRJWms3amFydDlPN3BYeXlNd1AyNldLNzBUTnZPdWotUDI2dXM?oc=5"
         },
         {
-          "title": "The evangelical Supreme Court justice shaping Brazil’s election - Taylorville Daily News",
-          "publishedAt": "Thu, 10 Sep 2026 03:04:06 GMT",
-          "url": "https://news.google.com/rss/articles/CBMiogFBVV95cUxPUVpJVVdkaTdkMk8tVUtNdVhwSzJHMUVrM0pWUERpQ1VocVZFUG14VXNXd09Ua2xhbGJQVkxMV0FCeXdxbXBldTd1QUVtaTJvV1JrQnFmS2hqcmVXNzlvaWIwNTl3T1VCRXQxb3ZDSDZXNzdLZHhZQlNQSGIwQmxKTFEwUXhGQmtFcHV3aG5Wd29wNUxaXy15T2UwY3Q1ODBHVWc?oc=5"
+          "title": "Brazil Supreme Court chief suspends colleagues' rulings amid election row - France 24",
+          "publishedAt": "Wed, 09 Sep 2026 23:44:00 GMT",
+          "url": "https://news.google.com/rss/articles/CBMiswFBVV95cUxOTlhRQUpQMlRXdFZ1cV82VGx2eHJzNV9jeXR1bHN0Q3M5d3ZJVTdzeHdMMTFaT1hSX1VKMjJzMzd2Ym9aa2d0TU1GNFV2bEFuNldicVN6ek1uUkNTY0h1WE1tX2NSOUVXckFhU2RDa2VYVldmSzNTb3dxOHNPLWJFa0dCRGp2U3VxTUx3cDVhN0VmX1BubGZpel9sbS12My16amNJRkM2eER5UzRMVmxQYUdoWQ?oc=5"
         },
         {
-          "title": "Brazil’s Lula signs measures to cut fuel taxes and subsidize diesel ahead of election - AP News",
-          "publishedAt": "Wed, 09 Sep 2026 22:13:00 GMT",
-          "url": "https://news.google.com/rss/articles/CBMiowFBVV95cUxPLUJLNmV1MG45NjhFalRCb29Ba1hkYndHYTRDVHRObEs5UlA1emktVjB2emk0YWZOc1NoMHF5WTZKYmFVQnJvaGJ4ZGFLM180RjJ4N1ZNOUVxMVYtSEhZQnBlS2U3VFNHZXNrNVdYQ1VLYWQ5QnBjZGtNR2QxRVNLajZwanB2b1l2OC1SZ0ZxeEstMnZ3dWREMUdBdWFiSWxBdWsw?oc=5"
+          "title": "Brazil's Rating Will Depend On Fiscal Credibility, Upcoming Elections, Says Fitch - TradingView",
+          "publishedAt": "Thu, 10 Sep 2026 14:42:17 GMT",
+          "url": "https://news.google.com/rss/articles/CBMi4wFBVV95cUxQdlAycEcwY1pWcEhfdzMxaFAwZzVLd3E0bjY3XzZQV2Mtb2Q4Mm5UU09DQTUwSGE2NW9LT2RwYmppS3JFRHNrSE9tSTFfVnFSLUI2cjRYX3RhSXZTcGZrXzlDeHE1aEV6SUJ3cFNodDVWYy1GNnNjeXktc25LLXNqNkJsaUEwajFlVTZEc2o5X2RLblB0eGotLTdKenN3akNLRE5QQVBIMzJxR2xBbFpubEdSc19ZTGdUTTBpTEZPc2pZdlV3d0JXRFNsYWdBNTlUNER5X0M1WjZTTUJuRkxTR095WQ?oc=5"
         },
         {
           "title": "Brazil's Judicial Clash: Right vs Left Before Election - 조선일보",
@@ -674,67 +499,237 @@
           "url": "https://news.google.com/rss/articles/CBMihAFBVV95cUxQSDBHd3VWU3ljV0l1bGI0bTdZSVdmOS1qeVlqZ0FoN01TUVplSEEzTkpKS3BqS2U0a2N6S1pndzlJV25nejk0YTJPUHRXdXowMkR2QzZCa3JyUk9xbEdQTC1Yc1RGWWNFb2FzdUJHY0Z3cUpqSWFTWmVVQWhfNU42Y3FWLTA?oc=5"
         },
         {
+          "title": "Traders Unwind Brazil Real Hedges as Election Seen Fueling Rally - Bloomberg.com",
+          "publishedAt": "Thu, 10 Sep 2026 11:05:21 GMT",
+          "url": "https://news.google.com/rss/articles/CBMitgFBVV95cUxNYWJ3NF9RWGdIZ0RVOWlPc2RuVkVsVzFUUlZpM3NOTUZEUU1tYlJCOV9IU2l1WU92RHh6Wmd5VnlSeGkzQ2wwbGxMY2tkYTlXeDc1SWE4UllOWWR1aDJ2SEZIX1MtMVJDQzNZcmxhQnNCc2s3NTJLSzRBd3hqMlJoMTNtLU02Y1BhemppMmNKaHptUVg3TjFhM2NOb3U0QmRsUmZVYkdES3hRVTRVUFNjeUVWa2JEZw?oc=5"
+        }
+      ],
+      "updated_at": "2026-09-11T04:36:18.039628+00:00"
+    }
+  },
+  "Farina di soia": {
+    "updated_at": "2026-09-11T04:36:24.815147+00:00",
+    "value": {
+      "enabled": true,
+      "direction": "NEUTRALE",
+      "score": 0.0,
+      "count": 0,
+      "events": [],
+      "updated_at": "2026-09-11T04:36:24.815147+00:00"
+    }
+  },
+  "Olio di soia": {
+    "updated_at": "2026-09-11T04:36:31.746799+00:00",
+    "value": {
+      "enabled": true,
+      "direction": "NEUTRALE",
+      "score": 0.0,
+      "count": 0,
+      "events": [],
+      "updated_at": "2026-09-11T04:36:31.746799+00:00"
+    }
+  },
+  "Avena": {
+    "updated_at": "2026-09-11T04:36:38.599304+00:00",
+    "value": {
+      "enabled": true,
+      "direction": "NEUTRALE",
+      "score": 0.0,
+      "count": 0,
+      "events": [],
+      "updated_at": "2026-09-11T04:36:38.599304+00:00"
+    }
+  },
+  "Riso": {
+    "updated_at": "2026-09-11T04:36:45.519562+00:00",
+    "value": {
+      "enabled": true,
+      "direction": "NEUTRALE",
+      "score": 0.0,
+      "count": 2,
+      "events": [
+        {
+          "title": "PDP is going into this election as one family – Iworiso-Markson - The Guardian Nigeria News",
+          "publishedAt": "Sun, 13 Oct 2019 07:00:00 GMT",
+          "url": "https://news.google.com/rss/articles/CBMilgFBVV95cUxOY1ZzcW9qX095bTVmZEtzQnhzV2dicjVpYktxRWZDZEZiT0owb2xmaGRCblJXazdHNEt6OHhtZzRhUWlNck5yR1lJZlRCeHRUMWpIVDVIYjdXVXY3MkxrTy1BbTVoT1l3RzBIUWhnWjh0Vmx6VkVBenRLTWJOY0lDQVA5elhZUDBhOUYzSWdGWlViMzFQV2c?oc=5"
+        },
+        {
+          "title": "Iworiso-Markson: All Hands on Deck for Diri’s Reelection - THISDAYLIVE",
+          "publishedAt": "Fri, 30 Jun 2023 07:00:00 GMT",
+          "url": "https://news.google.com/rss/articles/CBMimgFBVV95cUxQbXgxcUFIOURGdkUzR2VjM3A5UFdKaHNkOTlsZUVwUnd3SmdwZ2JLSVVDZ0pyZXlsSjFuQ1RuMUZFb1JXZF9KQmZGZW5RaUNhTC0yeFJCMzI5NTcybkw1dVJTN3g5ZTJBQ3V6bGFJZHpFdzNralhsODA1SHh3VFUxVHNjSDh3a3JUWGxlY24yZFJjR0xyOUU4eW9B?oc=5"
+        }
+      ],
+      "updated_at": "2026-09-11T04:36:45.519562+00:00"
+    }
+  },
+  "Caffè": {
+    "updated_at": "2026-09-11T04:36:53.807597+00:00",
+    "value": {
+      "enabled": true,
+      "direction": "NEUTRALE",
+      "score": 0.0,
+      "count": 22,
+      "events": [
+        {
+          "title": "Poll Tracker: Brazil’s 2026 Presidential Election - AS/COA",
+          "publishedAt": "Tue, 08 Sep 2026 12:00:00 GMT",
+          "url": "https://news.google.com/rss/articles/CBMihgFBVV95cUxPajRZX25tMVdpMkdUcFRpR1hZRjRQZmZsQWEwaW9hcUttMzFobjExS2VfOE1WRmZSNnhieHkyaVdiZjZQZDYxTTRJeTFFS3VHOTEyTi1HeVNBVWVFLTFYYUk0MEpkWEMwN1o5eFU3Y0VnSnhDN2ZDX09qVTdlbDBoUUhFR3BjQQ?oc=5"
+        },
+        {
+          "title": "Bolsonaro, Lula statistically tied in simulated Brazil runoff, Atlas/Bloomberg poll shows - Reuters",
+          "publishedAt": "Thu, 10 Sep 2026 18:18:12 GMT",
+          "url": "https://news.google.com/rss/articles/CBMixwFBVV95cUxNYTlEVmtuNGNhLTc4U2pGV0w1bXN0eEVLb0JTQkExbWtxemxldXZnV280MTN5cHZoZUVoN3RqekNYdXF0TEI4X1RWekN5RWt6d2V4ZkJmTEZpQnFqR2dCY0dSbkNsdEp1X0RnWDJQbjdMd2d1b3N3Q1d0REVHbWdkNVFEM2luOXhxaWRlQndKNVBINEI3QlVtR3lYUE5YdmRCWEZHS3dwNTV3UzYtMTRIYXkyLTROTlhjQVlVMGJvTzdtcVVONXpj?oc=5"
+        },
+        {
+          "title": "Bolsonaro Surges in Brazil Poll as Supreme Court Crisis Weighs on Lula - Bloomberg.com",
+          "publishedAt": "Thu, 10 Sep 2026 17:30:00 GMT",
+          "url": "https://news.google.com/rss/articles/CBMiygFBVV95cUxNSEtqekdDMk00eXlMaXdfdU5uR3lLRlp2eVlqTzJ4a1BMZy1zWHF1azZXR2JDSkc3M3ZZNmEwYV9HYk05NUN1QnhJcG9DZVl3WHFJRi1WUXp1aGpNMkhqSnRYRVRHSEFjeVUxbDk0YkhRQWJ2NmxsTnh2MnZIMWFVZGpnZmpNSGNMSnViank1MUFKUXJFdHRTbnI3WTVySGQ0S0NNMHFOTjRwd1RqcXF4OHF4ZlFOQTdITi1nejl2eTlQcmhRNUswZUlB?oc=5"
+        },
+        {
           "title": "Voter disappointment makes Brazil election unpredictable, analyst says - Valor International",
           "publishedAt": "Wed, 09 Sep 2026 11:25:09 GMT",
           "url": "https://news.google.com/rss/articles/CBMi0wFBVV95cUxOSXppRXhsZ01zakZHTWhlWG90VXMwRkl1OVc5M2xhNVo4N0MtQUVaVDEzME5mQ0pxOVFjMVI5Q0IySEJCMkJTVGNvenZwV0JRZklrZndKVFBpLWIwVVAxREdCRFlZRXZnMGQzUUFGdkg5QmFJWG5QdGp6bnhET1VWV3ltdUROeW1ZX1pydUJTVnBNOWo1T2lvN21VVG4wMWN0ZnBIQjNpa2VTZXlJbTdCWS1TWVJERHktRmV5YVpjVTVMcWNBS0Z0RmY5Z2ZxZE8tR2pR0gHiAUFVX3lxTE9TYUstUm80Z1FCNHJLVkpZVTVqNUFidDhsQ3dTdEJvX0taeDZ3SmFjeTQxNmVyUXJ6LVA3OE03UFhpbTJ3Y0FoRXZsMEgxckZWYkJJVUNkMXFXdjRlRW01Sm10OF80NXAwd0thdlA5aWZLYWxtVHd0N1Bham9Vdkd4REJFeUQ2UVZSYUdPaUItMzh2S0E0QWJ3WlYxWkFyOXFabjVaVWh2U1ZNVHFpXy15MmM2dmFCd005YmJETkJKWXFZVlNPWGNJeml4TEJQUkhXZ3hZOFJhMm1hLTN5aVdWS0E?oc=5"
+        },
+        {
+          "title": "Lula, Flavio Bolsonaro Tied in Brazil's Election Runoff, Quaest Poll Shows - U.S. News & World Report",
+          "publishedAt": "Mon, 07 Sep 2026 21:28:00 GMT",
+          "url": "https://news.google.com/rss/articles/CBMiwwFBVV95cUxNZEdGUGd3elR0MVJKQlM1SXRFNTBwNXQzRzRQS2lGQTVzY25WM25MeFdLSTJVb0U5bUxFQ25xblEyMzZSVWw2M3JCUzBFTlRTckp3bWt3amRySG44akdnZDljb2EwZXdtb2JiZENyemxySWxVbVFkVmlhUEMtQjktZWhDQzItNlFVakoxZDNtdmlZTkoyVHpXT3lpWm5CbGJOSjdxbTJIOW0ydURqVVlSd2xuQ193M3FsbXFtX3hwakd2Zzg?oc=5"
+        },
+        {
+          "title": "Brazil Supreme Court chief suspends colleagues' rulings amid election row - France 24",
+          "publishedAt": "Wed, 09 Sep 2026 23:44:00 GMT",
+          "url": "https://news.google.com/rss/articles/CBMiswFBVV95cUxOTlhRQUpQMlRXdFZ1cV82VGx2eHJzNV9jeXR1bHN0Q3M5d3ZJVTdzeHdMMTFaT1hSX1VKMjJzMzd2Ym9aa2d0TU1GNFV2bEFuNldicVN6ek1uUkNTY0h1WE1tX2NSOUVXckFhU2RDa2VYVldmSzNTb3dxOHNPLWJFa0dCRGp2U3VxTUx3cDVhN0VmX1BubGZpel9sbS12My16amNJRkM2eER5UzRMVmxQYUdoWQ?oc=5"
+        },
+        {
+          "title": "The evangelical Supreme Court justice shaping Brazil’s election - Taylorville Daily News",
+          "publishedAt": "Thu, 10 Sep 2026 03:04:06 GMT",
+          "url": "https://news.google.com/rss/articles/CBMiogFBVV95cUxPUVpJVVdkaTdkMk8tVUtNdVhwSzJHMUVrM0pWUERpQ1VocVZFUG14VXNXd09Ua2xhbGJQVkxMV0FCeXdxbXBldTd1QUVtaTJvV1JrQnFmS2hqcmVXNzlvaWIwNTl3T1VCRXQxb3ZDSDZXNzdLZHhZQlNQSGIwQmxKTFEwUXhGQmtFcHV3aG5Wd29wNUxaXy15T2UwY3Q1ODBHVWc?oc=5"
+        },
+        {
+          "title": "Brazil's Judicial Clash: Right vs Left Before Election - 조선일보",
+          "publishedAt": "Thu, 10 Sep 2026 20:30:51 GMT",
+          "url": "https://news.google.com/rss/articles/CBMihAFBVV95cUxQSDBHd3VWU3ljV0l1bGI0bTdZSVdmOS1qeVlqZ0FoN01TUVplSEEzTkpKS3BqS2U0a2N6S1pndzlJV25nejk0YTJPUHRXdXowMkR2QzZCa3JyUk9xbEdQTC1Yc1RGWWNFb2FzdUJHY0Z3cUpqSWFTWmVVQWhfNU42Y3FWLTA?oc=5"
         }
       ],
-      "updated_at": "2026-09-11T01:22:01.518292+00:00"
+      "updated_at": "2026-09-11T04:36:53.807597+00:00"
+    }
+  },
+  "Cacao": {
+    "updated_at": "2026-09-11T04:37:00.060096+00:00",
+    "value": {
+      "enabled": true,
+      "direction": "NEUTRALE",
+      "score": 0.0,
+      "count": 0,
+      "events": [],
+      "updated_at": "2026-09-11T04:37:00.060096+00:00"
+    }
+  },
+  "Zucchero": {
+    "updated_at": "2026-09-11T04:37:05.046600+00:00",
+    "value": {
+      "enabled": true,
+      "direction": "NEUTRALE",
+      "score": 0.0,
+      "count": 21,
+      "events": [
+        {
+          "title": "Poll Tracker: Brazil’s 2026 Presidential Election - AS/COA",
+          "publishedAt": "Tue, 08 Sep 2026 12:00:00 GMT",
+          "url": "https://news.google.com/rss/articles/CBMihgFBVV95cUxPajRZX25tMVdpMkdUcFRpR1hZRjRQZmZsQWEwaW9hcUttMzFobjExS2VfOE1WRmZSNnhieHkyaVdiZjZQZDYxTTRJeTFFS3VHOTEyTi1HeVNBVWVFLTFYYUk0MEpkWEMwN1o5eFU3Y0VnSnhDN2ZDX09qVTdlbDBoUUhFR3BjQQ?oc=5"
+        },
+        {
+          "title": "Bolsonaro, Lula statistically tied in simulated Brazil runoff, Atlas/Bloomberg poll shows - Reuters",
+          "publishedAt": "Thu, 10 Sep 2026 18:18:12 GMT",
+          "url": "https://news.google.com/rss/articles/CBMixwFBVV95cUxNYTlEVmtuNGNhLTc4U2pGV0w1bXN0eEVLb0JTQkExbWtxemxldXZnV280MTN5cHZoZUVoN3RqekNYdXF0TEI4X1RWekN5RWt6d2V4ZkJmTEZpQnFqR2dCY0dSbkNsdEp1X0RnWDJQbjdMd2d1b3N3Q1d0REVHbWdkNVFEM2luOXhxaWRlQndKNVBINEI3QlVtR3lYUE5YdmRCWEZHS3dwNTV3UzYtMTRIYXkyLTROTlhjQVlVMGJvTzdtcVVONXpj?oc=5"
+        },
+        {
+          "title": "Bolsonaro Surges in Brazil Poll as Supreme Court Crisis Weighs on Lula - Bloomberg.com",
+          "publishedAt": "Thu, 10 Sep 2026 17:30:00 GMT",
+          "url": "https://news.google.com/rss/articles/CBMiygFBVV95cUxNSEtqekdDMk00eXlMaXdfdU5uR3lLRlp2eVlqTzJ4a1BMZy1zWHF1azZXR2JDSkc3M3ZZNmEwYV9HYk05NUN1QnhJcG9DZVl3WHFJRi1WUXp1aGpNMkhqSnRYRVRHSEFjeVUxbDk0YkhRQWJ2NmxsTnh2MnZIMWFVZGpnZmpNSGNMSnViank1MUFKUXJFdHRTbnI3WTVySGQ0S0NNMHFOTjRwd1RqcXF4OHF4ZlFOQTdITi1nejl2eTlQcmhRNUswZUlB?oc=5"
+        },
+        {
+          "title": "Deforestation Is on the Ballot in Brazil’s Presidential Election - sentientmedia.org",
+          "publishedAt": "Wed, 09 Sep 2026 15:00:00 GMT",
+          "url": "https://news.google.com/rss/articles/CBMigwFBVV95cUxOc3BJdVVMdnFEYlNyMXVTU2s5SndPNmMzMVRYbmRTOUJxV1NfQnZCOElyb3NxM3dHb1FwUlpGcHRRc05NUG5tSi1JQXFEVTRZNTZDR1F2bEhrZ0dqV3hwWjdvakdNbnFuNFZNdjczSkoweXlPaGxOU1JtRzhiUUhXX1NWdw?oc=5"
+        },
+        {
+          "title": "Voter disappointment makes Brazil election unpredictable, analyst says - Valor International",
+          "publishedAt": "Wed, 09 Sep 2026 11:25:09 GMT",
+          "url": "https://news.google.com/rss/articles/CBMi0wFBVV95cUxOSXppRXhsZ01zakZHTWhlWG90VXMwRkl1OVc5M2xhNVo4N0MtQUVaVDEzME5mQ0pxOVFjMVI5Q0IySEJCMkJTVGNvenZwV0JRZklrZndKVFBpLWIwVVAxREdCRFlZRXZnMGQzUUFGdkg5QmFJWG5QdGp6bnhET1VWV3ltdUROeW1ZX1pydUJTVnBNOWo1T2lvN21VVG4wMWN0ZnBIQjNpa2VTZXlJbTdCWS1TWVJERHktRmV5YVpjVTVMcWNBS0Z0RmY5Z2ZxZE8tR2pR0gHiAUFVX3lxTE9TYUstUm80Z1FCNHJLVkpZVTVqNUFidDhsQ3dTdEJvX0taeDZ3SmFjeTQxNmVyUXJ6LVA3OE03UFhpbTJ3Y0FoRXZsMEgxckZWYkJJVUNkMXFXdjRlRW01Sm10OF80NXAwd0thdlA5aWZLYWxtVHd0N1Bham9Vdkd4REJFeUQ2UVZSYUdPaUItMzh2S0E0QWJ3WlYxWkFyOXFabjVaVWh2U1ZNVHFpXy15MmM2dmFCd005YmJETkJKWXFZVlNPWGNJeml4TEJQUkhXZ3hZOFJhMm1hLTN5aVdWS0E?oc=5"
+        },
+        {
+          "title": "Brazil Supreme Court chief suspends colleagues' rulings amid election row - France 24",
+          "publishedAt": "Wed, 09 Sep 2026 23:44:00 GMT",
+          "url": "https://news.google.com/rss/articles/CBMiswFBVV95cUxOTlhRQUpQMlRXdFZ1cV82VGx2eHJzNV9jeXR1bHN0Q3M5d3ZJVTdzeHdMMTFaT1hSX1VKMjJzMzd2Ym9aa2d0TU1GNFV2bEFuNldicVN6ek1uUkNTY0h1WE1tX2NSOUVXckFhU2RDa2VYVldmSzNTb3dxOHNPLWJFa0dCRGp2U3VxTUx3cDVhN0VmX1BubGZpel9sbS12My16amNJRkM2eER5UzRMVmxQYUdoWQ?oc=5"
+        },
+        {
+          "title": "Brazil's Judicial Clash: Right vs Left Before Election - 조선일보",
+          "publishedAt": "Thu, 10 Sep 2026 20:30:51 GMT",
+          "url": "https://news.google.com/rss/articles/CBMihAFBVV95cUxQSDBHd3VWU3ljV0l1bGI0bTdZSVdmOS1qeVlqZ0FoN01TUVplSEEzTkpKS3BqS2U0a2N6S1pndzlJV25nejk0YTJPUHRXdXowMkR2QzZCa3JyUk9xbEdQTC1Yc1RGWWNFb2FzdUJHY0Z3cUpqSWFTWmVVQWhfNU42Y3FWLTA?oc=5"
+        },
+        {
+          "title": "The evangelical Supreme Court justice shaping Brazil’s election - Taylorville Daily News",
+          "publishedAt": "Thu, 10 Sep 2026 03:04:06 GMT",
+          "url": "https://news.google.com/rss/articles/CBMiogFBVV95cUxPUVpJVVdkaTdkMk8tVUtNdVhwSzJHMUVrM0pWUERpQ1VocVZFUG14VXNXd09Ua2xhbGJQVkxMV0FCeXdxbXBldTd1QUVtaTJvV1JrQnFmS2hqcmVXNzlvaWIwNTl3T1VCRXQxb3ZDSDZXNzdLZHhZQlNQSGIwQmxKTFEwUXhGQmtFcHV3aG5Wd29wNUxaXy15T2UwY3Q1ODBHVWc?oc=5"
+        }
+      ],
+      "updated_at": "2026-09-11T04:37:05.046600+00:00"
     }
   },
   "Cotone": {
-    "updated_at": "2026-09-11T01:22:08.079303+00:00",
+    "updated_at": "2026-09-11T04:37:10.005253+00:00",
     "value": {
       "enabled": true,
       "direction": "NEUTRALE",
       "score": 0.0,
       "count": 0,
       "events": [],
-      "updated_at": "2026-09-11T01:22:08.079303+00:00"
+      "updated_at": "2026-09-11T04:37:10.005253+00:00"
     }
   },
   "Succo d'arancia": {
-    "updated_at": "2026-09-11T01:22:12.476316+00:00",
+    "updated_at": "2026-09-11T04:37:14.640466+00:00",
     "value": {
       "enabled": true,
       "direction": "NEUTRALE",
       "score": 0.0,
       "count": 0,
       "events": [],
-      "updated_at": "2026-09-11T01:22:12.476316+00:00"
+      "updated_at": "2026-09-11T04:37:14.640466+00:00"
     }
   },
   "Bovini vivi": {
-    "updated_at": "2026-09-11T01:22:16.822042+00:00",
+    "updated_at": "2026-09-11T04:37:22.319207+00:00",
     "value": {
       "enabled": true,
       "direction": "NEUTRALE",
       "score": 0.0,
       "count": 0,
       "events": [],
-      "updated_at": "2026-09-11T01:22:16.822042+00:00"
+      "updated_at": "2026-09-11T04:37:22.319207+00:00"
     }
   },
   "Maiali magri": {
-    "updated_at": "2026-09-11T01:22:22.918456+00:00",
+    "updated_at": "2026-09-11T04:37:27.533093+00:00",
     "value": {
       "enabled": true,
       "direction": "NEUTRALE",
       "score": 0.0,
       "count": 0,
       "events": [],
-      "updated_at": "2026-09-11T01:22:22.918456+00:00"
+      "updated_at": "2026-09-11T04:37:27.533093+00:00"
     }
   },
   "Feeder Cattle": {
-    "updated_at": "2026-09-11T01:22:30.495746+00:00",
+    "updated_at": "2026-09-11T04:37:34.482674+00:00",
     "value": {
       "enabled": true,
       "direction": "NEUTRALE",
       "score": 0.0,
       "count": 0,
       "events": [],
-      "updated_at": "2026-09-11T01:22:30.495746+00:00"
+      "updated_at": "2026-09-11T04:37:34.482674+00:00"
     }
   }
 }
