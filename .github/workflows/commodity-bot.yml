@@ -146,4 +146,4 @@ jobs:
           if ! git diff --cached --quiet; then
             git commit -m "chore: persist commodities bot v4.2 state"
             git push
-          fi
+          fi 
