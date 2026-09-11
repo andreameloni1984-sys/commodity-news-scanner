@@ -8,6 +8,8 @@ from urllib.parse import urlparse, parse_qs
 from zoneinfo import ZoneInfo
 
 import requests
+import urllib.request
+import urllib.parse
 
 
 # ============================================================
@@ -43,7 +45,26 @@ EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "21"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "6.1"
+BOT_VERSION = "6.2"
+
+# v6.2 — positioning, event risk, liquidity, anomaly and statistical memory.
+COT_ENABLED = os.getenv("COT_ENABLED", "1") == "1"
+COT_CACHE_FILE = os.getenv("COT_CACHE_FILE", "commodities_cot_cache.json")
+COT_CACHE_HOURS = int(os.getenv("COT_CACHE_HOURS", "12"))
+COT_TIMEOUT = int(os.getenv("COT_TIMEOUT", "15"))
+COT_MAX_YEARS = int(os.getenv("COT_MAX_YEARS", "2"))
+EVENT_RISK_ENABLED = os.getenv("EVENT_RISK_ENABLED", "1") == "1"
+EVENT_RISK_BLOCK_MINUTES = int(os.getenv("EVENT_RISK_BLOCK_MINUTES", "45"))
+EVENT_RISK_AFTER_MINUTES = int(os.getenv("EVENT_RISK_AFTER_MINUTES", "30"))
+EVENT_RISK_CACHE_FILE = os.getenv("EVENT_RISK_CACHE_FILE", "commodities_event_risk_cache.json")
+TRADING_ECONOMICS_API_KEY = os.getenv("TRADING_ECONOMICS_API_KEY", "").strip()
+ANOMALY_ENABLED = os.getenv("ANOMALY_ENABLED", "1") == "1"
+ANOMALY_ZSCORE = float(os.getenv("ANOMALY_ZSCORE", "2.5"))
+LIQUIDITY_ENABLED = os.getenv("LIQUIDITY_ENABLED", "1") == "1"
+DYNAMIC_CORRELATION_ENABLED = os.getenv("DYNAMIC_CORRELATION_ENABLED", "1") == "1"
+STAT_MEMORY_ENABLED = os.getenv("STAT_MEMORY_ENABLED", "1") == "1"
+STAT_MEMORY_MIN_SAMPLES = int(os.getenv("STAT_MEMORY_MIN_SAMPLES", "20"))
+V62_MAX_ADJUSTMENT = float(os.getenv("V62_MAX_ADJUSTMENT", "10"))
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -6589,6 +6610,337 @@ def v5_daily_report():
     return "\n".join(lines)
 
 
+
+# ============================================================
+# v6.2 — MARKET MICROSTRUCTURE / EVENT / MEMORY LAYERS
+# ============================================================
+
+COT_CONTRACT_ALIASES = {
+    "Oro": ["GOLD - COMEX", "GOLD"],
+    "Argento": ["SILVER - COMEX", "SILVER"],
+    "Rame": ["COPPER-GRADE #1 - COMEX", "COPPER"],
+    "Petrolio WTI": ["CRUDE OIL, LIGHT SWEET - NYMEX", "CRUDE OIL"],
+    "Gas Naturale": ["NATURAL GAS - NEW YORK MERCANTILE EXCHANGE", "NATURAL GAS"],
+    "Benzina RBOB": ["GASOLINE - NEW YORK MERCANTILE EXCHANGE", "GASOLINE"],
+    "Heating Oil": ["NO. 2 HEATING OIL - NEW YORK MERCANTILE EXCHANGE", "HEATING OIL"],
+    "Platino": ["PLATINUM - NYMEX", "PLATINUM"],
+    "Palladio": ["PALLADIUM - NYMEX", "PALLADIUM"],
+    "Mais": ["CORN - CHICAGO BOARD OF TRADE", "CORN"],
+    "Frumento": ["WHEAT-SRW - CHICAGO BOARD OF TRADE", "WHEAT"],
+    "Soia": ["SOYBEANS - CHICAGO BOARD OF TRADE", "SOYBEANS"],
+    "Caffe": ["COFFEE C - ICE FUTURES U.S.", "COFFEE"],
+    "Zucchero": ["SUGAR NO. 11 - ICE FUTURES U.S.", "SUGAR"],
+    "Cacao": ["COCOA - ICE FUTURES U.S.", "COCOA"],
+    "Cotone": ["COTTON NO. 2 - ICE FUTURES U.S.", "COTTON"],
+}
+
+
+def _v62_http_json(url, timeout=12):
+    req = urllib.request.Request(url, headers={"User-Agent": "CommoditiesBot/6.2"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        raw = r.read().decode("utf-8", errors="replace")
+    return json.loads(raw)
+
+
+def _v62_cache_load(path, max_age_hours):
+    try:
+        if not os.path.exists(path): return None
+        age = (time.time() - os.path.getmtime(path)) / 3600
+        if age > max_age_hours: return None
+        with open(path, "r", encoding="utf-8") as f: return json.load(f)
+    except Exception:
+        return None
+
+
+def _v62_cache_save(path, obj):
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(obj, f, ensure_ascii=False, indent=2)
+    except Exception as exc:
+        print(f"   ⚠️ v6.2 cache: {exc}")
+
+
+def cot_positioning_engine(name):
+    """Reads CFTC disaggregated COT data when publicly available.
+
+    COT is weekly/lagged, so it is deliberately a context factor rather than
+    a direct entry trigger. No COT value is fabricated when the feed fails.
+    """
+    empty = {"available": False, "source": "CFTC", "name": name, "score": 50.0,
+             "bias": "NEUTRAL", "net_managed_money": None, "open_interest": None,
+             "report_date": None, "reason": "COT non disponibile"}
+    if not COT_ENABLED:
+        empty["reason"] = "COT disabilitato"
+        return empty
+    aliases = COT_CONTRACT_ALIASES.get(name, [])
+    if not aliases:
+        empty["reason"] = "commodity non mappata"
+        return empty
+    cached = _v62_cache_load(COT_CACHE_FILE, COT_CACHE_HOURS)
+    if isinstance(cached, dict) and name in cached:
+        return cached[name]
+    try:
+        import csv, io, zipfile
+        rows=[]
+        year=datetime.now(timezone.utc).year
+        for y in range(year, max(year-COT_MAX_YEARS, 2006)-1, -1):
+            url=f"https://www.cftc.gov/files/dea/history/fut_disagg_txt_{y}.zip"
+            try:
+                req=urllib.request.Request(url, headers={"User-Agent":"CommoditiesBot/6.2"})
+                with urllib.request.urlopen(req, timeout=COT_TIMEOUT) as r: blob=r.read()
+                with zipfile.ZipFile(io.BytesIO(blob)) as z:
+                    names=z.namelist()
+                    if not names: continue
+                    data=z.read(names[0]).decode("utf-8", errors="replace")
+                rows=list(csv.DictReader(io.StringIO(data)))
+                if rows: break
+            except Exception:
+                continue
+        if not rows:
+            empty["reason"]="download CFTC non disponibile"
+            return empty
+        key=None
+        for candidate in ("Market_and_Exchange_Names","Market_and_Exchange_Names ","Contract_Market_Name"):
+            if rows and candidate in rows[0]: key=candidate; break
+        if not key:
+            empty["reason"]="schema CFTC inatteso"
+            return empty
+        matches=[]
+        for row in rows:
+            market=str(row.get(key,"" )).upper()
+            if any(a.upper() in market for a in aliases): matches.append(row)
+        if not matches:
+            empty["reason"]="contratto CFTC non trovato"
+            return empty
+        row=matches[-1]
+        def num(*keys):
+            for k in keys:
+                v=row.get(k)
+                if v not in (None,""):
+                    try: return float(str(v).replace(",",""))
+                    except Exception: pass
+            return None
+        mm_long=num("M_Money_Positions_Long_All","M_Money_Positions_Long_All ")
+        mm_short=num("M_Money_Positions_Short_All","M_Money_Positions_Short_All ")
+        oi=num("Open_Interest_All")
+        if mm_long is None or mm_short is None:
+            empty["reason"]="posizionamento Managed Money non disponibile"
+            return empty
+        net=mm_long-mm_short
+        denom=max(1.0,abs(mm_long)+abs(mm_short))
+        pct=100.0*net/denom
+        score=clamp(50+pct*0.35, 25, 75)
+        bias="LONG" if score>=55 else "SHORT" if score<=45 else "NEUTRAL"
+        report=row.get("As_of_Date_In_Form_MM/DD/YYYY") or row.get("Report_Date_as_YYYY_MM_DD")
+        out={"available":True,"source":"CFTC COT","name":name,"score":round(score,1),
+             "bias":bias,"net_managed_money":round(net,2),"managed_money_long":mm_long,
+             "managed_money_short":mm_short,"open_interest":oi,"report_date":report,
+             "reason":"weekly positioning; context only"}
+        cached=cached if isinstance(cached,dict) else {}
+        cached[name]=out; _v62_cache_save(COT_CACHE_FILE,cached)
+        return out
+    except Exception as exc:
+        empty["reason"]=f"CFTC error: {exc}"
+        return empty
+
+
+def v62_term_structure_engine(name, futures):
+    """Normalizes the existing futures-curve layer without inventing a curve."""
+    f=futures or {}
+    if not isinstance(f,dict) or not f.get("available"):
+        return {"available":False,"state":"UNKNOWN","score":50.0,"reason":"curva futures non disponibile"}
+    text=str(f.get("structure") or f.get("signal") or "").upper()
+    if "BACKWARD" in text:
+        return {"available":True,"state":"BACKWARDATION","score":58.0,"reason":"backwardation"}
+    if "CONTANGO" in text:
+        return {"available":True,"state":"CONTANGO","score":45.0,"reason":"contango"}
+    return {"available":True,"state":"FLAT/UNKNOWN","score":50.0,"reason":"pendenza non classificata"}
+
+
+def liquidity_engine(candles):
+    """Liquidity proxy from volume/range/freshness; labels itself as PROXY."""
+    if not LIQUIDITY_ENABLED or not candles or len(candles)<40:
+        return {"available":False,"quality":50.0,"mode":"UNAVAILABLE"}
+    recent=candles[-20:]
+    vols=[safe_float(x.get("volume")) for x in recent if safe_float(x.get("volume")) is not None]
+    ranges=[]
+    for x in recent:
+        h,l,c=safe_float(x.get("high")),safe_float(x.get("low")),safe_float(x.get("close"))
+        if h is not None and l is not None and c: ranges.append(abs(h-l)/abs(c)*100)
+    vol_score=50.0
+    if len(vols)>=10:
+        avg=sum(vols[:-5])/max(1,len(vols[:-5])); cur=sum(vols[-5:])/5
+        vol_score=clamp(50+(cur/max(avg,1e-9)-1)*25,20,80)
+    range_score=50.0
+    if ranges:
+        med=sorted(ranges)[len(ranges)//2]; cur=sum(ranges[-5:])/min(5,len(ranges))
+        range_score=clamp(60-(cur/max(med,1e-9)-1)*15,20,80)
+    q=clamp(0.6*vol_score+0.4*range_score,0,100)
+    return {"available":True,"quality":round(q,1),"mode":"PROXY","volume_score":round(vol_score,1),"range_score":round(range_score,1)}
+
+
+def anomaly_detector(candles):
+    """Detects price/range/volume anomalies using robust local z-scores."""
+    if not ANOMALY_ENABLED or not candles or len(candles)<50:
+        return {"available":False,"anomaly":False,"severity":0.0,"reasons":[]}
+    closes=[safe_float(x.get("close")) for x in candles if safe_float(x.get("close")) is not None]
+    if len(closes)<50: return {"available":False,"anomaly":False,"severity":0.0,"reasons":[]}
+    rets=[]
+    for i in range(1,len(closes)): rets.append((closes[i]/closes[i-1]-1)*100 if closes[i-1] else 0)
+    base=rets[-50:-1]; cur=rets[-1]
+    mean=sum(base)/len(base); sd=(sum((x-mean)**2 for x in base)/max(1,len(base)-1))**0.5
+    rz=abs((cur-mean)/sd) if sd>1e-9 else 0
+    ranges=[]; vols=[]
+    for x in candles[-51:]:
+        h,l,c=safe_float(x.get("high")),safe_float(x.get("low")),safe_float(x.get("close"))
+        if h is not None and l is not None and c: ranges.append((h-l)/abs(c)*100)
+        v=safe_float(x.get("volume"));
+        if v is not None: vols.append(v)
+    reasons=[]; severity=0
+    if rz>=ANOMALY_ZSCORE: reasons.append(f"return_z={rz:.1f}"); severity=max(severity,min(100,rz/4*100))
+    if len(ranges)>=20:
+        rmean=sum(ranges[:-1])/max(1,len(ranges)-1); rsd=(sum((x-rmean)**2 for x in ranges[:-1])/max(1,len(ranges)-2))**0.5
+        rsz=abs((ranges[-1]-rmean)/rsd) if rsd>1e-9 else 0
+        if rsz>=ANOMALY_ZSCORE: reasons.append(f"range_z={rsz:.1f}"); severity=max(severity,min(100,rsz/4*100))
+    return {"available":True,"anomaly":bool(reasons),"severity":round(severity,1),"reasons":reasons,"return_z":round(rz,2)}
+
+
+def dynamic_correlation_engine(name, candles, all_results=None):
+    """Uses available same-run returns; no hard-coded correlation values."""
+    if not DYNAMIC_CORRELATION_ENABLED or not all_results: return {"available":False,"score":50.0,"relations":[]}
+    def returns(cs):
+        vals=[safe_float(x.get("close")) for x in cs if safe_float(x.get("close")) is not None]
+        return [(vals[i]/vals[i-1]-1) for i in range(1,len(vals)) if vals[i-1]]
+    r0=returns(candles)[-40:]
+    if len(r0)<20: return {"available":False,"score":50.0,"relations":[]}
+    rel=[]
+    for item in all_results:
+        if item.get("name")==name or not item.get("available"): continue
+        rr=returns(item.get("candles",[]))[-40:]
+        n=min(len(r0),len(rr))
+        if n<20: continue
+        a,b=r0[-n:],rr[-n:]; ma=sum(a)/n; mb=sum(b)/n
+        da=sum((x-ma)**2 for x in a); db=sum((x-mb)**2 for x in b)
+        if da<=0 or db<=0: continue
+        corr=sum((a[i]-ma)*(b[i]-mb) for i in range(n))/(da*db)**0.5
+        rel.append((corr,item.get("name")))
+    if not rel: return {"available":False,"score":50.0,"relations":[]}
+    avg=sum(c for c,_ in rel)/len(rel)
+    # Correlation itself is not direction; use it only as a coherence measure.
+    score=clamp(50+avg*10,35,65)
+    return {"available":True,"score":round(score,1),"avg_correlation":round(avg,3),"relations":[{"name":n,"corr":round(c,3)} for c,n in sorted(rel,key=lambda z:abs(z[0]),reverse=True)[:5]]}
+
+
+def historical_setup_memory(name, analysis):
+    """Learns from evaluated journal records, requiring a minimum sample."""
+    if not STAT_MEMORY_ENABLED: return {"available":False,"samples":0,"success":None,"reason":"disabled"}
+    paths=[INTELLIGENCE_JOURNAL_FILE,"commodities_prediction_log.json"]
+    rows=[]
+    for path in paths:
+        try:
+            with open(path,"r",encoding="utf-8") as f:
+                x=json.load(f)
+            if isinstance(x,list): rows.extend(x)
+        except Exception: pass
+    direction=analysis.get("setup_direction") or analysis.get("model_signal")
+    regime=(analysis.get("market_regime") or {}).get("regime")
+    matches=[]
+    for r in rows:
+        if r.get("name")!=name: continue
+        if direction and r.get("direction") not in (direction,None): continue
+        if regime and r.get("regime") not in (regime,None): continue
+        outcome=r.get("outcome") or r.get("result") or r.get("status")
+        if isinstance(outcome,str) and outcome.upper() in ("WIN","LOSS","TP","SL","SUCCESS","FAIL"): matches.append(outcome.upper())
+    if len(matches)<STAT_MEMORY_MIN_SAMPLES:
+        return {"available":False,"samples":len(matches),"success":None,"reason":"campione insufficiente"}
+    wins=sum(1 for x in matches if x in ("WIN","TP","SUCCESS")); success=100*wins/len(matches)
+    return {"available":True,"samples":len(matches),"success":round(success,1),"wins":wins,"losses":len(matches)-wins,"reason":"historical evaluated sample"}
+
+
+def event_risk_engine(name, news=None, global_impact=None):
+    """High-impact event risk. Uses Trading Economics only when an API key exists.
+    Without an event feed, it stays neutral and never invents an event time.
+    """
+    out={"available":False,"level":"UNKNOWN","score":50.0,"block_entry":False,"reason":"calendar eventi non disponibile","events":[]}
+    if not EVENT_RISK_ENABLED: out["reason"]="event risk disabilitato"; return out
+    events=[]
+    if TRADING_ECONOMICS_API_KEY:
+        try:
+            now=datetime.now(timezone.utc)
+            d1=now.strftime("%Y-%m-%d"); d2=(now+timedelta(days=2)).strftime("%Y-%m-%d")
+            url=f"https://api.tradingeconomics.com/calendar/country/united%20states/{d1}/{d2}?c={urllib.parse.quote(TRADING_ECONOMICS_API_KEY)}"
+            data=_v62_http_json(url,timeout=12)
+            if isinstance(data,list):
+                for e in data:
+                    imp=str(e.get("importance") or e.get("Importance") or "").lower()
+                    if imp in ("3","high","2") or "high" in imp:
+                        events.append({"event":e.get("event") or e.get("Event"),"date":e.get("date") or e.get("Date"),"importance":imp,"country":e.get("country") or e.get("Country")})
+        except Exception as exc:
+            out["reason"]=f"calendar error: {exc}"
+    # News shock can raise risk, but it is not treated as a scheduled event.
+    shock=safe_float((global_impact or {}).get("shock_intensity"),0) or 0
+    news_count=safe_float((news or {}).get("count"),0) or 0
+    if events:
+        out["available"]=True; out["events"]=events[:10]; out["level"]="HIGH"; out["score"]=25.0; out["block_entry"]=True; out["reason"]="evento macro ad alta importanza presente"
+    elif shock>=0.85:
+        out["available"]=True; out["level"]="ELEVATED"; out["score"]=40.0; out["reason"]="shock news elevato; orario evento non verificato"
+    elif news_count>0:
+        out["available"]=True; out["level"]="NORMAL"; out["score"]=50.0; out["reason"]="news presenti, nessun evento high-impact verificato"
+    return out
+
+
+def v62_intelligence_fusion_engine(name, analysis, candles, intraday, usd, global_impact, political, futures, weather=None, disasters=None, all_results=None):
+    """Bounded v6.2 fusion. New layers can improve/worsen confidence but never manufacture a trade."""
+    a=analysis
+    regime=market_regime_engine(a) if callable(globals().get("market_regime_engine")) else {"state":"UNKNOWN","score":50}
+    # Existing v6.1 regime returns can differ by version; normalize.
+    if not isinstance(regime,dict): regime={}
+    regime_state=regime.get("state") or regime.get("regime") or "UNKNOWN"
+    cot=cot_positioning_engine(name)
+    curve=v62_term_structure_engine(name,futures)
+    liq=liquidity_engine(intraday or candles)
+    anomaly=anomaly_detector(intraday or candles)
+    corr=dynamic_correlation_engine(name,candles,all_results)
+    memory=historical_setup_memory(name,a)
+    events=event_risk_engine(name,a.get("news"),global_impact)
+    direction=_safe_direction(a.get("setup_direction") or a.get("model_signal"))
+    adj=0.0; reasons=[]
+    if cot.get("available") and direction != "NONE":
+        if cot.get("bias")==direction: adj += 3; reasons.append("COT coerente")
+        elif cot.get("bias") in ("LONG","SHORT"): adj -= 3; reasons.append("COT contrario")
+    if curve.get("available"): adj += clamp(curve.get("score",50)-50,-4,4)*0.5
+    if liq.get("available"):
+        if liq["quality"]<35: adj-=4; reasons.append("liquidità proxy debole")
+        elif liq["quality"]>70: adj+=2; reasons.append("liquidità proxy buona")
+    if anomaly.get("anomaly"):
+        adj-=min(6,anomaly.get("severity",0)/20); reasons.append("anomalia prezzo/range")
+    if corr.get("available"): adj += clamp(corr.get("score",50)-50,-3,3)
+    if memory.get("available") and memory.get("success") is not None:
+        adj += clamp((memory["success"]-50)/10,-4,4); reasons.append(f"storico {memory['success']:.0f}%")
+    if events.get("block_entry") and direction != "NONE":
+        a["entry_blockers"]=(a.get("entry_blockers") or [])+["EVENT_RISK"]
+        if a.get("signal") in ("LONG","SHORT"):
+            a["signal"]="WAIT"; a["action_label"]="ATTENDERE"
+        reasons.append("evento high-impact")
+    elif events.get("level")=="ELEVATED":
+        adj-=3; reasons.append("event/news risk elevato")
+    # Regime-specific bounded adjustment.
+    if direction=="LONG" and regime_state in ("TREND_UP","TREND"): adj+=2
+    elif direction=="SHORT" and regime_state in ("TREND_DOWN","TREND"): adj+=2
+    elif regime_state in ("HIGH_VOLATILITY","SHOCK"): adj-=2
+    adj=clamp(adj,-V62_MAX_ADJUSTMENT,V62_MAX_ADJUSTMENT)
+    a["v62_positioning"]=cot; a["v62_term_structure"]=curve; a["v62_liquidity"]=liq
+    a["v62_anomaly"]=anomaly; a["v62_correlation"]=corr; a["v62_memory"]=memory; a["v62_event_risk"]=events
+    a["v62_adjustment"]=round(adj,2)
+    a["score"]=clamp((safe_float(a.get("score"),50) or 50)+adj,0,100)
+    # Separate confidence concepts.
+    a["direction_probability"]=round(clamp((safe_float(a.get("probability"),0.5) or 0.5)*100,0,100),1)
+    a["data_confidence"]=round(clamp((safe_float(a.get("intelligence_quality"),50) or 50),0,100),1)
+    a["model_confidence"]=round(clamp((safe_float(a.get("confidence"),50) or 50),0,100),1)
+    a["entry_probability"]=round(clamp(safe_float(a.get("entry_probability"),a.get("direction_probability")) + adj*0.5,0,100),1)
+    a["v62_summary"]=" | ".join(reasons[:6]) or "nessun aggiustamento v6.2"
+    return a
+
 # ============================================================
 # MAIN
 # ============================================================
@@ -6598,8 +6950,8 @@ def _safe_direction(value):
     return value if value in ("LONG", "SHORT") else "NONE"
 
 
-def market_regime_engine(candles, intraday=None):
-    """Classifies the market regime without claiming predictive certainty."""
+def v61_market_regime_engine(candles, intraday=None):
+    """v6.1 compatibility regime layer; kept separate from the core regime engine."""
     data = intraday or candles or []
     if len(data) < 30:
         return {"regime":"UNKNOWN", "confidence":0.0, "trend_score":0.0, "volatility":"UNKNOWN"}
@@ -6656,7 +7008,7 @@ def cross_market_intelligence(name, usd=None, global_impact=None, political=None
 def intelligence_fusion_engine(name, analysis, candles, intraday, usd, global_impact, political, futures, weather=None, disasters=None):
     """High-level decision layer: context, regime, conflicts and data quality."""
     a=analysis
-    regime=market_regime_engine(candles, intraday)
+    regime=v61_market_regime_engine(candles, intraday)
     cross=cross_market_intelligence(name, usd, global_impact, political, futures)
     direction=_safe_direction(a.get("setup_direction") or a.get("model_signal"))
     votes=[]
@@ -6825,8 +7177,8 @@ def main():
             analysis = v5_enhance_analysis(name, analysis, candles, intraday_candles)
 
             # v6.1: intelligence fusion — regime + cross-market + data quality.
-            analysis = intelligence_fusion_engine(
-                name, analysis, candles, intraday_candles, usd, global_impact, political, _curve, weather, disasters
+            analysis = v62_intelligence_fusion_engine(
+                name, analysis, candles, intraday_candles, usd, global_impact, political, _curve, weather, disasters, results
             )
             save_intelligence_feedback(name, analysis)
 
