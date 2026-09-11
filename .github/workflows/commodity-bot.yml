@@ -1,4 +1,4 @@
-name: Commodities Bot v4.2 Signal Engine
+name: Commodities Bot v4.2 Interactive Telegram
 
 on:
   schedule:
@@ -36,7 +36,7 @@ jobs:
         run: |
           python -m py_compile commodity_bot.py
 
-      - name: Run Commodities Bot v4.2
+      - name: Run Commodities Bot v4.2 Interactive Telegram
         env:
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
           NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
@@ -78,6 +78,7 @@ jobs:
           MARKET_INTELLIGENCE_ENABLED: '1'
           MARKET_INTELLIGENCE_MODE: 'PRICEPEDIA_STYLE'
           MARKET_INTELLIGENCE_OPTIONAL_SOURCES: '1'
+
           POLITICAL_IMPACT_ENABLED: '1'
           GEOPOLITICAL_IMPACT_ENABLED: '1'
           COMMODITY_FUNDAMENTALS_ENABLED: '1'
@@ -151,6 +152,6 @@ jobs:
             2>/dev/null || true
 
           if ! git diff --cached --quiet; then
-            git commit -m "chore: persist commodities bot v4.2 state"
+            git commit -m "chore: persist commodities bot v4.2 interactive state"
             git push
           fi
