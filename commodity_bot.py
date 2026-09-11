@@ -4758,41 +4758,66 @@ def _telegram_normalize_command(text):
 
 
 def _telegram_find_commodity(ranked, query):
-    """Find a commodity by name or common alias."""
+    """Find a commodity from a Telegram command, including natural-language requests."""
     q = _telegram_normalize_command(query)
     aliases = {
         "oro": "oro", "gold": "oro",
         "argento": "argento", "silver": "argento",
-        "platino": "platino", "palladio": "palladio",
-        "wti": "petrolio wti", "petrolio": "petrolio wti", "brent": "petrolio brent",
-        "petrolio brent": "petrolio brent", "petrolio wti": "petrolio wti",
-        "gas": "gas naturale", "gas naturale": "gas naturale",
-        "benzina": "benzina rbob", "rbob": "benzina rbob",
-        "heating oil": "heating oil", "rame": "rame", "copper": "rame",
-        "alluminio": "alluminio", "nichel": "nichel", "zinco": "zinco", "piombo": "piombo",
-        "grano": "grano", "wheat": "grano", "mais": "mais", "corn": "mais",
-        "soia": "soia", "soybean": "soia", "farina di soia": "farina di soia", "soybean meal": "farina di soia",
-        "olio di soia": "olio di soia", "soybean oil": "olio di soia", "avena": "avena", "oats": "avena",
-        "riso": "riso", "rice": "riso", "caffe": "caffè", "caffè": "caffè", "coffee": "caffè",
-        "cacao": "cacao", "cocoa": "cacao", "zucchero": "zucchero", "sugar": "zucchero",
-        "cotone": "cotone", "cotton": "cotone", "succo d'arancia": "succo d'arancia", "arancia": "succo d'arancia",
-        "orange juice": "succo d'arancia", "bovini": "bovini vivi", "bovini vivi": "bovini vivi", "live cattle": "bovini vivi",
-        "maiali": "maiali magri", "maiali magri": "maiali magri", "lean hogs": "maiali magri",
+        "platino": "platino", "platinum": "platino",
+        "palladio": "palladio", "palladium": "palladio",
+        "wti": "petrolio wti", "petrolio": "petrolio wti", "crude oil": "petrolio wti", "crude": "petrolio wti",
+        "brent": "petrolio brent", "oil brent": "petrolio brent", "petrolio brent": "petrolio brent",
+        "gas": "gas naturale", "gas naturale": "gas naturale", "natural gas": "gas naturale",
+        "benzina": "benzina rbob", "rbob": "benzina rbob", "gasoline": "benzina rbob",
+        "heating oil": "heating oil", "gasolio": "heating oil",
+        "rame": "rame", "copper": "rame",
+        "alluminio": "alluminio", "aluminum": "alluminio", "aluminium": "alluminio",
+        "nichel": "nichel", "nickel": "nichel", "zinco": "zinco", "zinc": "zinco", "piombo": "piombo", "lead": "piombo",
+        "grano": "grano", "wheat": "grano", "chicago srw wheat": "grano",
+        "mais": "mais", "corn": "mais",
+        "soia": "soia", "soybean": "soia",
+        "farina di soia": "farina di soia", "soybean meal": "farina di soia",
+        "olio di soia": "olio di soia", "soybean oil": "olio di soia",
+        "avena": "avena", "oats": "avena",
+        "riso": "riso", "rice": "riso", "rough rice": "riso",
+        "caffe": "caffè", "caffè": "caffè", "coffee": "caffè",
+        "cacao": "cacao", "cocoa": "cacao",
+        "zucchero": "zucchero", "sugar": "zucchero",
+        "cotone": "cotone", "cotton": "cotone",
+        "succo d'arancia": "succo d'arancia", "orange juice": "succo d'arancia", "arancia": "succo d'arancia",
+        "bovini": "bovini vivi", "bovini vivi": "bovini vivi", "live cattle": "bovini vivi",
+        "maiali": "maiali magri", "maiali magri": "maiali magri", "lean hogs": "maiali magri", "lean hog": "maiali magri",
         "feeder": "feeder cattle", "feeder cattle": "feeder cattle",
     }
-    target = aliases.get(q, q)
     candidates = [x for x in ranked if x.get("available")]
+
+    # Exact command first.
+    target = aliases.get(q, q)
     exact = [x for x in candidates if _telegram_normalize_command(x.get("name")) == target]
     if exact:
         return exact[0]
+
+    # Natural-language command: "dammi oro con tp e sl", "analizza gold", etc.
+    # Prefer the longest alias so "petrolio brent" wins over "petrolio".
+    for alias in sorted(aliases, key=len, reverse=True):
+        if alias in q:
+            target = aliases[alias]
+            exact = [x for x in candidates if _telegram_normalize_command(x.get("name")) == target]
+            if exact:
+                return exact[0]
+            partial = [x for x in candidates if target in _telegram_normalize_command(x.get("name"))]
+            if partial:
+                return partial[0]
+
     partial = [x for x in candidates if target in _telegram_normalize_command(x.get("name")) or _telegram_normalize_command(x.get("name")) in target]
     return partial[0] if partial else None
 
 
 def _telegram_commodity_detail(item):
-    """Build a compact but useful single-commodity report."""
+    """Build a single-commodity Telegram report with operational SL/TP levels."""
     if not item:
         return "⚪ Commodity non trovata. Scrivi HELP per vedere i comandi disponibili."
+
     a = item.get("analysis", {}) or {}
     name = item.get("name", "N/D")
     direction = a.get("setup_direction") or a.get("model_signal") or "N/D"
@@ -4806,44 +4831,72 @@ def _telegram_commodity_detail(item):
     intel_score = safe_float(intel.get("score"), 50) or 50
     regime = (intel.get("regime") or a.get("market_regime") or "N/D")
     trigger = a.get("entry_trigger", {}) or {}
+    se = a.get("signal_engine_v42", {}) or {}
+
+    # v4.2 keeps the authoritative calculated entry/SL/TP in the Signal Engine.
+    # Fall back to the legacy analysis fields when needed.
+    entry = safe_float(se.get("entry"), safe_float(a.get("entry"), safe_float(a.get("price"), 0))) or 0
+    stop = safe_float(se.get("stop"), safe_float(a.get("stop"), 0)) or 0
+    tp1 = safe_float(se.get("tp1"), safe_float(a.get("tp1"), 0)) or 0
+    tp2 = safe_float(se.get("tp2"), safe_float(a.get("tp2"), 0)) or 0
+    tp3 = safe_float(se.get("tp3"), safe_float(a.get("tp3"), 0)) or 0
+    rr1 = safe_float(se.get("rr_tp1"), 0) or 0
+    rr2 = safe_float(se.get("rr_tp2"), 0) or 0
+    rr3 = safe_float(se.get("rr_tp3"), 0) or 0
+
     icon = "🟢" if direction == "LONG" else "🔴" if direction == "SHORT" else "⚪"
     action_icon = "🟢" if action in ("ENTRARE", "ENTRATA POSSIBILE") else "🔴" if action == "NON ENTRARE" else "🟡"
+
     lines = [
-        f"🌍 COMMODITIES BOT v{BOT_VERSION}", "", f"📌 {name}",
-        f"{icon} {direction} — {action_icon} {action}", "",
+        f"🌍 COMMODITIES BOT v{BOT_VERSION}",
+        "",
+        f"📌 {name}",
+        f"{icon} {direction} — {action_icon} {action}",
+        "",
         f"💰 Prezzo: {_fmt_price(a.get('price'))}",
         f"📊 Score: {score:.1f}/100 | Prob: {prob:.1f}%",
         f"🎯 Qualità: {quality:.1f} | Confidenza: {conf:.1f}",
         f"🧠 Intel v4.1: {intel_score:.0f} | Regime: {regime}",
     ]
-    se = a.get("signal_engine_v42", {}) or {}
+
     if se.get("available"):
-        lines.append(f"🧩 Signal Engine v4.2: {se.get('score',0):.0f}/100")
-        lines.append(f"📍 L2L {se.get('level_to_level',0):.0f} | Trigger {se.get('trigger',0):.0f} | RR {se.get('rr',0):.0f}")
-        ob = se.get("order_block", {}) or {}
-        if ob.get("available"):
-            lines.append(f"🧱 Order Block: {_fmt_price(ob.get('low'))} — {_fmt_price(ob.get('high'))}")
-    if a.get("entry") is not None:
-        lines.append(f"🎯 Entry: {_fmt_price(a.get('entry'))}")
-    if a.get("stop") is not None:
-        lines.append(f"🛑 SL: {_fmt_price(a.get('stop'))}")
-    if a.get("tp1") is not None:
-        lines.append(f"🎯 TP1: {_fmt_price(a.get('tp1'))}")
-    if a.get("tp2") is not None:
-        lines.append(f"🎯 TP2: {_fmt_price(a.get('tp2'))}")
-    if a.get("tp3") is not None:
-        lines.append(f"🎯 TP3: {_fmt_price(a.get('tp3'))}")
+        lines += [
+            "",
+            f"🧩 SIGNAL ENGINE v4.2: {se.get('decision','N/D')}",
+            f"📈 Score SE: {safe_float(se.get('score'),0) or 0:.1f} | MTF {safe_float(se.get('mtf'),0) or 0:.0f} | L2L {safe_float(se.get('level_to_level'),0) or 0:.0f}",
+            f"🔥 Trigger {safe_float(se.get('trigger'),0) or 0:.0f} | RR score {safe_float(se.get('rr'),0) or 0:.0f}",
+        ]
+
+    # Always show the risk plan when the engine has valid levels.
+    if entry > 0:
+        lines.append("")
+        lines.append("📐 PIANO TP / SL")
+        lines.append(f"📍 Entry: {_fmt_price(entry)}")
+        if stop > 0:
+            lines.append(f"🛑 SL: {_fmt_price(stop)}")
+        if tp1 > 0:
+            lines.append(f"🎯 TP1: {_fmt_price(tp1)}" + (f" | R/R {rr1:.2f}" if rr1 > 0 else ""))
+        if tp2 > 0:
+            lines.append(f"🎯 TP2: {_fmt_price(tp2)}" + (f" | R/R {rr2:.2f}" if rr2 > 0 else ""))
+        if tp3 > 0:
+            lines.append(f"🎯 TP3: {_fmt_price(tp3)}" + (f" | R/R {rr3:.2f}" if rr3 > 0 else ""))
+
     if trigger.get("kind"):
         lines.append(f"🔥 Trigger: {trigger.get('kind')} {trigger.get('timeframe','')}")
-    blockers = a.get("entry_blockers") or []
+
+    blockers = list(a.get("entry_blockers") or [])
+    blockers += list(se.get("blockers") or [])
+    # Deduplicate while preserving order.
+    blockers = list(dict.fromkeys(str(x) for x in blockers if x))
     if blockers:
-        lines.append("⏳ Blocco: " + " | ".join(map(str, blockers[:3])))
+        lines.append("⏳ Blocco: " + " | ".join(blockers[:4]))
+
     warnings = a.get("entry_warnings") or []
     if warnings:
         lines.append("ℹ️ " + " | ".join(map(str, warnings[:2])))
+
     lines += ["", "🧪 PAPER ONLY — nessun ordine reale."]
     return "\n".join(lines)
-
 
 def _telegram_best(ranked):
     available = [x for x in ranked if x.get("available")]
@@ -4886,10 +4939,11 @@ def _telegram_help():
         "🏆 classifica — classifica attuale\n"
         "🥇 migliore — miglior setup\n"
         "🎯 segnali — soli segnali operativi\n"
-        "📌 oro — analisi completa Oro\n"
-        "📌 brent — analisi completa Brent\n"
-        "📌 wti — analisi completa WTI\n"
-        "📌 rame / grano / caffè / cacao / ecc. — analisi della commodity\n"
+        "📌 oro — analisi completa Oro + TP/SL\n"
+        "📌 brent — analisi completa Brent + TP/SL\n"
+        "📌 wti — analisi completa WTI + TP/SL\n"
+        "📌 rame / grano / caffè / cacao / ecc. — analisi + TP/SL\n"
+        "💬 Puoi anche scrivere: \"dammi oro con tp e sl\", \"analizza Brent\", \"fammi il piano del caffè\"\n"
         "❓ help — elenco comandi\n\n"
         "🧪 PAPER ONLY — nessun ordine reale."
     )
@@ -4964,6 +5018,11 @@ def process_telegram_commands(ranked):
                 if item:
                     print(f"📨 Telegram: analisi {item.get('name')} richiesta")
                     send_telegram(_telegram_commodity_detail(item))
+                else:
+                    send_telegram(
+                        "⚪ Non ho riconosciuto la commodity.\n\n"
+                        "Esempi: `oro`, `dammi oro con tp e sl`, `analizza Brent`, `fammi il piano del caffè`."
+                    )
 
         _json_save(TELEGRAM_COMMAND_OFFSET_FILE, {"offset": newest_offset, "updated_at": now.isoformat()})
     except Exception as exc:
