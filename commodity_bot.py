@@ -30,6 +30,7 @@ POSITION_FILE = "position.json"
 DIRECTION_STATE_FILE = "commodities_direction_state.json"
 PREDICTION_LOG_FILE = "commodities_prediction_log.json"
 DAILY_REPORT_FILE = "commodities_daily_report_state.json"
+DAILY_TOP5_FILE = "commodities_daily_top5.json"
 PREDICTION_HORIZON_HOURS = int(os.getenv("PREDICTION_HORIZON_HOURS", "6"))
 INTRADAY_ALERT_MIN_SCORE = float(os.getenv("INTRADAY_ALERT_MIN_SCORE", "70"))
 PERFORMANCE_RETENTION_DAYS = int(os.getenv("PERFORMANCE_RETENTION_DAYS", "90"))
@@ -42,7 +43,7 @@ EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "21"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "5.0"
+BOT_VERSION = "6.1"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -136,6 +137,11 @@ KNOWLEDGE_SOURCES = [
     {"name": "ICE Education", "url": "https://www.ice.com/support/education", "type": "web"},
     {"name": "ICE Commodity Technical Analysis", "url": "https://www.ice.com/publicdocs/Charting_and_Technical_Analysis_for_Commodity_Markets.pdf", "type": "web"},
     {"name": "NOAA Climate Data Online", "url": "https://www.ncei.noaa.gov/cdo-web/", "type": "web"},
+    {"name": "TradingView Futures", "url": "https://www.tradingview.com/markets/futures/", "type": "web"},
+    {"name": "Trading Economics Commodities", "url": "https://tradingeconomics.com/commodity", "type": "web"},
+    {"name": "Trading Economics Calendar", "url": "https://tradingeconomics.com/calendar", "type": "web"},
+    {"name": "Investing Commodities", "url": "https://www.investing.com/commodities/", "type": "web"},
+    {"name": "Borsa Italiana ETC/ETN", "url": "https://www.borsaitaliana.it/etc-etn/etc-etn/home.htm", "type": "web"},
 ]
 
 # Additional global institutional sources. Kept separate so the bot can report
@@ -844,6 +850,40 @@ YAHOO_TICKERS = {
 YAHOO_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0 Safari/537.36"}
 DATA_SOURCE_STATS = {}
 
+# ============================================================
+# v6.1 — DATA RESCUE + INTELLIGENCE FUSION
+# Multiple providers, retries, cache, timeframe reconstruction,
+# regime detection, cross-market context and feedback journal.
+# ============================================================
+DATA_CACHE = {}
+DATA_CACHE_TTL_MINUTES = int(os.getenv("DATA_CACHE_TTL_MINUTES", "60"))
+DATA_INTRADAY_CACHE_TTL_MINUTES = int(os.getenv("DATA_INTRADAY_CACHE_TTL_MINUTES", "15"))
+DATA_RETRY_COUNT = int(os.getenv("DATA_RETRY_COUNT", "2"))
+DATA_RETRY_BACKOFF = float(os.getenv("DATA_RETRY_BACKOFF", "1.2"))
+INTELLIGENCE_JOURNAL_FILE = "commodities_intelligence_journal.json"
+
+# Provider-specific Twelve Data aliases. We never assume that a Yahoo
+# futures ticker is also a valid Twelve Data symbol.
+TD_SYMBOL_ALIASES = {
+    "Oro": ["XAU/USD", "GOLD"], "Argento": ["XAG/USD", "SILVER"],
+    "Platino": ["XPT/USD", "PLATINUM"], "Palladio": ["XPD/USD", "PALLADIUM"],
+    "Petrolio WTI": ["WTI/USD", "WTI", "CRUDE OIL"],
+    "Petrolio Brent": ["XBR/USD", "BRENT", "BRENT CRUDE"],
+    "Gas Naturale": ["NG/USD", "NATURAL GAS"], "Benzina RBOB": ["RB/USD", "RBOB", "GASOLINE"],
+    "Heating Oil": ["HO/USD", "HEATING OIL"], "Rame": ["HG1", "COPPER", "XCU/USD"],
+    "Alluminio": ["ALI", "ALUMINUM"], "Nichel": ["NICKEL"], "Zinco": ["ZINC"], "Piombo": ["LEAD"],
+}
+
+# Informational sources: used as contextual/validation sources, never as a
+# replacement for executable market data unless an API is explicitly available.
+INTELLIGENCE_SOURCE_REGISTRY = [
+    {"name":"TradingView Futures", "url":"https://www.tradingview.com/markets/futures/", "role":"market_structure"},
+    {"name":"Trading Economics Commodities", "url":"https://tradingeconomics.com/commodity", "role":"macro_commodities"},
+    {"name":"Trading Economics Calendar", "url":"https://tradingeconomics.com/calendar", "role":"events"},
+    {"name":"Investing Commodities", "url":"https://www.investing.com/commodities/", "role":"market_news"},
+    {"name":"Borsa Italiana ETC/ETN", "url":"https://www.borsaitaliana.it/etc-etn/etc-etn/home.htm", "role":"investment_reference"},
+]
+
 
 
 def resolve_commodity_symbols():
@@ -1049,43 +1089,156 @@ def get_data_twelvedata(symbol, interval="1day", outputsize=4000):
     return candles
 
 
+def _provider_cache_get(name, interval):
+    key = (name, interval)
+    item = DATA_CACHE.get(key)
+    if not item:
+        return None
+    age_min = (datetime.now(timezone.utc) - item["saved_at"]).total_seconds() / 60.0
+    ttl = DATA_INTRADAY_CACHE_TTL_MINUTES if interval not in ("1day", "1d") else DATA_CACHE_TTL_MINUTES
+    if age_min <= ttl:
+        return item["candles"], age_min
+    return None
+
+
+def _provider_cache_put(name, interval, candles, provider):
+    DATA_CACHE[(name, interval)] = {
+        "saved_at": datetime.now(timezone.utc),
+        "candles": candles,
+        "provider": provider,
+    }
+
+
+def _retry_call(fn, label):
+    last = None
+    for attempt in range(max(1, DATA_RETRY_COUNT + 1)):
+        try:
+            return fn()
+        except Exception as exc:
+            last = exc
+            if attempt < DATA_RETRY_COUNT:
+                import time
+                time.sleep(DATA_RETRY_BACKOFF * (2 ** attempt))
+    raise RuntimeError(f"{label}: {last}")
+
+
+def _resample_minutes(candles, minutes):
+    if not candles:
+        return []
+    buckets = {}
+    for candle in candles:
+        try:
+            dt = datetime.fromisoformat(str(candle["datetime"]).replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            continue
+        total = dt.hour * 60 + dt.minute
+        bucket_total = (total // minutes) * minutes
+        key = dt.replace(hour=bucket_total // 60, minute=bucket_total % 60, second=0, microsecond=0)
+        buckets.setdefault(key, []).append(candle)
+    out = []
+    for key in sorted(buckets):
+        rows = [r for r in buckets[key] if r.get("close") is not None]
+        if not rows:
+            continue
+        highs = [r.get("high") for r in rows if r.get("high") is not None]
+        lows = [r.get("low") for r in rows if r.get("low") is not None]
+        out.append({
+            "datetime": key.isoformat(),
+            "open": rows[0].get("open"),
+            "high": max(highs) if highs else rows[0]["close"],
+            "low": min(lows) if lows else rows[0]["close"],
+            "close": rows[-1]["close"],
+            "volume": sum((r.get("volume") or 0) for r in rows),
+        })
+    return out
+
+
+def _td_candidates(name, symbol):
+    vals = []
+    if symbol:
+        vals.append(str(symbol))
+    vals.extend(TD_SYMBOL_ALIASES.get(name, []))
+    resolved = resolve_commodity_symbols().get(name) if name else None
+    if resolved:
+        vals.insert(0, resolved)
+    seen = set(); out = []
+    for x in vals:
+        if x and x.upper() not in seen:
+            seen.add(x.upper()); out.append(x)
+    return out
+
+
 def get_data(symbol, interval="1day", outputsize=4000):
-    """Multi-source: Yahoo gratuito prima, Twelve Data come confronto/fallback."""
-    # Recuperiamo il nome della commodity dal simbolo configurato/risolto.
+    """v6.1 DATA RESCUE: provider-specific symbols + retry + cache + timeframe reconstruction."""
     name = next((n for n, s in COMMODITIES.items() if s.upper() == str(symbol).upper()), None)
     if name is None:
         name = next((n for n, s in resolve_commodity_symbols().items() if s.upper() == str(symbol).upper()), None)
     if name is None:
         name = str(symbol)
 
-    yahoo_error = None
+    errors = []
+    # 1) Fast cache rescue.
+    cached = _provider_cache_get(name, interval)
+    if cached:
+        candles, age = cached
+        DATA_SOURCE_STATS.setdefault(name, {})[interval] = f"CACHE ({age:.0f}m)"
+        print(f"   🗃️ {name} {interval}: cache {age:.0f}m")
+        return candles[-outputsize:]
+
+    # 2) Native Yahoo.
     try:
-        raw_interval = interval
         if interval == "4h":
-            hourly = get_data_yahoo(name, "1h", max(outputsize * 4, 800))
+            hourly = _retry_call(lambda: get_data_yahoo(name, "1h", max(outputsize * 4, 800)), f"Yahoo {name} 1h")
             candles = _resample_4h(hourly)[-outputsize:]
         else:
-            candles = get_data_yahoo(name, interval, outputsize)
+            candles = _retry_call(lambda: get_data_yahoo(name, interval, outputsize), f"Yahoo {name} {interval}")
         if len(candles) >= 10:
+            _provider_cache_put(name, interval, candles, "YAHOO")
             DATA_SOURCE_STATS.setdefault(name, {})[interval] = "YAHOO"
             return candles
+        errors.append(f"Yahoo insufficienti {len(candles)}")
     except Exception as exc:
-        yahoo_error = str(exc)
+        errors.append(f"Yahoo: {exc}")
 
-    # Fallback Twelve Data se Yahoo non risponde.
-    try:
-        candles = get_data_twelvedata(symbol, interval, outputsize)
-        if len(candles) >= 10:
-            DATA_SOURCE_STATS.setdefault(name, {})[interval] = "TWELVE DATA"
-            if yahoo_error:
-                print(f"   🔁 {name} {interval}: Yahoo KO → Twelve Data OK")
-            return candles
-    except Exception as td_error:
-        if yahoo_error:
-            raise RuntimeError(f"Yahoo: {yahoo_error} | Twelve Data: {td_error}")
-        raise
+    # 3) Twelve Data with multiple provider-specific symbols.
+    for td_symbol in _td_candidates(name, symbol):
+        try:
+            candles = _retry_call(lambda td_symbol=td_symbol: get_data_twelvedata(td_symbol, interval, outputsize), f"Twelve Data {td_symbol} {interval}")
+            if len(candles) >= 10:
+                _provider_cache_put(name, interval, candles, f"TWELVE DATA:{td_symbol}")
+                DATA_SOURCE_STATS.setdefault(name, {})[interval] = f"TWELVE DATA ({td_symbol})"
+                print(f"   🔁 {name} {interval}: fallback Twelve Data {td_symbol} OK")
+                return candles
+            errors.append(f"TD {td_symbol} insufficienti {len(candles)}")
+        except Exception as exc:
+            errors.append(f"TD {td_symbol}: {exc}")
 
-    raise RuntimeError(f"Nessun provider dati disponibile per {name} {interval}")
+    # 4) Reconstruct missing intraday timeframes from a finer timeframe.
+    fallbacks = {"4h": ("1h", 4, _resample_4h), "15min": ("5min", 3, lambda c: _resample_minutes(c, 15)), "5min": ("1min", 5, lambda c: _resample_minutes(c, 5))}
+    if interval in fallbacks:
+        finer, factor, builder = fallbacks[interval]
+        try:
+            fine = get_data(name if name else symbol, finer, max(outputsize * factor, 500))
+            candles = builder(fine)[-outputsize:]
+            if len(candles) >= 10:
+                DATA_SOURCE_STATS.setdefault(name, {})[interval] = f"RECONSTRUCTED FROM {finer}"
+                _provider_cache_put(name, interval, candles, f"RECONSTRUCTED:{finer}")
+                print(f"   🧩 {name} {interval}: ricostruito da {finer}")
+                return candles
+        except Exception as exc:
+            errors.append(f"reconstruction {finer}: {exc}")
+
+    # 5) Stale cache is preferable to deleting the analysis, but mark it stale.
+    stale = DATA_CACHE.get((name, interval))
+    if stale and stale.get("candles"):
+        age = (datetime.now(timezone.utc) - stale["saved_at"]).total_seconds() / 60.0
+        DATA_SOURCE_STATS.setdefault(name, {})[interval] = f"STALE CACHE ({age:.0f}m)"
+        print(f"   ⚠️ {name} {interval}: uso cache vecchia {age:.0f}m")
+        return stale["candles"][-outputsize:]
+
+    raise RuntimeError(f"DATA RESCUE FALLITO {name} {interval}: " + " | ".join(errors[-6:]))
 
 
 def get_daily_data(symbol):
@@ -4467,7 +4620,7 @@ def record_predictions(results):
         if price is None: continue
         rec={"id":f'{item["name"]}|{cycle}',"created_at":now.isoformat(),"cycle":cycle,"name":item["name"],"symbol":item["symbol"],
              "direction":direction,"operational_signal":a.get("signal","WAIT"),"action":a.get("action_label",""),"price":price,
-             "entry":safe_float(a.get("entry")),"stop":safe_float(a.get("stop")),"tp1":safe_float(a.get("tp1")),
+             "entry":safe_float(a.get("entry")),"stop":safe_float(a.get("stop")),"tp1":safe_float(a.get("tp1")),"tp2":safe_float(a.get("tp2")),"tp3":safe_float(a.get("tp3")),
              "score":safe_float(a.get("score"),0) or 0,"probability":safe_float(a.get("entry_probability"),0) or safe_float(a.get("long_probability"),0.5)*100,
              "confidence":safe_float(a.get("confidence"),0) or 0,"quality":safe_float(a.get("quality"),0) or 0,
              "regime":(a.get("market_regime",{}) or {}).get("state","N/D"),"status":"PENDING" if direction in ("LONG","SHORT") else "NEUTRALE"}
@@ -4477,38 +4630,78 @@ def record_predictions(results):
     return new,log
 
 def _future_candles_for_prediction(prediction):
+    """Return the forecast window using 15m candles for more precise TP/SL validation."""
     created=datetime.fromisoformat(prediction["created_at"].replace("Z","+00:00"))
     if datetime.now(timezone.utc) < created+timedelta(hours=INTRADAY_EVAL_HOURS): return []
-    try: rows=get_data(prediction["symbol"],"1h",1200)
-    except Exception: return []
     end=created+timedelta(hours=INTRADAY_EVAL_HOURS)
-    out=[]
-    for row in rows:
-        try: dt=datetime.fromisoformat(str(row["datetime"]).replace("Z","+00:00"))
-        except Exception: continue
-        if created < dt <= end: out.append(row)
-    return out
+    for interval, size in (("15min", 2000), ("1h", 1200)):
+        try:
+            rows=get_data(prediction["symbol"], interval, size)
+            out=[]
+            for row in rows:
+                try: dt=datetime.fromisoformat(str(row["datetime"]).replace("Z","+00:00"))
+                except Exception: continue
+                if created < dt <= end: out.append(row)
+            if out: return out
+        except Exception:
+            continue
+    return []
 
 def evaluate_prediction(prediction,future):
+    """Validate direction plus each frozen TP/SL level from the original forecast."""
     if not future: return None
     p=safe_float(prediction.get("price")); direction=prediction.get("direction","WAIT")
     if p is None or direction not in ("LONG","SHORT"): return None
-    sl=safe_float(prediction.get("stop")); tp1=safe_float(prediction.get("tp1")); close_end=safe_float(future[-1].get("close"))
+    entry=safe_float(prediction.get("entry")) or p
+    sl=safe_float(prediction.get("stop")); tps=[safe_float(prediction.get(k)) for k in ("tp1","tp2","tp3")]
+    close_end=safe_float(future[-1].get("close"))
     if close_end is None: return None
-    first_hit="NONE"
+    hits={"tp1":False,"tp2":False,"tp3":False,"sl":False}
+    first_event="NONE"; ambiguous=False
     for c in future:
         hi,lo=safe_float(c.get("high")),safe_float(c.get("low"))
         if hi is None or lo is None: continue
-        hit_tp=tp1 is not None and (hi>=tp1 if direction=="LONG" else lo<=tp1)
-        hit_sl=sl is not None and (lo<=sl if direction=="LONG" else hi>=sl)
-        if hit_tp and hit_sl: first_hit="AMBIGUO"; break
-        if hit_tp: first_hit="TP1"; break
-        if hit_sl: first_hit="SL"; break
-    close_correct=close_end>p if direction=="LONG" else close_end<p
-    verdict="CORRETTA" if first_hit=="TP1" or (first_hit=="NONE" and close_correct) else "ERRATA"
-    if first_hit=="AMBIGUO": verdict="AMBIGUA"
-    return {"verdict":verdict,"first_hit":first_hit,"close_end":close_end,
-            "move_pct":(close_end/p-1)*100,"evaluated_at":datetime.now(timezone.utc).isoformat()}
+        candle_hits=[]
+        if tps[0] is not None and (hi>=tps[0] if direction=="LONG" else lo<=tps[0]): candle_hits.append("TP1")
+        if tps[1] is not None and (hi>=tps[1] if direction=="LONG" else lo<=tps[1]): candle_hits.append("TP2")
+        if tps[2] is not None and (hi>=tps[2] if direction=="LONG" else lo<=tps[2]): candle_hits.append("TP3")
+        if sl is not None and (lo<=sl if direction=="LONG" else hi>=sl): candle_hits.append("SL")
+        for h in candle_hits: hits[h.lower()]=True
+        if first_event=="NONE" and candle_hits: first_event=candle_hits[0]
+        if "SL" in candle_hits and any(x.startswith("TP") for x in candle_hits): ambiguous=True
+    close_correct=close_end>entry if direction=="LONG" else close_end<entry
+    direction_verdict="AMBIGUA" if ambiguous else ("CORRETTA" if close_correct else "ERRATA")
+    tp_verdict="TP3" if hits["tp3"] else "TP2" if hits["tp2"] else "TP1" if hits["tp1"] else "NESSUN TP"
+    return {"verdict":direction_verdict,"direction_correct":close_correct,"first_hit":first_event,
+            "tp1_hit":hits["tp1"],"tp2_hit":hits["tp2"],"tp3_hit":hits["tp3"],"sl_hit":hits["sl"],
+            "tp_verdict":tp_verdict,"ambiguous_levels":ambiguous,"close_end":close_end,
+            "move_pct":(close_end/entry-1)*100 if entry else 0,"evaluated_at":datetime.now(timezone.utc).isoformat()}
+
+def save_daily_top5_snapshot(ranked, prediction_log):
+    """Freeze the first top-5 ranking after the configured morning report time."""
+    try:
+        now=datetime.now(ZoneInfo("Europe/Rome")); today=now.date().isoformat()
+        state=_json_load(DAILY_TOP5_FILE,{}) or {}
+        if state.get("date")==today: return False
+        minutes=now.hour*60+now.minute; morning=MORNING_REPORT_HOUR*60+MORNING_REPORT_MINUTE; usa=USA_REPORT_HOUR*60+USA_REPORT_MINUTE
+        if minutes < morning or minutes >= usa: return False
+        available=[x for x in ranked if x.get("available")][:5]
+        if len(available)<5: return False
+        snapshot=[]
+        for item in available:
+            a=item.get("analysis",{}) or {}
+            candidates=[p for p in prediction_log if p.get("name")==item.get("name")]
+            pred=max(candidates,key=lambda x:x.get("created_at","")) if candidates else None
+            snapshot.append({"name":item.get("name"),"symbol":item.get("symbol"),"rank":len(snapshot)+1,
+                "ranking_score":item.get("ranking_score"),"direction":a.get("setup_direction") or a.get("model_signal"),"signal":a.get("signal"),
+                "price":safe_float(a.get("price")),"entry":safe_float(a.get("entry")),"stop":safe_float(a.get("stop")),
+                "tp1":safe_float(a.get("tp1")),"tp2":safe_float(a.get("tp2")),"tp3":safe_float(a.get("tp3")),
+                "prediction_id":pred.get("id") if pred else None,"created_at":pred.get("created_at") if pred else now.astimezone(timezone.utc).isoformat()})
+        _json_save(DAILY_TOP5_FILE,{"date":today,"captured_at":now.isoformat(),"items":snapshot})
+        return True
+    except Exception as exc:
+        print(f"⚠️ Snapshot top 5 non salvato: {exc}")
+        return False
 
 def _periodic_intraday_summary(log, start_date, end_date):
     rows=[]
@@ -4586,6 +4779,36 @@ def run_end_of_day_test(force=False):
     if state.get("last_report_date")==today and not force: return None
     state.update({"last_report_date":today,"accuracy":acc,"evaluated":len(directional),"total_readings":len(rows),"pending":pending}); _json_save(DAILY_REPORT_FILE,state)
     # Long-term is part of the same evening report.
+    # ========================================================
+    # SONDAGGIO SERALE — TOP 5 DELLA GIORNATA
+    # ========================================================
+    top5_state=_json_load(DAILY_TOP5_FILE,{}) or {}
+    top5=top5_state.get("items",[]) if top5_state.get("date")==today else []
+    if top5:
+        lines += ["", "🌙 SONDAGGIO SERALE — TOP 5", "Verifica della previsione congelata al mattino:"]
+        survey_direction=survey_tp1=survey_tp2=survey_tp3=survey_sl=0
+        for item in top5:
+            pred=next((p for p in log if p.get("id")==item.get("prediction_id")),None)
+            result=evaluate_prediction(pred,_future_candles_for_prediction(pred)) if pred else None
+            if result is None:
+                lines.append(f"{item.get('rank')}. {item.get('name')} — 🟡 DA VALUTARE")
+                continue
+            d="✅" if result.get("direction_correct") else "❌"
+            tp1="✅" if result.get("tp1_hit") else "❌"
+            tp2="✅" if result.get("tp2_hit") else "❌"
+            tp3="✅" if result.get("tp3_hit") else "❌"
+            sl="❌ COLPITO" if result.get("sl_hit") else "✅ NON COLPITO"
+            lines.append(f"{item.get('rank')}. {item.get('name')} | {item.get('direction','N/D')} | PREVISIONE {d} | TP1 {tp1} | TP2 {tp2} | TP3 {tp3} | SL {sl}")
+            lines.append(f"   Entry {_fmt_price(item.get('entry'))} | SL {_fmt_price(item.get('stop'))} | TP1 {_fmt_price(item.get('tp1'))} | TP2 {_fmt_price(item.get('tp2'))} | TP3 {_fmt_price(item.get('tp3'))}")
+            survey_direction += int(bool(result.get("direction_correct")))
+            survey_tp1 += int(bool(result.get("tp1_hit")))
+            survey_tp2 += int(bool(result.get("tp2_hit")))
+            survey_tp3 += int(bool(result.get("tp3_hit")))
+            survey_sl += int(not result.get("sl_hit"))
+        lines.append(f"📊 TOP 5: previsione {survey_direction}/5 | TP1 {survey_tp1}/5 | TP2 {survey_tp2}/5 | TP3 {survey_tp3}/5 | SL rispettato {survey_sl}/5")
+    else:
+        lines += ["", "🌙 SONDAGGIO SERALE — TOP 5", "🟡 Nessun Top 5 congelato per questa giornata."]
+
     lines += ["","🧠 LUNGO TERMINE"]
     lt=long_term_report()
     lines.extend(lt.splitlines()[3:] if len(lt.splitlines())>3 else lt.splitlines())
@@ -6370,6 +6593,121 @@ def v5_daily_report():
 # MAIN
 # ============================================================
 
+
+def _safe_direction(value):
+    return value if value in ("LONG", "SHORT") else "NONE"
+
+
+def market_regime_engine(candles, intraday=None):
+    """Classifies the market regime without claiming predictive certainty."""
+    data = intraday or candles or []
+    if len(data) < 30:
+        return {"regime":"UNKNOWN", "confidence":0.0, "trend_score":0.0, "volatility":"UNKNOWN"}
+    closes = [safe_float(x.get("close")) for x in data[-80:] if safe_float(x.get("close")) is not None]
+    if len(closes) < 30:
+        return {"regime":"UNKNOWN", "confidence":0.0, "trend_score":0.0, "volatility":"UNKNOWN"}
+    fast = sum(closes[-10:]) / 10
+    slow = sum(closes[-30:]) / 30
+    ret = (closes[-1] / closes[-21] - 1) if closes[-21] else 0
+    ranges = []
+    for x in data[-30:]:
+        h, l, c = safe_float(x.get("high")), safe_float(x.get("low")), safe_float(x.get("close"))
+        if h is not None and l is not None and c:
+            ranges.append((h-l)/abs(c))
+    vol = (sum(ranges)/len(ranges))*100 if ranges else 0
+    trend_score = clamp(abs(ret)*1000 + abs(fast/slow-1)*500, 0, 100)
+    if trend_score >= 55 and abs(ret) >= 0.006:
+        regime = "TREND_UP" if ret > 0 else "TREND_DOWN"
+    elif vol >= 1.8:
+        regime = "HIGH_VOLATILITY"
+    elif trend_score < 25:
+        regime = "RANGE"
+    else:
+        regime = "TRANSITION"
+    return {"regime":regime, "confidence":round(clamp(35+trend_score*0.65,0,100),1), "trend_score":round(trend_score,1), "return_20":round(ret*100,2), "volatility_pct":round(vol,3), "volatility":"HIGH" if vol>=1.8 else "NORMAL"}
+
+
+def cross_market_intelligence(name, usd=None, global_impact=None, political=None, futures=None):
+    """Combines already-collected external contexts; no fabricated prices."""
+    score = 50.0; reasons=[]
+    u = usd or {}
+    uscore = safe_float(u.get("score"), 50.0) or 50.0
+    if name in ("Oro","Argento","Platino","Palladio"):
+        if uscore < 45: score += 7; reasons.append("USD debole favorevole ai metalli")
+        elif uscore > 60: score -= 7; reasons.append("USD forte penalizzante per i metalli")
+    gi = global_impact or {}
+    shock = safe_float(gi.get("shock_intensity"), 0.0) or 0.0
+    if shock > 0.7 and name in ("Oro","Petrolio WTI","Petrolio Brent","Gas Naturale"):
+        score += 5; reasons.append("shock globale elevato")
+    pi = political or {}
+    pscore = safe_float(pi.get("score"), 0.0) or 0.0
+    if abs(pscore) >= 15:
+        score += clamp(pscore*0.15,-8,8); reasons.append("impatto politico rilevante")
+    fs = futures or {}
+    if isinstance(fs, dict) and fs.get("available"):
+        curve = str(fs.get("structure") or fs.get("signal") or "").upper()
+        if "BACKWARD" in curve or "BACKWARDATION" in curve:
+            score += 3; reasons.append("curva backwardation")
+        elif "CONTANGO" in curve:
+            score -= 2; reasons.append("curva contango")
+    return {"score":round(clamp(score,0,100),1), "reasons":reasons}
+
+
+def intelligence_fusion_engine(name, analysis, candles, intraday, usd, global_impact, political, futures, weather=None, disasters=None):
+    """High-level decision layer: context, regime, conflicts and data quality."""
+    a=analysis
+    regime=market_regime_engine(candles, intraday)
+    cross=cross_market_intelligence(name, usd, global_impact, political, futures)
+    direction=_safe_direction(a.get("setup_direction") or a.get("model_signal"))
+    votes=[]
+    if direction != "NONE":
+        if regime["regime"] == "TREND_UP": votes.append(1 if direction=="LONG" else -1)
+        elif regime["regime"] == "TREND_DOWN": votes.append(1 if direction=="SHORT" else -1)
+        if cross["score"] >= 60: votes.append(1)
+        elif cross["score"] <= 40: votes.append(-1)
+    regime_bonus = 0
+    if direction=="LONG" and regime["regime"]=="TREND_UP": regime_bonus=5
+    if direction=="SHORT" and regime["regime"]=="TREND_DOWN": regime_bonus=5
+    if regime["regime"]=="HIGH_VOLATILITY": regime_bonus -= 3
+    quality=100.0
+    sc=a.get("source_check") or {}
+    if sc.get("core_data_ok") is False: quality-=20
+    if "STALE" in str(DATA_SOURCE_STATS.get(name,{})).upper(): quality-=10
+    missing=sum(1 for tf in ("4H","1H","15m","5m") if tf not in (a.get("pattern_timeframes") or {}))
+    quality-=min(25,missing*6)
+    quality=clamp(quality,0,100)
+    a["market_regime"]=regime
+    a["cross_market_intelligence"]=cross
+    a["intelligence_quality"]=round(quality,1)
+    a["intelligence_conflicts"] = {"votes":votes,"agreement":round((sum(1 for v in votes if v>0)-sum(1 for v in votes if v<0))/max(1,len(votes))*100,1)}
+    a["score"]=clamp((safe_float(a.get("score"),50) or 50)+regime_bonus,0,100)
+    a["intelligence_summary"] = " | ".join([regime["regime"], f"CROSS {cross['score']:.0f}", f"DATA {quality:.0f}"])
+    return a
+
+
+def save_intelligence_feedback(name, analysis):
+    """Persistent paper-trading memory for later statistical learning."""
+    try:
+        try:
+            with open(INTELLIGENCE_JOURNAL_FILE,"r",encoding="utf-8") as f: rows=json.load(f)
+            if not isinstance(rows,list): rows=[]
+        except Exception:
+            rows=[]
+        rows.append({
+            "timestamp":datetime.now(timezone.utc).isoformat(), "name":name,
+            "signal":analysis.get("signal"), "direction":analysis.get("setup_direction") or analysis.get("model_signal"),
+            "score":round(safe_float(analysis.get("score"),0) or 0,2),
+            "probability":analysis.get("probability_validated") or analysis.get("entry_probability"),
+            "regime":(analysis.get("market_regime") or {}).get("regime"),
+            "data_quality":analysis.get("intelligence_quality"),
+            "entry":analysis.get("entry"), "stop":analysis.get("stop"),
+            "tp1":analysis.get("tp1"), "tp2":analysis.get("tp2"), "tp3":analysis.get("tp3"),
+        })
+        rows=rows[-2000:]
+        with open(INTELLIGENCE_JOURNAL_FILE,"w",encoding="utf-8") as f: json.dump(rows,f,ensure_ascii=False,indent=2)
+    except Exception as exc:
+        print(f"   ⚠️ Intelligence journal: {exc}")
+
 def main():
     print()
     print("=" * 70)
@@ -6449,6 +6787,11 @@ def main():
 
             analysis["pattern_timeframes"] = pattern_timeframes or {}
             analysis["source_check"] = source_check or {}
+            analysis["source_registry"] = INTELLIGENCE_SOURCE_REGISTRY
+            # Core-data quality: daily + 1H are mandatory; finer TFs are optional
+            # and can be reconstructed/rescued without killing the analysis.
+            analysis["source_check"]["core_data_ok"] = len(candles) >= 120 and len(intraday_candles) >= 80
+            analysis["source_check"]["data_quality"] = round(clamp(100 - max(0, 120-len(candles))*0.25, 0, 100),1)
 
             weather = weather_intelligence(name)
             disasters = natural_disaster_intelligence(name)
@@ -6481,7 +6824,13 @@ def main():
             # v5.0: calibrated probability + smart-money proxy + walk-forward statistical risk.
             analysis = v5_enhance_analysis(name, analysis, candles, intraday_candles)
 
-            # v5.0: long-term forecast uses the enhanced current state.
+            # v6.1: intelligence fusion — regime + cross-market + data quality.
+            analysis = intelligence_fusion_engine(
+                name, analysis, candles, intraday_candles, usd, global_impact, political, _curve, weather, disasters
+            )
+            save_intelligence_feedback(name, analysis)
+
+            # v6.1: long-term forecast uses the enhanced intelligent current state.
             analysis["long_term"] = long_term_forecast(name, candles, analysis)
 
             results.append({
@@ -6619,6 +6968,9 @@ def main():
     if not available_ranked:
         raise RuntimeError("Nessuna commodity dispone di dati sufficienti per il Gold Engine. Controllare simboli/API quota.")
     best = available_ranked[0]
+
+    # Freeze the morning Top 5 so the evening survey tests the same forecast.
+    save_daily_top5_snapshot(ranked, _prediction_log)
 
     demo_execution = demo_execution_adapter(results, position)
     print(f"🤖 Demo adapter: {demo_execution.get('reason', 'ordine registrato')}" if not demo_execution.get('executed') else f"🤖 DEMO ORDER: {demo_execution['order']['commodity']} {demo_execution['order']['side']}")
