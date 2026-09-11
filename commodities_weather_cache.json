@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-09-11T06:23:04.349134+00:00",
+  "timestamp": "2026-09-11T06:49:09.406215+00:00",
   "data": {
     "Oro": {
       "enabled": true,
@@ -281,6 +281,42 @@
         }
       ],
       "temperature_change_mean": 4.0,
+      "historical_context": "recent 30-day observations + 10-day forecast"
+    },
+    "Petrolio WTI": {
+      "enabled": true,
+      "score": -1.2,
+      "label": "NEUTRALE",
+      "confidence": 52,
+      "regions": [
+        {
+          "region": "US Gulf",
+          "lat": 29.0,
+          "lon": -95.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 29.770000000000003,
+          "forecast_min_mean": 28.52,
+          "forecast_rain_total": 9.099999999999998,
+          "forecast_wind_max": 42.8,
+          "recent_temp_mean": 29.47741935483871,
+          "recent_rain_total": 86.89999999999999,
+          "recent_wind_max": 32.3,
+          "raw_forecast_dates": [
+            "2026-09-11",
+            "2026-09-12",
+            "2026-09-13",
+            "2026-09-14",
+            "2026-09-15",
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20"
+          ]
+        }
+      ],
+      "temperature_change_mean": 0.29,
       "historical_context": "recent 30-day observations + 10-day forecast"
     }
   }
