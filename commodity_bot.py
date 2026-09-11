@@ -8,8 +8,6 @@ from urllib.parse import urlparse, parse_qs
 from zoneinfo import ZoneInfo
 
 import requests
-import urllib.request
-import urllib.parse
 
 
 # ============================================================
@@ -32,7 +30,6 @@ POSITION_FILE = "position.json"
 DIRECTION_STATE_FILE = "commodities_direction_state.json"
 PREDICTION_LOG_FILE = "commodities_prediction_log.json"
 DAILY_REPORT_FILE = "commodities_daily_report_state.json"
-DAILY_TOP5_FILE = "commodities_daily_top5.json"
 PREDICTION_HORIZON_HOURS = int(os.getenv("PREDICTION_HORIZON_HOURS", "6"))
 INTRADAY_ALERT_MIN_SCORE = float(os.getenv("INTRADAY_ALERT_MIN_SCORE", "70"))
 PERFORMANCE_RETENTION_DAYS = int(os.getenv("PERFORMANCE_RETENTION_DAYS", "90"))
@@ -43,28 +40,30 @@ ADAPTIVE_RISK_ENABLED = os.getenv("ADAPTIVE_RISK_ENABLED", "1") == "1"
 EXIT_ENGINE_ENABLED = os.getenv("EXIT_ENGINE_ENABLED", "1") == "1"
 EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "21"))
 
+# v4.0 — Daily Bias + Telegram on-demand command engine.
+DAILY_BIAS_ENABLED = os.getenv("DAILY_BIAS_ENABLED", "1") == "1"
+TELEGRAM_COMMANDS_ENABLED = os.getenv("TELEGRAM_COMMANDS_ENABLED", "1") == "1"
+TELEGRAM_COMMAND_MAX_AGE_SECONDS = int(os.getenv("TELEGRAM_COMMAND_MAX_AGE_SECONDS", "900"))
+DAILY_BIAS_FILE = "commodities_daily_bias.json"
+LATEST_SNAPSHOT_FILE = "commodities_latest_snapshot.json"
+TELEGRAM_OFFSET_FILE = "telegram_update_offset.json"
+MIN_ENTRY_RR = float(os.getenv("MIN_ENTRY_RR", "2.5"))
+MIN_ENTRY_RR_TP1 = float(os.getenv("MIN_ENTRY_RR_TP1", "1.5"))
+MIN_ENTRY_RR_TP2 = float(os.getenv("MIN_ENTRY_RR_TP2", "2.0"))
+MIN_ENTRY_RR_TP3 = float(os.getenv("MIN_ENTRY_RR_TP3", "2.5"))
+MAX_ENTRY_STOP_ATR = float(os.getenv("MAX_ENTRY_STOP_ATR", "2.5"))
+SL_STRUCTURE_BUFFER_ATR = float(os.getenv("SL_STRUCTURE_BUFFER_ATR", "0.15"))
+SL_MIN_ATR = float(os.getenv("SL_MIN_ATR", "0.80"))
+STAT_LOOKBACK = int(os.getenv("STAT_SLTP_LOOKBACK", "1500"))
+STAT_FORWARD_BARS = int(os.getenv("STAT_SLTP_FORWARD_BARS", "6"))
+STAT_MAE_QUANTILE = float(os.getenv("STAT_MAE_QUANTILE", "0.70"))
+STAT_MFE_Q1 = float(os.getenv("STAT_MFE_Q1", "0.55"))
+STAT_MFE_Q2 = float(os.getenv("STAT_MFE_Q2", "0.70"))
+STAT_MFE_Q3 = float(os.getenv("STAT_MFE_Q3", "0.82"))
+
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "6.2"
-
-# v6.2 — positioning, event risk, liquidity, anomaly and statistical memory.
-COT_ENABLED = os.getenv("COT_ENABLED", "1") == "1"
-COT_CACHE_FILE = os.getenv("COT_CACHE_FILE", "commodities_cot_cache.json")
-COT_CACHE_HOURS = int(os.getenv("COT_CACHE_HOURS", "12"))
-COT_TIMEOUT = int(os.getenv("COT_TIMEOUT", "15"))
-COT_MAX_YEARS = int(os.getenv("COT_MAX_YEARS", "2"))
-EVENT_RISK_ENABLED = os.getenv("EVENT_RISK_ENABLED", "1") == "1"
-EVENT_RISK_BLOCK_MINUTES = int(os.getenv("EVENT_RISK_BLOCK_MINUTES", "45"))
-EVENT_RISK_AFTER_MINUTES = int(os.getenv("EVENT_RISK_AFTER_MINUTES", "30"))
-EVENT_RISK_CACHE_FILE = os.getenv("EVENT_RISK_CACHE_FILE", "commodities_event_risk_cache.json")
-TRADING_ECONOMICS_API_KEY = os.getenv("TRADING_ECONOMICS_API_KEY", "").strip()
-ANOMALY_ENABLED = os.getenv("ANOMALY_ENABLED", "1") == "1"
-ANOMALY_ZSCORE = float(os.getenv("ANOMALY_ZSCORE", "2.5"))
-LIQUIDITY_ENABLED = os.getenv("LIQUIDITY_ENABLED", "1") == "1"
-DYNAMIC_CORRELATION_ENABLED = os.getenv("DYNAMIC_CORRELATION_ENABLED", "1") == "1"
-STAT_MEMORY_ENABLED = os.getenv("STAT_MEMORY_ENABLED", "1") == "1"
-STAT_MEMORY_MIN_SAMPLES = int(os.getenv("STAT_MEMORY_MIN_SAMPLES", "20"))
-V62_MAX_ADJUSTMENT = float(os.getenv("V62_MAX_ADJUSTMENT", "10"))
+BOT_VERSION = "4.0"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -103,34 +102,14 @@ MONITOR_SEND_FULL = os.getenv("MONITOR_SEND_FULL", "0") == "1"
 # but Telegram is intentionally quiet except for scheduled decision points,
 # material scenario changes, and the daily statistical report.
 COMMUNICATION_MODE = os.getenv("COMMUNICATION_MODE", "MORNING_USA_EVENT")
-MORNING_REPORT_HOUR = int(os.getenv("MORNING_REPORT_HOUR", "8"))
-MORNING_REPORT_MINUTE = int(os.getenv("MORNING_REPORT_MINUTE", "0"))
+MORNING_REPORT_HOUR = int(os.getenv("MORNING_REPORT_HOUR", "5"))
+MORNING_REPORT_MINUTE = int(os.getenv("MORNING_REPORT_MINUTE", "30"))
 USA_REPORT_HOUR = int(os.getenv("USA_REPORT_HOUR", "14"))
 USA_REPORT_MINUTE = int(os.getenv("USA_REPORT_MINUTE", "30"))
 EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "21"))
-EVENT_ALERTS_ENABLED = os.getenv("EVENT_ALERTS_ENABLED", "0") == "1"
+EVENT_ALERTS_ENABLED = os.getenv("EVENT_ALERTS_ENABLED", "1") == "1"
 SILENT_INTERNAL_ANALYSIS = os.getenv("SILENT_INTERNAL_ANALYSIS", "1") == "1"
 MONITOR_STATE_FILE = "commodities_monitor_state.json"
-MIN_ENTRY_PROBABILITY = float(os.getenv("MIN_ENTRY_PROBABILITY", "62"))
-MIN_ENTRY_QUALITY = float(os.getenv("MIN_ENTRY_QUALITY", "55"))
-MIN_ENTRY_CONFIDENCE = float(os.getenv("MIN_ENTRY_CONFIDENCE", "60"))
-MIN_ENTRY_RR = float(os.getenv("MIN_ENTRY_RR", "2.5"))
-MIN_ENTRY_RR_TP1 = float(os.getenv("MIN_ENTRY_RR_TP1", "1.5"))
-MIN_ENTRY_RR_TP2 = float(os.getenv("MIN_ENTRY_RR_TP2", "2.0"))
-MAX_ENTRY_STOP_ATR = float(os.getenv("MAX_ENTRY_STOP_ATR", "2.5"))
-
-# v4.3 — Intelligence fusion + long-term forecast journal.
-ELECTION_IMPACT_ENABLED = os.getenv("ELECTION_IMPACT_ENABLED", "1") == "1"
-ELECTION_LOOKBACK_DAYS = int(os.getenv("ELECTION_LOOKBACK_DAYS", "21"))
-ELECTION_CACHE_FILE = "commodities_election_cache.json"
-ELECTION_CACHE_HOURS = int(os.getenv("ELECTION_CACHE_HOURS", "3"))
-LONG_TERM_ENABLED = os.getenv("LONG_TERM_ENABLED", "1") == "1"
-LONG_TERM_FORECAST_FILE = "commodities_long_term_forecasts.json"
-LONG_TERM_RETENTION_DAYS = int(os.getenv("LONG_TERM_RETENTION_DAYS", "450"))
-LONG_TERM_HORIZONS_DAYS = (30, 90, 180, 365)
-INTRADAY_JOURNAL_ALL = os.getenv("INTRADAY_JOURNAL_ALL", "1") == "1"
-INTRADAY_JOURNAL_RETENTION_DAYS = int(os.getenv("INTRADAY_JOURNAL_RETENTION_DAYS", "120"))
-INTRADAY_EVAL_HOURS = int(os.getenv("INTRADAY_EVAL_HOURS", "6"))
 
 # v2.5 GLOBAL COMMODITY INTELLIGENCE
 WEATHER_CACHE_FILE = "commodities_weather_cache.json"
@@ -158,11 +137,6 @@ KNOWLEDGE_SOURCES = [
     {"name": "ICE Education", "url": "https://www.ice.com/support/education", "type": "web"},
     {"name": "ICE Commodity Technical Analysis", "url": "https://www.ice.com/publicdocs/Charting_and_Technical_Analysis_for_Commodity_Markets.pdf", "type": "web"},
     {"name": "NOAA Climate Data Online", "url": "https://www.ncei.noaa.gov/cdo-web/", "type": "web"},
-    {"name": "TradingView Futures", "url": "https://www.tradingview.com/markets/futures/", "type": "web"},
-    {"name": "Trading Economics Commodities", "url": "https://tradingeconomics.com/commodity", "type": "web"},
-    {"name": "Trading Economics Calendar", "url": "https://tradingeconomics.com/calendar", "type": "web"},
-    {"name": "Investing Commodities", "url": "https://www.investing.com/commodities/", "type": "web"},
-    {"name": "Borsa Italiana ETC/ETN", "url": "https://www.borsaitaliana.it/etc-etn/etc-etn/home.htm", "type": "web"},
 ]
 
 # Additional global institutional sources. Kept separate so the bot can report
@@ -200,17 +174,6 @@ KNOWLEDGE_SOURCES.extend([
     {"name": "IG Breakout Fakeout", "url": "https://www.ig.com/it/ig-academy/basi-analisi-tecnica/breakouts-and-fakeouts", "type": "web"},
     {"name": "Borsa Italiana Commodity", "url": "https://www.borsaitaliana.it/notizie/sotto-la-lente/commodity.htm", "type": "web"},
 ])
-# v5.0 — Research sources and methodology map. These sources inform concepts only;
-# no source is treated as proof of profitability. Every derived rule is validated on market data.
-KNOWLEDGE_SOURCES.extend([
-    {"name": "Gianluca Defendi - Trading con i volumi", "url": "https://www.hoeplieditore.it/hoepli-editore/articolo/trading-con-i-volumi-gianluca-defendi/9788836020317/3261", "type": "web"},
-    {"name": "Andrea Salari - Trading Intraday", "url": "https://www.andreasalari.it/", "type": "web"},
-    {"name": "PoliTO - Commodities + AI", "url": "https://webthesis.biblio.polito.it/20297/", "type": "web"},
-    {"name": "PoliTO - Trading System e Reti Neurali", "url": "https://webthesis.biblio.polito.it/17701/", "type": "web"},
-    {"name": "PoliTO - AI e Deep Learning nel mercato finanziario", "url": "https://webthesis.biblio.polito.it/25393/", "type": "web"},
-    {"name": "PoliTO - Intraday classification + pattern recognition", "url": "https://webthesis.biblio.polito.it/7654/", "type": "web"},
-])
-
 KNOWLEDGE_CONCEPTS = {
     "trend": ["trend", "trending", "trendline", "higher high", "lower low"],
     "reversal": ["reversal", "inversion", "inversione", "turning point"],
@@ -871,40 +834,6 @@ YAHOO_TICKERS = {
 YAHOO_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0 Safari/537.36"}
 DATA_SOURCE_STATS = {}
 
-# ============================================================
-# v6.1 — DATA RESCUE + INTELLIGENCE FUSION
-# Multiple providers, retries, cache, timeframe reconstruction,
-# regime detection, cross-market context and feedback journal.
-# ============================================================
-DATA_CACHE = {}
-DATA_CACHE_TTL_MINUTES = int(os.getenv("DATA_CACHE_TTL_MINUTES", "60"))
-DATA_INTRADAY_CACHE_TTL_MINUTES = int(os.getenv("DATA_INTRADAY_CACHE_TTL_MINUTES", "15"))
-DATA_RETRY_COUNT = int(os.getenv("DATA_RETRY_COUNT", "2"))
-DATA_RETRY_BACKOFF = float(os.getenv("DATA_RETRY_BACKOFF", "1.2"))
-INTELLIGENCE_JOURNAL_FILE = "commodities_intelligence_journal.json"
-
-# Provider-specific Twelve Data aliases. We never assume that a Yahoo
-# futures ticker is also a valid Twelve Data symbol.
-TD_SYMBOL_ALIASES = {
-    "Oro": ["XAU/USD", "GOLD"], "Argento": ["XAG/USD", "SILVER"],
-    "Platino": ["XPT/USD", "PLATINUM"], "Palladio": ["XPD/USD", "PALLADIUM"],
-    "Petrolio WTI": ["WTI/USD", "WTI", "CRUDE OIL"],
-    "Petrolio Brent": ["XBR/USD", "BRENT", "BRENT CRUDE"],
-    "Gas Naturale": ["NG/USD", "NATURAL GAS"], "Benzina RBOB": ["RB/USD", "RBOB", "GASOLINE"],
-    "Heating Oil": ["HO/USD", "HEATING OIL"], "Rame": ["HG1", "COPPER", "XCU/USD"],
-    "Alluminio": ["ALI", "ALUMINUM"], "Nichel": ["NICKEL"], "Zinco": ["ZINC"], "Piombo": ["LEAD"],
-}
-
-# Informational sources: used as contextual/validation sources, never as a
-# replacement for executable market data unless an API is explicitly available.
-INTELLIGENCE_SOURCE_REGISTRY = [
-    {"name":"TradingView Futures", "url":"https://www.tradingview.com/markets/futures/", "role":"market_structure"},
-    {"name":"Trading Economics Commodities", "url":"https://tradingeconomics.com/commodity", "role":"macro_commodities"},
-    {"name":"Trading Economics Calendar", "url":"https://tradingeconomics.com/calendar", "role":"events"},
-    {"name":"Investing Commodities", "url":"https://www.investing.com/commodities/", "role":"market_news"},
-    {"name":"Borsa Italiana ETC/ETN", "url":"https://www.borsaitaliana.it/etc-etn/etc-etn/home.htm", "role":"investment_reference"},
-]
-
 
 
 def resolve_commodity_symbols():
@@ -1110,156 +1039,43 @@ def get_data_twelvedata(symbol, interval="1day", outputsize=4000):
     return candles
 
 
-def _provider_cache_get(name, interval):
-    key = (name, interval)
-    item = DATA_CACHE.get(key)
-    if not item:
-        return None
-    age_min = (datetime.now(timezone.utc) - item["saved_at"]).total_seconds() / 60.0
-    ttl = DATA_INTRADAY_CACHE_TTL_MINUTES if interval not in ("1day", "1d") else DATA_CACHE_TTL_MINUTES
-    if age_min <= ttl:
-        return item["candles"], age_min
-    return None
-
-
-def _provider_cache_put(name, interval, candles, provider):
-    DATA_CACHE[(name, interval)] = {
-        "saved_at": datetime.now(timezone.utc),
-        "candles": candles,
-        "provider": provider,
-    }
-
-
-def _retry_call(fn, label):
-    last = None
-    for attempt in range(max(1, DATA_RETRY_COUNT + 1)):
-        try:
-            return fn()
-        except Exception as exc:
-            last = exc
-            if attempt < DATA_RETRY_COUNT:
-                import time
-                time.sleep(DATA_RETRY_BACKOFF * (2 ** attempt))
-    raise RuntimeError(f"{label}: {last}")
-
-
-def _resample_minutes(candles, minutes):
-    if not candles:
-        return []
-    buckets = {}
-    for candle in candles:
-        try:
-            dt = datetime.fromisoformat(str(candle["datetime"]).replace("Z", "+00:00"))
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-        except Exception:
-            continue
-        total = dt.hour * 60 + dt.minute
-        bucket_total = (total // minutes) * minutes
-        key = dt.replace(hour=bucket_total // 60, minute=bucket_total % 60, second=0, microsecond=0)
-        buckets.setdefault(key, []).append(candle)
-    out = []
-    for key in sorted(buckets):
-        rows = [r for r in buckets[key] if r.get("close") is not None]
-        if not rows:
-            continue
-        highs = [r.get("high") for r in rows if r.get("high") is not None]
-        lows = [r.get("low") for r in rows if r.get("low") is not None]
-        out.append({
-            "datetime": key.isoformat(),
-            "open": rows[0].get("open"),
-            "high": max(highs) if highs else rows[0]["close"],
-            "low": min(lows) if lows else rows[0]["close"],
-            "close": rows[-1]["close"],
-            "volume": sum((r.get("volume") or 0) for r in rows),
-        })
-    return out
-
-
-def _td_candidates(name, symbol):
-    vals = []
-    if symbol:
-        vals.append(str(symbol))
-    vals.extend(TD_SYMBOL_ALIASES.get(name, []))
-    resolved = resolve_commodity_symbols().get(name) if name else None
-    if resolved:
-        vals.insert(0, resolved)
-    seen = set(); out = []
-    for x in vals:
-        if x and x.upper() not in seen:
-            seen.add(x.upper()); out.append(x)
-    return out
-
-
 def get_data(symbol, interval="1day", outputsize=4000):
-    """v6.1 DATA RESCUE: provider-specific symbols + retry + cache + timeframe reconstruction."""
+    """Multi-source: Yahoo gratuito prima, Twelve Data come confronto/fallback."""
+    # Recuperiamo il nome della commodity dal simbolo configurato/risolto.
     name = next((n for n, s in COMMODITIES.items() if s.upper() == str(symbol).upper()), None)
     if name is None:
         name = next((n for n, s in resolve_commodity_symbols().items() if s.upper() == str(symbol).upper()), None)
     if name is None:
         name = str(symbol)
 
-    errors = []
-    # 1) Fast cache rescue.
-    cached = _provider_cache_get(name, interval)
-    if cached:
-        candles, age = cached
-        DATA_SOURCE_STATS.setdefault(name, {})[interval] = f"CACHE ({age:.0f}m)"
-        print(f"   🗃️ {name} {interval}: cache {age:.0f}m")
-        return candles[-outputsize:]
-
-    # 2) Native Yahoo.
+    yahoo_error = None
     try:
+        raw_interval = interval
         if interval == "4h":
-            hourly = _retry_call(lambda: get_data_yahoo(name, "1h", max(outputsize * 4, 800)), f"Yahoo {name} 1h")
+            hourly = get_data_yahoo(name, "1h", max(outputsize * 4, 800))
             candles = _resample_4h(hourly)[-outputsize:]
         else:
-            candles = _retry_call(lambda: get_data_yahoo(name, interval, outputsize), f"Yahoo {name} {interval}")
+            candles = get_data_yahoo(name, interval, outputsize)
         if len(candles) >= 10:
-            _provider_cache_put(name, interval, candles, "YAHOO")
             DATA_SOURCE_STATS.setdefault(name, {})[interval] = "YAHOO"
             return candles
-        errors.append(f"Yahoo insufficienti {len(candles)}")
     except Exception as exc:
-        errors.append(f"Yahoo: {exc}")
+        yahoo_error = str(exc)
 
-    # 3) Twelve Data with multiple provider-specific symbols.
-    for td_symbol in _td_candidates(name, symbol):
-        try:
-            candles = _retry_call(lambda td_symbol=td_symbol: get_data_twelvedata(td_symbol, interval, outputsize), f"Twelve Data {td_symbol} {interval}")
-            if len(candles) >= 10:
-                _provider_cache_put(name, interval, candles, f"TWELVE DATA:{td_symbol}")
-                DATA_SOURCE_STATS.setdefault(name, {})[interval] = f"TWELVE DATA ({td_symbol})"
-                print(f"   🔁 {name} {interval}: fallback Twelve Data {td_symbol} OK")
-                return candles
-            errors.append(f"TD {td_symbol} insufficienti {len(candles)}")
-        except Exception as exc:
-            errors.append(f"TD {td_symbol}: {exc}")
+    # Fallback Twelve Data se Yahoo non risponde.
+    try:
+        candles = get_data_twelvedata(symbol, interval, outputsize)
+        if len(candles) >= 10:
+            DATA_SOURCE_STATS.setdefault(name, {})[interval] = "TWELVE DATA"
+            if yahoo_error:
+                print(f"   🔁 {name} {interval}: Yahoo KO → Twelve Data OK")
+            return candles
+    except Exception as td_error:
+        if yahoo_error:
+            raise RuntimeError(f"Yahoo: {yahoo_error} | Twelve Data: {td_error}")
+        raise
 
-    # 4) Reconstruct missing intraday timeframes from a finer timeframe.
-    fallbacks = {"4h": ("1h", 4, _resample_4h), "15min": ("5min", 3, lambda c: _resample_minutes(c, 15)), "5min": ("1min", 5, lambda c: _resample_minutes(c, 5))}
-    if interval in fallbacks:
-        finer, factor, builder = fallbacks[interval]
-        try:
-            fine = get_data(name if name else symbol, finer, max(outputsize * factor, 500))
-            candles = builder(fine)[-outputsize:]
-            if len(candles) >= 10:
-                DATA_SOURCE_STATS.setdefault(name, {})[interval] = f"RECONSTRUCTED FROM {finer}"
-                _provider_cache_put(name, interval, candles, f"RECONSTRUCTED:{finer}")
-                print(f"   🧩 {name} {interval}: ricostruito da {finer}")
-                return candles
-        except Exception as exc:
-            errors.append(f"reconstruction {finer}: {exc}")
-
-    # 5) Stale cache is preferable to deleting the analysis, but mark it stale.
-    stale = DATA_CACHE.get((name, interval))
-    if stale and stale.get("candles"):
-        age = (datetime.now(timezone.utc) - stale["saved_at"]).total_seconds() / 60.0
-        DATA_SOURCE_STATS.setdefault(name, {})[interval] = f"STALE CACHE ({age:.0f}m)"
-        print(f"   ⚠️ {name} {interval}: uso cache vecchia {age:.0f}m")
-        return stale["candles"][-outputsize:]
-
-    raise RuntimeError(f"DATA RESCUE FALLITO {name} {interval}: " + " | ".join(errors[-6:]))
+    raise RuntimeError(f"Nessun provider dati disponibile per {name} {interval}")
 
 
 def get_daily_data(symbol):
@@ -2102,15 +1918,15 @@ def political_impact(name):
     import xml.etree.ElementTree as ET
 
     queries = {
-        "Oro": "gold White House tariffs Fed geopolitics sanctions war",
-        "Argento": "silver White House tariffs industrial demand geopolitics",
-        "Petrolio WTI": "oil WTI OPEC White House sanctions war tariffs",
-        "Petrolio Brent": "Brent oil OPEC White House sanctions war tariffs",
-        "Gas Naturale": "natural gas geopolitics LNG sanctions Europe White House",
-        "Rame": "copper White House tariffs China geopolitics mining",
-        "Grano": "wheat grain White House tariffs Russia Ukraine geopolitics",
-        "Mais": "corn maize White House tariffs agriculture geopolitics",
-        "Caffè": "coffee Brazil tariffs White House trade weather geopolitics",
+        "Oro": "gold Trump tariffs Fed geopolitics sanctions war",
+        "Argento": "silver Trump tariffs industrial demand geopolitics",
+        "Petrolio WTI": "oil WTI OPEC Trump sanctions war tariffs",
+        "Petrolio Brent": "Brent oil OPEC Trump sanctions war tariffs",
+        "Gas Naturale": "natural gas geopolitics LNG sanctions Europe Trump",
+        "Rame": "copper Trump tariffs China geopolitics mining",
+        "Grano": "wheat grain Trump tariffs Russia Ukraine geopolitics",
+        "Mais": "corn maize Trump tariffs agriculture geopolitics",
+        "Caffè": "coffee Brazil tariffs Trump trade weather geopolitics",
     }
     query = queries.get(name, name)
     positive = {"tariff", "tariffs", "sanction", "sanctions", "war", "conflict", "attack", "shortage", "disruption", "embargo", "opec cut", "cut production", "trade war", "escalation"}
@@ -4101,7 +3917,7 @@ def entry_trigger_engine(analysis):
             "candidates": [{"tf":x[1],"kind":x[2],"score":round(x[0],1),"age_bars":x[6]} for x in candidates]}
 
 
-def core_market_regime_engine(analysis):
+def market_regime_engine(analysis):
     """Classify the current market regime using only data already in analysis.
 
     This is a descriptive regime classifier, not a predictive guarantee.
@@ -4264,38 +4080,83 @@ def price_action_context_engine(analysis):
             "level_score": round(location,1)}
 
 
+def _quantile(values, q):
+    vals=sorted([float(v) for v in values if v is not None and math.isfinite(float(v))])
+    if not vals: return None
+    q=clamp(float(q),0,1)
+    pos=(len(vals)-1)*q; lo=int(math.floor(pos)); hi=int(math.ceil(pos))
+    if lo==hi: return vals[lo]
+    return vals[lo] + (vals[hi]-vals[lo])*(pos-lo)
+
+
+def statistical_excursions(candles, direction, lookback=STAT_LOOKBACK, forward=STAT_FORWARD_BARS):
+    """Historical MAE/MFE on completed bars. Descriptive only, never a guarantee."""
+    if direction not in ("LONG","SHORT") or len(candles) < max(80, forward+20):
+        return {"samples":0}
+    rows=candles[-min(len(candles),lookback):]
+    maes=[]; mfes=[]
+    for i in range(20, len(rows)-forward):
+        entry=safe_float(rows[i].get("close"))
+        if not entry: continue
+        future=rows[i+1:i+1+forward]
+        highs=[safe_float(x.get("high")) for x in future if safe_float(x.get("high")) is not None]
+        lows=[safe_float(x.get("low")) for x in future if safe_float(x.get("low")) is not None]
+        if not highs or not lows: continue
+        if direction=="LONG":
+            mfes.append(max(highs)-entry); maes.append(entry-min(lows))
+        else:
+            mfes.append(entry-min(lows)); maes.append(max(highs)-entry)
+    return {"samples":len(maes),
+            "mae":_quantile(maes,STAT_MAE_QUANTILE),
+            "mfe1":_quantile(mfes,STAT_MFE_Q1),
+            "mfe2":_quantile(mfes,STAT_MFE_Q2),
+            "mfe3":_quantile(mfes,STAT_MFE_Q3)}
+
+
 def adaptive_risk_levels(analysis, candles, direction):
-    """Adaptive SL/TP: structure first, ATR second, percentage profile as fallback."""
+    """v3.9 risk engine: actual entry + structure + ATR + historical MAE/MFE + hard R/R validation."""
     if not ADAPTIVE_RISK_ENABLED or direction not in ("LONG","SHORT") or not candles:
-        return {"available": False}
-    price=safe_float(analysis.get("price"))
-    if not price: return {"available": False}
-    a=atr(candles,14) or price*0.01
+        return {"available":False}
+    entry=safe_float(analysis.get("entry")) or safe_float(analysis.get("price"))
+    if not entry: return {"available":False}
+    a=atr(candles,14) or entry*0.01
     l2l=analysis.get("level_to_level",{}) or {}
     support=safe_float(l2l.get("support")); resistance=safe_float(l2l.get("resistance"))
-    lows=[safe_float(x.get("low")) for x in candles[-30:] if safe_float(x.get("low")) is not None]
-    highs=[safe_float(x.get("high")) for x in candles[-30:] if safe_float(x.get("high")) is not None]
+    lows=[safe_float(x.get("low")) for x in candles[-40:] if safe_float(x.get("low")) is not None]
+    highs=[safe_float(x.get("high")) for x in candles[-40:] if safe_float(x.get("high")) is not None]
     swing_low=min(lows) if lows else None; swing_high=max(highs) if highs else None
-    profile=LEVEL_PROFILES.get(analysis.get("commodity_name") or "", {})
-    sl_pct=profile.get("sl_pct", min(STOP_ATR*a/max(price,1e-9),0.025))
-    tp1_pct=profile.get("tp1_pct", min(TP1_ATR*a/max(price,1e-9),0.035))
-    tp2_pct=profile.get("tp2_pct", min(TP2_ATR*a/max(price,1e-9),0.055))
-    tp3_pct=profile.get("tp3_pct", min(TP3_ATR*a/max(price,1e-9),0.08))
+    profile=LEVEL_PROFILES.get(analysis.get("commodity_name") or "",{})
+    hist=statistical_excursions(candles,direction)
     if direction=="LONG":
-        candidates=[x for x in (support,swing_low,price-sl_pct*price) if x is not None and x < price]
-        stop=max(candidates) if candidates else price-sl_pct*price
-        stop=min(stop, price-0.55*a)
-        risk=max(price-stop,0.35*a)
-        tps=[price+max(tp1_pct*price,1.35*risk), price+max(tp2_pct*price,2.0*risk), price+max(tp3_pct*price,2.7*risk)]
+        struct=[x for x in (support,swing_low) if x is not None and x < entry]
+        structural_stop=(max(struct)-SL_STRUCTURE_BUFFER_ATR*a) if struct else None
+        atr_stop=entry-max(SL_MIN_ATR*a,0.01*entry)
+        hist_stop=entry-(hist.get("mae") or SL_MIN_ATR*a)
+        candidates=[x for x in (structural_stop,atr_stop,hist_stop) if x is not None and x < entry]
+        stop=max(candidates) if candidates else atr_stop
+        max_risk=MAX_ENTRY_STOP_ATR*a
+        if profile.get("sl_pct") is not None: max_risk=min(max_risk, entry*float(profile["sl_pct"])*1.8)
+        stop=max(stop,entry-max_risk)
+        risk=entry-stop
+        raw_tps=[entry+(hist.get("mfe1") or 0),entry+(hist.get("mfe2") or 0),entry+(hist.get("mfe3") or 0)]
+        tps=[max(raw_tps[0],entry+MIN_ENTRY_RR_TP1*risk),max(raw_tps[1],entry+MIN_ENTRY_RR_TP2*risk),max(raw_tps[2],entry+MIN_ENTRY_RR_TP3*risk)]
     else:
-        candidates=[x for x in (resistance,swing_high,price+sl_pct*price) if x is not None and x > price]
-        stop=min(candidates) if candidates else price+sl_pct*price
-        stop=max(stop, price+0.55*a)
-        risk=max(stop-price,0.35*a)
-        tps=[price-max(tp1_pct*price,1.35*risk), price-max(tp2_pct*price,2.0*risk), price-max(tp3_pct*price,2.7*risk)]
-    return {"available": True, "atr": round(a,6), "stop": _price_round(stop), "tp1": _price_round(tps[0]), "tp2": _price_round(tps[1]), "tp3": _price_round(tps[2]),
-            "risk_distance": round(risk,6), "method": "STRUCTURA + ATR + PROFILE FALLBACK"}
-
+        struct=[x for x in (resistance,swing_high) if x is not None and x > entry]
+        structural_stop=(min(struct)+SL_STRUCTURE_BUFFER_ATR*a) if struct else None
+        atr_stop=entry+max(SL_MIN_ATR*a,0.01*entry)
+        hist_stop=entry+(hist.get("mae") or SL_MIN_ATR*a)
+        candidates=[x for x in (structural_stop,atr_stop,hist_stop) if x is not None and x > entry]
+        stop=min(candidates) if candidates else atr_stop
+        max_risk=MAX_ENTRY_STOP_ATR*a
+        if profile.get("sl_pct") is not None: max_risk=min(max_risk, entry*float(profile["sl_pct"])*1.8)
+        stop=min(stop,entry+max_risk)
+        risk=stop-entry
+        raw_tps=[entry-(hist.get("mfe1") or 0),entry-(hist.get("mfe2") or 0),entry-(hist.get("mfe3") or 0)]
+        tps=[min(raw_tps[0],entry-MIN_ENTRY_RR_TP1*risk),min(raw_tps[1],entry-MIN_ENTRY_RR_TP2*risk),min(raw_tps[2],entry-MIN_ENTRY_RR_TP3*risk)]
+    rr=[abs(tp-entry)/max(risk,1e-12) for tp in tps]
+    valid=rr[2] >= MIN_ENTRY_RR and risk <= MAX_ENTRY_STOP_ATR*a*1.001
+    rejection="" if valid else ("SL TROPPO LONTANO" if risk > MAX_ENTRY_STOP_ATR*a*1.001 else "R/R INSUFFICIENTE")
+    return {"available":True,"valid":valid,"rejection":rejection,"atr":round(a,6),"entry":_price_round(entry),"stop":_price_round(stop),"tp1":_price_round(tps[0]),"tp2":_price_round(tps[1]),"tp3":_price_round(tps[2]),"risk_distance":round(risk,6),"rr_tp1":round(rr[0],2),"rr_tp2":round(rr[1],2),"rr_tp3":round(rr[2],2),"historical_samples":hist.get("samples",0),"method":"STRUTTURA + ATR + MAE/MFE STORICO + R/R"}
 
 def exit_engine(position, analysis, current_price):
     """Early exit logic based on structure/reversal/price action; targets and SL remain primary."""
@@ -4390,57 +4251,20 @@ def smart_entry_engine(analysis):
     if source_discrepancy: blockers.append("DISCREPANZA FONTI")
     if not l2l.get("gate", True): warnings.append("L2L CONTRARIO")
 
-    # v3.8: strict confluence gate. Telegram may say COMPRA/VENDI ORA
-    # only when ALL critical conditions are satisfied.
-    entry_price = safe_float(analysis.get("entry"), safe_float(analysis.get("price"), 0)) or 0
-    stop_price = safe_float(analysis.get("stop"), 0) or 0
-    tp1_price = safe_float(analysis.get("tp1"), 0) or 0
-    tp2_price = safe_float(analysis.get("tp2"), 0) or 0
-    tp3_price = safe_float(analysis.get("tp3"), 0) or 0
-    risk_distance = abs(entry_price-stop_price) if entry_price and stop_price else 0
-    rr1 = abs(tp1_price-entry_price) / risk_distance if risk_distance else 0
-    rr2 = abs(tp2_price-entry_price) / risk_distance if risk_distance else 0
-    rr3 = abs(tp3_price-entry_price) / risk_distance if risk_distance else 0
-    atr_value = safe_float(analysis.get("atr"), 0) or 0
-    stop_atr = risk_distance / atr_value if atr_value > 0 else 999.0
-    rr1_ok = rr1 >= MIN_ENTRY_RR_TP1
-    rr2_ok = rr2 >= MIN_ENTRY_RR_TP2
-    rr3_ok = rr3 >= MIN_ENTRY_RR
-    stop_ok = stop_atr <= MAX_ENTRY_STOP_ATR
-    l2l_ok = bool(l2l.get("gate", False))
-    structural_ok = structural_same >= 2
-    fast_ok = fast_opp == 0
-    prob_ok = prob >= MIN_ENTRY_PROBABILITY
-    quality_ok = quality >= MIN_ENTRY_QUALITY
-    confidence_ok = conf >= MIN_ENTRY_CONFIDENCE
-    trigger_ok = bool(trigger.get("confirmed"))
-    safety_block = (risk.get("mode") in ("SHOCK", "ALERT") or
-                    rev.get("stage") == "CONFIRMED")
-    confluence_ok = (structural_ok and fast_ok and l2l_ok and trigger_ok and
-                     rr1_ok and rr2_ok and rr3_ok and stop_ok and
-                     prob_ok and quality_ok and confidence_ok and not safety_block)
+    # Safety gates only. Everything else is graded by score.
+    safety_block = risk.get("mode") == "SHOCK" or rev.get("stage") == "CONFIRMED" or analysis.get("risk_levels_valid") is False or (safe_float(analysis.get("adaptive_risk", {}).get("rr_tp3"), 0) or 0) < MIN_ENTRY_RR
     if safety_block:
+        if analysis.get("risk_levels_valid") is False:
+            blockers.append(analysis.get("risk_levels_rejection") or "RISCHIO SL/TP NON VALIDO")
         state, action, signal = "SAFETY_BLOCK", "NON ENTRARE", "WAIT"
-    elif intraday >= 80 and confluence_ok:
+    elif intraday >= 80 and (trigger.get("confirmed") or fast_same >= 1 or structural_same >= 2):
         state, action, signal = "ENTRY_CONFIRMED", ("COMPRA ORA" if d == "LONG" else "VENDI ORA"), d
-    elif intraday >= 65 and not safety_block:
-        state, action, signal = "ACTIVE_SETUP", ("LONG — ASPETTARE CONFERMA" if d == "LONG" else "SHORT — ASPETTARE CONFERMA"), "WAIT"
-    else:
+    elif intraday >= 70:
+        state, action, signal = "ACTIVE_SETUP", "ENTRATA POSSIBILE", d
+    elif intraday >= 60:
         state, action, signal = "WATCH", "ATTENDERE", "WAIT"
-    if not confluence_ok:
-        missing=[]
-        if not structural_ok: missing.append("MTF")
-        if not fast_ok: missing.append("5m/1m")
-        if not l2l_ok: missing.append("L2L")
-        if not trigger_ok: missing.append("TRIGGER")
-        if not rr1_ok: missing.append("RR TP1")
-        if not rr2_ok: missing.append("RR TP2")
-        if not rr3_ok: missing.append("RR TP3")
-        if not stop_ok: missing.append("STOP/ATR")
-        if not prob_ok: missing.append("PROB")
-        if not quality_ok: missing.append("QUALITÀ")
-        if not confidence_ok: missing.append("CONFIDENZA")
-        if missing: blockers.append("CONFLUENZA INCOMPLETA: " + ",".join(missing))
+    else:
+        state, action, signal = "WEAK_SETUP", "NON ENTRARE", "WAIT"
 
     analysis["price_action"] = price_action
     analysis["entry_trigger"] = trigger
@@ -4460,141 +4284,161 @@ def smart_entry_engine(analysis):
         "trigger": trigger.get("kind", "NONE"),
         "l2l_score": round(l2l_score, 1),
         "price_action_score": round(pa_score, 1),
-        "rr_tp1": round(rr1, 2),
-        "rr_tp2": round(rr2, 2),
-        "rr_tp3": round(rr3, 2),
-        "stop_atr": round(stop_atr, 2),
-        "confluence_ok": confluence_ok,
     }
     return analysis
 
-# ============================================================
-# v4.3 LONG-TERM FORECAST ENGINE + JOURNAL
-# ============================================================
-def _daily_momentum(rows, bars):
-    closes=[safe_float(x.get("close")) for x in rows or []]; closes=[x for x in closes if x is not None]
-    if len(closes)<=bars or closes[-bars-1]==0: return 0.0
-    return closes[-1]/closes[-bars-1]-1.0
 
-def long_term_forecast(name, candles, analysis):
-    """Create frozen 30/90/180/365-day directional forecasts from current data.
-    This is a research forecast, not a promise or price target.
+# ============================================================
+# v4.0 DAILY BIAS + TELEGRAM ON-DEMAND COMMANDS
+# ============================================================
+def build_daily_bias(ranked):
+    """Create a persistent intraday/day plan from the completed multi-layer analysis.
+    It is a directional bias, not a promise that price will move one way all day.
     """
-    if not LONG_TERM_ENABLED or len(candles or [])<120:
-        return {"enabled":False,"status":"INSUFFICIENT_DATA"}
-    closes=[safe_float(x.get("close")) for x in candles if safe_float(x.get("close")) is not None]
-    if len(closes)<120: return {"enabled":False,"status":"INSUFFICIENT_DATA"}
-    m20=_daily_momentum(candles,20); m60=_daily_momentum(candles,60); m120=_daily_momentum(candles,120)
-    base=0.50
-    model_dir=analysis.get("setup_direction") or analysis.get("model_signal")
-    model_prob=safe_float(analysis.get("long_probability"),0.5) or 0.5
-    if model_dir=="LONG": base += (model_prob-0.5)*0.22
-    elif model_dir=="SHORT": base -= (0.5-(1-model_prob))*0.22
-    trend=0.40*math.tanh(m20*18)+0.35*math.tanh(m60*10)+0.25*math.tanh(m120*7)
-    structural=0.0
-    reg=(analysis.get("market_regime",{}) or {}).get("state","")
-    if "UP" in reg.upper(): structural=0.08
-    elif "DOWN" in reg.upper(): structural=-0.08
-    fs=(analysis.get("futures_structure",{}) or {}).get("score",0) or 0
-    cyc=(analysis.get("cyclical",{}) or {}).get("score",0) or 0
-    political=(analysis.get("political",{}) or {}).get("score",0) or 0
-    election=(analysis.get("elections",{}) or {}).get("score",0) or 0
-    weather=(analysis.get("weather",{}) or {}).get("score",0) or 0
-    # Context is capped so long-term direction cannot be hijacked by one news feed.
-    context=clamp((fs*0.012)+(cyc*0.06)+(political*0.012)+(election*0.006)+(weather*0.003),-0.15,0.15)
-    signal=clamp((base-0.5)*0.55 + trend*0.30 + structural*0.10 + context*0.05,-0.45,0.45)
-    out={}
-    for d in LONG_TERM_HORIZONS_DAYS:
-        horizon_weight=1.0 if d<=30 else 0.85 if d<=90 else 0.70 if d<=180 else 0.55
-        p_long=clamp(0.50+signal*horizon_weight,0.05,0.95)
-        p_short=1-p_long
-        direction="LONG" if p_long>=0.56 else "SHORT" if p_short>=0.56 else "NEUTRALE"
-        confidence=clamp(abs(p_long-0.5)*200,0,100)
-        out[str(d)]={"direction":direction,"long_probability":round(p_long*100,1),"short_probability":round(p_short*100,1),"confidence":round(confidence,1)}
-    return {"enabled":True,"status":"OK","price":safe_float(analysis.get("price")),"generated_at":datetime.now(timezone.utc).isoformat(),"horizons":out,
-            "drivers":{"momentum20":round(m20*100,2),"momentum60":round(m60*100,2),"momentum120":round(m120*100,2),"regime":reg,"futures":fs,"cyclical":cyc,"political":political,"elections":election,"weather":weather}}
+    out=[]
+    for item in ranked:
+        if not item.get("available"):
+            continue
+        a=item.get("analysis",{}) or {}
+        tfs=a.get("timeframes",{}) or {}
+        dirs=[tfs.get(tf,{}).get("direction","NONE") for tf in ("4H","1H","15m")]
+        long_w=sum(w for w,d in zip((0.45,0.35,0.20),dirs) if d=="LONG")
+        short_w=sum(w for w,d in zip((0.45,0.35,0.20),dirs) if d=="SHORT")
+        if long_w >= 0.45 and long_w > short_w:
+            bias="LONG"
+            align=long_w
+        elif short_w >= 0.45 and short_w > long_w:
+            bias="SHORT"
+            align=short_w
+        else:
+            bias="NEUTRALE"
+            align=max(long_w,short_w)
+        prob=safe_float(a.get("entry_probability"),0) or 0
+        conf=safe_float(a.get("confidence"),0) or 0
+        score=safe_float(a.get("score"),0) or 0
+        political=a.get("political",{}) or {}
+        global_impact=a.get("global_impact",{}) or {}
+        # Political/global context can reinforce but cannot reverse the MTF bias by itself.
+        context=0.0
+        pdir=str(political.get("direction",""))
+        if pdir==bias: context += 5
+        if str(global_impact.get("mode",""))=="SHOCK": context -= 12
+        daily_conf=clamp(align*55 + conf*.20 + prob*.15 + score*.10 + context,0,100)
+        session=a.get("session",{}) or {}
+        timing=a.get("timing",{}) or {}
+        exit_band=session.get("exit_band") or session.get("best_band") or "N/D"
+        best_time=timing.get("best_time") or "N/D"
+        invalidation="4H/1H/15m contro-bias + inversione confermata"
+        if global_impact.get("mode")=="SHOCK":
+            invalidation="SHOCK: rivalutare immediatamente il bias"
+        out.append({"name":item.get("name"),"bias":bias,"confidence":round(daily_conf,1),"mtf_alignment":round(align,2),"best_time":best_time,"exit_band":exit_band,"invalidation":invalidation,"action":a.get("action_label","ATTENDERE"),"price":a.get("price"),"entry":a.get("entry"),"stop":a.get("stop"),"tp1":a.get("tp1"),"tp2":a.get("tp2"),"tp3":a.get("tp3"),"rr_tp3":(a.get("adaptive_risk",{}) or {}).get("rr_tp3"),"source":"4H + 1H + 15m + news/political/global context"})
+    out.sort(key=lambda x:x.get("confidence",0),reverse=True)
+    return {"timestamp":datetime.now(timezone.utc).isoformat(),"date":datetime.now(ZoneInfo("Europe/Rome")).date().isoformat(),"items":out}
 
-def record_long_term_forecasts(results):
-    if not LONG_TERM_ENABLED: return 0
-    log=_json_load(LONG_TERM_FORECAST_FILE,[])
-    if not isinstance(log,list): log=[]
-    now=datetime.now(timezone.utc); today=now.date().isoformat(); new=0
-    cutoff=now-timedelta(days=LONG_TERM_RETENTION_DAYS)
-    for item in results:
-        if not item.get("available"): continue
-        a=item.get("analysis",{}); f=a.get("long_term") or long_term_forecast(item["name"],item.get("candles",[]),a)
-        a["long_term"]=f
-        if not f.get("enabled"): continue
-        # Exactly one frozen forecast per commodity/day.
-        if any(x.get("name")==item["name"] and x.get("forecast_date")==today for x in log): continue
-        log.append({"id":f'{item["name"]}|{today}',"name":item["name"],"symbol":item["symbol"],"forecast_date":today,
-                    "created_at":now.isoformat(),"price":f.get("price"),"horizons":f.get("horizons",{}),"drivers":f.get("drivers",{}),"status":"OPEN"})
-        new+=1
-    kept=[]
-    for x in log:
-        try:
-            dt=datetime.fromisoformat(str(x.get("created_at")).replace("Z","+00:00"))
-            if dt>=cutoff: kept.append(x)
-        except Exception: kept.append(x)
-    _json_save(LONG_TERM_FORECAST_FILE,kept)
-    return new
 
-def _evaluate_long_term_entry(rec, horizon_days):
-    created=datetime.fromisoformat(str(rec["created_at"]).replace("Z","+00:00")); target=created+timedelta(days=horizon_days)
-    if datetime.now(timezone.utc)<target: return None
-    try: rows=get_data(rec["symbol"],"1day",500)
-    except Exception: return None
-    if not rows: return None
-    best=None
-    for r in rows:
-        try: dt=datetime.fromisoformat(str(r["datetime"]).replace("Z","+00:00"))
-        except Exception: continue
-        if dt.date()>=target.date(): best=r; break
-    if best is None: return None
-    p=safe_float(rec.get("price")); c=safe_float(best.get("close"))
-    if p is None or c is None: return None
-    h=rec.get("horizons",{}).get(str(horizon_days),{}); d=h.get("direction")
-    move=(c/p-1)*100
-    if d=="LONG": verdict="CORRETTA" if move>0 else "ERRATA"
-    elif d=="SHORT": verdict="CORRETTA" if move<0 else "ERRATA"
-    else: verdict="NEUTRALE"
-    return {"verdict":verdict,"target_price":c,"move_pct":round(move,3),"evaluated_at":datetime.now(timezone.utc).isoformat()}
+def _fmt_daily_item(x):
+    bias=x.get("bias","NEUTRALE")
+    icon="🔵" if bias=="LONG" else "🔴" if bias=="SHORT" else "🟡"
+    return f"{icon} {x.get('name','N/D')} — {bias} | {x.get('confidence',0):.0f}%"
 
-def evaluate_long_term_forecasts():
-    log=_json_load(LONG_TERM_FORECAST_FILE,[])
-    if not isinstance(log,list): return log,False
-    changed=False
-    for rec in log:
-        ev=rec.setdefault("evaluations",{})
-        for d in LONG_TERM_HORIZONS_DAYS:
-            k=str(d)
-            if k in ev: continue
-            result=_evaluate_long_term_entry(rec,d)
-            if result: ev[k]=result; changed=True
-    if changed: _json_save(LONG_TERM_FORECAST_FILE,log)
-    return log,changed
 
-def long_term_report():
-    log,_=evaluate_long_term_forecasts()
-    if not log: return "🧠 LONG-TERM FORECAST — nessun dato storico disponibile."
-    now=datetime.now(ZoneInfo("Europe/Rome")); lines=["🧠 LONG-TERM FORECAST REPORT",f"📅 {now.strftime('%d/%m/%Y')}","━━━━━━━━━━━━━━━━━━━━"]
-    for d in LONG_TERM_HORIZONS_DAYS:
-        rows=[r for r in log if r.get("evaluations",{}).get(str(d)) and r.get("horizons",{}).get(str(d),{}).get("direction") in ("LONG","SHORT")]
-        c=sum(r["evaluations"][str(d)].get("verdict")=="CORRETTA" for r in rows); w=sum(r["evaluations"][str(d)].get("verdict")=="ERRATA" for r in rows); acc=c/(c+w)*100 if c+w else 0
-        pending=sum(1 for r in log if str(d) not in r.get("evaluations",{}))
-        lines.append(f"⏳ {d} GIORNI: {c} ✅ | {w} ❌ | Accuracy {acc:.1f}% | Aperte {pending}")
-    # Current directional outlook for the most recent forecast of each commodity.
-    latest={}
-    for r in log:
-        latest[r.get("name")]=r
-    lines += ["","🔮 OUTLOOK ATTUALE"]
-    for name,r in sorted(latest.items()):
-        h=r.get("horizons",{}); parts=[]
-        for d in LONG_TERM_HORIZONS_DAYS:
-            x=h.get(str(d),{}); parts.append(f"{d}g {x.get('direction','N/D')} {safe_float(x.get('long_probability'),0) or 0:.0f}%L")
-        lines.append(f"• {name}: " + " | ".join(parts))
-    lines.append("🔒 Previsioni storiche congelate: non vengono riscritte.")
+def build_daily_telegram(daily, limit=5):
+    lines=[f"🌅 COMMODITIES BOT v{BOT_VERSION}","","📅 PIANO INTRADAY / BIAS GIORNALIERO","━━━━━━━━━━━━━━━━━━━━"]
+    for x in daily.get("items",[])[:limit]:
+        lines += ["",_fmt_daily_item(x),f"⏰ Finestra migliore: {x.get('best_time','N/D')}",f"🚪 Uscita prevista: {x.get('exit_band','N/D')}",f"⚠️ Invalidazione: {x.get('invalidation','N/D')}"]
+    lines += ["","📌 Il BIAS resta valido finché la struttura 4H/1H/15m non lo invalida.","🧪 PAPER ONLY — nessun ordine reale"]
     return "\n".join(lines)
+
+
+def build_requested_signal(ranked):
+    best=next((x for x in ranked if x.get("available")),None)
+    if not best: return "❌ Nessuna commodity disponibile."
+    a=best.get("analysis",{}) or {}; d=a.get("setup_direction") or a.get("model_signal") or "NONE"
+    daily=build_daily_bias(ranked); dx=next((x for x in daily["items"] if x.get("name")==best.get("name")),{})
+    lines=["🎯 MIGLIORE OPPORTUNITÀ ADESSO","",f"🥇 {best.get('name')}",f"{'🟢' if d=='LONG' else '🔴' if d=='SHORT' else '🟡'} {d} — {a.get('action_label','ATTENDERE')}",f"📊 Score {safe_float(a.get('intraday_score'),0) or 0:.0f}/100",f"📈 Probabilità {safe_float(a.get('entry_probability'),0) or 0:.1f}%",f"📅 Bias giornata: {dx.get('bias','N/D')} ({dx.get('confidence',0):.0f}%)"]
+    if a.get("entry") is not None: lines.append(f"🎯 Entry: {_fmt_price(a.get('entry'))}")
+    if a.get("stop") is not None: lines.append(f"🛑 SL: {_fmt_price(a.get('stop'))}")
+    for k in ("tp1","tp2","tp3"):
+        if a.get(k) is not None: lines.append(f"🎯 {k.upper()}: {_fmt_price(a.get(k))}")
+    lines += [f"⏰ Uscita prevista: {dx.get('exit_band','N/D')}","🧪 PAPER ONLY — nessun ordine reale"]
+    return "\n".join(lines)
+
+
+def build_requested_risk(ranked, name_hint=None):
+    target=None
+    if name_hint:
+        q=name_hint.lower()
+        target=next((x for x in ranked if x.get("available") and q in str(x.get("name","")).lower()),None)
+    if target is None: target=next((x for x in ranked if x.get("available")),None)
+    if not target: return "❌ Nessuna commodity disponibile."
+    a=target.get("analysis",{}) or {}; r=a.get("adaptive_risk",{}) or {}
+    lines=[f"🎯 {target.get('name','N/D')} — TP / SL","",f"📍 Prezzo: {_fmt_price(a.get('price'))}",f"🎯 Entry: {_fmt_price(a.get('entry')) if a.get('entry') is not None else 'N/D'}",f"🛑 SL: {_fmt_price(a.get('stop')) if a.get('stop') is not None else 'N/D'}",f"🎯 TP1: {_fmt_price(a.get('tp1')) if a.get('tp1') is not None else 'N/D'}",f"🎯 TP2: {_fmt_price(a.get('tp2')) if a.get('tp2') is not None else 'N/D'}",f"🎯 TP3: {_fmt_price(a.get('tp3')) if a.get('tp3') is not None else 'N/D'}"]
+    if r: lines += [f"📐 R/R: {r.get('rr_tp1','N/D')} / {r.get('rr_tp2','N/D')} / {r.get('rr_tp3','N/D')}",f"🧠 Metodo: {r.get('method','N/D')}"]
+    lines += ["","TP1 → BE | TP2 → SL a TP1 | TP3 → chiudere","🧪 PAPER ONLY — nessun ordine reale"]
+    return "\n".join(lines)
+
+
+def _telegram_offset():
+    return int((_json_load(TELEGRAM_OFFSET_FILE,{}) or {}).get("offset",0) or 0)
+
+
+def _save_telegram_offset(offset):
+    _json_save(TELEGRAM_OFFSET_FILE,{"offset":int(offset)})
+
+
+def poll_telegram_commands():
+    if not TELEGRAM_COMMANDS_ENABLED or not TELEGRAM_BOT_TOKEN:
+        return []
+    try:
+        r=requests.get(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates",params={"offset":_telegram_offset(),"timeout":0,"allowed_updates":json.dumps(["message"])},timeout=10)
+        data=r.json() if r.ok else {}
+        updates=data.get("result",[]) or []
+        if not updates: return []
+        commands=[]; max_id=None
+        for u in updates:
+            max_id=u.get("update_id") if u.get("update_id") is not None else max_id
+            msg=u.get("message",{}) or {}; chat=msg.get("chat",{}) or {}; text=str(msg.get("text","")).strip()
+            if str(chat.get("id")) != str(TELEGRAM_CHAT_ID): continue
+            if not text: continue
+            dt=msg.get("date")
+            if dt and datetime.now(timezone.utc).timestamp()-float(dt)>TELEGRAM_COMMAND_MAX_AGE_SECONDS: continue
+            commands.append((text, str(chat.get("id"))))
+        if max_id is not None: _save_telegram_offset(max_id+1)
+        return commands
+    except Exception as exc:
+        print(f"⚠️ Telegram command polling: {exc}")
+        return []
+
+
+def handle_telegram_commands(commands, ranked, daily, position_message=None):
+    for text, chat_id in commands:
+        q=text.lower().replace("/","").strip()
+        try:
+            if "classifica" in q or q in ("ranking","rank"):
+                msg=build_telegram(ranked, ranked[0] if ranked else {}, position_message)
+            elif "giornata" in q or "bias" in q or "previsione" in q:
+                msg=build_daily_telegram(daily)
+            elif "intraday" in q:
+                msg=build_intraday_alert(ranked, position_message)
+            elif "tp" in q or "sl" in q or "stop" in q or "take profit" in q:
+                hint="oro" if "oro" in q or "gold" in q else None
+                msg=build_requested_risk(ranked,hint)
+            elif "segnale" in q or "opportunit" in q:
+                msg=build_requested_signal(ranked)
+            elif "oro" in q or "gold" in q:
+                target=next((x for x in ranked if x.get("available") and ("oro" in str(x.get("name","")).lower() or "gold" in str(x.get("name","")).lower())),None)
+                msg=build_requested_risk([target] if target else ranked,"oro")
+                if target:
+                    dx=next((x for x in daily.get("items",[]) if x.get("name")==target.get("name")),{})
+                    msg += f"\n\n📅 Bias giornata: {dx.get('bias','N/D')}\n⏰ Uscita prevista: {dx.get('exit_band','N/D')}"
+            elif "aggiorna" in q or "refresh" in q:
+                msg=build_requested_signal(ranked)
+            else:
+                msg=("🤖 COMANDI DISPONIBILI\n\nclassifica\ngiornata\nintraday\nsegnale\noro\ntp sl\naggiorna")
+            send_telegram(msg, chat_id_override=chat_id)
+        except Exception as exc:
+            print(f"⚠️ Comando Telegram non gestito '{text}': {exc}")
+
 
 # ============================================================
 # v2.3 PREDICTION JOURNAL + END-OF-DAY TEST
@@ -4625,150 +4469,89 @@ def _prediction_direction(item):
 
 
 def record_predictions(results):
-    """Journal every 15-minute commodity reading, while scoring only directional forecasts.
-    WAIT/NEUTRAL are retained but are not counted as LONG/SHORT wins/losses.
+    """Record actionable intraday alerts for later objective evaluation.
+
+    We only journal actionable LONG/SHORT alerts (ENTRARE or ENTRATA POSSIBILE),
+    because a WAIT is not a trade prediction. Each record contains the regime,
+    trigger and score so the EOD report can identify which setups work.
     """
-    log=_json_load(PREDICTION_LOG_FILE,[])
-    if not isinstance(log,list): log=[]
-    now=datetime.now(timezone.utc); cutoff=now-timedelta(days=INTRADAY_JOURNAL_RETENTION_DAYS); new=0
-    cycle=now.replace(minute=(now.minute//15)*15,second=0,microsecond=0).isoformat()
+    log = _json_load(PREDICTION_LOG_FILE, [])
+    if not isinstance(log, list): log=[]
+    now=datetime.now(timezone.utc)
+    cutoff=now-timedelta(days=PERFORMANCE_RETENTION_DAYS)
+    new_items=0
     for item in results:
         if not item.get("available"): continue
         a=item.get("analysis",{}) or {}
+        action=str(a.get("action_label",""))
         direction=a.get("setup_direction") or a.get("model_signal")
-        if direction not in ("LONG","SHORT"): direction="NEUTRALE"
-        price=safe_float(a.get("price"));
+        if direction not in ("LONG","SHORT") or action not in ("COMPRA ORA","VENDI ORA","ENTRATA POSSIBILE"):
+            continue
+        price=safe_float(a.get("price"))
         if price is None: continue
-        rec={"id":f'{item["name"]}|{cycle}',"created_at":now.isoformat(),"cycle":cycle,"name":item["name"],"symbol":item["symbol"],
-             "direction":direction,"operational_signal":a.get("signal","WAIT"),"action":a.get("action_label",""),"price":price,
-             "entry":safe_float(a.get("entry")),"stop":safe_float(a.get("stop")),"tp1":safe_float(a.get("tp1")),"tp2":safe_float(a.get("tp2")),"tp3":safe_float(a.get("tp3")),
-             "score":safe_float(a.get("score"),0) or 0,"probability":safe_float(a.get("entry_probability"),0) or safe_float(a.get("long_probability"),0.5)*100,
-             "confidence":safe_float(a.get("confidence"),0) or 0,"quality":safe_float(a.get("quality"),0) or 0,
-             "regime":(a.get("market_regime",{}) or {}).get("state","N/D"),"status":"PENDING" if direction in ("LONG","SHORT") else "NEUTRALE"}
-        if not any(x.get("id")==rec["id"] for x in log): log.append(rec); new+=1
+        trig=a.get("entry_trigger",{}) or {}
+        score=safe_float(a.get("intraday_score"),0) or 0
+        bucket="80-100" if score>=80 else "70-79"
+        # One alert per commodity/direction/trigger/15-minute cycle.
+        cycle=now.replace(minute=(now.minute//15)*15,second=0,microsecond=0).isoformat()
+        rec={
+            "id":f"{item['name']}|{cycle}|{direction}|{trig.get('kind','SETUP')}",
+            "created_at":now.isoformat(),"name":item["name"],"symbol":item["symbol"],
+            "direction":direction,"action":action,"price":price,
+            "entry":safe_float(a.get("entry")),"stop":safe_float(a.get("stop")),
+            "tp1":safe_float(a.get("tp1")),"tp2":safe_float(a.get("tp2")),
+            "tp3":safe_float(a.get("tp3")),"atr":safe_float(a.get("atr")) or 0.0,
+            "score":score,"score_bucket":bucket,"probability":safe_float(a.get("entry_probability"),0) or 0,
+            "confidence":safe_float(a.get("confidence"),0) or 0,"quality":safe_float(a.get("quality"),0) or 0,
+            "setup":trig.get("kind") or a.get("entry_method","N/D"),"trigger_tf":trig.get("timeframe","N/D"),
+            "regime":(a.get("market_regime",{}) or {}).get("state","N/D"),
+            "status":"PENDING"
+        }
+        if not any(x.get("id")==rec["id"] for x in log):
+            log.append(rec); new_items+=1
     log=[x for x in log if x.get("created_at","")>=cutoff.isoformat()]
     _json_save(PREDICTION_LOG_FILE,log)
-    return new,log
+    return new_items,log
 
 def _future_candles_for_prediction(prediction):
-    """Return the forecast window using 15m candles for more precise TP/SL validation."""
     created=datetime.fromisoformat(prediction["created_at"].replace("Z","+00:00"))
-    if datetime.now(timezone.utc) < created+timedelta(hours=INTRADAY_EVAL_HOURS): return []
-    end=created+timedelta(hours=INTRADAY_EVAL_HOURS)
-    for interval, size in (("15min", 2000), ("1h", 1200)):
-        try:
-            rows=get_data(prediction["symbol"], interval, size)
-            out=[]
-            for row in rows:
-                try: dt=datetime.fromisoformat(str(row["datetime"]).replace("Z","+00:00"))
-                except Exception: continue
-                if created < dt <= end: out.append(row)
-            if out: return out
-        except Exception:
-            continue
-    return []
+    if datetime.now(timezone.utc) < created+timedelta(hours=PREDICTION_HORIZON_HOURS): return []
+    try: rows=get_data(prediction["symbol"],"1h",1200)
+    except Exception: return []
+    end=created+timedelta(hours=PREDICTION_HORIZON_HOURS)
+    out=[]
+    for row in rows:
+        try: dt=datetime.fromisoformat(str(row["datetime"]).replace("Z","+00:00"))
+        except Exception: continue
+        if created < dt <= end: out.append(row)
+    return out
 
 def evaluate_prediction(prediction,future):
-    """Validate direction plus each frozen TP/SL level from the original forecast."""
     if not future: return None
     p=safe_float(prediction.get("price")); direction=prediction.get("direction","WAIT")
     if p is None or direction not in ("LONG","SHORT"): return None
-    entry=safe_float(prediction.get("entry")) or p
-    sl=safe_float(prediction.get("stop")); tps=[safe_float(prediction.get(k)) for k in ("tp1","tp2","tp3")]
-    close_end=safe_float(future[-1].get("close"))
+    sl=safe_float(prediction.get("stop")); tp1=safe_float(prediction.get("tp1")); close_end=safe_float(future[-1].get("close"))
     if close_end is None: return None
-    hits={"tp1":False,"tp2":False,"tp3":False,"sl":False}
-    first_event="NONE"; ambiguous=False
+    first_hit="NONE"
     for c in future:
         hi,lo=safe_float(c.get("high")),safe_float(c.get("low"))
         if hi is None or lo is None: continue
-        candle_hits=[]
-        if tps[0] is not None and (hi>=tps[0] if direction=="LONG" else lo<=tps[0]): candle_hits.append("TP1")
-        if tps[1] is not None and (hi>=tps[1] if direction=="LONG" else lo<=tps[1]): candle_hits.append("TP2")
-        if tps[2] is not None and (hi>=tps[2] if direction=="LONG" else lo<=tps[2]): candle_hits.append("TP3")
-        if sl is not None and (lo<=sl if direction=="LONG" else hi>=sl): candle_hits.append("SL")
-        for h in candle_hits: hits[h.lower()]=True
-        if first_event=="NONE" and candle_hits: first_event=candle_hits[0]
-        if "SL" in candle_hits and any(x.startswith("TP") for x in candle_hits): ambiguous=True
-    close_correct=close_end>entry if direction=="LONG" else close_end<entry
-    direction_verdict="AMBIGUA" if ambiguous else ("CORRETTA" if close_correct else "ERRATA")
-    tp_verdict="TP3" if hits["tp3"] else "TP2" if hits["tp2"] else "TP1" if hits["tp1"] else "NESSUN TP"
-    return {"verdict":direction_verdict,"direction_correct":close_correct,"first_hit":first_event,
-            "tp1_hit":hits["tp1"],"tp2_hit":hits["tp2"],"tp3_hit":hits["tp3"],"sl_hit":hits["sl"],
-            "tp_verdict":tp_verdict,"ambiguous_levels":ambiguous,"close_end":close_end,
-            "move_pct":(close_end/entry-1)*100 if entry else 0,"evaluated_at":datetime.now(timezone.utc).isoformat()}
-
-def save_daily_top5_snapshot(ranked, prediction_log):
-    """Freeze the first top-5 ranking after the configured morning report time."""
-    try:
-        now=datetime.now(ZoneInfo("Europe/Rome")); today=now.date().isoformat()
-        state=_json_load(DAILY_TOP5_FILE,{}) or {}
-        if state.get("date")==today: return False
-        minutes=now.hour*60+now.minute; morning=MORNING_REPORT_HOUR*60+MORNING_REPORT_MINUTE; usa=USA_REPORT_HOUR*60+USA_REPORT_MINUTE
-        if minutes < morning or minutes >= usa: return False
-        available=[x for x in ranked if x.get("available")][:5]
-        if len(available)<5: return False
-        snapshot=[]
-        for item in available:
-            a=item.get("analysis",{}) or {}
-            candidates=[p for p in prediction_log if p.get("name")==item.get("name")]
-            pred=max(candidates,key=lambda x:x.get("created_at","")) if candidates else None
-            snapshot.append({"name":item.get("name"),"symbol":item.get("symbol"),"rank":len(snapshot)+1,
-                "ranking_score":item.get("ranking_score"),"direction":a.get("setup_direction") or a.get("model_signal"),"signal":a.get("signal"),
-                "price":safe_float(a.get("price")),"entry":safe_float(a.get("entry")),"stop":safe_float(a.get("stop")),
-                "tp1":safe_float(a.get("tp1")),"tp2":safe_float(a.get("tp2")),"tp3":safe_float(a.get("tp3")),
-                "prediction_id":pred.get("id") if pred else None,"created_at":pred.get("created_at") if pred else now.astimezone(timezone.utc).isoformat()})
-        _json_save(DAILY_TOP5_FILE,{"date":today,"captured_at":now.isoformat(),"items":snapshot})
-        return True
-    except Exception as exc:
-        print(f"⚠️ Snapshot top 5 non salvato: {exc}")
-        return False
-
-def _periodic_intraday_summary(log, start_date, end_date):
-    rows=[]
-    for p in log:
-        try: d=datetime.fromisoformat(str(p.get("created_at")).replace("Z","+00:00")).astimezone(ZoneInfo("Europe/Rome")).date()
-        except Exception: continue
-        if start_date<=d<=end_date and p.get("status")=="EVALUATED" and p.get("direction") in ("LONG","SHORT"): rows.append(p)
-    c=sum(x.get("verdict")=="CORRETTA" for x in rows); w=sum(x.get("verdict")=="ERRATA" for x in rows); a=c/(c+w)*100 if c+w else 0
-    return len(rows),c,w,a
-
-def _periodic_long_term_summary(log, start_date, end_date):
-    out=[]
-    for d in LONG_TERM_HORIZONS_DAYS:
-        rows=[]
-        for r in log:
-            try: fd=datetime.fromisoformat(str(r.get("forecast_date"))).date()
-            except Exception: continue
-            ev=r.get("evaluations",{}).get(str(d),{}); direction=r.get("horizons",{}).get(str(d),{}).get("direction")
-            if start_date<=fd<=end_date and direction in ("LONG","SHORT") and ev: rows.append(ev)
-        c=sum(x.get("verdict")=="CORRETTA" for x in rows); w=sum(x.get("verdict")=="ERRATA" for x in rows); a=c/(c+w)*100 if c+w else 0
-        out.append((d,c,w,a))
-    return out
-
-def periodic_performance_appendix():
-    now=datetime.now(ZoneInfo("Europe/Rome")); log=_json_load(PREDICTION_LOG_FILE,[]) or []
-    ltlog,_=_evaluate_long_term_placeholder() if False else (None,None)
-    lines=[]
-    # Weekly report on Friday; month report on the last calendar day.
-    if now.weekday()==4:
-        start=now.date()-timedelta(days=4); n,c,w,a=_periodic_intraday_summary(log,start,now.date())
-        lines += ["","📅 REPORT SETTIMANALE",f"⚡ Intraday: {c} ✅ | {w} ❌ | Accuracy {a:.1f}% ({n} valutate)"]
-        ltlog,_=evaluate_long_term_forecasts();
-        for d,c,w,a in _periodic_long_term_summary(ltlog,start,now.date()): lines.append(f"🧠 {d}g: {c} ✅ | {w} ❌ | {a:.1f}%")
-    tomorrow=now.date()+timedelta(days=1)
-    if tomorrow.month!=now.month:
-        start=now.date().replace(day=1); n,c,w,a=_periodic_intraday_summary(log,start,now.date())
-        lines += ["","📆 REPORT MENSILE",f"⚡ Intraday: {c} ✅ | {w} ❌ | Accuracy {a:.1f}% ({n} valutate)"]
-        ltlog,_=evaluate_long_term_forecasts();
-        for d,c,w,a in _periodic_long_term_summary(ltlog,start,now.date()): lines.append(f"🧠 {d}g: {c} ✅ | {w} ❌ | {a:.1f}%")
-    return lines
+        hit_tp=tp1 is not None and (hi>=tp1 if direction=="LONG" else lo<=tp1)
+        hit_sl=sl is not None and (lo<=sl if direction=="LONG" else hi>=sl)
+        if hit_tp and hit_sl: first_hit="AMBIGUO"; break
+        if hit_tp: first_hit="TP1"; break
+        if hit_sl: first_hit="SL"; break
+    close_correct=close_end>p if direction=="LONG" else close_end<p
+    verdict="CORRETTA" if first_hit=="TP1" or (first_hit=="NONE" and close_correct) else "ERRATA"
+    if first_hit=="AMBIGUO": verdict="AMBIGUA"
+    return {"verdict":verdict,"first_hit":first_hit,"close_end":close_end,
+            "move_pct":(close_end/p-1)*100,"evaluated_at":datetime.now(timezone.utc).isoformat()}
 
 def run_end_of_day_test(force=False):
     log=_json_load(PREDICTION_LOG_FILE,[])
-    if not isinstance(log,list): log=[]
+    if not isinstance(log,list) or not log: return None
     local_now=datetime.now(ZoneInfo("Europe/Rome"))
-    if not force and not (local_now.hour==EOD_REPORT_HOUR and 0<=local_now.minute<30): return None
+    if not force and local_now.hour<EOD_REPORT_HOUR: return None
     changed=False
     for pred in log:
         if pred.get("status")!="PENDING": continue
@@ -4776,65 +4559,42 @@ def run_end_of_day_test(force=False):
         if result:
             pred.update(result); pred["status"]="EVALUATED"; changed=True
     if changed: _json_save(PREDICTION_LOG_FILE,log)
-    today=local_now.date().isoformat(); rows=[]
+    today=local_now.date().isoformat()
+    evaluated=[]; pending=[]
     for pred in log:
         try: d=datetime.fromisoformat(pred.get("created_at","").replace("Z","+00:00")).astimezone(ZoneInfo("Europe/Rome")).date().isoformat()
         except Exception: continue
-        if d==today: rows.append(pred)
-    directional=[p for p in rows if p.get("direction") in ("LONG","SHORT") and p.get("status")=="EVALUATED"]
-    correct=sum(p.get("verdict")=="CORRETTA" for p in directional); wrong=sum(p.get("verdict")=="ERRATA" for p in directional); amb=sum(p.get("verdict")=="AMBIGUA" for p in directional)
-    pending=sum(p.get("status")=="PENDING" for p in rows); neutral=sum(p.get("direction")=="NEUTRALE" for p in rows)
-    acc=correct/(correct+wrong)*100 if correct+wrong else 0.0
-    lines=[f"🌙 COMMODITIES DAILY REPORT v{BOT_VERSION}",f"📅 {local_now.strftime('%d/%m/%Y')}","━━━━━━━━━━━━━━━━━━━━",
-           "⚡ INTRADAY — RILEVAMENTI OGNI 15 MINUTI",f"🔎 Rilevamenti totali: {len(rows)}",f"🎯 Previsioni direzionali valutate: {len(directional)}",
-           f"✅ Azzeccate: {correct}",f"❌ Sbagliate: {wrong}",f"⚪ Ambigue: {amb}",f"🟡 Ancora aperte: {pending}",f"⚪ Neutrali/WAIT: {neutral}",f"📈 Accuracy direzionale: {acc:.1f}%"]
+        if d==today:
+            (evaluated if pred.get("status")=="EVALUATED" else pending).append(pred)
+    if not evaluated and not pending: return None
+    correct=sum(p.get("verdict")=="CORRETTA" for p in evaluated); wrong=sum(p.get("verdict")=="ERRATA" for p in evaluated); ambiguous=sum(p.get("verdict")=="AMBIGUA" for p in evaluated)
+    accuracy=correct/(correct+wrong)*100 if correct+wrong else 0.0
+    lines=[f"📊 COMMODITIES BOT v{BOT_VERSION} — PERFORMANCE INTRADAY", "", f"📅 {local_now.strftime('%d/%m/%Y')}","━━━━━━━━━━━━━━━━━━━━",
+           f"🎯 Segnali valutati: {len(evaluated)}",f"✅ Azzeccati: {correct}",f"❌ Sbagliati: {wrong}",f"⚪ Ambigui: {ambiguous}",f"🟡 Ancora in valutazione: {len(pending)}",f"📈 Accuratezza: {accuracy:.1f}%"]
+    for bucket in ("80-100","70-79"):
+        rows=[p for p in evaluated if p.get("score_bucket")==bucket]; c=sum(p.get("verdict")=="CORRETTA" for p in rows); w=sum(p.get("verdict")=="ERRATA" for p in rows); acc=c/(c+w)*100 if c+w else 0
+        lines.append(f"⭐ Score {bucket}: {len(rows)} | {acc:.1f}%")
+    by_setup={}
+    for p in evaluated: by_setup.setdefault(p.get("setup","N/D"),[]).append(p)
+    if by_setup:
+        lines += ["","🔥 PER SETUP"]
+        rows=[]
+        for name,vals in by_setup.items():
+            c=sum(x.get("verdict")=="CORRETTA" for x in vals); w=sum(x.get("verdict")=="ERRATA" for x in vals); acc=c/(c+w)*100 if c+w else 0; rows.append((acc,name,len(vals)))
+        for acc,name,n in sorted(rows,reverse=True)[:5]: lines.append(f"• {name}: {acc:.1f}% ({n})")
     by_name={}
-    for p in directional: by_name.setdefault(p["name"],[]).append(p)
+    for p in evaluated: by_name.setdefault(p["name"],[]).append(p)
     if by_name:
-        lines += ["","🏆 ACCURACY PER COMMODITY"]
-        vals=[]
-        for name,rs in by_name.items():
-            c=sum(x.get("verdict")=="CORRETTA" for x in rs); w=sum(x.get("verdict")=="ERRATA" for x in rs); a=c/(c+w)*100 if c+w else 0; vals.append((a,name,len(rs)))
-        for a,name,n in sorted(vals,reverse=True): lines.append(f"• {name}: {a:.1f}% ({n})")
+        lines += ["","🏆 PER COMMODITY"]
+        rows=[]
+        for name,vals in by_name.items():
+            c=sum(x.get("verdict")=="CORRETTA" for x in vals); w=sum(x.get("verdict")=="ERRATA" for x in vals); acc=c/(c+w)*100 if c+w else 0; rows.append((acc,name,len(vals)))
+        for acc,name,n in sorted(rows,reverse=True)[:5]: lines.append(f"• {name}: {acc:.1f}% ({n})")
+    lines += ["","🔒 PAPER ONLY — nessun ordine reale"]
     state=_json_load(DAILY_REPORT_FILE,{})
     if state.get("last_report_date")==today and not force: return None
-    state.update({"last_report_date":today,"accuracy":acc,"evaluated":len(directional),"total_readings":len(rows),"pending":pending}); _json_save(DAILY_REPORT_FILE,state)
-    # Long-term is part of the same evening report.
-    # ========================================================
-    # SONDAGGIO SERALE — TOP 5 DELLA GIORNATA
-    # ========================================================
-    top5_state=_json_load(DAILY_TOP5_FILE,{}) or {}
-    top5=top5_state.get("items",[]) if top5_state.get("date")==today else []
-    if top5:
-        lines += ["", "🌙 SONDAGGIO SERALE — TOP 5", "Verifica della previsione congelata al mattino:"]
-        survey_direction=survey_tp1=survey_tp2=survey_tp3=survey_sl=0
-        for item in top5:
-            pred=next((p for p in log if p.get("id")==item.get("prediction_id")),None)
-            result=evaluate_prediction(pred,_future_candles_for_prediction(pred)) if pred else None
-            if result is None:
-                lines.append(f"{item.get('rank')}. {item.get('name')} — 🟡 DA VALUTARE")
-                continue
-            d="✅" if result.get("direction_correct") else "❌"
-            tp1="✅" if result.get("tp1_hit") else "❌"
-            tp2="✅" if result.get("tp2_hit") else "❌"
-            tp3="✅" if result.get("tp3_hit") else "❌"
-            sl="❌ COLPITO" if result.get("sl_hit") else "✅ NON COLPITO"
-            lines.append(f"{item.get('rank')}. {item.get('name')} | {item.get('direction','N/D')} | PREVISIONE {d} | TP1 {tp1} | TP2 {tp2} | TP3 {tp3} | SL {sl}")
-            lines.append(f"   Entry {_fmt_price(item.get('entry'))} | SL {_fmt_price(item.get('stop'))} | TP1 {_fmt_price(item.get('tp1'))} | TP2 {_fmt_price(item.get('tp2'))} | TP3 {_fmt_price(item.get('tp3'))}")
-            survey_direction += int(bool(result.get("direction_correct")))
-            survey_tp1 += int(bool(result.get("tp1_hit")))
-            survey_tp2 += int(bool(result.get("tp2_hit")))
-            survey_tp3 += int(bool(result.get("tp3_hit")))
-            survey_sl += int(not result.get("sl_hit"))
-        lines.append(f"📊 TOP 5: previsione {survey_direction}/5 | TP1 {survey_tp1}/5 | TP2 {survey_tp2}/5 | TP3 {survey_tp3}/5 | SL rispettato {survey_sl}/5")
-    else:
-        lines += ["", "🌙 SONDAGGIO SERALE — TOP 5", "🟡 Nessun Top 5 congelato per questa giornata."]
-
-    lines += ["","🧠 LUNGO TERMINE"]
-    lt=long_term_report()
-    lines.extend(lt.splitlines()[3:] if len(lt.splitlines())>3 else lt.splitlines())
-    lines += periodic_performance_appendix()
-    lines += ["","🔒 PAPER ONLY — nessun ordine reale"]
+    state.update({"last_report_date":today,"accuracy":accuracy,"evaluated":len(evaluated),"pending":len(pending)})
+    _json_save(DAILY_REPORT_FILE,state)
     return "\n".join(lines)
 
 # ============================================================
@@ -5081,15 +4841,15 @@ def demo_execution_adapter(results, position):
 # TELEGRAM
 # ============================================================
 
-def send_telegram(message):
+def send_telegram(message, chat_id_override=None):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("⚠️ Telegram non configurato: controlla TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID.")
-        return False
+        print("⚠️ Telegram non configurato.")
+        return
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
 
     payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
+        "chat_id": chat_id_override or TELEGRAM_CHAT_ID,
         "text": message,
     }
 
@@ -5618,22 +5378,6 @@ def save_monitor_state(ranked, best, position):
             "trigger_tf": t.get("timeframe"),
             "position": (position or {}).get("name"),
             "position_direction": (position or {}).get("direction"),
-            "ranked": [
-                {"name": x.get("name"), "symbol": x.get("symbol"), "analysis": {
-                    "signal": (x.get("analysis",{}) or {}).get("signal"),
-                    "setup_direction": (x.get("analysis",{}) or {}).get("setup_direction"),
-                    "model_signal": (x.get("analysis",{}) or {}).get("model_signal"),
-                    "action_label": (x.get("analysis",{}) or {}).get("action_label"),
-                    "score": (x.get("analysis",{}) or {}).get("score",0),
-                    "entry_probability": (x.get("analysis",{}) or {}).get("entry_probability",0),
-                    "probability_validated": (x.get("analysis",{}) or {}).get("probability_validated"),
-                    "probability_status": (x.get("analysis",{}) or {}).get("probability_status"),
-                    "entry": (x.get("analysis",{}) or {}).get("entry"),
-                    "stop": (x.get("analysis",{}) or {}).get("stop"),
-                    "tp2": (x.get("analysis",{}) or {}).get("tp2"),
-                    "statistical_risk": (x.get("analysis",{}) or {}).get("statistical_risk",{}),
-                }} for x in ranked[:5]
-            ],
         })
     except Exception as exc:
         print(f"⚠️ Monitor state non salvato: {exc}")
@@ -5661,7 +5405,7 @@ def build_telegram(ranked, best, position_message=None, position=None):
         timing=a.get('timing',{}); pattern=a.get('candle_pattern','N/D')
         action=a.get('action_label','ATTENDERE')
         lines += ['', '━━━━━━━━━━━━━━━━━━━━', f'{medal} {item["name"]}', '━━━━━━━━━━━━━━━━━━━━',
-                  f'🎯 AZIONE: {action}', f'🧭 DIREZIONE: {direction}', f'🧩 STATO ENTRY: {a.get("entry_state","N/D")}', f'📊 SCORE/QUALITÀ/CONF: {a.get("score",0):.0f}/{a.get("quality",0):.0f}/{a.get("confidence",0):.0f}', f'🧪 PROB. VALIDATA: {a.get("probability_validated"):.1f}%' if isinstance(a.get("probability_validated"),(int,float)) else '🧪 PROB. VALIDATA: non ancora validata',
+                  f'🎯 AZIONE: {action}', f'🧭 DIREZIONE: {direction}', f'🧩 STATO ENTRY: {a.get("entry_state","N/D")}', f'📊 SCORE/QUALITÀ/CONF: {a.get("score",0):.0f}/{a.get("quality",0):.0f}/{a.get("confidence",0):.0f}',
                   f'💰 PREZZO ATTUALE: {price:.4f}' if price is not None else '💰 PREZZO ATTUALE: N/D',
                   f'📥 ENTRATA: {entry:.4f}' if entry is not None else '📥 ENTRATA: N/D', f'📌 SETUP: {a.get("entry_method","N/D")}', f'⚡ TRIGGER: {a.get("entry_trigger",{}).get("kind","N/D")} {a.get("entry_trigger",{}).get("timeframe","")}'.strip(), f'🕯️ PATTERN: {pattern}', f'📚 STORICO SETUP: {a.get("pattern_backtest",{}).get("win_rate",0)*100:.0f}% successo' if a.get("pattern_backtest",{}).get("samples",0)>=5 else '📚 STORICO SETUP: dati insufficienti',
                   f'🧠 ENSEMBLE: {a.get("ensemble_alignment","N/D")} | RANK {a.get("ensemble_rank","N/D")} | {a.get("cross_sectional_score",50):.0f}/100',
@@ -5677,7 +5421,7 @@ def build_telegram(ranked, best, position_message=None, position=None):
             f'🛑 STOP LOSS: {stop:.4f}' if stop is not None else '🛑 STOP LOSS: N/D',
             f'🎯 TP1: {tp1:.4f}' if tp1 is not None else '🎯 TP1: N/D',
             f'🎯 TP2: {tp2:.4f}' if tp2 is not None else '🎯 TP2: N/D',
-            f'🎯 TP3: {tp3:.4f}' if tp3 is not None else '🎯 TP3: N/D', f'📐 TP/SL STATISTICO: {(a.get("statistical_risk",{}) or {}).get("status","N/D")} | SL {(a.get("statistical_risk",{}) or {}).get("sl_atr","-")} ATR | TP {(a.get("statistical_risk",{}) or {}).get("tp_atr","-")} ATR',
+            f'🎯 TP3: {tp3:.4f}' if tp3 is not None else '🎯 TP3: N/D',
             f'⏰ ORARIO MIGLIORE: {timing.get("best_time","N/D")}',
             f'⏳ FINESTRA: {timing.get("window","N/D")}',
         ]
@@ -5769,86 +5513,6 @@ def apply_futures_structure(analysis, structure):
 
 
 # ============================================================
-# v4.3 GLOBAL ELECTION INTELLIGENCE
-# ============================================================
-ELECTION_COMMODITY_MAP = {
-    "Oro": ["gold", "safe haven", "central bank", "tariff", "sanction", "war", "rates", "dollar"],
-    "Argento": ["silver", "industrial demand", "china", "tariff", "trade", "mine"],
-    "Rame": ["copper", "china", "infrastructure", "manufacturing", "mine", "export", "tariff"],
-    "Petrolio WTI": ["oil", "opec", "energy", "iran", "russia", "sanction", "production", "tariff"],
-    "Petrolio Brent": ["oil", "opec", "energy", "iran", "russia", "sanction", "production", "tariff"],
-    "Gas Naturale": ["natural gas", "lng", "pipeline", "energy", "russia", "europe", "storage"],
-    "Grano": ["wheat", "grain", "ukraine", "russia", "black sea", "export", "tariff", "agriculture"],
-    "Mais": ["corn", "maize", "ethanol", "china", "export", "agriculture", "tariff"],
-    "Soia": ["soybean", "china", "brazil", "export", "agriculture", "tariff"],
-    "Caffè": ["coffee", "brazil", "vietnam", "export", "tariff", "agriculture"],
-    "Zucchero": ["sugar", "brazil", "ethanol", "export", "agriculture", "tariff"],
-}
-
-ELECTION_EVENT_TERMS = (
-    "election", "elections", "presidential election", "general election", "parliamentary election",
-    "vote", "voting", "ballot", "poll", "runoff", "referendum", "coalition", "government",
-)
-
-def _election_cache():
-    return _json_load(ELECTION_CACHE_FILE, {}) or {}
-
-def _save_election_cache(data):
-    _json_save(ELECTION_CACHE_FILE, data)
-
-def election_impact(name):
-    if not ELECTION_IMPACT_ENABLED:
-        return {"enabled": False, "direction": "NEUTRALE", "score": 0.0, "count": 0, "events": []}
-    cache=_election_cache(); now=datetime.now(timezone.utc)
-    key=name
-    old=cache.get(key)
-    try:
-        if old:
-            dt=datetime.fromisoformat(str(old.get("updated_at")).replace("Z","+00:00"))
-            if now-dt < timedelta(hours=ELECTION_CACHE_HOURS): return old.get("value", old)
-    except Exception: pass
-    terms=ELECTION_COMMODITY_MAP.get(name,[name])
-    q='("election" OR "elections" OR "vote" OR "runoff" OR "referendum") ('+' OR '.join(terms[:8])+')'
-    articles=[]
-    try:
-        articles=_fetch_rss_articles(q, limit=30)
-    except Exception:
-        articles=[]
-    relevant=[]; raw=0.0
-    for a in articles:
-        text=(str(a.get("title",''))+' '+str(a.get("description",''))).lower()
-        if not any(t in text for t in ELECTION_EVENT_TERMS): continue
-        rel=sum(1 for t in terms if t.lower() in text)
-        if rel<=0: continue
-        # Conservative mechanism-based direction. Elections are not inherently bullish/bearish.
-        sign=0.0
-        if any(k in text for k in ("sanction","export ban","production cut","infrastructure spending","stimulus","military escalation","war")):
-            sign=1.0
-        elif any(k in text for k in ("production increase","export increase","ceasefire","de-escalation","fiscal tightening")):
-            sign=-1.0
-        # Election uncertainty is useful for gold but not automatically for every commodity.
-        if name=="Oro" and any(k in text for k in ("uncertainty","tight race","political risk","instability")):
-            sign=max(sign,0.6)
-        raw += sign * min(2.0, rel*0.35)
-        relevant.append({"title":a.get("title",""),"publishedAt":a.get("publishedAt",a.get("published",'')),"url":a.get("url","")})
-    score=clamp(raw/max(len(relevant),1)*8.0,-8.0,8.0) if relevant else 0.0
-    direction="FAVOREVOLE" if score>=1.0 else "SFAVOREVOLE" if score<=-1.0 else "NEUTRALE"
-    value={"enabled":True,"direction":direction,"score":round(score,2),"count":len(relevant),"events":relevant[:8],"updated_at":now.isoformat()}
-    cache[key]={"updated_at":now.isoformat(),"value":value}; _save_election_cache(cache)
-    return value
-
-def apply_election_layer(analysis, election):
-    analysis["elections"]=election or {}
-    if not election: return
-    direction=analysis.get("setup_direction") or analysis.get("model_signal")
-    e=safe_float(election.get("score"),0) or 0
-    if direction=="SHORT": e=-e
-    # Very small bounded adjustment: election data informs, price engine decides.
-    delta=clamp(e*0.45,-3.0,3.0)
-    analysis["election_nudge"]=round(delta,2)
-    analysis["score"]=clamp(safe_float(analysis.get("score"),0) + delta,0,100)
-
-# ============================================================
 # v3.0 POLITICAL EVENT -> MECHANISM -> COMMODITY -> HORIZON
 # ============================================================
 
@@ -5886,7 +5550,7 @@ def political_impact_v3(name, base=None):
     base = dict(base or political_impact(name) or {})
     try:
         query_terms = POLITICAL_COMMODITY_MAP.get(name, [name])
-        query = "(" + " OR ".join(query_terms[:8]) + ") (White House OR U.S. president OR US administration OR tariff OR sanctions OR geopolitics OR OPEC OR Fed)"
+        query = "(" + " OR ".join(query_terms[:8]) + ") (Trump OR tariff OR sanctions OR geopolitics OR OPEC OR Fed)"
         articles = _fetch_rss_articles(query, limit=30)
     except Exception:
         articles = []
@@ -6199,7 +5863,7 @@ def finalize_v26_analysis(analysis):
         except Exception as exc:
             print(f"⚠️ Ricalcolo rischio v2.7: {exc}")
     smart_entry_engine(analysis)
-    analysis["market_regime"] = core_market_regime_engine(analysis)
+    analysis["market_regime"] = market_regime_engine(analysis)
     return analysis
 
 # ============================================================
@@ -6217,856 +5881,50 @@ def _communication_state():
 def _save_communication_state(state):
     _json_save("commodities_communication_state.json", state)
 
-def _daily_selection_state():
-    return _json_load("commodities_daily_selection.json", {}) or {}
-
-def _save_daily_selection_state(state):
-    _json_save("commodities_daily_selection.json", state)
-
-def _selection_for_today(ranked):
-    now=datetime.now(ZoneInfo("Europe/Rome")); today=now.date().isoformat(); state=_daily_selection_state()
-    if state.get("date")==today and state.get("name"): return state
-    if not ranked: return {}
-    candidates=[x for x in ranked if x.get("available")]
-    if not candidates: return {}
-    best=candidates[0]; a=best.get("analysis",{})
-    state={"date":today,"name":best.get("name"),"symbol":best.get("symbol"),"direction":a.get("setup_direction") or a.get("model_signal"),"locked_at":datetime.now(timezone.utc).isoformat()}
-    _save_daily_selection_state(state); return state
-
-def _find_selected(ranked, selection):
-    name=selection.get("name") if selection else None
-    return next((x for x in ranked if x.get("name")==name and x.get("available")), None) or (ranked[0] if ranked else {})
-
-def _session_message(label, item, position_message=None):
-    a=item.get("analysis",{}) or {}; direction=a.get("setup_direction") or a.get("model_signal") or "NONE"; state=a.get("entry_state","WATCH"); confluence_ok=bool((a.get("intraday_core",{}) or {}).get("confluence_ok",False))
-    if state=="ENTRY_CONFIRMED" and confluence_ok and direction in ("LONG","SHORT"):
-        action="COMPRA ORA" if direction=="LONG" else "VENDI ORA"; icon="🟢" if direction=="LONG" else "🔴"; display=f"{icon} {direction} — {action}"
-    elif direction in ("LONG","SHORT"):
-        display=f"🟡 {direction} — ASPETTARE CONFERMA"
-    else: display="⚪ NO TRADE"
-    lines=[label,"",f"🥇 {item.get('name','N/D')}",display,"",f"💰 Prezzo: {_fmt_price(a.get('price'))}",f"📊 Score: {safe_float(a.get('score'),0) or 0:.0f}/100",f"📈 Probabilità: {safe_float(a.get('entry_probability'),0) or safe_float(a.get('long_probability'),0.5)*100:.1f}%",f"🧠 Confidenza: {safe_float(a.get('confidence'),0) or 0:.1f}/100"]
-    for key,lab in (("entry","Entry"),("stop","Stop"),("tp1","TP1"),("tp2","TP2"),("tp3","TP3")):
-        if a.get(key) is not None: lines.append(f"{'🎯' if key!='stop' else '🛑'} {lab}: {_fmt_price(a.get(key))}")
-    reg=(a.get("market_regime",{}) or {}).get("state");
+def _session_message(label, ranked, best, position_message=None):
+    a=best.get("analysis",{}) or {}
+    direction=a.get("setup_direction") or a.get("model_signal") or "NONE"
+    action=a.get("action_label") or a.get("signal") or "ATTENDERE"
+    icon="🟢" if direction=="LONG" else "🔴" if direction=="SHORT" else "🟡"
+    lines=[f"{label}","",f"🥇 {best.get('name','N/D')}",f"{icon} {direction} — {action}","",f"💰 Prezzo: {_fmt_price(a.get('price'))}",f"📊 Score: {safe_float(a.get('score'),0) or 0:.0f}/100",f"📈 Probabilità: {safe_float(a.get('entry_probability'),0) or 0:.1f}%",f"🧠 Confidenza: {safe_float(a.get('confidence'),0) or 0:.1f}/100"]
+    if a.get("entry") is not None: lines.append(f"🎯 Entry: {_fmt_price(a.get('entry'))}")
+    if a.get("stop") is not None: lines.append(f"🛑 Stop: {_fmt_price(a.get('stop'))}")
+    if a.get("tp1") is not None: lines.append(f"🎯 TP1: {_fmt_price(a.get('tp1'))}")
+    if a.get("tp2") is not None: lines.append(f"🎯 TP2: {_fmt_price(a.get('tp2'))}")
+    if a.get("tp3") is not None: lines.append(f"🎯 TP3: {_fmt_price(a.get('tp3'))}")
+    reg=(a.get("market_regime",{}) or {}).get("state")
     if reg: lines.append(f"🌍 Regime: {reg}")
-    pa=a.get("price_action",{}) or {}; patterns=pa.get("patterns",[]) or []
-    if patterns: lines.append("🕯️ "+" + ".join(patterns[:3]))
-    e=a.get("elections",{}) or {}; p=a.get("political",{}) or {}
-    lines.append(f"🗳️ Elezioni globali: {e.get('direction','N/D')} ({e.get('count',0)} eventi)")
-    lines.append(f"🇺🇸 Presidente degli Stati Uniti: {p.get('direction','N/D')}")
-    lt=a.get("long_term",{}).get("horizons",{}) if isinstance(a.get("long_term"),dict) else {}
-    if lt:
-        lines.append(f"🔮 LT: 30g {lt.get('30',{}).get('direction','N/D')} | 90g {lt.get('90',{}).get('direction','N/D')} | 180g {lt.get('180',{}).get('direction','N/D')}")
-    if position_message: lines += ["","📌 POSIZIONE",position_message]
-    lines += ["","🧪 PAPER ONLY — nessun ordine reale"]
+    blockers=a.get("entry_blockers",[]) or []
+    if blockers: lines.append("⚠️ " + " | ".join(blockers[:3]))
+    pa=a.get("price_action",{}) or {}
+    patterns=pa.get("patterns",[]) or []
+    if patterns: lines.append("🕯️ " + " + ".join(patterns[:3]))
+    if position_message: lines += ["", "📌 POSIZIONE", position_message]
+    lines += ["", "🧪 PAPER ONLY — nessun ordine reale"]
     return "\n".join(lines)
 
 def maybe_send_session_reports(ranked, best, position_message=None):
-    if COMMUNICATION_MODE!="MORNING_USA_EVENT": return
-    now=datetime.now(ZoneInfo("Europe/Rome")); today=now.date().isoformat(); state=_communication_state(); sent=state.setdefault("sent",{})
-    selection=_selection_for_today(ranked); selected=_find_selected(ranked,selection)
-    if now.hour==MORNING_REPORT_HOUR and MORNING_REPORT_MINUTE<=now.minute<MORNING_REPORT_MINUTE+30 and sent.get("morning")!=today and selected:
-        send_telegram(_session_message("🌅 COMMODITY DEL GIORNO — INTRADAY",selected,position_message)); sent["morning"]=today
-    if now.hour==USA_REPORT_HOUR and USA_REPORT_MINUTE<=now.minute<USA_REPORT_MINUTE+30 and sent.get("usa")!=today and selected:
-        send_telegram(_session_message("🇺🇸 USA SESSION UPDATE — RECHECK",selected,position_message)); sent["usa"]=today
+    if COMMUNICATION_MODE != "MORNING_USA_EVENT": return
+    now=datetime.now(ZoneInfo("Europe/Rome")); today=now.date().isoformat(); state=_communication_state()
+    sent=state.setdefault("sent", {})
+    if now.hour==MORNING_REPORT_HOUR and MORNING_REPORT_MINUTE <= now.minute < MORNING_REPORT_MINUTE+30 and sent.get("morning") != today:
+        send_telegram(_session_message("🌅 MORNING SIGNAL", ranked, best, position_message))
+        sent["morning"]=today
+    if now.hour==USA_REPORT_HOUR and USA_REPORT_MINUTE <= now.minute < USA_REPORT_MINUTE+30 and sent.get("usa") != today:
+        send_telegram(_session_message("🇺🇸 USA SESSION UPDATE", ranked, best, position_message))
+        sent["usa"]=today
     _save_communication_state(state)
-
-
-# ============================================================
-# v5.0 PREDICTIVE VALIDATION / SMART-MONEY PROXY / STATISTICAL RISK
-# ============================================================
-V5_MIN_CALIBRATION_SAMPLES = int(os.getenv("V5_MIN_CALIBRATION_SAMPLES", "30"))
-V5_MIN_RISK_TRADES = int(os.getenv("V5_MIN_RISK_TRADES", "25"))
-V5_REQUIRE_VALIDATED_PROB = os.getenv("V5_REQUIRE_VALIDATED_PROB", "0") == "1"
-V5_RISK_HORIZON_BARS = int(os.getenv("V5_RISK_HORIZON_BARS", "8"))
-
-
-def _v5_directional_log():
-    log = _json_load(PREDICTION_LOG_FILE, []) or []
-    return [x for x in log if x.get("status") == "EVALUATED" and x.get("direction") in ("LONG", "SHORT")]
-
-
-def v5_probability_calibration(name, direction):
-    """Calibrate the model probability using only already evaluated paper predictions.
-    Uses empirical-Bayes shrinkage toward 50% so tiny samples cannot create fake certainty.
-    """
-    rows = [x for x in _v5_directional_log()
-            if x.get("name") == name and x.get("direction") == direction]
-    wins = sum(x.get("verdict") == "CORRETTA" for x in rows)
-    losses = sum(x.get("verdict") == "ERRATA" for x in rows)
-    n = wins + losses
-    # Twelve neutral pseudo-observations keep early estimates conservative.
-    pseudo = 12
-    empirical = (wins + pseudo * 0.5) / (n + pseudo) if n + pseudo else 0.5
-    status = "VALIDATA" if n >= V5_MIN_CALIBRATION_SAMPLES else "NON_VALIDATA"
-    return {
-        "samples": n,
-        "wins": wins,
-        "losses": losses,
-        "raw_rate": round(wins / n * 100, 1) if n else None,
-        "calibrated_probability": round(empirical * 100, 1),
-        "status": status,
-        "method": "EMPIRICAL_BAYES_SHRINKAGE_50",
-    }
-
-
-def _v5_obv(candles):
-    if not candles:
-        return 0.0
-    obv = 0.0
-    prev = safe_float(candles[0].get("close"))
-    for c in candles[1:]:
-        close = safe_float(c.get("close")); vol = safe_float(c.get("volume"), 0.0) or 0.0
-        if close is None or prev is None:
-            continue
-        if close > prev: obv += vol
-        elif close < prev: obv -= vol
-        prev = close
-    return obv
-
-
-def v5_smart_money_proxy(candles, direction):
-    """Conservative price/volume proxy inspired by liquidity, pressure and Wyckoff concepts.
-    It does not pretend to observe institutional order flow when the provider exposes no order book.
-    """
-    if not candles or direction not in ("LONG", "SHORT"):
-        return {"score": 50.0, "state": "N/D", "available": False}
-    rows = candles[-80:]
-    closes = [safe_float(x.get("close")) for x in rows]
-    vols = [safe_float(x.get("volume"), 0.0) or 0.0 for x in rows]
-    closes = [x for x in closes if x is not None]
-    if len(closes) < 20:
-        return {"score": 50.0, "state": "DATI INSUFFICIENTI", "available": False}
-    last = closes[-1]
-    e20 = ema(closes, 20) or last
-    avg_vol = mean(vols[-20:])
-    last_vol = vols[-1] if vols else 0.0
-    vol_ratio = last_vol / avg_vol if avg_vol > 0 else 1.0
-    recent_ret = (closes[-1] / closes[-6] - 1.0) if len(closes) >= 6 and closes[-6] else 0.0
-    obv = _v5_obv(rows)
-    obv_prev = _v5_obv(rows[:-10]) if len(rows) > 30 else 0.0
-    obv_delta = obv - obv_prev
-    direction_sign = 1 if direction == "LONG" else -1
-    trend_component = 1 if (last > e20) == (direction == "LONG") else -1
-    momentum_component = 1 if recent_ret * direction_sign > 0 else -1
-    flow_component = 1 if obv_delta * direction_sign > 0 else -1
-    volume_component = 1 if vol_ratio >= 1.15 and momentum_component > 0 else 0
-    raw = 50 + 12 * trend_component + 15 * momentum_component + 15 * flow_component + 8 * volume_component
-    score = clamp(raw, 0, 100)
-    state = "ACCUMULAZIONE/PRESSIONE" if score >= 65 else "DISTRIBUZIONE/CONTROPRESSIONE" if score <= 35 else "MISTA"
-    return {"available": True, "score": round(score, 1), "state": state,
-            "volume_ratio": round(vol_ratio, 2), "recent_return": round(recent_ret * 100, 3),
-            "obv_delta": round(obv_delta, 2), "method": "PRICE_VOLUME_PROXY"}
-
-
-def v5_statistical_risk_engine(candles, direction):
-    """Select SL/TP from a small, walk-forward historical grid.
-    Uses only completed historical bars and a conservative same-bar rule.
-    """
-    if direction not in ("LONG", "SHORT") or len(candles or []) < 160:
-        return {"available": False, "status": "DATI INSUFFICIENTI"}
-    rows = candles[-900:]
-    atr_values = []
-    for i in range(len(rows)):
-        atr_values.append(atr(rows[:i+1], 14) if i >= 20 else None)
-    candidates = []
-    sl_mults = (1.0, 1.25, 1.5, 1.75, 2.0)
-    tp_mults = (1.5, 2.0, 2.5, 3.0, 3.5, 4.0)
-    start = max(30, int(len(rows) * 0.35))
-    end = max(start + 1, len(rows) - V5_RISK_HORIZON_BARS - 1)
-    split = start + int((end - start) * 0.60)
-
-    def evaluate_grid(a, b):
-        outcomes = []
-        for i in range(a, b):
-            av = atr_values[i]
-            entry = safe_float(rows[i].get("close"))
-            if av is None or entry is None or av <= 0:
-                continue
-            for sm in sl_mults:
-                for tm in tp_mults:
-                    stop = entry - sm * av if direction == "LONG" else entry + sm * av
-                    target = entry + tm * av if direction == "LONG" else entry - tm * av
-                    result = None
-                    for j in range(i + 1, min(i + 1 + V5_RISK_HORIZON_BARS, len(rows))):
-                        hi = safe_float(rows[j].get("high")); lo = safe_float(rows[j].get("low"))
-                        if hi is None or lo is None: continue
-                        hit_stop = lo <= stop if direction == "LONG" else hi >= stop
-                        hit_target = hi >= target if direction == "LONG" else lo <= target
-                        if hit_stop and hit_target:
-                            result = -sm
-                            break
-                        if hit_target:
-                            result = tm
-                            break
-                        if hit_stop:
-                            result = -sm
-                            break
-                    if result is None:
-                        last = safe_float(rows[min(i + V5_RISK_HORIZON_BARS, len(rows)-1)].get("close"))
-                        if last is None: continue
-                        result = (last-entry)/av if direction == "LONG" else (entry-last)/av
-                        result = clamp(result, -sm, tm)
-                    outcomes.append((sm, tm, result))
-        return outcomes
-
-    train = evaluate_grid(start, split)
-    valid = evaluate_grid(split, end)
-    if not train or not valid:
-        return {"available": False, "status": "NESSUN CAMPIONE"}
-
-    def rank_grid(data):
-        best = None
-        for sm in sl_mults:
-            for tm in tp_mults:
-                vals = [r for a,b,r in data if a == sm and b == tm]
-                if len(vals) < V5_MIN_RISK_TRADES: continue
-                expectancy = mean(vals)
-                win = sum(v > 0 for v in vals) / len(vals)
-                score = expectancy * 100 + win * 10 - abs(tm / sm - 2.0) * 2
-                candidate = (score, sm, tm, expectancy, win, len(vals))
-                if best is None or candidate[0] > best[0]: best = candidate
-        return best
-
-    train_best = rank_grid(train)
-    if not train_best:
-        return {"available": False, "status": "CAMPIONE TRAIN INSUFFICIENTE"}
-    sm, tm = train_best[1], train_best[2]
-    valid_vals = [r for a,b,r in valid if a == sm and b == tm]
-    if len(valid_vals) < V5_MIN_RISK_TRADES:
-        return {"available": False, "status": "VALIDAZIONE INSUFFICIENTE"}
-    valid_expectancy = mean(valid_vals)
-    valid_win = sum(v > 0 for v in valid_vals) / len(valid_vals)
-    robust = valid_expectancy > 0
-    return {"available": True, "status": "VALIDATA" if robust else "NON_VALIDATA",
-            "sl_atr": sm, "tp_atr": tm, "train_expectancy": round(train_best[3], 3),
-            "train_win_rate": round(train_best[4] * 100, 1), "train_samples": train_best[5],
-            "validation_expectancy": round(valid_expectancy, 3),
-            "validation_win_rate": round(valid_win * 100, 1), "validation_samples": len(valid_vals),
-            "method": "WALK_FORWARD_ATR_GRID"}
-
-
-def v5_enhance_analysis(name, analysis, candles, intraday_candles=None):
-    """Final v5 layer: calibrated probability, smart-money proxy and statistical risk."""
-    a = analysis
-    direction = a.get("setup_direction") or a.get("model_signal")
-    if direction not in ("LONG", "SHORT"):
-        return a
-    sm = v5_smart_money_proxy(intraday_candles or candles, direction)
-    a["smart_money_proxy"] = sm
-    # Smart-money proxy is deliberately bounded to avoid turning volume into a fake oracle.
-    sm_delta = ((sm.get("score", 50.0) - 50.0) * 0.10) if sm.get("available") else 0.0
-    a["score"] = clamp((safe_float(a.get("score"), 0) or 0) + sm_delta, 0, 100)
-
-    cal = v5_probability_calibration(name, direction)
-    raw_prob = safe_float(a.get("entry_probability"), None)
-    if raw_prob is None:
-        raw_prob = (safe_float(a.get("long_probability"), 0.5) or 0.5) * 100
-    if direction == "SHORT":
-        raw_direction_prob = 100 - raw_prob
-    else:
-        raw_direction_prob = raw_prob
-    if cal["status"] == "VALIDATA":
-        final_prob = 0.45 * raw_direction_prob + 0.55 * cal["calibrated_probability"]
-    else:
-        final_prob = raw_direction_prob
-    a["probability_raw"] = round(raw_direction_prob, 1)
-    a["probability_validated"] = round(final_prob, 1) if cal["status"] == "VALIDATA" else None
-    a["probability_validation"] = cal
-    a["probability_status"] = cal["status"]
-
-    risk = v5_statistical_risk_engine(intraday_candles or candles, direction)
-    a["statistical_risk"] = risk
-    if risk.get("available") and risk.get("status") == "VALIDATA":
-        price = safe_float(a.get("price")); av = safe_float(risk.get("sl_atr")); tv = safe_float(risk.get("tp_atr"))
-        atr_now = atr(intraday_candles or candles, 14) if (intraday_candles or candles) else None
-        if price and atr_now and av and tv:
-            if direction == "LONG":
-                a["stop"] = _price_round(price - av * atr_now); a["tp1"] = _price_round(price + max(1.5, tv*0.65) * atr_now); a["tp2"] = _price_round(price + tv * atr_now); a["tp3"] = _price_round(price + (tv + 1.0) * atr_now)
-            else:
-                a["stop"] = _price_round(price + av * atr_now); a["tp1"] = _price_round(price - max(1.5, tv*0.65) * atr_now); a["tp2"] = _price_round(price - tv * atr_now); a["tp3"] = _price_round(price - (tv + 1.0) * atr_now)
-            a["risk_method"] = "STATISTICO WALK-FORWARD"
-    # Hard entry gate only if explicitly enabled; default preserves paper research flow.
-    if V5_REQUIRE_VALIDATED_PROB and cal["status"] != "VALIDATA" and a.get("signal") in ("LONG", "SHORT"):
-        a["signal"] = "WAIT"; a["action_label"] = "ATTENDERE"
-        a.setdefault("entry_blockers", []).append("PROBABILITA_NON_VALIDATA")
-    return a
-
-
-
-def long_term_forecast(name, candles, analysis):
-    """v5 long-term forecast: commodity-specific, regime-conditioned and explicitly validated."""
-    if not LONG_TERM_ENABLED or len(candles or []) < 160:
-        return {"enabled": False, "status": "INSUFFICIENT_DATA"}
-    rows = candles[-1200:]
-    closes = [safe_float(x.get("close")) for x in rows]
-    closes = [x for x in closes if x is not None]
-    if len(closes) < 160:
-        return {"enabled": False, "status": "INSUFFICIENT_DATA"}
-    m20 = _daily_momentum(rows,20); m60 = _daily_momentum(rows,60); m120 = _daily_momentum(rows,120)
-    model_prob = safe_float(analysis.get("long_probability"),0.5) or 0.5
-    model_dir = analysis.get("setup_direction") or analysis.get("model_signal")
-    # Current momentum regime: use the sign and rough magnitude of 20d momentum.
-    current_sign = 1 if m20 > 0 else -1 if m20 < 0 else 0
-    out = {}
-    for d in LONG_TERM_HORIZONS_DAYS:
-        horizon = min(int(d), 365)
-        samples=[]
-        # Conditional historical analogues: same 20d momentum sign, then evaluate forward return.
-        max_i = len(rows)-horizon-1
-        for i in range(30, max_i):
-            c0 = safe_float(rows[i].get("close"))
-            c1 = safe_float(rows[i+horizon].get("close"))
-            if c0 is None or c1 is None or c0 <= 0: continue
-            m20_i = _daily_momentum(rows[:i+1],20)
-            sign_i = 1 if m20_i > 0 else -1 if m20_i < 0 else 0
-            if current_sign == 0 or sign_i == current_sign:
-                samples.append(1 if c1 > c0 else 0)
-        n=len(samples)
-        empirical=(sum(samples)+10*0.5)/(n+10) if n else 0.5
-        # Model + trend + conditional analogue. No claim of validation until sample threshold.
-        trend_bias = clamp(0.5 + 0.18*math.tanh(m20*18) + 0.10*math.tanh(m60*10) + 0.06*math.tanh(m120*7), 0.05, 0.95)
-        if model_dir == "SHORT": model_long = 1-model_prob
-        else: model_long = model_prob
-        if n >= 20:
-            p_long = clamp(0.35*model_long + 0.25*trend_bias + 0.40*empirical, 0.05, 0.95)
-            status="VALIDATA"
-        else:
-            p_long = clamp(0.55*model_long + 0.45*trend_bias, 0.10, 0.90)
-            status="NON_VALIDATA"
-        p_short=1-p_long
-        direction="LONG" if p_long>=0.56 else "SHORT" if p_short>=0.56 else "NEUTRALE"
-        out[str(d)]={"direction":direction,"long_probability":round(p_long*100,1),"short_probability":round(p_short*100,1),
-                     "confidence":round(abs(p_long-0.5)*200,1),"status":status,"historical_samples":n,
-                     "historical_hit_rate":round(empirical*100,1) if n else None}
-    return {"enabled":True,"status":"OK","price":safe_float(analysis.get("price")),
-            "generated_at":datetime.now(timezone.utc).isoformat(),"horizons":out,
-            "drivers":{"momentum20":round(m20*100,2),"momentum60":round(m60*100,2),"momentum120":round(m120*100,2),
-                        "model_probability":round(model_prob*100,1),"regime":(analysis.get("market_regime",{}) or {}).get("state","N/D"),
-                        "futures":(analysis.get("futures_structure",{}) or {}).get("score",0),
-                        "cyclical":(analysis.get("cyclical",{}) or {}).get("score",0),
-                        "political":(analysis.get("political",{}) or {}).get("score",0),
-                        "weather":(analysis.get("weather",{}) or {}).get("score",0)},
-            "method":"MODEL + MOMENTUM + CONDITIONAL HISTORICAL ANALOGUES"}
-
-def v5_daily_report():
-    """Actionable EOD report: ranking, validated probability, statistical risk and learning status."""
-    local_now = datetime.now(ZoneInfo("Europe/Rome"))
-    log = _json_load(PREDICTION_LOG_FILE, []) or []
-    if not isinstance(log, list): log = []
-    changed = False
-    for pred in log:
-        if pred.get("status") != "PENDING": continue
-        result = evaluate_prediction(pred, _future_candles_for_prediction(pred))
-        if result:
-            pred.update(result); pred["status"] = "EVALUATED"; changed = True
-    if changed: _json_save(PREDICTION_LOG_FILE, log)
-    today = local_now.date().isoformat()
-    rows = []
-    for p in log:
-        try: d = datetime.fromisoformat(str(p.get("created_at","")).replace("Z","+00:00")).astimezone(ZoneInfo("Europe/Rome")).date().isoformat()
-        except Exception: continue
-        if d == today: rows.append(p)
-    directional = [p for p in rows if p.get("direction") in ("LONG","SHORT") and p.get("status") == "EVALUATED"]
-    correct = sum(p.get("verdict") == "CORRETTA" for p in directional)
-    wrong = sum(p.get("verdict") == "ERRATA" for p in directional)
-    amb = sum(p.get("verdict") == "AMBIGUA" for p in directional)
-    pending = sum(p.get("status") == "PENDING" for p in rows)
-    accuracy = correct/(correct+wrong)*100 if correct+wrong else 0.0
-    state = _json_load(DAILY_REPORT_FILE,{}) or {}
-    if state.get("last_report_date") == today: return None
-    lines = [f"🌙 COMMODITIES DAILY REPORT v{BOT_VERSION}", f"📅 {local_now.strftime('%d/%m/%Y')}", "━━━━━━━━━━━━━━━━━━━━",
-             f"🎯 INTRADAY: {len(directional)} valutate | {correct} ✅ | {wrong} ❌ | {amb} ⚪ | {pending} aperte",
-             f"📈 Accuracy: {accuracy:.1f}%" if directional else "📈 Accuracy: NON ANCORA VALIDABILE", ""]
-    # Historical calibration snapshot.
-    calib = []
-    for p in _v5_directional_log():
-        calib.append(p)
-    if calib:
-        wins = sum(x.get("verdict") == "CORRETTA" for x in calib); total = sum(x.get("verdict") in ("CORRETTA","ERRATA") for x in calib)
-        lines.append(f"🧠 VALIDAZIONE STORICA: {wins}/{total} corretti | {wins/total*100:.1f}%" if total else "🧠 VALIDAZIONE STORICA: dati insufficienti")
-    else:
-        lines.append("🧠 VALIDAZIONE STORICA: in formazione — nessun campione valutato")
-    lines += ["", "🏆 COSA OSSERVARE DOMANI"]
-    # This section is populated by the latest persisted ranking state when available.
-    monitor = _json_load(MONITOR_STATE_FILE,{}) or {}
-    ranked = monitor.get("ranked", []) if isinstance(monitor, dict) else []
-    if ranked:
-        for i, item in enumerate(ranked[:5], 1):
-            a = item.get("analysis", {}) or {}; d = a.get("setup_direction") or a.get("model_signal") or "NONE"
-            prob = a.get("probability_validated")
-            prob_txt = f"{prob:.1f}% VALIDATA" if isinstance(prob,(int,float)) else "non validata"
-            risk = a.get("statistical_risk", {}) or {}
-            rr = 0.0
-            entry, stop, tp2 = a.get("entry") or a.get("price"), a.get("stop"), a.get("tp2")
-            if entry and stop and tp2 and abs(entry-stop)>0: rr = abs(tp2-entry)/abs(entry-stop)
-            lines.append(f"{i}. {item.get('name','N/D')} | {a.get('signal','WAIT')} | {d} | P {prob_txt} | Score {a.get('score',0):.0f} | R/R {rr:.2f}")
-            lines.append(f"   Entry {_fmt_price(entry)} | SL {_fmt_price(stop)} | TP2 {_fmt_price(tp2)} | rischio {risk.get('status','N/D')}")
-    else:
-        lines.append("Nessun ranking persistito disponibile in questa esecuzione.")
-    lines += ["", "🧪 Nota: le probabilità non validate NON vengono presentate come statisticamente dimostrate.", "🔒 PAPER ONLY — nessun ordine reale"]
-    state.update({"last_report_date": today, "accuracy": accuracy, "evaluated": len(directional), "total_readings": len(rows), "pending": pending})
-    _json_save(DAILY_REPORT_FILE, state)
-    return "\n".join(lines)
-
-
-
-# ============================================================
-# v6.2 — MARKET MICROSTRUCTURE / EVENT / MEMORY LAYERS
-# ============================================================
-
-COT_CONTRACT_ALIASES = {
-    "Oro": ["GOLD - COMEX", "GOLD"],
-    "Argento": ["SILVER - COMEX", "SILVER"],
-    "Rame": ["COPPER-GRADE #1 - COMEX", "COPPER"],
-    "Petrolio WTI": ["CRUDE OIL, LIGHT SWEET - NYMEX", "CRUDE OIL"],
-    "Gas Naturale": ["NATURAL GAS - NEW YORK MERCANTILE EXCHANGE", "NATURAL GAS"],
-    "Benzina RBOB": ["GASOLINE - NEW YORK MERCANTILE EXCHANGE", "GASOLINE"],
-    "Heating Oil": ["NO. 2 HEATING OIL - NEW YORK MERCANTILE EXCHANGE", "HEATING OIL"],
-    "Platino": ["PLATINUM - NYMEX", "PLATINUM"],
-    "Palladio": ["PALLADIUM - NYMEX", "PALLADIUM"],
-    "Mais": ["CORN - CHICAGO BOARD OF TRADE", "CORN"],
-    "Frumento": ["WHEAT-SRW - CHICAGO BOARD OF TRADE", "WHEAT"],
-    "Soia": ["SOYBEANS - CHICAGO BOARD OF TRADE", "SOYBEANS"],
-    "Caffe": ["COFFEE C - ICE FUTURES U.S.", "COFFEE"],
-    "Zucchero": ["SUGAR NO. 11 - ICE FUTURES U.S.", "SUGAR"],
-    "Cacao": ["COCOA - ICE FUTURES U.S.", "COCOA"],
-    "Cotone": ["COTTON NO. 2 - ICE FUTURES U.S.", "COTTON"],
-}
-
-
-def _v62_http_json(url, timeout=12):
-    req = urllib.request.Request(url, headers={"User-Agent": "CommoditiesBot/6.2"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        raw = r.read().decode("utf-8", errors="replace")
-    return json.loads(raw)
-
-
-def _v62_cache_load(path, max_age_hours):
-    try:
-        if not os.path.exists(path): return None
-        age = (time.time() - os.path.getmtime(path)) / 3600
-        if age > max_age_hours: return None
-        with open(path, "r", encoding="utf-8") as f: return json.load(f)
-    except Exception:
-        return None
-
-
-def _v62_cache_save(path, obj):
-    try:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(obj, f, ensure_ascii=False, indent=2)
-    except Exception as exc:
-        print(f"   ⚠️ v6.2 cache: {exc}")
-
-
-def cot_positioning_engine(name):
-    """Reads CFTC disaggregated COT data when publicly available.
-
-    COT is weekly/lagged, so it is deliberately a context factor rather than
-    a direct entry trigger. No COT value is fabricated when the feed fails.
-    """
-    empty = {"available": False, "source": "CFTC", "name": name, "score": 50.0,
-             "bias": "NEUTRAL", "net_managed_money": None, "open_interest": None,
-             "report_date": None, "reason": "COT non disponibile"}
-    if not COT_ENABLED:
-        empty["reason"] = "COT disabilitato"
-        return empty
-    aliases = COT_CONTRACT_ALIASES.get(name, [])
-    if not aliases:
-        empty["reason"] = "commodity non mappata"
-        return empty
-    cached = _v62_cache_load(COT_CACHE_FILE, COT_CACHE_HOURS)
-    if isinstance(cached, dict) and name in cached:
-        return cached[name]
-    try:
-        import csv, io, zipfile
-        rows=[]
-        year=datetime.now(timezone.utc).year
-        for y in range(year, max(year-COT_MAX_YEARS, 2006)-1, -1):
-            url=f"https://www.cftc.gov/files/dea/history/fut_disagg_txt_{y}.zip"
-            try:
-                req=urllib.request.Request(url, headers={"User-Agent":"CommoditiesBot/6.2"})
-                with urllib.request.urlopen(req, timeout=COT_TIMEOUT) as r: blob=r.read()
-                with zipfile.ZipFile(io.BytesIO(blob)) as z:
-                    names=z.namelist()
-                    if not names: continue
-                    data=z.read(names[0]).decode("utf-8", errors="replace")
-                rows=list(csv.DictReader(io.StringIO(data)))
-                if rows: break
-            except Exception:
-                continue
-        if not rows:
-            empty["reason"]="download CFTC non disponibile"
-            return empty
-        key=None
-        for candidate in ("Market_and_Exchange_Names","Market_and_Exchange_Names ","Contract_Market_Name"):
-            if rows and candidate in rows[0]: key=candidate; break
-        if not key:
-            empty["reason"]="schema CFTC inatteso"
-            return empty
-        matches=[]
-        for row in rows:
-            market=str(row.get(key,"" )).upper()
-            if any(a.upper() in market for a in aliases): matches.append(row)
-        if not matches:
-            empty["reason"]="contratto CFTC non trovato"
-            return empty
-        row=matches[-1]
-        def num(*keys):
-            for k in keys:
-                v=row.get(k)
-                if v not in (None,""):
-                    try: return float(str(v).replace(",",""))
-                    except Exception: pass
-            return None
-        mm_long=num("M_Money_Positions_Long_All","M_Money_Positions_Long_All ")
-        mm_short=num("M_Money_Positions_Short_All","M_Money_Positions_Short_All ")
-        oi=num("Open_Interest_All")
-        if mm_long is None or mm_short is None:
-            empty["reason"]="posizionamento Managed Money non disponibile"
-            return empty
-        net=mm_long-mm_short
-        denom=max(1.0,abs(mm_long)+abs(mm_short))
-        pct=100.0*net/denom
-        score=clamp(50+pct*0.35, 25, 75)
-        bias="LONG" if score>=55 else "SHORT" if score<=45 else "NEUTRAL"
-        report=row.get("As_of_Date_In_Form_MM/DD/YYYY") or row.get("Report_Date_as_YYYY_MM_DD")
-        out={"available":True,"source":"CFTC COT","name":name,"score":round(score,1),
-             "bias":bias,"net_managed_money":round(net,2),"managed_money_long":mm_long,
-             "managed_money_short":mm_short,"open_interest":oi,"report_date":report,
-             "reason":"weekly positioning; context only"}
-        cached=cached if isinstance(cached,dict) else {}
-        cached[name]=out; _v62_cache_save(COT_CACHE_FILE,cached)
-        return out
-    except Exception as exc:
-        empty["reason"]=f"CFTC error: {exc}"
-        return empty
-
-
-def v62_term_structure_engine(name, futures):
-    """Normalizes the existing futures-curve layer without inventing a curve."""
-    f=futures or {}
-    if not isinstance(f,dict) or not f.get("available"):
-        return {"available":False,"state":"UNKNOWN","score":50.0,"reason":"curva futures non disponibile"}
-    text=str(f.get("structure") or f.get("signal") or "").upper()
-    if "BACKWARD" in text:
-        return {"available":True,"state":"BACKWARDATION","score":58.0,"reason":"backwardation"}
-    if "CONTANGO" in text:
-        return {"available":True,"state":"CONTANGO","score":45.0,"reason":"contango"}
-    return {"available":True,"state":"FLAT/UNKNOWN","score":50.0,"reason":"pendenza non classificata"}
-
-
-def liquidity_engine(candles):
-    """Liquidity proxy from volume/range/freshness; labels itself as PROXY."""
-    if not LIQUIDITY_ENABLED or not candles or len(candles)<40:
-        return {"available":False,"quality":50.0,"mode":"UNAVAILABLE"}
-    recent=candles[-20:]
-    vols=[safe_float(x.get("volume")) for x in recent if safe_float(x.get("volume")) is not None]
-    ranges=[]
-    for x in recent:
-        h,l,c=safe_float(x.get("high")),safe_float(x.get("low")),safe_float(x.get("close"))
-        if h is not None and l is not None and c: ranges.append(abs(h-l)/abs(c)*100)
-    vol_score=50.0
-    if len(vols)>=10:
-        avg=sum(vols[:-5])/max(1,len(vols[:-5])); cur=sum(vols[-5:])/5
-        vol_score=clamp(50+(cur/max(avg,1e-9)-1)*25,20,80)
-    range_score=50.0
-    if ranges:
-        med=sorted(ranges)[len(ranges)//2]; cur=sum(ranges[-5:])/min(5,len(ranges))
-        range_score=clamp(60-(cur/max(med,1e-9)-1)*15,20,80)
-    q=clamp(0.6*vol_score+0.4*range_score,0,100)
-    return {"available":True,"quality":round(q,1),"mode":"PROXY","volume_score":round(vol_score,1),"range_score":round(range_score,1)}
-
-
-def anomaly_detector(candles):
-    """Detects price/range/volume anomalies using robust local z-scores."""
-    if not ANOMALY_ENABLED or not candles or len(candles)<50:
-        return {"available":False,"anomaly":False,"severity":0.0,"reasons":[]}
-    closes=[safe_float(x.get("close")) for x in candles if safe_float(x.get("close")) is not None]
-    if len(closes)<50: return {"available":False,"anomaly":False,"severity":0.0,"reasons":[]}
-    rets=[]
-    for i in range(1,len(closes)): rets.append((closes[i]/closes[i-1]-1)*100 if closes[i-1] else 0)
-    base=rets[-50:-1]; cur=rets[-1]
-    mean=sum(base)/len(base); sd=(sum((x-mean)**2 for x in base)/max(1,len(base)-1))**0.5
-    rz=abs((cur-mean)/sd) if sd>1e-9 else 0
-    ranges=[]; vols=[]
-    for x in candles[-51:]:
-        h,l,c=safe_float(x.get("high")),safe_float(x.get("low")),safe_float(x.get("close"))
-        if h is not None and l is not None and c: ranges.append((h-l)/abs(c)*100)
-        v=safe_float(x.get("volume"));
-        if v is not None: vols.append(v)
-    reasons=[]; severity=0
-    if rz>=ANOMALY_ZSCORE: reasons.append(f"return_z={rz:.1f}"); severity=max(severity,min(100,rz/4*100))
-    if len(ranges)>=20:
-        rmean=sum(ranges[:-1])/max(1,len(ranges)-1); rsd=(sum((x-rmean)**2 for x in ranges[:-1])/max(1,len(ranges)-2))**0.5
-        rsz=abs((ranges[-1]-rmean)/rsd) if rsd>1e-9 else 0
-        if rsz>=ANOMALY_ZSCORE: reasons.append(f"range_z={rsz:.1f}"); severity=max(severity,min(100,rsz/4*100))
-    return {"available":True,"anomaly":bool(reasons),"severity":round(severity,1),"reasons":reasons,"return_z":round(rz,2)}
-
-
-def dynamic_correlation_engine(name, candles, all_results=None):
-    """Uses available same-run returns; no hard-coded correlation values."""
-    if not DYNAMIC_CORRELATION_ENABLED or not all_results: return {"available":False,"score":50.0,"relations":[]}
-    def returns(cs):
-        vals=[safe_float(x.get("close")) for x in cs if safe_float(x.get("close")) is not None]
-        return [(vals[i]/vals[i-1]-1) for i in range(1,len(vals)) if vals[i-1]]
-    r0=returns(candles)[-40:]
-    if len(r0)<20: return {"available":False,"score":50.0,"relations":[]}
-    rel=[]
-    for item in all_results:
-        if item.get("name")==name or not item.get("available"): continue
-        rr=returns(item.get("candles",[]))[-40:]
-        n=min(len(r0),len(rr))
-        if n<20: continue
-        a,b=r0[-n:],rr[-n:]; ma=sum(a)/n; mb=sum(b)/n
-        da=sum((x-ma)**2 for x in a); db=sum((x-mb)**2 for x in b)
-        if da<=0 or db<=0: continue
-        corr=sum((a[i]-ma)*(b[i]-mb) for i in range(n))/(da*db)**0.5
-        rel.append((corr,item.get("name")))
-    if not rel: return {"available":False,"score":50.0,"relations":[]}
-    avg=sum(c for c,_ in rel)/len(rel)
-    # Correlation itself is not direction; use it only as a coherence measure.
-    score=clamp(50+avg*10,35,65)
-    return {"available":True,"score":round(score,1),"avg_correlation":round(avg,3),"relations":[{"name":n,"corr":round(c,3)} for c,n in sorted(rel,key=lambda z:abs(z[0]),reverse=True)[:5]]}
-
-
-def historical_setup_memory(name, analysis):
-    """Learns from evaluated journal records, requiring a minimum sample."""
-    if not STAT_MEMORY_ENABLED: return {"available":False,"samples":0,"success":None,"reason":"disabled"}
-    paths=[INTELLIGENCE_JOURNAL_FILE,"commodities_prediction_log.json"]
-    rows=[]
-    for path in paths:
-        try:
-            with open(path,"r",encoding="utf-8") as f:
-                x=json.load(f)
-            if isinstance(x,list): rows.extend(x)
-        except Exception: pass
-    direction=analysis.get("setup_direction") or analysis.get("model_signal")
-    regime=(analysis.get("market_regime") or {}).get("regime")
-    matches=[]
-    for r in rows:
-        if r.get("name")!=name: continue
-        if direction and r.get("direction") not in (direction,None): continue
-        if regime and r.get("regime") not in (regime,None): continue
-        outcome=r.get("outcome") or r.get("result") or r.get("status")
-        if isinstance(outcome,str) and outcome.upper() in ("WIN","LOSS","TP","SL","SUCCESS","FAIL"): matches.append(outcome.upper())
-    if len(matches)<STAT_MEMORY_MIN_SAMPLES:
-        return {"available":False,"samples":len(matches),"success":None,"reason":"campione insufficiente"}
-    wins=sum(1 for x in matches if x in ("WIN","TP","SUCCESS")); success=100*wins/len(matches)
-    return {"available":True,"samples":len(matches),"success":round(success,1),"wins":wins,"losses":len(matches)-wins,"reason":"historical evaluated sample"}
-
-
-def event_risk_engine(name, news=None, global_impact=None):
-    """High-impact event risk. Uses Trading Economics only when an API key exists.
-    Without an event feed, it stays neutral and never invents an event time.
-    """
-    out={"available":False,"level":"UNKNOWN","score":50.0,"block_entry":False,"reason":"calendar eventi non disponibile","events":[]}
-    if not EVENT_RISK_ENABLED: out["reason"]="event risk disabilitato"; return out
-    events=[]
-    if TRADING_ECONOMICS_API_KEY:
-        try:
-            now=datetime.now(timezone.utc)
-            d1=now.strftime("%Y-%m-%d"); d2=(now+timedelta(days=2)).strftime("%Y-%m-%d")
-            url=f"https://api.tradingeconomics.com/calendar/country/united%20states/{d1}/{d2}?c={urllib.parse.quote(TRADING_ECONOMICS_API_KEY)}"
-            data=_v62_http_json(url,timeout=12)
-            if isinstance(data,list):
-                for e in data:
-                    imp=str(e.get("importance") or e.get("Importance") or "").lower()
-                    if imp in ("3","high","2") or "high" in imp:
-                        events.append({"event":e.get("event") or e.get("Event"),"date":e.get("date") or e.get("Date"),"importance":imp,"country":e.get("country") or e.get("Country")})
-        except Exception as exc:
-            out["reason"]=f"calendar error: {exc}"
-    # News shock can raise risk, but it is not treated as a scheduled event.
-    shock=safe_float((global_impact or {}).get("shock_intensity"),0) or 0
-    news_count=safe_float((news or {}).get("count"),0) or 0
-    if events:
-        out["available"]=True; out["events"]=events[:10]; out["level"]="HIGH"; out["score"]=25.0; out["block_entry"]=True; out["reason"]="evento macro ad alta importanza presente"
-    elif shock>=0.85:
-        out["available"]=True; out["level"]="ELEVATED"; out["score"]=40.0; out["reason"]="shock news elevato; orario evento non verificato"
-    elif news_count>0:
-        out["available"]=True; out["level"]="NORMAL"; out["score"]=50.0; out["reason"]="news presenti, nessun evento high-impact verificato"
-    return out
-
-
-def v62_intelligence_fusion_engine(name, analysis, candles, intraday, usd, global_impact, political, futures, weather=None, disasters=None, all_results=None):
-    """Bounded v6.2 fusion. New layers can improve/worsen confidence but never manufacture a trade."""
-    a=analysis
-    regime=core_market_regime_engine(a) if callable(globals().get("core_market_regime_engine")) else {"state":"UNKNOWN","score":50}
-    # Existing v6.1 regime returns can differ by version; normalize.
-    if not isinstance(regime,dict): regime={}
-    regime_state=regime.get("state") or regime.get("regime") or "UNKNOWN"
-    cot=cot_positioning_engine(name)
-    curve=v62_term_structure_engine(name,futures)
-    liq=liquidity_engine(intraday or candles)
-    anomaly=anomaly_detector(intraday or candles)
-    corr=dynamic_correlation_engine(name,candles,all_results)
-    memory=historical_setup_memory(name,a)
-    events=event_risk_engine(name,a.get("news"),global_impact)
-    direction=_safe_direction(a.get("setup_direction") or a.get("model_signal"))
-    adj=0.0; reasons=[]
-    if cot.get("available") and direction != "NONE":
-        if cot.get("bias")==direction: adj += 3; reasons.append("COT coerente")
-        elif cot.get("bias") in ("LONG","SHORT"): adj -= 3; reasons.append("COT contrario")
-    if curve.get("available"): adj += clamp(curve.get("score",50)-50,-4,4)*0.5
-    if liq.get("available"):
-        if liq["quality"]<35: adj-=4; reasons.append("liquidità proxy debole")
-        elif liq["quality"]>70: adj+=2; reasons.append("liquidità proxy buona")
-    if anomaly.get("anomaly"):
-        adj-=min(6,anomaly.get("severity",0)/20); reasons.append("anomalia prezzo/range")
-    if corr.get("available"): adj += clamp(corr.get("score",50)-50,-3,3)
-    if memory.get("available") and memory.get("success") is not None:
-        adj += clamp((memory["success"]-50)/10,-4,4); reasons.append(f"storico {memory['success']:.0f}%")
-    if events.get("block_entry") and direction != "NONE":
-        a["entry_blockers"]=(a.get("entry_blockers") or [])+["EVENT_RISK"]
-        if a.get("signal") in ("LONG","SHORT"):
-            a["signal"]="WAIT"; a["action_label"]="ATTENDERE"
-        reasons.append("evento high-impact")
-    elif events.get("level")=="ELEVATED":
-        adj-=3; reasons.append("event/news risk elevato")
-    # Regime-specific bounded adjustment.
-    if direction=="LONG" and regime_state in ("TREND_UP","TREND"): adj+=2
-    elif direction=="SHORT" and regime_state in ("TREND_DOWN","TREND"): adj+=2
-    elif regime_state in ("HIGH_VOLATILITY","SHOCK"): adj-=2
-    adj=clamp(adj,-V62_MAX_ADJUSTMENT,V62_MAX_ADJUSTMENT)
-    a["v62_positioning"]=cot; a["v62_term_structure"]=curve; a["v62_liquidity"]=liq
-    a["v62_anomaly"]=anomaly; a["v62_correlation"]=corr; a["v62_memory"]=memory; a["v62_event_risk"]=events
-    a["v62_adjustment"]=round(adj,2)
-    a["score"]=clamp((safe_float(a.get("score"),50) or 50)+adj,0,100)
-    # Separate confidence concepts.
-    a["direction_probability"]=round(clamp((safe_float(a.get("probability"),0.5) or 0.5)*100,0,100),1)
-    a["data_confidence"]=round(clamp((safe_float(a.get("intelligence_quality"),50) or 50),0,100),1)
-    a["model_confidence"]=round(clamp((safe_float(a.get("confidence"),50) or 50),0,100),1)
-    a["entry_probability"]=round(clamp(safe_float(a.get("entry_probability"),a.get("direction_probability")) + adj*0.5,0,100),1)
-    a["v62_summary"]=" | ".join(reasons[:6]) or "nessun aggiustamento v6.2"
-    return a
 
 # ============================================================
 # MAIN
 # ============================================================
 
-
-def _safe_direction(value):
-    return value if value in ("LONG", "SHORT") else "NONE"
-
-
-def v61_market_regime_engine(candles, intraday=None):
-    """v6.1 compatibility regime layer; kept separate from the core regime engine."""
-    data = intraday or candles or []
-    if len(data) < 30:
-        return {"regime":"UNKNOWN", "confidence":0.0, "trend_score":0.0, "volatility":"UNKNOWN"}
-    closes = [safe_float(x.get("close")) for x in data[-80:] if safe_float(x.get("close")) is not None]
-    if len(closes) < 30:
-        return {"regime":"UNKNOWN", "confidence":0.0, "trend_score":0.0, "volatility":"UNKNOWN"}
-    fast = sum(closes[-10:]) / 10
-    slow = sum(closes[-30:]) / 30
-    ret = (closes[-1] / closes[-21] - 1) if closes[-21] else 0
-    ranges = []
-    for x in data[-30:]:
-        h, l, c = safe_float(x.get("high")), safe_float(x.get("low")), safe_float(x.get("close"))
-        if h is not None and l is not None and c:
-            ranges.append((h-l)/abs(c))
-    vol = (sum(ranges)/len(ranges))*100 if ranges else 0
-    trend_score = clamp(abs(ret)*1000 + abs(fast/slow-1)*500, 0, 100)
-    if trend_score >= 55 and abs(ret) >= 0.006:
-        regime = "TREND_UP" if ret > 0 else "TREND_DOWN"
-    elif vol >= 1.8:
-        regime = "HIGH_VOLATILITY"
-    elif trend_score < 25:
-        regime = "RANGE"
-    else:
-        regime = "TRANSITION"
-    return {"regime":regime, "confidence":round(clamp(35+trend_score*0.65,0,100),1), "trend_score":round(trend_score,1), "return_20":round(ret*100,2), "volatility_pct":round(vol,3), "volatility":"HIGH" if vol>=1.8 else "NORMAL"}
-
-
-def cross_market_intelligence(name, usd=None, global_impact=None, political=None, futures=None):
-    """Combines already-collected external contexts; no fabricated prices."""
-    score = 50.0; reasons=[]
-    u = usd or {}
-    uscore = safe_float(u.get("score"), 50.0) or 50.0
-    if name in ("Oro","Argento","Platino","Palladio"):
-        if uscore < 45: score += 7; reasons.append("USD debole favorevole ai metalli")
-        elif uscore > 60: score -= 7; reasons.append("USD forte penalizzante per i metalli")
-    gi = global_impact or {}
-    shock = safe_float(gi.get("shock_intensity"), 0.0) or 0.0
-    if shock > 0.7 and name in ("Oro","Petrolio WTI","Petrolio Brent","Gas Naturale"):
-        score += 5; reasons.append("shock globale elevato")
-    pi = political or {}
-    pscore = safe_float(pi.get("score"), 0.0) or 0.0
-    if abs(pscore) >= 15:
-        score += clamp(pscore*0.15,-8,8); reasons.append("impatto politico rilevante")
-    fs = futures or {}
-    if isinstance(fs, dict) and fs.get("available"):
-        curve = str(fs.get("structure") or fs.get("signal") or "").upper()
-        if "BACKWARD" in curve or "BACKWARDATION" in curve:
-            score += 3; reasons.append("curva backwardation")
-        elif "CONTANGO" in curve:
-            score -= 2; reasons.append("curva contango")
-    return {"score":round(clamp(score,0,100),1), "reasons":reasons}
-
-
-def intelligence_fusion_engine(name, analysis, candles, intraday, usd, global_impact, political, futures, weather=None, disasters=None):
-    """High-level decision layer: context, regime, conflicts and data quality."""
-    a=analysis
-    regime=v61_market_regime_engine(candles, intraday)
-    cross=cross_market_intelligence(name, usd, global_impact, political, futures)
-    direction=_safe_direction(a.get("setup_direction") or a.get("model_signal"))
-    votes=[]
-    if direction != "NONE":
-        if regime["regime"] == "TREND_UP": votes.append(1 if direction=="LONG" else -1)
-        elif regime["regime"] == "TREND_DOWN": votes.append(1 if direction=="SHORT" else -1)
-        if cross["score"] >= 60: votes.append(1)
-        elif cross["score"] <= 40: votes.append(-1)
-    regime_bonus = 0
-    if direction=="LONG" and regime["regime"]=="TREND_UP": regime_bonus=5
-    if direction=="SHORT" and regime["regime"]=="TREND_DOWN": regime_bonus=5
-    if regime["regime"]=="HIGH_VOLATILITY": regime_bonus -= 3
-    quality=100.0
-    sc=a.get("source_check") or {}
-    if sc.get("core_data_ok") is False: quality-=20
-    if "STALE" in str(DATA_SOURCE_STATS.get(name,{})).upper(): quality-=10
-    missing=sum(1 for tf in ("4H","1H","15m","5m") if tf not in (a.get("pattern_timeframes") or {}))
-    quality-=min(25,missing*6)
-    quality=clamp(quality,0,100)
-    a["market_regime"]=regime
-    a["cross_market_intelligence"]=cross
-    a["intelligence_quality"]=round(quality,1)
-    a["intelligence_conflicts"] = {"votes":votes,"agreement":round((sum(1 for v in votes if v>0)-sum(1 for v in votes if v<0))/max(1,len(votes))*100,1)}
-    a["score"]=clamp((safe_float(a.get("score"),50) or 50)+regime_bonus,0,100)
-    a["intelligence_summary"] = " | ".join([regime["regime"], f"CROSS {cross['score']:.0f}", f"DATA {quality:.0f}"])
-    return a
-
-
-def save_intelligence_feedback(name, analysis):
-    """Persistent paper-trading memory for later statistical learning."""
-    try:
-        try:
-            with open(INTELLIGENCE_JOURNAL_FILE,"r",encoding="utf-8") as f: rows=json.load(f)
-            if not isinstance(rows,list): rows=[]
-        except Exception:
-            rows=[]
-        rows.append({
-            "timestamp":datetime.now(timezone.utc).isoformat(), "name":name,
-            "signal":analysis.get("signal"), "direction":analysis.get("setup_direction") or analysis.get("model_signal"),
-            "score":round(safe_float(analysis.get("score"),0) or 0,2),
-            "probability":analysis.get("probability_validated") or analysis.get("entry_probability"),
-            "regime":(analysis.get("market_regime") or {}).get("regime"),
-            "data_quality":analysis.get("intelligence_quality"),
-            "entry":analysis.get("entry"), "stop":analysis.get("stop"),
-            "tp1":analysis.get("tp1"), "tp2":analysis.get("tp2"), "tp3":analysis.get("tp3"),
-        })
-        rows=rows[-2000:]
-        with open(INTELLIGENCE_JOURNAL_FILE,"w",encoding="utf-8") as f: json.dump(rows,f,ensure_ascii=False,indent=2)
-    except Exception as exc:
-        print(f"   ⚠️ Intelligence journal: {exc}")
-
 def main():
     print()
     print("=" * 70)
     print(f"🌍 COMMODITIES BOT v{BOT_VERSION}")
-    print("MORNING 08:00 + USA 14:30 + EOD 21:00 | INTRADAY 15m + LONG TERM JOURNAL | PAPER ONLY")
-    print("v4.3 INTELLIGENCE FUSION: ENTER solo con MTF + trigger + L2L + R/R + qualità/confidenza/probabilità")
-    print("COMMUNICATION: MORNING + USA + EOD | INTERNAL ANALYSIS EVERY 15m")
+    print("MORNING + USA + EVENT-DRIVEN + DAILY STATS | PAPER ONLY")
+    print("COMMUNICATION: MORNING + USA + MATERIAL EVENTS | INTERNAL ANALYSIS SILENT")
     print("=" * 70)
     print()
 
@@ -7139,19 +5997,10 @@ def main():
 
             analysis["pattern_timeframes"] = pattern_timeframes or {}
             analysis["source_check"] = source_check or {}
-            analysis["source_registry"] = INTELLIGENCE_SOURCE_REGISTRY
-            # Core-data quality: daily + 1H are mandatory; finer TFs are optional
-            # and can be reconstructed/rescued without killing the analysis.
-            analysis["source_check"]["core_data_ok"] = len(candles) >= 120 and len(intraday_candles) >= 80
-            analysis["source_check"]["data_quality"] = round(clamp(100 - max(0, 120-len(candles))*0.25, 0, 100),1)
 
             weather = weather_intelligence(name)
             disasters = natural_disaster_intelligence(name)
             apply_weather_and_disaster_layers(analysis, weather, disasters)
-
-            # v4.3: global election intelligence is commodity-specific and bounded.
-            elections = election_impact(name)
-            apply_election_layer(analysis, elections)
 
             # v2.9: Level-to-Level technical structure after all current context layers.
             level_to_level_engine(
@@ -7167,23 +6016,15 @@ def main():
             if adaptive_levels.get("available"):
                 analysis.update({k: adaptive_levels[k] for k in ("stop","tp1","tp2","tp3")})
                 analysis["adaptive_risk"] = adaptive_levels
+                analysis["risk_levels_valid"] = bool(adaptive_levels.get("valid", True))
+                analysis["risk_levels_rejection"] = adaptive_levels.get("rejection", "")
+                if not analysis["risk_levels_valid"]:
+                    analysis.setdefault("entry_blockers", []).append(adaptive_levels.get("rejection") or "R/R INSUFFICIENTE")
 
             # v3.0: optional futures curve context. No data -> no invented signal.
             _curve = futures_structure_engine(name)
             apply_futures_structure(analysis, _curve)
             analysis["v3_context"] = v3_context_summary(analysis)
-
-            # v5.0: calibrated probability + smart-money proxy + walk-forward statistical risk.
-            analysis = v5_enhance_analysis(name, analysis, candles, intraday_candles)
-
-            # v6.1: intelligence fusion — regime + cross-market + data quality.
-            analysis = v62_intelligence_fusion_engine(
-                name, analysis, candles, intraday_candles, usd, global_impact, political, _curve, weather, disasters, results
-            )
-            save_intelligence_feedback(name, analysis)
-
-            # v6.1: long-term forecast uses the enhanced intelligent current state.
-            analysis["long_term"] = long_term_forecast(name, candles, analysis)
 
             results.append({
                 "name": name,
@@ -7270,22 +6111,20 @@ def main():
     # v2.7: diagnostica trasparente dei blocchi di ingresso per le migliori 5.
     _diag = [x for x in results if x.get("available") and x.get("analysis",{}).get("setup_direction") in ("LONG","SHORT")]
     _diag.sort(key=lambda x: safe_float(x.get("analysis",{}).get("score"),0) or 0, reverse=True)
-    print(f"\n🔬 DIAGNOSTICA ENTRY v{BOT_VERSION}")
+    print("\n🔬 DIAGNOSTICA ENTRY v3.5")
     for _it in _diag[:5]:
         _a=_it["analysis"]; _t=_a.get("entry_trigger",{}) or {}; _r=_a.get("risk",{}) or {}; _l=_a.get("level_to_level",{}) or {}
         print(f"   {_it['name']}: {_a.get('setup_direction')} | score={_a.get('score',0):.1f} q={_a.get('quality',0):.1f} conf={_a.get('confidence',0):.1f} prob={_a.get('entry_probability',0):.1f}% | L2L={_l.get('score',0):.1f} {_l.get('behaviour','-')} gate={_l.get('gate')} | MTF={_a.get('structural_same',0)} | fast_opp={_a.get('fast_conflicts',0)} | risk={_r.get('mode')} mq={_r.get('market_quality',0):.1f} rb={safe_float(_a.get('risk_benefit',{}).get('score'),0) or 0:.1f} | trigger={_t.get('kind')} {_t.get('timeframe','-')} {_t.get('score',0):.1f} confirmed={_t.get('confirmed')} | state={_a.get('entry_state')} | regime={(_a.get('market_regime',{}) or {}).get('state','N/D')} | blockers={','.join(_a.get('entry_blockers',[])) or 'NESSUNO'} | warnings={','.join(_a.get('entry_warnings',[])) or 'NESSUNO'}")
 
-    new_long = record_long_term_forecasts(results)
-    print(f"🧠 Long-Term Journal: {new_long} nuove previsioni congelate")
     new_predictions, _prediction_log = record_predictions(results)
-    print(f"📝 Intraday Journal: {new_predictions} nuovi rilevamenti registrati")
+    print(f"📝 Prediction Journal: {new_predictions} nuove previsioni registrate")
 
     print("\n🧠 V3 CONTEXT")
     for _it in sorted([x for x in results if x.get("available")], key=lambda x: safe_float(x.get("analysis",{}).get("score"),0) or 0, reverse=True)[:5]:
         _a=_it["analysis"]; _v=_a.get("v3_context",{}) or {}; _p=_a.get("political",{}) or {}; _f=_a.get("futures_structure",{}) or {}
         print(f"   {_it['name']}: EARLY={_v.get('early')} {_v.get('early_direction')} | POL={_p.get('direction')} { _p.get('mechanism','N/D')} { _p.get('horizon','N/D')} | CURVE={_f.get('state')} | REV={_v.get('reversal')}")
 
-    print(f"\n🔭 EARLY OPPORTUNITY ENGINE v{BOT_VERSION}")
+    print("\n🔭 EARLY OPPORTUNITY ENGINE v3.5")
     for _it in sorted(
         [x for x in results if x.get("available")],
         key=lambda x: safe_float(x.get("analysis",{}).get("early_opportunity",{}).get("score"),0) or 0,
@@ -7321,8 +6160,14 @@ def main():
         raise RuntimeError("Nessuna commodity dispone di dati sufficienti per il Gold Engine. Controllare simboli/API quota.")
     best = available_ranked[0]
 
-    # Freeze the morning Top 5 so the evening survey tests the same forecast.
-    save_daily_top5_snapshot(ranked, _prediction_log)
+    daily_bias = build_daily_bias(ranked) if DAILY_BIAS_ENABLED else {"items": []}
+    _json_save(DAILY_BIAS_FILE, daily_bias)
+    try:
+        _json_save(LATEST_SNAPSHOT_FILE, {"timestamp": datetime.now(timezone.utc).isoformat(), "ranking": [{"name":x.get("name"),"score":x.get("ranking_score"),"direction":(x.get("analysis",{}) or {}).get("setup_direction") or (x.get("analysis",{}) or {}).get("model_signal")} for x in ranked if x.get("available")]})
+    except Exception: pass
+    telegram_commands = poll_telegram_commands()
+    if telegram_commands:
+        handle_telegram_commands(telegram_commands, ranked, daily_bias, None)
 
     demo_execution = demo_execution_adapter(results, position)
     print(f"🤖 Demo adapter: {demo_execution.get('reason', 'ordine registrato')}" if not demo_execution.get('executed') else f"🤖 DEMO ORDER: {demo_execution['order']['commodity']} {demo_execution['order']['side']}")
@@ -7487,7 +6332,7 @@ def main():
     save_monitor_state(ranked, best, position)
 
     # Fine giornata: valuta le previsioni maturate e invia il report una sola volta.
-    eod_report = v5_daily_report() if (datetime.now(ZoneInfo("Europe/Rome")).hour == EOD_REPORT_HOUR and 0 <= datetime.now(ZoneInfo("Europe/Rome")).minute < 30) else None
+    eod_report = run_end_of_day_test()
     if eod_report:
         send_telegram(eod_report)
         print(eod_report)
@@ -7508,7 +6353,7 @@ def main():
 
     print()
     print("=" * 70)
-    print(f"⚠️ v{BOT_VERSION}: analisi quantitativa, non garanzia di profitto. PAPER ONLY.")
+    print("⚠️ v3.4: analisi quantitativa, non garanzia di profitto. PAPER ONLY.")
     print("=" * 70)
 
 
