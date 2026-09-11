@@ -42,7 +42,7 @@ EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "21"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "4.1"
+BOT_VERSION = "4.2"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -4242,10 +4242,22 @@ def smart_entry_engine(analysis):
     confluence_ok = (structural_ok and fast_ok and l2l_ok and trigger_ok and
                      rr1_ok and rr2_ok and rr3_ok and stop_ok and
                      prob_ok and quality_ok and confidence_ok and not safety_block)
+
+    # v4.1: tiered entry gate. The strict gate remains the preferred path,
+    # but an exceptionally strong setup may enter when only soft confirmations
+    # (L2L and/or later TP RR) are missing. Safety blockers can never be bypassed.
+    soft_missing = sum([not l2l_ok, not rr2_ok, not rr3_ok])
+    relaxed_core_ok = (structural_ok and fast_ok and trigger_ok and rr1_ok and
+                       stop_ok and prob >= 65 and quality >= 52 and
+                       confidence >= 55 and not safety_block)
+    relaxed_entry_ok = relaxed_core_ok and soft_missing <= 2 and intraday >= 78
+
     if safety_block:
         state, action, signal = "SAFETY_BLOCK", "NON ENTRARE", "WAIT"
     elif intraday >= 80 and confluence_ok:
         state, action, signal = "ENTRY_CONFIRMED", ("COMPRA ORA" if d == "LONG" else "VENDI ORA"), d
+    elif relaxed_entry_ok:
+        state, action, signal = "ENTRY_POSSIBLE", ("ENTRATA POSSIBILE LONG" if d == "LONG" else "ENTRATA POSSIBILE SHORT"), d
     elif intraday >= 65 and not safety_block:
         state, action, signal = "ACTIVE_SETUP", ("LONG — ASPETTARE CONFERMA" if d == "LONG" else "SHORT — ASPETTARE CONFERMA"), "WAIT"
     else:
@@ -4726,15 +4738,161 @@ def _telegram_command_ranking(ranked):
         action = a.get("action_label", "ATTENDERE")
         direction = a.get("setup_direction") or a.get("model_signal") or "N/D"
         score = safe_float(a.get("score"), 0) or 0
-        prob = (safe_float(a.get("probability"), 0) or 0) * 100
+        prob_raw = safe_float(a.get("entry_probability", a.get("probability", 0)), 0) or 0
+        prob = prob_raw * 100 if prob_raw <= 1.5 else prob_raw
         intel = safe_float((a.get("market_intelligence_v41", {}) or {}).get("score"), 50) or 50
-        icon = "🟢" if action == "ENTRARE" else "🔴" if action == "NON ENTRARE" else "🟡"
+        icon = "🟢" if action in ("ENTRARE", "ENTRATA POSSIBILE") else "🔴" if action == "NON ENTRARE" else "🟡"
         rank_icon = medals[i-1] if i <= 3 else f"{i}."
         lines.append(f"{rank_icon} {item['name']} | {icon} {action} | {direction} | Score {score:.0f} | Prob {prob:.0f}% | Intel {intel:.0f}")
     if not available:
         lines.append("⚪ Nessuna commodity disponibile.")
     lines += ["", "🧪 PAPER ONLY — nessun ordine reale."]
     return "\n".join(lines)
+
+
+def _telegram_normalize_command(text):
+    """Normalize a Telegram command/message for simple natural-language matching."""
+    normalized = re.sub(r"\s+", " ", str(text or "").strip().lower())
+    normalized = normalized.replace("/", "")
+    return normalized
+
+
+def _telegram_find_commodity(ranked, query):
+    """Find a commodity by name or common alias."""
+    q = _telegram_normalize_command(query)
+    aliases = {
+        "oro": "oro", "gold": "oro",
+        "argento": "argento", "silver": "argento",
+        "platino": "platino", "palladio": "palladio",
+        "wti": "petrolio wti", "petrolio": "petrolio wti", "brent": "petrolio brent",
+        "petrolio brent": "petrolio brent", "petrolio wti": "petrolio wti",
+        "gas": "gas naturale", "gas naturale": "gas naturale",
+        "benzina": "benzina rbob", "rbob": "benzina rbob",
+        "heating oil": "heating oil", "rame": "rame", "copper": "rame",
+        "alluminio": "alluminio", "nichel": "nichel", "zinco": "zinco", "piombo": "piombo",
+        "grano": "grano", "wheat": "grano", "mais": "mais", "corn": "mais",
+        "soia": "soia", "soybean": "soia", "farina di soia": "farina di soia", "soybean meal": "farina di soia",
+        "olio di soia": "olio di soia", "soybean oil": "olio di soia", "avena": "avena", "oats": "avena",
+        "riso": "riso", "rice": "riso", "caffe": "caffè", "caffè": "caffè", "coffee": "caffè",
+        "cacao": "cacao", "cocoa": "cacao", "zucchero": "zucchero", "sugar": "zucchero",
+        "cotone": "cotone", "cotton": "cotone", "succo d'arancia": "succo d'arancia", "arancia": "succo d'arancia",
+        "orange juice": "succo d'arancia", "bovini": "bovini vivi", "bovini vivi": "bovini vivi", "live cattle": "bovini vivi",
+        "maiali": "maiali magri", "maiali magri": "maiali magri", "lean hogs": "maiali magri",
+        "feeder": "feeder cattle", "feeder cattle": "feeder cattle",
+    }
+    target = aliases.get(q, q)
+    candidates = [x for x in ranked if x.get("available")]
+    exact = [x for x in candidates if _telegram_normalize_command(x.get("name")) == target]
+    if exact:
+        return exact[0]
+    partial = [x for x in candidates if target in _telegram_normalize_command(x.get("name")) or _telegram_normalize_command(x.get("name")) in target]
+    return partial[0] if partial else None
+
+
+def _telegram_commodity_detail(item):
+    """Build a compact but useful single-commodity report."""
+    if not item:
+        return "⚪ Commodity non trovata. Scrivi HELP per vedere i comandi disponibili."
+    a = item.get("analysis", {}) or {}
+    name = item.get("name", "N/D")
+    direction = a.get("setup_direction") or a.get("model_signal") or "N/D"
+    action = a.get("action_label", "ATTENDERE")
+    score = safe_float(a.get("score"), 0) or 0
+    prob_raw = safe_float(a.get("entry_probability", a.get("probability", 0)), 0) or 0
+    prob = prob_raw * 100 if prob_raw <= 1.5 else prob_raw
+    conf = safe_float(a.get("confidence"), 0) or 0
+    quality = safe_float(a.get("entry_quality", a.get("quality", 0)), 0) or 0
+    intel = a.get("market_intelligence_v41", {}) or {}
+    intel_score = safe_float(intel.get("score"), 50) or 50
+    regime = (intel.get("regime") or a.get("market_regime") or "N/D")
+    trigger = a.get("entry_trigger", {}) or {}
+    icon = "🟢" if direction == "LONG" else "🔴" if direction == "SHORT" else "⚪"
+    action_icon = "🟢" if action in ("ENTRARE", "ENTRATA POSSIBILE") else "🔴" if action == "NON ENTRARE" else "🟡"
+    lines = [
+        f"🌍 COMMODITIES BOT v{BOT_VERSION}", "", f"📌 {name}",
+        f"{icon} {direction} — {action_icon} {action}", "",
+        f"💰 Prezzo: {_fmt_price(a.get('price'))}",
+        f"📊 Score: {score:.1f}/100 | Prob: {prob:.1f}%",
+        f"🎯 Qualità: {quality:.1f} | Confidenza: {conf:.1f}",
+        f"🧠 Intel v4.1: {intel_score:.0f} | Regime: {regime}",
+    ]
+    se = a.get("signal_engine_v42", {}) or {}
+    if se.get("available"):
+        lines.append(f"🧩 Signal Engine v4.2: {se.get('score',0):.0f}/100")
+        lines.append(f"📍 L2L {se.get('level_to_level',0):.0f} | Trigger {se.get('trigger',0):.0f} | RR {se.get('rr',0):.0f}")
+        ob = se.get("order_block", {}) or {}
+        if ob.get("available"):
+            lines.append(f"🧱 Order Block: {_fmt_price(ob.get('low'))} — {_fmt_price(ob.get('high'))}")
+    if a.get("entry") is not None:
+        lines.append(f"🎯 Entry: {_fmt_price(a.get('entry'))}")
+    if a.get("stop") is not None:
+        lines.append(f"🛑 SL: {_fmt_price(a.get('stop'))}")
+    if a.get("tp1") is not None:
+        lines.append(f"🎯 TP1: {_fmt_price(a.get('tp1'))}")
+    if a.get("tp2") is not None:
+        lines.append(f"🎯 TP2: {_fmt_price(a.get('tp2'))}")
+    if a.get("tp3") is not None:
+        lines.append(f"🎯 TP3: {_fmt_price(a.get('tp3'))}")
+    if trigger.get("kind"):
+        lines.append(f"🔥 Trigger: {trigger.get('kind')} {trigger.get('timeframe','')}")
+    blockers = a.get("entry_blockers") or []
+    if blockers:
+        lines.append("⏳ Blocco: " + " | ".join(map(str, blockers[:3])))
+    warnings = a.get("entry_warnings") or []
+    if warnings:
+        lines.append("ℹ️ " + " | ".join(map(str, warnings[:2])))
+    lines += ["", "🧪 PAPER ONLY — nessun ordine reale."]
+    return "\n".join(lines)
+
+
+def _telegram_best(ranked):
+    available = [x for x in ranked if x.get("available")]
+    if not available:
+        return "⚪ Nessuna commodity disponibile."
+    available.sort(key=lambda x: safe_float(x.get("ranking_score", x.get("analysis", {}).get("score", 0)), 0) or 0, reverse=True)
+    return "🥇 MIGLIORE SETUP\n\n" + _telegram_commodity_detail(available[0])
+
+
+def _telegram_signals(ranked):
+    candidates = []
+    for item in ranked:
+        if not item.get("available"):
+            continue
+        a = item.get("analysis", {}) or {}
+        action = str(a.get("action_label", "")).upper()
+        if action == "ENTRARE" or action.startswith("ENTRATA POSSIBILE"):
+            candidates.append(item)
+    candidates.sort(key=lambda x: safe_float(x.get("ranking_score", x.get("analysis", {}).get("score", 0)), 0) or 0, reverse=True)
+    lines = [f"🌍 COMMODITIES BOT v{BOT_VERSION}", "", "🎯 SEGNALI OPERATIVI", "━━━━━━━━━━━━━━━━━━━━"]
+    if not candidates:
+        lines.append("🟡 Nessun segnale operativo confermato adesso.")
+    else:
+        for i, item in enumerate(candidates[:10], 1):
+            a = item.get("analysis", {}) or {}
+            d = a.get("setup_direction") or a.get("model_signal") or "N/D"
+            score = safe_float(a.get("score"), 0) or 0
+            prob_raw = safe_float(a.get("entry_probability", a.get("probability", 0)), 0) or 0
+            prob = prob_raw * 100 if prob_raw <= 1.5 else prob_raw
+            lines.append(f"{i}. {item['name']} | {d} | Score {score:.0f} | Prob {prob:.0f}%")
+    lines += ["", "🧪 PAPER ONLY — nessun ordine reale."]
+    return "\n".join(lines)
+
+
+def _telegram_help():
+    return (
+        f"🌍 COMMODITIES BOT v{BOT_VERSION}\n\n"
+        "🤖 COMANDI DISPONIBILI\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "🏆 classifica — classifica attuale\n"
+        "🥇 migliore — miglior setup\n"
+        "🎯 segnali — soli segnali operativi\n"
+        "📌 oro — analisi completa Oro\n"
+        "📌 brent — analisi completa Brent\n"
+        "📌 wti — analisi completa WTI\n"
+        "📌 rame / grano / caffè / cacao / ecc. — analisi della commodity\n"
+        "❓ help — elenco comandi\n\n"
+        "🧪 PAPER ONLY — nessun ordine reale."
+    )
 
 
 def process_telegram_commands(ranked):
@@ -4772,8 +4930,8 @@ def process_telegram_commands(ranked):
             chat_id = str(chat.get("id", ""))
             if chat_id != str(TELEGRAM_CHAT_ID):
                 continue
-            text = str(message.get("text", "") or "").strip().lower()
-            if not text:
+            raw_text = str(message.get("text", "") or "").strip()
+            if not raw_text:
                 continue
             ts = message.get("date")
             if ts:
@@ -4784,16 +4942,28 @@ def process_telegram_commands(ranked):
                 if age < -60:
                     continue
 
-            normalized = re.sub(r"\\s+", " ", text).strip()
-            is_ranking = (
-                normalized in {"classifica", "ranking", "/classifica", "/ranking", "/rank"}
-                or "mandami la classifica" in normalized
-                or "dammi la classifica" in normalized
-                or "inviami la classifica" in normalized
-            )
-            if is_ranking:
+            normalized = _telegram_normalize_command(raw_text)
+            command = normalized
+            if "mandami la classifica" in normalized or "dammi la classifica" in normalized or "inviami la classifica" in normalized:
+                command = "classifica"
+
+            if command in {"classifica", "ranking", "rank"}:
                 print("📨 Telegram: comando CLASSIFICA ricevuto")
                 send_telegram(_telegram_command_ranking(ranked))
+            elif command in {"migliore", "best", "miglior setup", "migliore setup"}:
+                print("📨 Telegram: comando MIGLIORE ricevuto")
+                send_telegram(_telegram_best(ranked))
+            elif command in {"segnali", "signals", "setup"}:
+                print("📨 Telegram: comando SEGNALI ricevuto")
+                send_telegram(_telegram_signals(ranked))
+            elif command in {"help", "aiuto", "comandi", "menu", "start"}:
+                print("📨 Telegram: comando HELP ricevuto")
+                send_telegram(_telegram_help())
+            else:
+                item = _telegram_find_commodity(ranked, command)
+                if item:
+                    print(f"📨 Telegram: analisi {item.get('name')} richiesta")
+                    send_telegram(_telegram_commodity_detail(item))
 
         _json_save(TELEGRAM_COMMAND_OFFSET_FILE, {"offset": newest_offset, "updated_at": now.isoformat()})
     except Exception as exc:
@@ -5813,6 +5983,170 @@ def finalize_v26_analysis(analysis):
 
 
 # ============================================================
+# v4.2 SIGNAL ENGINE — LEVEL-TO-LEVEL + STRUCTURE + RISK
+# ============================================================
+def _v42_order_block(analysis, candles):
+    """Detect a simple, non-future-looking order-block style zone.
+
+    This is deliberately conservative: it only labels a recent opposite candle
+    before an impulse larger than 1 ATR. It does not invent order-book data.
+    """
+    d = analysis.get("setup_direction") or analysis.get("model_signal")
+    if d not in ("LONG", "SHORT") or not candles or len(candles) < 12:
+        return {"available": False, "state": "N/D"}
+    atrv = safe_float(analysis.get("atr"), 0) or atr(candles, 14) or 0.0
+    if atrv <= 0:
+        return {"available": False, "state": "N/D"}
+    look = candles[-14:]
+    for i in range(len(look) - 2, 1, -1):
+        row = look[i]
+        nxt = look[i + 1]
+        o = safe_float(row.get("open")); h = safe_float(row.get("high")); lo = safe_float(row.get("low")); c = safe_float(row.get("close"))
+        nc = safe_float(nxt.get("close"))
+        if None in (o, h, lo, c, nc):
+            continue
+        body = abs(c - o)
+        impulse = abs(nc - c)
+        opposite = (d == "LONG" and c < o) or (d == "SHORT" and c > o)
+        if opposite and body > 0 and impulse >= 1.0 * atrv:
+            return {
+                "available": True,
+                "state": "IDENTIFICATO",
+                "direction": d,
+                "high": round(h, 8),
+                "low": round(lo, 8),
+                "source": "recent opposing candle + impulse",
+            }
+    return {"available": False, "state": "NON IDENTIFICATO"}
+
+
+def signal_engine_v42(analysis, candles=None):
+    """Turn existing analysis layers into one actionable, explainable signal.
+
+    Source-derived concepts used here: Level-to-Level, supply/demand context,
+    multi-timeframe confirmation, futures context, and predefined SL/TP/RR.
+    No real execution is performed.
+    """
+    d = analysis.get("setup_direction") or analysis.get("model_signal")
+    if d not in ("LONG", "SHORT"):
+        analysis["signal_engine_v42"] = {"available": False, "decision": "NO TRADE", "score": 0.0}
+        return analysis
+
+    l2l = analysis.get("level_to_level", {}) or {}
+    intel = analysis.get("market_intelligence_v41", {}) or {}
+    curve = analysis.get("futures_structure", {}) or {}
+    risk = analysis.get("risk", {}) or {}
+    trigger = analysis.get("entry_trigger", {}) or {}
+    tfs = analysis.get("timeframes", {}) or {}
+    order_block = _v42_order_block(analysis, candles or analysis.get("_candles") or [])
+
+    aligned = sum(1 for tf in ("4H", "1H", "15m") if (tfs.get(tf, {}) or {}).get("direction") == d)
+    fast_aligned = sum(1 for tf in ("5m", "1m") if (tfs.get(tf, {}) or {}).get("direction") == d)
+    mtf_score = clamp(aligned / 3 * 75 + fast_aligned / 2 * 25, 0, 100)
+    l2l_score = safe_float(l2l.get("score"), 50) or 50
+    intel_score = safe_float(intel.get("score"), 50) or 50
+    curve_score = 50.0
+    curve_dir = str(curve.get("direction", "NONE"))
+    if curve_dir == d:
+        curve_score = 72.0
+    elif curve_dir in ("LONG", "SHORT"):
+        curve_score = 28.0
+    trigger_score = safe_float(trigger.get("score"), 0) or 0
+    if trigger.get("confirmed"):
+        trigger_score = max(trigger_score, 78.0)
+    if l2l.get("retest"):
+        trigger_score = max(trigger_score, 90.0)
+    if l2l.get("fakeout"):
+        trigger_score = min(trigger_score, 20.0)
+
+    entry = safe_float(analysis.get("entry"), safe_float(analysis.get("price"), 0)) or 0
+    stop = safe_float(analysis.get("stop"), 0) or 0
+    tp1 = safe_float(analysis.get("tp1"), 0) or 0
+    tp2 = safe_float(analysis.get("tp2"), 0) or 0
+    tp3 = safe_float(analysis.get("tp3"), 0) or 0
+    rd = abs(entry - stop) if entry and stop else 0
+    rr1 = abs(tp1-entry)/rd if rd else 0
+    rr2 = abs(tp2-entry)/rd if rd else 0
+    rr3 = abs(tp3-entry)/rd if rd else 0
+    rr_score = clamp((min(rr1/1.5,1) + min(rr2/2.0,1) + min(rr3/2.5,1)) / 3 * 100, 0, 100)
+    quality = safe_float(analysis.get("quality"), 0) or 0
+    confidence = safe_float(analysis.get("confidence"), 0) or 0
+    risk_score = clamp((quality * 0.45 + confidence * 0.35 + safe_float(risk.get("market_quality"), 50) * 0.20), 0, 100)
+
+    raw_score = (
+        mtf_score * 0.18 +
+        l2l_score * 0.22 +
+        intel_score * 0.15 +
+        trigger_score * 0.20 +
+        rr_score * 0.15 +
+        risk_score * 0.10
+    )
+    if order_block.get("available"):
+        raw_score += 3.0
+    if curve_dir == d:
+        raw_score += 2.0
+    raw_score = clamp(raw_score, 0, 100)
+
+    safety = risk.get("mode") in ("SHOCK", "ALERT") or (analysis.get("reversal", {}) or {}).get("stage") == "CONFIRMED"
+    blockers = []
+    if safety: blockers.append("SAFETY BLOCK")
+    if aligned < 2: blockers.append("MTF INCOMPLETO")
+    if not trigger.get("confirmed"): blockers.append("TRIGGER NON CONFERMATO")
+    if l2l.get("fakeout"): blockers.append("FAKEOUT")
+    if rr1 < 1.5: blockers.append("RR TP1 INSUFFICIENTE")
+    if rd <= 0: blockers.append("SL NON VALIDO")
+
+    if safety or l2l.get("fakeout"):
+        decision = "NON ENTRARE"
+        state = "BLOCKED"
+    elif trigger.get("confirmed") and raw_score >= 82 and rr1 >= 1.5 and rd > 0:
+        decision = "ENTRARE"
+        state = "CONFIRMED"
+    elif raw_score >= 68 and rd > 0 and rr1 >= 1.5:
+        decision = f"ENTRATA POSSIBILE {d}"
+        state = "POSSIBLE"
+    elif raw_score >= 52:
+        decision = f"{d} — ASPETTARE"
+        state = "WAIT"
+    else:
+        decision = "NON ENTRARE"
+        state = "BLOCKED"
+
+    analysis["signal_engine_v42"] = {
+        "available": True,
+        "decision": decision,
+        "state": state,
+        "direction": d,
+        "score": round(raw_score, 1),
+        "mtf": round(mtf_score, 1),
+        "level_to_level": round(l2l_score, 1),
+        "intelligence": round(intel_score, 1),
+        "trigger": round(trigger_score, 1),
+        "rr": round(rr_score, 1),
+        "risk": round(risk_score, 1),
+        "order_block": order_block,
+        "entry": entry,
+        "stop": stop,
+        "tp1": tp1,
+        "tp2": tp2,
+        "tp3": tp3,
+        "rr_tp1": round(rr1, 2),
+        "rr_tp2": round(rr2, 2),
+        "rr_tp3": round(rr3, 2),
+        "blockers": blockers[:6],
+        "method": "LEVEL-TO-LEVEL + MTF + INTELLIGENCE + FUTURES + RISK/REWARD",
+    }
+    return analysis
+
+
+def apply_signal_engine_v42(results):
+    for item in results:
+        if item.get("available"):
+            signal_engine_v42(item.get("analysis", {}), item.get("candles") or [])
+    return results
+
+
+# ============================================================
 # v3.6 COMMUNICATION ENGINE
 # ============================================================
 def _communication_state():
@@ -6280,6 +6614,9 @@ def main():
         if _item.get("available"):
             finalize_v26_analysis(_item["analysis"])
 
+    # v4.2: build one actionable, explainable signal from the finalized layers.
+    apply_signal_engine_v42(results)
+
     # v3.3: Early Opportunity runs after live layers are finalized.
     if EARLY_OPPORTUNITY_ENABLED:
         apply_early_opportunity(results)
@@ -6465,6 +6802,8 @@ def main():
     print(f"Knowledge Engine: {a.get('trading_knowledge', {}).get('usable', 0)} fonti | bias {a.get('knowledge_bias', 0):+.1f}")
     print(f"Learning Engine: {len(a.get('learning_validated_rules', []))} regole validate | attive {', '.join(a.get('learning_current_hits', [])) or 'nessuna'} | score {a.get('learning_score', 0):.1f}")
     print(f"Market Intelligence v4.1: {intelligence_v41_summary(a)} | delta {a.get('intelligence_delta', 0):+.1f}")
+    _se = a.get("signal_engine_v42", {}) or {}
+    print(f"Signal Engine v4.2: {_se.get('decision','N/D')} | score {_se.get('score',0):.1f} | MTF {_se.get('mtf',0):.1f} | L2L {_se.get('level_to_level',0):.1f} | Trigger {_se.get('trigger',0):.1f} | RR {_se.get('rr',0):.1f}")
     _l2l = a.get("level_to_level", {}) or {}
     print(f"Level-to-Level: {_l2l.get('state','N/D')} | score {_l2l.get('score',50):.1f} | trend {_l2l.get('trend','N/D')} | {_l2l.get('behaviour','N/D')} | gate {_l2l.get('gate')}")
     print(
