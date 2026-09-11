@@ -1,4 +1,4 @@
-name: Commodities Bot v4.1 Market Intelligence + Daily Bias + Telegram
+name: Commodities Bot v4.2 Signal Engine
 
 on:
   schedule:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: commodities-bot-v4-1
+  group: commodities-bot-v4-2
   cancel-in-progress: false
 
 jobs:
@@ -32,26 +32,42 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests
 
-      - name: Run Commodities Bot v4.1
+      - name: Run Commodities Bot v4.2 Signal Engine
         env:
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
           NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
+          # =====================================================
+          # SAFETY
+          # =====================================================
           PAPER_TRADING_ONLY: '1'
           DEMO_TRADING_ENABLED: '0'
 
+          # =====================================================
+          # EXECUTION / MONITOR
+          # =====================================================
           MONITOR_INTERVAL_MINUTES: '15'
           COMMUNICATION_MODE: 'MORNING_USA_EVENT'
           SILENT_INTERNAL_ANALYSIS: '1'
           EVENT_ALERTS_ENABLED: '1'
           MONITOR_SEND_FULL: '0'
 
+          # =====================================================
+          # DAILY BIAS
+          # =====================================================
           DAILY_BIAS_ENABLED: '1'
+
+          # =====================================================
+          # TELEGRAM COMMANDS
+          # =====================================================
           TELEGRAM_COMMANDS_ENABLED: '1'
           TELEGRAM_COMMAND_MAX_AGE_SECONDS: '900'
 
+          # =====================================================
+          # SESSION REPORTS
+          # =====================================================
           MORNING_REPORT_HOUR: '5'
           MORNING_REPORT_MINUTE: '30'
 
@@ -60,6 +76,9 @@ jobs:
 
           EOD_REPORT_HOUR: '21'
 
+          # =====================================================
+          # MARKET INTELLIGENCE v4.1
+          # =====================================================
           MARKET_INTELLIGENCE_ENABLED: '1'
           MARKET_INTELLIGENCE_MODE: 'PRICEPEDIA_STYLE'
           MARKET_INTELLIGENCE_OPTIONAL_SOURCES: '1'
@@ -71,16 +90,27 @@ jobs:
           CROSS_COMMODITY_ANALYSIS_ENABLED: '1'
           FUTURES_STRUCTURE_ENABLED: '1'
           VOLATILITY_CONTEXT_ENABLED: '1'
+
+          # CME remains optional
           CME_REQUIRED: '0'
 
+          # =====================================================
+          # DATA SOURCES
+          # =====================================================
           TWELVE_DATA_COMMODITIES_ENABLED: '1'
           TWELVE_DATA_DEBUG: '1'
           TWELVE_DATA_TIMEOUT_SECONDS: '20'
 
+          # =====================================================
+          # ENTRY ENGINE
+          # =====================================================
           MIN_ENTRY_PROBABILITY: '62'
           MIN_ENTRY_QUALITY: '55'
           MIN_ENTRY_CONFIDENCE: '60'
 
+          # =====================================================
+          # RISK / REWARD
+          # =====================================================
           MIN_ENTRY_RR: '2.5'
           MIN_ENTRY_RR_TP1: '1.5'
           MIN_ENTRY_RR_TP2: '2.0'
@@ -90,13 +120,21 @@ jobs:
           SL_STRUCTURE_BUFFER_ATR: '0.15'
           SL_MIN_ATR: '0.80'
 
+          # =====================================================
+          # STATISTICAL SL / TP
+          # =====================================================
           STAT_SLTP_LOOKBACK: '1500'
           STAT_SLTP_FORWARD_BARS: '6'
+
           STAT_MAE_QUANTILE: '0.70'
+
           STAT_MFE_Q1: '0.55'
           STAT_MFE_Q2: '0.70'
           STAT_MFE_Q3: '0.82'
 
+          # =====================================================
+          # MARKET INTELLIGENCE WEIGHTS
+          # =====================================================
           INTELLIGENCE_WEIGHT: '0.20'
           POLITICAL_IMPACT_WEIGHT: '0.20'
           GEOPOLITICAL_IMPACT_WEIGHT: '0.20'
@@ -105,7 +143,57 @@ jobs:
           CROSS_COMMODITY_WEIGHT: '0.10'
           FUTURES_STRUCTURE_WEIGHT: '0.05'
 
-        run: python commodity_bot.py
+          # =====================================================
+          # SIGNAL ENGINE v4.2
+          # =====================================================
+          SIGNAL_ENGINE_ENABLED: '1'
+          SIGNAL_ENGINE_VERSION: '4.2'
+
+          # Level-to-Level
+          LEVEL_TO_LEVEL_ENABLED: '1'
+
+          # Order Block
+          ORDER_BLOCK_ENABLED: '1'
+
+          # Multi Time Frame
+          MTF_SIGNAL_ENABLED: '1'
+
+          # Breakout / Retest / Trigger
+          ENTRY_TRIGGER_ENABLED: '1'
+
+          # Early Opportunity
+          EARLY_OPPORTUNITY_ENABLED: '1'
+
+          # Dynamic SL / TP
+          DYNAMIC_SLTP_ENABLED: '1'
+
+          # Signal scoring
+          SIGNAL_SCORE_ENABLED: '1'
+
+          # =====================================================
+          # TIERED ENTRY
+          # =====================================================
+          TIERED_ENTRY_ENABLED: '1'
+
+          # Confirmed entry
+          CONFIRMED_ENTRY_MIN_SCORE: '80'
+
+          # Possible entry
+          POSSIBLE_ENTRY_MIN_SCORE: '78'
+          POSSIBLE_ENTRY_MIN_PROBABILITY: '65'
+          POSSIBLE_ENTRY_MIN_QUALITY: '52'
+          POSSIBLE_ENTRY_MIN_CONFIDENCE: '55'
+
+          # Maximum soft confirmations that can be missing
+          POSSIBLE_ENTRY_MAX_SOFT_MISSING: '2'
+
+          # =====================================================
+          # TELEGRAM
+          # =====================================================
+          TELEGRAM_RANKING_ENABLED: '1'
+          TELEGRAM_SIGNAL_DETAILS_ENABLED: '1'
+          TELEGRAM_BEST_SETUP_ENABLED: '1'
+          TELEGRAM_COMMODITY_QUERY_ENABLED: '1'
 
       - name: Persist bot state
         if: always()
@@ -118,9 +206,11 @@ jobs:
             telegram_update_offset.json \
             commodities_daily_bias.json \
             commodities_latest_snapshot.json \
+            commodities_monitor_state.json \
+            commodities_positions.json \
             2>/dev/null || true
 
           if ! git diff --cached --quiet; then
-            git commit -m "chore: persist commodities bot v4.1 state"
+            git commit -m "chore: persist commodities bot v4.2 state"
             git push
           fi
