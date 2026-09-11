@@ -42,7 +42,7 @@ EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "21"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "3.8"
+BOT_VERSION = "4.1"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -69,6 +69,27 @@ except Exception:
 
 FUTURES_CACHE_FILE = "commodities_futures_structure_cache.json"
 FUTURES_CACHE_HOURS = int(os.getenv("FUTURES_CACHE_HOURS", "2"))
+
+# v4.1 — Market Intelligence / PricePedia-style four-lens layer.
+# The layer is analytical only: it never executes real orders and it never
+# invents unavailable inventory/COT/futures data. Missing optional sources are
+# represented as neutral / unavailable context.
+MARKET_INTELLIGENCE_ENABLED = os.getenv("MARKET_INTELLIGENCE_ENABLED", "1") == "1"
+MARKET_INTELLIGENCE_MODE = os.getenv("MARKET_INTELLIGENCE_MODE", "PRICEPEDIA_STYLE")
+MARKET_INTELLIGENCE_OPTIONAL_SOURCES = os.getenv("MARKET_INTELLIGENCE_OPTIONAL_SOURCES", "1") == "1"
+GEOPOLITICAL_IMPACT_ENABLED = os.getenv("GEOPOLITICAL_IMPACT_ENABLED", "1") == "1"
+COMMODITY_FUNDAMENTALS_ENABLED = os.getenv("COMMODITY_FUNDAMENTALS_ENABLED", "1") == "1"
+MARKET_REGIME_ENABLED = os.getenv("MARKET_REGIME_ENABLED", "1") == "1"
+CROSS_COMMODITY_ANALYSIS_ENABLED = os.getenv("CROSS_COMMODITY_ANALYSIS_ENABLED", "1") == "1"
+VOLATILITY_CONTEXT_ENABLED = os.getenv("VOLATILITY_CONTEXT_ENABLED", "1") == "1"
+INTELLIGENCE_WEIGHT = float(os.getenv("INTELLIGENCE_WEIGHT", "0.20"))
+POLITICAL_IMPACT_WEIGHT = float(os.getenv("POLITICAL_IMPACT_WEIGHT", "0.20"))
+GEOPOLITICAL_IMPACT_WEIGHT = float(os.getenv("GEOPOLITICAL_IMPACT_WEIGHT", "0.20"))
+FUNDAMENTALS_WEIGHT = float(os.getenv("FUNDAMENTALS_WEIGHT", "0.15"))
+MARKET_REGIME_WEIGHT = float(os.getenv("MARKET_REGIME_WEIGHT", "0.10"))
+CROSS_COMMODITY_WEIGHT = float(os.getenv("CROSS_COMMODITY_WEIGHT", "0.10"))
+FUTURES_STRUCTURE_WEIGHT = float(os.getenv("FUTURES_STRUCTURE_WEIGHT", "0.05"))
+
 
 
 # v3.3 — 15-minute smart monitoring. The bot is scheduled externally
@@ -5761,6 +5782,225 @@ def maybe_send_session_reports(ranked, best, position_message=None):
         sent["usa"]=today
     _save_communication_state(state)
 
+
+# ============================================================
+# v4.1 MARKET INTELLIGENCE ENGINE
+# ============================================================
+# PricePedia-style four lenses translated into bounded, explainable features:
+# 1) micro: supply/demand proxies from commodity-specific news
+# 2) macro: rates/USD/global risk/geopolitics
+# 3) qualitative: political/geopolitical/event context
+# 4) financial: trend, momentum, volatility, curve and cross-commodity context
+# Optional data are never treated as hard blockers.
+
+V41_FUNDAMENTAL_TERMS = {
+    "Oro": {"bull": ["central bank", "safe haven", "demand", "buying", "rate cuts", "weaker dollar"], "bear": ["strong dollar", "rate hike", "selling", "demand slowdown"]},
+    "Argento": {"bull": ["industrial demand", "solar demand", "supply deficit", "mine supply", "weaker dollar"], "bear": ["industrial slowdown", "strong dollar", "oversupply"]},
+    "Platino": {"bull": ["supply deficit", "mine disruption", "automotive demand", "hydrogen demand"], "bear": ["oversupply", "weak auto demand", "recession"]},
+    "Palladio": {"bull": ["supply disruption", "mine disruption", "automotive demand", "sanctions"], "bear": ["oversupply", "weak auto demand", "substitution"]},
+    "Petrolio WTI": {"bull": ["opec", "production cut", "inventory draw", "supply disruption", "demand growth", "refinery demand"], "bear": ["inventory build", "oversupply", "production increase", "demand slowdown", "recession"]},
+    "Petrolio Brent": {"bull": ["opec", "production cut", "inventory draw", "supply disruption", "demand growth", "hormuz"], "bear": ["inventory build", "oversupply", "production increase", "demand slowdown", "recession"]},
+    "Gas Naturale": {"bull": ["storage draw", "cold weather", "heat wave", "lng demand", "lng outage", "pipeline disruption"], "bear": ["storage build", "warm weather", "oversupply", "mild weather", "demand slowdown"]},
+    "Benzina RBOB": {"bull": ["refinery outage", "gasoline demand", "inventory draw", "driving season", "supply disruption"], "bear": ["inventory build", "weak demand", "refinery restart", "oversupply"]},
+    "Heating Oil": {"bull": ["diesel demand", "refinery outage", "inventory draw", "cold weather", "supply disruption"], "bear": ["inventory build", "weak demand", "refinery restart", "warm weather"]},
+    "Rame": {"bull": ["china stimulus", "china demand", "industrial demand", "mine disruption", "smelter cuts", "inventory draw"], "bear": ["china slowdown", "recession", "oversupply", "inventory build", "smelter restart"]},
+    "Alluminio": {"bull": ["smelter cuts", "supply disruption", "inventory draw", "china stimulus", "industrial demand"], "bear": ["oversupply", "inventory build", "production increase", "china slowdown"]},
+    "Nichel": {"bull": ["mine disruption", "supply cuts", "stainless demand", "battery demand"], "bear": ["oversupply", "production increase", "weak stainless demand", "weak battery demand"]},
+    "Zinco": {"bull": ["mine disruption", "smelter cuts", "inventory draw", "industrial demand"], "bear": ["oversupply", "inventory build", "china slowdown"]},
+    "Piombo": {"bull": ["supply disruption", "mine disruption", "battery demand", "inventory draw"], "bear": ["oversupply", "inventory build", "industrial slowdown"]},
+    "Grano": {"bull": ["drought", "frost", "crop failure", "export ban", "ukraine", "russia", "inventory draw", "supply disruption"], "bear": ["harvest increase", "crop improvement", "oversupply", "inventory build", "export increase"]},
+    "Mais": {"bull": ["drought", "frost", "crop failure", "export demand", "inventory draw", "supply disruption"], "bear": ["crop improvement", "harvest increase", "oversupply", "inventory build"]},
+    "Soia": {"bull": ["drought", "crop failure", "china demand", "export demand", "inventory draw"], "bear": ["crop improvement", "harvest increase", "oversupply", "china slowdown"]},
+    "Farina di soia": {"bull": ["soybean meal demand", "feed demand", "china demand", "supply disruption"], "bear": ["oversupply", "weak feed demand", "china slowdown"]},
+    "Olio di soia": {"bull": ["biofuel demand", "biodiesel demand", "supply disruption", "vegetable oil demand"], "bear": ["oversupply", "weak biofuel demand", "demand slowdown"]},
+    "Avena": {"bull": ["drought", "frost", "crop failure", "supply disruption"], "bear": ["harvest increase", "oversupply", "inventory build"]},
+    "Riso": {"bull": ["flood", "drought", "crop failure", "export restriction", "supply disruption"], "bear": ["harvest increase", "oversupply", "export increase"]},
+    "Caffè": {"bull": ["brazil frost", "brazil drought", "vietnam drought", "crop failure", "supply disruption", "export demand"], "bear": ["harvest increase", "crop improvement", "oversupply"]},
+    "Cacao": {"bull": ["crop failure", "drought", "disease", "supply disruption", "west africa supply"], "bear": ["harvest increase", "crop improvement", "oversupply"]},
+    "Zucchero": {"bull": ["drought", "crop failure", "supply disruption", "ethanol demand"], "bear": ["harvest increase", "oversupply", "crop improvement"]},
+    "Cotone": {"bull": ["drought", "crop failure", "textile demand", "supply disruption"], "bear": ["oversupply", "weak textile demand", "harvest increase"]},
+    "Succo d'arancia": {"bull": ["hurricane", "frost", "citrus greening", "crop failure", "supply disruption"], "bear": ["harvest increase", "crop improvement", "oversupply"]},
+    "Bovini vivi": {"bull": ["cattle supply", "tight supply", "feed costs", "export demand", "herd reduction"], "bear": ["herd expansion", "oversupply", "weak demand", "slaughter increase"]},
+    "Maiali magri": {"bull": ["hog supply", "tight supply", "export demand", "herd reduction"], "bear": ["herd expansion", "oversupply", "weak demand", "production increase"]},
+    "Feeder Cattle": {"bull": ["tight supply", "feed demand", "cattle demand", "herd reduction"], "bear": ["herd expansion", "oversupply", "weak demand"]},
+}
+
+
+def _v41_text_from_news(news):
+    # analyze_news() deliberately returns compact metadata, so this layer uses
+    # its label/count plus the existing commodity/global headline corpus when available.
+    return str((news or {}).get("label", "")) if isinstance(news, dict) else ""
+
+
+def _v41_sentiment_from_articles(articles, terms):
+    text = " ".join(str(a.get("title", "")) + " " + str(a.get("description", "")) for a in (articles or [])).lower()
+    bull = sum(1 for t in terms.get("bull", []) if t in text)
+    bear = sum(1 for t in terms.get("bear", []) if t in text)
+    return clamp((bull - bear) / 6.0, -1.0, 1.0), bull, bear
+
+
+def _v41_directional_value(value, direction):
+    v = safe_float(value, 0.0) or 0.0
+    if direction == "SHORT":
+        return -v
+    return v
+
+
+def _v41_financial_context(analysis):
+    d = analysis.get("setup_direction") or analysis.get("model_signal")
+    if d not in ("LONG", "SHORT"):
+        return {"score": 50.0, "direction": "NONE", "trend": 50.0, "momentum": 50.0, "volatility": 50.0}
+    tfs = analysis.get("timeframes", {}) or {}
+    aligned = sum(1 for tf in ("4H", "1H", "15m") if tfs.get(tf, {}).get("direction") == d)
+    opposite = sum(1 for tf in ("4H", "1H", "15m") if tfs.get(tf, {}).get("direction") not in (d, "NONE"))
+    trend = clamp(50 + aligned * 16 - opposite * 14, 0, 100)
+    momentum = clamp(50 + _v41_directional_value(analysis.get("mtf_bias", 0), d) * 50, 0, 100)
+    atr_pct = safe_float(analysis.get("atr_pct"), None)
+    if atr_pct is None:
+        price = safe_float(analysis.get("price"), 0) or 0
+        atr_v = safe_float(analysis.get("atr"), 0) or 0
+        atr_pct = atr_v / price if price else 0.0
+    vol = clamp(70 - max(0.0, atr_pct * 100 - 1.0) * 8, 30, 80)
+    score = clamp(trend * .45 + momentum * .35 + vol * .20, 0, 100)
+    return {"score": round(score, 1), "direction": d, "trend": round(trend, 1), "momentum": round(momentum, 1), "volatility": round(vol, 1)}
+
+
+def market_intelligence_v41(name, analysis, news=None, political=None, global_intel=None):
+    """Build the v4.1 four-lens intelligence block without inventing data."""
+    if not MARKET_INTELLIGENCE_ENABLED:
+        return {"enabled": False, "score": 50.0, "label": "DISATTIVATA", "direction": "NEUTRALE", "confidence": 0.0}
+
+    d = analysis.get("setup_direction") or analysis.get("model_signal")
+    if d not in ("LONG", "SHORT"):
+        d = "LONG"
+
+    political = political or {}
+    global_intel = global_intel or {}
+    news = news or {}
+
+    # Qualitative/news lens. We intentionally use existing fetched headlines;
+    # no second news scrape is performed here.
+    relevant_articles = global_intel.get("articles", []) or []
+    fundamentals = _v41_sentiment_from_articles(relevant_articles, V41_FUNDAMENTAL_TERMS.get(name, {"bull": [], "bear": []}))
+    news_score = safe_float(news.get("score"), 0.0) or 0.0
+    global_score = safe_float(global_intel.get("score"), 0.0) or 0.0
+    political_score = safe_float(political.get("score"), 0.0) or 0.0
+    commodity_global = analysis.get("global_impact", {}) or {}
+    geo_score = safe_float(commodity_global.get("score"), 0.0) or 0.0 if GEOPOLITICAL_IMPACT_ENABLED else 0.0
+
+    micro = fundamentals[0] if COMMODITY_FUNDAMENTALS_ENABLED else 0.0
+    macro = clamp(0.55 * global_score + 0.45 * news_score, -1, 1)
+    qualitative = clamp(0.55 * political_score + 0.45 * geo_score, -1, 1)
+    financial = _v41_financial_context(analysis)
+    financial_signed = _v41_directional_value((financial["score"] - 50) / 50.0, d)
+
+    # Convert context into a directional score. The four lenses are deliberately
+    # bounded so intelligence can refine, but not overpower, the quantitative engine.
+    # Configurable weights from the workflow. We normalise them so changing
+    # one weight does not accidentally change the score scale.
+    w_micro = max(0.0, FUNDAMENTALS_WEIGHT)
+    w_macro = max(0.0, INTELLIGENCE_WEIGHT)
+    w_qual = max(0.0, POLITICAL_IMPACT_WEIGHT + GEOPOLITICAL_IMPACT_WEIGHT)
+    w_fin = max(0.0, MARKET_REGIME_WEIGHT + VOLATILITY_CONTEXT_ENABLED * 0.05)
+    w_curve = max(0.0, FUTURES_STRUCTURE_WEIGHT)
+    w_total = max(w_micro + w_macro + w_qual + w_fin + w_curve, 1e-9)
+    curve = analysis.get("futures_structure", {}) or {}
+    curve_dir = str(curve.get("direction", "NONE"))
+    curve_score = 0.0
+    if curve_dir in ("LONG", "SHORT"):
+        curve_score = 0.35 if curve_dir == d else -0.35
+    contextual = clamp(
+        (w_micro * micro + w_macro * macro + w_qual * qualitative +
+         w_fin * financial_signed + w_curve * curve_score) / w_total,
+        -1, 1,
+    )
+    direction_score = contextual if d == "LONG" else -contextual
+    delta = clamp(direction_score * 8.0, -8.0, 8.0)
+
+    regime = "TREND" if financial["trend"] >= 68 else "MIXED" if financial["trend"] >= 48 else "RANGE/CONTRARIAN"
+    shock_mode = str(commodity_global.get("mode", global_intel.get("mode", "NORMAL")))
+    if shock_mode == "SHOCK":
+        regime = "SHOCK"
+
+    return {
+        "enabled": True,
+        "mode": MARKET_INTELLIGENCE_MODE,
+        "score": round(50 + contextual * 50, 1),
+        "direction": "FAVOREVOLE" if contextual >= .20 else "SFAVOREVOLE" if contextual <= -.20 else "NEUTRALE",
+        "delta": round(delta, 2),
+        "confidence": round(abs(contextual) * 100, 1),
+        "micro_supply_demand": {"score": round(50 + micro * 50, 1), "raw": round(micro, 3), "bull_hits": fundamentals[1], "bear_hits": fundamentals[2]},
+        "macro": {"score": round(50 + macro * 50, 1), "raw": round(macro, 3)},
+        "qualitative": {"score": round(50 + qualitative * 50, 1), "political": round(political_score, 3), "geopolitical": round(geo_score, 3)},
+        "financial": financial,
+        "market_regime": {"state": regime, "score": round(financial["score"], 1)},
+        "global_mode": shock_mode,
+        "global_articles": int(global_intel.get("count", 0) or 0),
+        "news_articles": int(news.get("count", 0) or 0),
+        "sources": int(global_intel.get("source_count", 0) or 0),
+    }
+
+
+def apply_market_intelligence_v41(analysis, name, news, political, global_intel):
+    intel = market_intelligence_v41(name, analysis, news, political, global_intel)
+    analysis["market_intelligence_v41"] = intel
+    if intel.get("enabled"):
+        old = safe_float(analysis.get("score"), 0) or 0
+        # Apply a small bounded adjustment. The core quant model remains primary.
+        analysis["score"] = clamp(old + safe_float(intel.get("delta"), 0), 0, 100)
+        analysis["intelligence_delta"] = safe_float(intel.get("delta"), 0) or 0
+    return analysis
+
+
+def apply_cross_commodity_intelligence_v41(results):
+    """Relative-strength/dispersion lens across the currently available basket."""
+    if not CROSS_COMMODITY_ANALYSIS_ENABLED:
+        return results
+    rows = []
+    for item in results:
+        if not item.get("available"):
+            continue
+        candles = item.get("candles") or []
+        if len(candles) < 25:
+            continue
+        try:
+            p0 = safe_float(candles[-21].get("close")); p1 = safe_float(candles[-1].get("close"))
+            if p0 and p1:
+                ret20 = (p1 / p0) - 1
+                rows.append((item, ret20))
+        except Exception:
+            continue
+    if not rows:
+        return results
+    values = [r for _, r in rows]
+    m = mean(values); sd = std(values)
+    for item, ret in rows:
+        a = item["analysis"]
+        d = a.get("setup_direction") or a.get("model_signal")
+        signed = ret if d == "LONG" else -ret if d == "SHORT" else 0.0
+        z = clamp((ret - m) / sd, -2.5, 2.5) if sd > 1e-9 else 0.0
+        cross_score = clamp(50 + signed * 500 + z * 5, 0, 100)
+        a["market_intelligence_v41"]["cross_commodity"] = {
+            "score": round(cross_score, 1), "ret20": round(ret * 100, 2), "basket_mean": round(m * 100, 2), "zscore": round(z, 2), "sample": len(rows)
+        }
+        delta = clamp((cross_score - 50) * CROSS_COMMODITY_WEIGHT * 0.08, -4, 4)
+        a["score"] = clamp((safe_float(a.get("score"), 0) or 0) + delta, 0, 100)
+        a["intelligence_delta"] = round((safe_float(a.get("intelligence_delta"), 0) or 0) + delta, 2)
+    return results
+
+
+def intelligence_v41_summary(analysis):
+    i = analysis.get("market_intelligence_v41", {}) or {}
+    if not i.get("enabled"):
+        return "N/D"
+    micro = (i.get("micro_supply_demand") or {}).get("score", 50)
+    macro = (i.get("macro") or {}).get("score", 50)
+    qual = (i.get("qualitative") or {}).get("score", 50)
+    fin = (i.get("financial") or {}).get("score", 50)
+    regime = (i.get("market_regime") or {}).get("state", "N/D")
+    return f"MICRO {micro:.0f} | MACRO {macro:.0f} | QUAL {qual:.0f} | FIN {fin:.0f} | REGIME {regime}"
+
+
 # ============================================================
 # MAIN
 # ============================================================
@@ -5770,7 +6010,7 @@ def main():
     print("=" * 70)
     print(f"🌍 COMMODITIES BOT v{BOT_VERSION}")
     print("MORNING + USA + EVENT-DRIVEN + DAILY STATS | PAPER ONLY")
-    print("v3.8 STRICT CONFLUENCE: ENTER solo con MTF + trigger + L2L + R/R + qualità/confidenza/probabilità")
+    print("v4.1 MARKET INTELLIGENCE: MICRO + MACRO + QUALITATIVA + FINANCIAL | STRICT CONFLUENCE")
     print("COMMUNICATION: MORNING + USA + MATERIAL EVENTS | INTERNAL ANALYSIS SILENT")
     print("=" * 70)
     print()
@@ -5867,6 +6107,10 @@ def main():
             # v3.0: optional futures curve context. No data -> no invented signal.
             _curve = futures_structure_engine(name)
             apply_futures_structure(analysis, _curve)
+
+            # v4.1: PricePedia-style Market Intelligence. Uses the data already
+            # fetched by the existing engine; optional sources never block a run.
+            apply_market_intelligence_v41(analysis, name, news, political, global_intel)
             analysis["v3_context"] = v3_context_summary(analysis)
 
             results.append({
@@ -5926,6 +6170,9 @@ def main():
 
     if not results:
         raise RuntimeError("Nessuna materia prima analizzata.")
+
+    # v4.1: cross-commodity relative-strength/dispersion lens.
+    apply_cross_commodity_intelligence_v41(results)
 
     # v2.4: cross-sectional multi-horizon ensemble + volatility/flow proxies.
     apply_cross_sectional_ensemble(results)
@@ -6128,6 +6375,7 @@ def main():
     print(f"Qualità: {a['quality']:.1f}/100")
     print(f"Knowledge Engine: {a.get('trading_knowledge', {}).get('usable', 0)} fonti | bias {a.get('knowledge_bias', 0):+.1f}")
     print(f"Learning Engine: {len(a.get('learning_validated_rules', []))} regole validate | attive {', '.join(a.get('learning_current_hits', [])) or 'nessuna'} | score {a.get('learning_score', 0):.1f}")
+    print(f"Market Intelligence v4.1: {intelligence_v41_summary(a)} | delta {a.get('intelligence_delta', 0):+.1f}")
     _l2l = a.get("level_to_level", {}) or {}
     print(f"Level-to-Level: {_l2l.get('state','N/D')} | score {_l2l.get('score',50):.1f} | trend {_l2l.get('trend','N/D')} | {_l2l.get('behaviour','N/D')} | gate {_l2l.get('gate')}")
     print(
@@ -6152,7 +6400,8 @@ def main():
             f"{x['signal']} | "
             f"R/B {item.get('ranking_score', x['score']):.0f}/100 | "
             f"SHORT {x['short_probability'] * 100:.1f}% | "
-            f"storico {x['repetition']['direction']} | fonte {item.get('source_check', {}).get('status', 'N/D')}"
+            f"storico {x['repetition']['direction']} | fonte {item.get('source_check', {}).get('status', 'N/D')} | "
+            f"INTEL {safe_float(x.get('market_intelligence_v41', {}).get('score'), 50):.0f}"
         )
 
     # v3.3: due alert separati e compatti ad ogni esecuzione.
