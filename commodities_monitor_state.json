@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-09-11T05:50:00.426139+00:00",
+  "timestamp": "2026-09-11T06:14:49.009481+00:00",
   "best": "Feeder Cattle",
   "direction": "LONG",
   "action": "LONG — ASPETTARE CONFERMA",
@@ -17,7 +17,7 @@
         "setup_direction": "LONG",
         "model_signal": "SHORT",
         "action_label": "LONG — ASPETTARE CONFERMA",
-        "score": 52.72,
+        "score": 52.55,
         "entry_probability": 69.94,
         "probability_validated": null,
         "probability_status": "NON_VALIDATA",
@@ -38,34 +38,13 @@
         "setup_direction": "LONG",
         "model_signal": "LONG",
         "action_label": "LONG — ASPETTARE CONFERMA",
-        "score": 62.11,
+        "score": 62.27,
         "entry_probability": 81.49,
         "probability_validated": null,
         "probability_status": "NON_VALIDATA",
         "entry": 216.954,
         "stop": 207.781,
         "tp2": 237.914,
-        "statistical_risk": {
-          "available": false,
-          "status": "DATI INSUFFICIENTI"
-        }
-      }
-    },
-    {
-      "name": "Benzina RBOB",
-      "symbol": "RB/USD",
-      "analysis": {
-        "signal": "WAIT",
-        "setup_direction": "LONG",
-        "model_signal": "LONG",
-        "action_label": "LONG — ASPETTARE CONFERMA",
-        "score": 66.44,
-        "entry_probability": 84.35,
-        "probability_validated": null,
-        "probability_status": "NON_VALIDATA",
-        "entry": 3.1681,
-        "stop": 2.9257,
-        "tp2": 3.6911,
         "statistical_risk": {
           "available": false,
           "status": "DATI INSUFFICIENTI"
@@ -94,6 +73,27 @@
       }
     },
     {
+      "name": "Heating Oil",
+      "symbol": "HO/USD",
+      "analysis": {
+        "signal": "WAIT",
+        "setup_direction": "LONG",
+        "model_signal": "LONG",
+        "action_label": "ATTENDERE",
+        "score": 57.04,
+        "entry_probability": 78.54,
+        "probability_validated": null,
+        "probability_status": "NON_VALIDATA",
+        "entry": 5.0378,
+        "stop": 4.7029,
+        "tp2": 5.7682,
+        "statistical_risk": {
+          "available": false,
+          "status": "DATI INSUFFICIENTI"
+        }
+      }
+    },
+    {
       "name": "Mais",
       "symbol": "CORN/USD",
       "analysis": {
@@ -101,13 +101,13 @@
         "setup_direction": "SHORT",
         "model_signal": "LONG",
         "action_label": "ATTENDERE",
-        "score": 41.83,
-        "entry_probability": 73.6,
+        "score": 45.02,
+        "entry_probability": 73.59,
         "probability_validated": null,
         "probability_status": "NON_VALIDATA",
-        "entry": 530.614,
-        "stop": 549.93,
-        "tp2": 485.639,
+        "entry": 530.112,
+        "stop": 549.43,
+        "tp2": 485.139,
         "statistical_risk": {
           "available": false,
           "status": "DATI INSUFFICIENTI"
