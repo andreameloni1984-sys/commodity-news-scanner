@@ -1,35 +1,14 @@
 {
-  "timestamp": "2026-09-11T06:51:34.382032+00:00",
-  "best": "Heating Oil",
+  "timestamp": "2026-09-11T07:19:35.344333+00:00",
+  "best": "Feeder Cattle",
   "direction": "LONG",
   "action": "LONG — ASPETTARE CONFERMA",
   "entry_state": "ACTIVE_SETUP",
   "trigger": "PULLBACK + RIPARTENZA",
-  "trigger_tf": "1m",
+  "trigger_tf": "5m",
   "position": null,
   "position_direction": null,
   "ranked": [
-    {
-      "name": "Heating Oil",
-      "symbol": "HO/USD",
-      "analysis": {
-        "signal": "WAIT",
-        "setup_direction": "LONG",
-        "model_signal": "LONG",
-        "action_label": "LONG — ASPETTARE CONFERMA",
-        "score": 74.61,
-        "entry_probability": 88.95,
-        "probability_validated": null,
-        "probability_status": "NON_VALIDATA",
-        "entry": 5.0552,
-        "stop": 4.7204,
-        "tp2": 5.7857,
-        "statistical_risk": {
-          "available": false,
-          "status": "DATI INSUFFICIENTI"
-        }
-      }
-    },
     {
       "name": "Feeder Cattle",
       "symbol": "FEEDER_CATTLE/USD",
@@ -38,7 +17,7 @@
         "setup_direction": "LONG",
         "model_signal": "SHORT",
         "action_label": "LONG — ASPETTARE CONFERMA",
-        "score": 52.79,
+        "score": 52.74,
         "entry_probability": 69.94,
         "probability_validated": null,
         "probability_status": "NON_VALIDATA",
@@ -59,7 +38,7 @@
         "setup_direction": "LONG",
         "model_signal": "LONG",
         "action_label": "LONG — ASPETTARE CONFERMA",
-        "score": 62.35,
+        "score": 62.43,
         "entry_probability": 81.49,
         "probability_validated": null,
         "probability_status": "NON_VALIDATA",
@@ -80,7 +59,7 @@
         "setup_direction": "LONG",
         "model_signal": "SHORT",
         "action_label": "ATTENDERE",
-        "score": 48.45,
+        "score": 48.13,
         "entry_probability": 73.7,
         "probability_validated": null,
         "probability_status": "NON_VALIDATA",
@@ -94,20 +73,41 @@
       }
     },
     {
-      "name": "Mais",
-      "symbol": "CORN/USD",
+      "name": "Oro",
+      "symbol": "XAU/USD",
       "analysis": {
         "signal": "WAIT",
-        "setup_direction": "SHORT",
+        "setup_direction": "LONG",
         "model_signal": "LONG",
-        "action_label": "ATTENDERE",
-        "score": 41.94,
-        "entry_probability": 73.6,
+        "action_label": "NON ENTRARE",
+        "score": 52.04,
+        "entry_probability": 67.61,
         "probability_validated": null,
         "probability_status": "NON_VALIDATA",
-        "entry": 530.363,
-        "stop": 549.68,
-        "tp2": 485.389,
+        "entry": 4385.71,
+        "stop": 4166.69,
+        "tp2": 4850.12,
+        "statistical_risk": {
+          "available": false,
+          "status": "DATI INSUFFICIENTI"
+        }
+      }
+    },
+    {
+      "name": "Heating Oil",
+      "symbol": "HO/USD",
+      "analysis": {
+        "signal": "WAIT",
+        "setup_direction": "LONG",
+        "model_signal": "LONG",
+        "action_label": "ATTENDERE",
+        "score": 54.15,
+        "entry_probability": 78.56,
+        "probability_validated": null,
+        "probability_status": "NON_VALIDATA",
+        "entry": 5.0193,
+        "stop": 4.6844,
+        "tp2": 5.7497,
         "statistical_risk": {
           "available": false,
           "status": "DATI INSUFFICIENTI"
