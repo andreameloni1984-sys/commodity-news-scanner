@@ -1,4 +1,4 @@
-name: Commodities Bot v4.2 Interactive Telegram
+name: Commodities Bot v4.4 Telegram Intelligence
 
 on:
   schedule:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: commodities-bot-v4-2
+  group: commodities-bot-v4-4
   cancel-in-progress: false
 
 jobs:
@@ -36,12 +36,13 @@ jobs:
         run: |
           python -m py_compile commodity_bot.py
 
-      - name: Run Commodities Bot v4.2 Interactive Telegram
+      - name: Run Commodities Bot v4.4 Telegram Intelligence
         env:
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
           NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
 
           PAPER_TRADING_ONLY: '1'
           DEMO_TRADING_ENABLED: '0'
@@ -52,6 +53,14 @@ jobs:
           COMMUNICATION_MODE: 'MORNING_USA_EVENT'
           SILENT_INTERNAL_ANALYSIS: '1'
           EVENT_ALERTS_ENABLED: '1'
+
+          EXTERNAL_INTELLIGENCE_ENABLED: '1'
+          EXTERNAL_INTELLIGENCE_SHADOW: '1'
+          CFTC_ENABLED: '1'
+          EIA_ENABLED: '1'
+          EXTERNAL_INTELLIGENCE_TIMEOUT_SECONDS: '15'
+          EXTERNAL_INTELLIGENCE_CACHE_HOURS: '12'
+          EXTERNAL_INTELLIGENCE_CACHE_FILE: 'commodities_external_intelligence_cache.json'
 
           DAILY_BIAS_ENABLED: '1'
           CANDLE_ENGINE_ENABLED: '1'
@@ -78,7 +87,6 @@ jobs:
           MARKET_INTELLIGENCE_ENABLED: '1'
           MARKET_INTELLIGENCE_MODE: 'PRICEPEDIA_STYLE'
           MARKET_INTELLIGENCE_OPTIONAL_SOURCES: '1'
-
           POLITICAL_IMPACT_ENABLED: '1'
           GEOPOLITICAL_IMPACT_ENABLED: '1'
           COMMODITY_FUNDAMENTALS_ENABLED: '1'
@@ -149,9 +157,10 @@ jobs:
             commodities_weather_cache.json \
             trading_knowledge_cache.json \
             validated_trading_rules.json \
+            commodities_external_intelligence_cache.json \
             2>/dev/null || true
 
           if ! git diff --cached --quiet; then
-            git commit -m "chore: persist commodities bot v4.2 interactive state"
+            git commit -m "feat: add Telegram weekly and monthly commodity forecasts"
             git push
           fi
