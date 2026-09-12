@@ -42,7 +42,7 @@ EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "21"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "4.2"
+BOT_VERSION = "4.4"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -4898,6 +4898,216 @@ def _telegram_commodity_detail(item):
     lines += ["", "🧪 PAPER ONLY — nessun ordine reale."]
     return "\n".join(lines)
 
+
+def _telegram_weekly_plan(item):
+    """Build a WEEKLY scenario from the existing daily candles only.
+    This is a scenario/forecast, not a real order. Historical 5-session
+    outcomes are calculated strictly from candles that precede the latest bar.
+    """
+    if not item or not item.get("available"):
+        return None
+    a = item.get("analysis", {}) or {}
+    candles = item.get("candles", []) or []
+    if len(candles) < 40:
+        return None
+
+    direction = a.get("setup_direction") or a.get("model_signal") or "NONE"
+    if direction not in ("LONG", "SHORT"):
+        return None
+
+    price = safe_float(a.get("price"), 0) or 0
+    if price <= 0:
+        try:
+            price = safe_float(candles[-1].get("close"), 0) or 0
+        except Exception:
+            price = 0
+    if price <= 0:
+        return None
+
+    # Historical next-5-session direction probability.  No future bars after
+    # the latest candle are used for the current forecast.
+    hist = []
+    for i in range(0, len(candles) - 5):
+        c = safe_float(candles[i].get("close"))
+        f = safe_float(candles[i + 5].get("close"))
+        if c and f:
+            r = f / c - 1.0
+            hist.append(r if direction == "LONG" else -r)
+    hist = hist[-1000:]
+    hist_win = sum(1 for r in hist if r > 0) / len(hist) if hist else 0.50
+    hist_avg = mean(hist) if hist else 0.0
+
+    # Current trend from daily closes.
+    closes = [safe_float(x.get("close")) for x in candles if safe_float(x.get("close")) is not None]
+    ret20 = closes[-1] / closes[-21] - 1.0 if len(closes) >= 21 else 0.0
+    trend_aligned = ret20 >= 0 if direction == "LONG" else ret20 <= 0
+
+    cyc = a.get("cyclical", {}) or {}
+    weekly_cycle = cyc.get("weekly", {}) or {}
+    cyc_quality = safe_float(weekly_cycle.get("quality"), 50) or 50
+
+    score = safe_float(a.get("score"), 0) or 0
+    confidence = safe_float(a.get("confidence"), 0) or 0
+    quality = safe_float(a.get("quality", a.get("entry_quality", 0)), 0) or 0
+    # Conservative weekly score: current engine + historical 5-day edge +
+    # daily trend + the existing cyclical weekly component.
+    trend_component = 100 if trend_aligned else 35
+    weekly_score = clamp(
+        score * 0.40 + hist_win * 100 * 0.25 + quality * 0.15
+        + trend_component * 0.10 + cyc_quality * 0.10,
+        0, 100,
+    )
+    probability = clamp(
+        0.45 * hist_win + 0.30 * ((score / 100.0) if score else 0.5)
+        + 0.15 * ((confidence / 100.0) if confidence else 0.5)
+        + 0.10 * ((cyc_quality / 100.0) if cyc_quality else 0.5),
+        0.05, 0.95,
+    )
+
+    # Weekly risk plan from daily ATR and recent structure. These levels are
+    # explicitly labelled as weekly scenario levels, not intraday triggers.
+    try:
+        av = atr(candles[-100:], 14)
+    except Exception:
+        av = 0.0
+    av = safe_float(av, 0) or 0
+    if av <= 0:
+        av = price * 0.01
+    recent = candles[-20:]
+    lows = [safe_float(x.get("low")) for x in recent if safe_float(x.get("low")) is not None]
+    highs = [safe_float(x.get("high")) for x in recent if safe_float(x.get("high")) is not None]
+    buffer = av * 0.15
+    if direction == "LONG":
+        structure_sl = min(lows) - buffer if lows else price - av
+        stop = min(price - av * 0.80, structure_sl)
+        if stop >= price:
+            stop = price - av
+        risk = price - stop
+        tp1, tp2, tp3 = price + risk * 1.5, price + risk * 2.0, price + risk * 2.5
+    else:
+        structure_sl = max(highs) + buffer if highs else price + av
+        stop = max(price + av * 0.80, structure_sl)
+        if stop <= price:
+            stop = price + av
+        risk = stop - price
+        tp1, tp2, tp3 = price - risk * 1.5, price - risk * 2.0, price - risk * 2.5
+
+    return {
+        "name": item.get("name", "N/D"), "direction": direction,
+        "score": weekly_score, "probability": probability * 100,
+        "history_win": hist_win * 100, "history_avg": hist_avg * 100,
+        "trend20": ret20 * 100, "cyc_quality": cyc_quality,
+        "price": price, "entry": price, "stop": stop,
+        "tp1": tp1, "tp2": tp2, "tp3": tp3,
+        "rr1": 1.5, "rr2": 2.0, "rr3": 2.5,
+    }
+
+
+def _telegram_weekly(ranked):
+    plans = []
+    for item in ranked:
+        plan = _telegram_weekly_plan(item)
+        if plan:
+            plans.append(plan)
+    if not plans:
+        return "⚪ Nessun dato sufficiente per una previsione settimanale."
+    plans.sort(key=lambda x: x["score"], reverse=True)
+    best = plans[0]
+    lines = [
+        f"🌍 COMMODITIES BOT v{BOT_VERSION}", "", "🏆 MIGLIORE DELLA SETTIMANA",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"🥇 {best['name']}",
+        f"{'🟢' if best['direction']=='LONG' else '🔴'} BIAS: {best['direction']}",
+        f"📊 Score settimanale: {best['score']:.1f}/100",
+        f"🎯 Probabilità stimata: {best['probability']:.1f}%",
+        f"📚 Storico 5 sessioni: {best['history_win']:.1f}% favorevole",
+        f"📈 Rendimento medio storico 5 sessioni: {best['history_avg']:+.2f}%",
+        f"📉 Trend 20 sessioni: {best['trend20']:+.2f}%",
+        f"🔄 Ciclo settimanale: {best['cyc_quality']:.0f}/100",
+        "",
+        "📐 PIANO SETTIMANALE — SCENARIO",
+        f"💰 Prezzo/Entry scenario: {_fmt_price(best['entry'])}",
+        f"🛑 SL: {_fmt_price(best['stop'])}",
+        f"🎯 TP1: {_fmt_price(best['tp1'])} | R/R 1:1.5",
+        f"🎯 TP2: {_fmt_price(best['tp2'])} | R/R 1:2.0",
+        f"🎯 TP3: {_fmt_price(best['tp3'])} | R/R 1:2.5",
+        "",
+        "📆 Orizzonte: prossime 5 sessioni",
+        "⚠️ Invalidazione: chiusura giornaliera oltre lo SL/scenario",
+        "🧪 PAPER ONLY — nessun ordine reale.",
+    ]
+    if len(plans) > 1:
+        lines += ["", "🏆 TOP 5 SETTIMANA"]
+        for i, p in enumerate(plans[:5], 1):
+            icon = "🟢" if p["direction"] == "LONG" else "🔴"
+            lines.append(f"{i}. {p['name']} | {icon} {p['direction']} | {p['score']:.0f} | {p['probability']:.0f}%")
+    return "\n".join(lines)
+
+
+def _telegram_monthly_plan(item):
+    """Build a longer-horizon monthly scenario from the daily history."""
+    if not item or not item.get("available"):
+        return None
+    a = item.get("analysis", {}) or {}
+    candles = item.get("candles", []) or []
+    if len(candles) < 90:
+        return None
+    direction = a.get("setup_direction") or a.get("model_signal") or "NONE"
+    if direction not in ("LONG", "SHORT"):
+        return None
+    closes = [safe_float(x.get("close")) for x in candles if safe_float(x.get("close")) is not None]
+    if len(closes) < 31:
+        return None
+    rows = []
+    for i in range(len(closes) - 20):
+        r = closes[i + 20] / closes[i] - 1.0
+        rows.append(r if direction == "LONG" else -r)
+    rows = rows[-1000:]
+    win = sum(1 for r in rows if r > 0) / len(rows) if rows else 0.5
+    avg = mean(rows) if rows else 0.0
+    score = safe_float(a.get("score"), 0) or 0
+    cyc = a.get("cyclical", {}) or {}
+    monthly_q = safe_float((cyc.get("monthly", {}) or {}).get("quality"), 50) or 50
+    monthly_score = clamp(score * .45 + win * 100 * .30 + monthly_q * .15 + safe_float(a.get("confidence"),50) * .10, 0, 100)
+    prob = clamp(0.55 * win + 0.30 * (score / 100.0) + 0.15 * (monthly_q / 100.0), .05, .95)
+    return {"name":item.get("name","N/D"),"direction":direction,"score":monthly_score,"probability":prob*100,"history_win":win*100,"history_avg":avg*100,"monthly_q":monthly_q}
+
+
+def _telegram_monthly(ranked):
+    plans = [p for p in (_telegram_monthly_plan(x) for x in ranked) if p]
+    if not plans:
+        return "⚪ Nessun dato sufficiente per una previsione mensile."
+    plans.sort(key=lambda x:x["score"], reverse=True)
+    lines=[f"🌍 COMMODITIES BOT v{BOT_VERSION}","","🏆 MIGLIORE DEL MESE","━━━━━━━━━━━━━━━━━━━━"]
+    for i,p in enumerate(plans[:5],1):
+        icon="🟢" if p["direction"]=="LONG" else "🔴"
+        lines.append(f"{i}. {p['name']} | {icon} {p['direction']} | Score {p['score']:.0f} | Prob {p['probability']:.0f}%")
+    b=plans[0]
+    lines += ["",f"🥇 SCELTA: {b['name']}",f"📚 Storico 20 sessioni: {b['history_win']:.1f}% favorevole",f"📈 Rendimento medio: {b['history_avg']:+.2f}%",f"🔄 Ciclo mensile: {b['monthly_q']:.0f}/100","","🧪 PAPER ONLY — nessun ordine reale."]
+    return "\n".join(lines)
+
+
+def telegram_set_commands():
+    """Expose the main commands in Telegram's / menu."""
+    if not TELEGRAM_BOT_TOKEN:
+        return
+    commands = [
+        {"command":"start","description":"Menu Commodities Bot"},
+        {"command":"classifica","description":"Classifica attuale"},
+        {"command":"migliore","description":"Migliore setup adesso"},
+        {"command":"settimanale","description":"Migliore commodity della settimana"},
+        {"command":"mensile","description":"Migliore commodity del mese"},
+        {"command":"segnali","description":"Segnali operativi"},
+        {"command":"help","description":"Guida ai comandi"},
+    ]
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setMyCommands",
+            json={"commands": commands}, timeout=10
+        ).raise_for_status()
+    except Exception as exc:
+        print(f"⚠️ Telegram setMyCommands: {exc}")
+
 def _telegram_best(ranked):
     available = [x for x in ranked if x.get("available")]
     if not available:
@@ -4937,7 +5147,9 @@ def _telegram_help():
         "🤖 COMANDI DISPONIBILI\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "🏆 classifica — classifica attuale\n"
-        "🥇 migliore — miglior setup\n"
+        "🥇 migliore — miglior setup adesso\n"
+        "📅 settimanale — migliore commodity della settimana\n"
+        "📆 mensile — migliore commodity del mese\n"
         "🎯 segnali — soli segnali operativi\n"
         "📌 oro — analisi completa Oro + TP/SL\n"
         "📌 brent — analisi completa Brent + TP/SL\n"
@@ -4957,6 +5169,7 @@ def process_telegram_commands(ranked):
         return
 
     try:
+        telegram_set_commands()
         state = _json_load(TELEGRAM_COMMAND_OFFSET_FILE, {}) or {}
         offset = int(state.get("offset", 0) or 0)
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
@@ -5000,6 +5213,10 @@ def process_telegram_commands(ranked):
             command = normalized
             if "mandami la classifica" in normalized or "dammi la classifica" in normalized or "inviami la classifica" in normalized:
                 command = "classifica"
+            elif any(x in normalized for x in ("migliore della settimana", "miglior della settimana", "migliore settimanale", "miglior settimanale", "top della settimana", "top settimana", "previsione settimanale", "previsione della settimana")):
+                command = "settimanale"
+            elif any(x in normalized for x in ("migliore del mese", "miglior del mese", "migliore mensile", "miglior mensile", "top del mese", "top mensile", "previsione mensile", "previsione del mese")):
+                command = "mensile"
 
             if command in {"classifica", "ranking", "rank"}:
                 print("📨 Telegram: comando CLASSIFICA ricevuto")
@@ -5007,6 +5224,12 @@ def process_telegram_commands(ranked):
             elif command in {"migliore", "best", "miglior setup", "migliore setup"}:
                 print("📨 Telegram: comando MIGLIORE ricevuto")
                 send_telegram(_telegram_best(ranked))
+            elif command in {"settimanale", "weekly", "settimana"}:
+                print("📨 Telegram: previsione SETTIMANALE richiesta")
+                send_telegram(_telegram_weekly(ranked))
+            elif command in {"mensile", "monthly", "mese"}:
+                print("📨 Telegram: previsione MENSILE richiesta")
+                send_telegram(_telegram_monthly(ranked))
             elif command in {"segnali", "signals", "setup"}:
                 print("📨 Telegram: comando SEGNALI ricevuto")
                 send_telegram(_telegram_signals(ranked))
