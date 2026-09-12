@@ -102,6 +102,9 @@ MONITOR_SEND_FULL = os.getenv("MONITOR_SEND_FULL", "0") == "1"
 # but Telegram is intentionally quiet except for scheduled decision points,
 # material scenario changes, and the daily statistical report.
 COMMUNICATION_MODE = os.getenv("COMMUNICATION_MODE", "MORNING_USA_EVENT")
+ON_DEMAND_ONLY = os.getenv("ON_DEMAND_ONLY", "0") == "1"
+ON_DEMAND_TELEGRAM_REQUEST = os.getenv("ON_DEMAND_TELEGRAM_REQUEST", "").strip()
+ON_DEMAND_TELEGRAM_CHAT_ID = os.getenv("ON_DEMAND_TELEGRAM_CHAT_ID", "").strip()
 MORNING_REPORT_HOUR = int(os.getenv("MORNING_REPORT_HOUR", "5"))
 MORNING_REPORT_MINUTE = int(os.getenv("MORNING_REPORT_MINUTE", "30"))
 USA_REPORT_HOUR = int(os.getenv("USA_REPORT_HOUR", "14"))
@@ -4757,6 +4760,63 @@ def _telegram_normalize_command(text):
     return normalized
 
 
+
+def telegram_requested_scope(request):
+    """Return the configured commodity name for a single-commodity Telegram request.
+
+    Ranking/weekly/monthly/signals/help requests return None because they need the
+    full cross-commodity universe.
+    """
+    q = _telegram_normalize_command(request)
+    if not q:
+        return None
+    broad = (
+        "classifica", "ranking", "rank", "migliore", "miglior setup",
+        "settimanale", "weekly", "settimana", "mensile", "monthly", "mese",
+        "segnali", "signals", "signal", "help", "aiuto", "comandi", "start"
+    )
+    if any(x in q for x in broad):
+        return None
+    aliases = {
+        "oro": "Oro", "gold": "Oro",
+        "argento": "Argento", "silver": "Argento",
+        "platino": "Platino", "platinum": "Platino",
+        "palladio": "Palladio", "palladium": "Palladio",
+        "wti": "Petrolio WTI", "petrolio": "Petrolio WTI", "crude": "Petrolio WTI", "crude oil": "Petrolio WTI",
+        "brent": "Petrolio Brent", "petrolio brent": "Petrolio Brent",
+        "gas": "Gas Naturale", "gas naturale": "Gas Naturale", "natural gas": "Gas Naturale",
+        "benzina": "Benzina RBOB", "rbob": "Benzina RBOB", "gasoline": "Benzina RBOB",
+        "heating oil": "Heating Oil", "gasolio": "Heating Oil",
+        "rame": "Rame", "copper": "Rame",
+        "alluminio": "Alluminio", "aluminum": "Alluminio", "aluminium": "Alluminio",
+        "nichel": "Nichel", "nickel": "Nichel",
+        "zinco": "Zinco", "zinc": "Zinco",
+        "piombo": "Piombo", "lead": "Piombo",
+        "grano": "Grano", "wheat": "Grano", "grain": "Grano",
+        "mais": "Mais", "corn": "Mais", "maize": "Mais",
+        "soia": "Soia", "soybean": "Soia", "soybeans": "Soia",
+        "farina di soia": "Farina di soia", "soybean meal": "Farina di soia",
+        "olio di soia": "Olio di soia", "soybean oil": "Olio di soia",
+        "avena": "Avena", "oats": "Avena",
+        "riso": "Riso", "rice": "Riso",
+        "caffè": "Caffè", "caffe": "Caffè", "coffee": "Caffè",
+        "cacao": "Cacao", "cocoa": "Cacao",
+        "zucchero": "Zucchero", "sugar": "Zucchero",
+        "cotone": "Cotone", "cotton": "Cotone",
+        "succo d'arancia": "Succo d'arancia", "orange juice": "Succo d'arancia",
+        "bovini vivi": "Bovini vivi", "live cattle": "Bovini vivi",
+        "maiali magri": "Maiali magri", "lean hogs": "Maiali magri", "hogs": "Maiali magri",
+        "feeder cattle": "Feeder Cattle",
+    }
+    for alias, name in sorted(aliases.items(), key=lambda kv: len(kv[0]), reverse=True):
+        if alias in q and name in COMMODITIES:
+            return name
+    # Exact configured commodity name match.
+    for name in COMMODITIES:
+        if _telegram_normalize_command(name) in q:
+            return name
+    return None
+
 def _telegram_find_commodity(ranked, query):
     """Find a commodity from a Telegram command, including natural-language requests."""
     q = _telegram_normalize_command(query)
@@ -5159,6 +5219,78 @@ def _telegram_help():
         "❓ help — elenco comandi\n\n"
         "🧪 PAPER ONLY — nessun ordine reale."
     )
+
+
+def process_telegram_on_demand(ranked):
+    """Answer exactly one Telegram request passed by the webhook bridge.
+
+    This path never calls getUpdates: Telegram delivery is handled by the
+    external HTTPS webhook bridge, which dispatches this workflow with the
+    request text and chat id as workflow inputs.
+    """
+    global TELEGRAM_CHAT_ID
+    raw_text = ON_DEMAND_TELEGRAM_REQUEST.strip()
+    chat_id = ON_DEMAND_TELEGRAM_CHAT_ID.strip() or str(TELEGRAM_CHAT_ID or "").strip()
+    if not raw_text:
+        return
+    if not TELEGRAM_BOT_TOKEN or not chat_id:
+        print("⚠️ On-demand Telegram: token/chat id mancanti")
+        return
+
+    try:
+        telegram_set_commands()
+        normalized = _telegram_normalize_command(raw_text)
+        command = normalized
+        if any(x in normalized for x in (
+            "mandami la classifica", "dammi la classifica", "inviami la classifica"
+        )):
+            command = "classifica"
+        elif any(x in normalized for x in (
+            "migliore della settimana", "miglior della settimana", "migliore settimanale",
+            "miglior settimanale", "top della settimana", "top settimana",
+            "previsione settimanale", "previsione della settimana"
+        )):
+            command = "settimanale"
+        elif any(x in normalized for x in (
+            "migliore del mese", "miglior del mese", "migliore mensile",
+            "miglior mensile", "top del mese", "top mensile",
+            "previsione mensile", "previsione del mese"
+        )):
+            command = "mensile"
+
+        if command in {"start", "help", "aiuto", "comandi"}:
+            reply = _telegram_help()
+        elif command in {"classifica", "ranking", "rank"}:
+            reply = _telegram_command_ranking(ranked)
+        elif command in {"migliore", "best", "miglior setup", "migliore setup"}:
+            reply = _telegram_best(ranked)
+        elif command in {"settimanale", "weekly", "settimana"}:
+            reply = _telegram_weekly(ranked)
+        elif command in {"mensile", "monthly", "mese"}:
+            reply = _telegram_monthly(ranked)
+        elif command in {"segnali", "signals", "signal"}:
+            reply = _telegram_signals(ranked)
+        else:
+            item = _telegram_find_commodity(ranked, normalized)
+            if item:
+                reply = _telegram_commodity_detail(item)
+            else:
+                reply = (
+                    "❓ Comando non riconosciuto.\n\n"
+                    + _telegram_help()
+                )
+
+        # send_telegram reads TELEGRAM_CHAT_ID at module level, so temporarily
+        # align it with the request chat when the workflow input is present.
+        original_chat_id = TELEGRAM_CHAT_ID
+        TELEGRAM_CHAT_ID = chat_id
+        try:
+            send_telegram(reply)
+        finally:
+            TELEGRAM_CHAT_ID = original_chat_id
+        print(f"📨 Telegram on-demand: {raw_text!r} → {command}")
+    except Exception as exc:
+        print(f"⚠️ Telegram on-demand error: {exc}")
 
 
 def process_telegram_commands(ranked):
@@ -6732,9 +6864,15 @@ def main():
     results = []
     resolved_symbols = resolve_commodity_symbols()
 
-    # Analizza SEMPRE tutte le commodity configurate. Un errore su una non
-    # deve interrompere né nascondere le altre.
-    for name in COMMODITIES:
+    # In on-demand mode, a request for a single commodity analyzes only that
+    # commodity. Cross-sectional commands (classifica, migliore, weekly,
+    # monthly, segnali) keep the full universe because they need all rankings.
+    requested_scope = telegram_requested_scope(ON_DEMAND_TELEGRAM_REQUEST) if ON_DEMAND_ONLY else None
+    analysis_names = [requested_scope] if requested_scope else list(COMMODITIES)
+    if requested_scope:
+        print(f"🎯 ON-DEMAND SCOPE: {requested_scope} — analisi singola commodity")
+
+    for name in analysis_names:
         symbol = resolved_symbols.get(name, COMMODITIES[name])
         print(f"🔎 Analizzo {name} [{symbol}]...")
 
@@ -7114,36 +7252,41 @@ def main():
             f"INTEL {safe_float(x.get('market_intelligence_v41', {}).get('score'), 50):.0f}"
         )
 
-    # v3.3: due alert separati e compatti ad ogni esecuzione.
-    # Il job esterno deve essere schedulato ogni 15 minuti.
-    monitor_message = build_telegram_5m(ranked, best, position_message, position)
-    if MONITOR_SEND_FULL:
-        send_telegram(monitor_message)
+    if ON_DEMAND_ONLY:
+        # True on-demand mode: no periodic polling, no scheduled reports and
+        # no event push. Telegram receives exactly the requested answer.
+        process_telegram_on_demand(ranked)
+        save_monitor_state(ranked, best, position)
     else:
-        print("📡 Internal monitor: Telegram alert periodico DISATTIVATO.")
-    maybe_send_session_reports(ranked, best, position_message)
-    process_telegram_commands(ranked)
-    save_monitor_state(ranked, best, position)
+        # Standard scheduled/event-driven mode.
+        monitor_message = build_telegram_5m(ranked, best, position_message, position)
+        if MONITOR_SEND_FULL:
+            send_telegram(monitor_message)
+        else:
+            print("📡 Internal monitor: Telegram alert periodico DISATTIVATO.")
+        maybe_send_session_reports(ranked, best, position_message)
+        process_telegram_commands(ranked)
+        save_monitor_state(ranked, best, position)
 
-    # Fine giornata: valuta le previsioni maturate e invia il report una sola volta.
-    eod_report = run_end_of_day_test()
-    if eod_report:
-        send_telegram(eod_report)
-        print(eod_report)
+        # Fine giornata: valuta le previsioni maturate e invia il report una sola volta.
+        eod_report = run_end_of_day_test()
+        if eod_report:
+            send_telegram(eod_report)
+            print(eod_report)
 
-    # Separate alert: only for the commodity currently held.
-    if position:
-        held = next((x for x in results if x.get("name") == position.get("name") and x.get("available")), None)
-        if held:
-            alert = build_reversal_alert(position, held.get("analysis", {}))
-            if alert and EVENT_ALERTS_ENABLED:
-                _st = _communication_state()
-                _key = f"reversal:{position.get('name')}:{position.get('direction')}"
-                _sig = alert.replace("\n", "|")
-                if _st.get("last_event_signature", {}).get(_key) != _sig:
-                    send_telegram(alert)
-                    ev = _st.setdefault("last_event_signature", {}); ev[_key] = _sig
-                    _save_communication_state(_st)
+        # Separate alert: only for the commodity currently held.
+        if position:
+            held = next((x for x in results if x.get("name") == position.get("name") and x.get("available")), None)
+            if held:
+                alert = build_reversal_alert(position, held.get("analysis", {}))
+                if alert and EVENT_ALERTS_ENABLED:
+                    _st = _communication_state()
+                    _key = f"reversal:{position.get('name')}:{position.get('direction')}"
+                    _sig = alert.replace("\n", "|")
+                    if _st.get("last_event_signature", {}).get(_key) != _sig:
+                        send_telegram(alert)
+                        ev = _st.setdefault("last_event_signature", {}); ev[_key] = _sig
+                        _save_communication_state(_st)
 
     print()
     print("=" * 70)
