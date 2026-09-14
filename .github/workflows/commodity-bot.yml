@@ -1,4 +1,4 @@
-name: Commodities Bot v4.4 Telegram On-Demand
+name: Commodities Bot v4.6 Telegram Live Price On-Demand
 
 on:
   workflow_dispatch:
@@ -7,16 +7,9 @@ on:
         description: "Richiesta Telegram"
         required: true
         type: string
-
       telegram_chat_id:
         description: "Chat ID Telegram"
         required: true
-        type: string
-
-      on_demand_scope:
-        description: "Scope analisi: auto, all oppure nome commodity"
-        required: false
-        default: "auto"
         type: string
 
 permissions:
@@ -41,7 +34,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Install dependencies
         run: |
@@ -50,9 +43,9 @@ jobs:
 
       - name: Verify Python syntax
         run: |
-          python -m py_compile commodity_bot.py
+          python -m py_compile commodity_bot.py live_price_engine.py runner_live.py
 
-      - name: Run Commodities Bot v4.4 On-Demand
+      - name: Run Commodities Bot v4.6 Live Price On-Demand
         env:
 
           # =========================
@@ -66,13 +59,30 @@ jobs:
           EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
 
           # =========================
+          # LIVE PRICE / BROKER DEMO
+          # =========================
+
+          LIVE_PRICE_ENABLED: "1"
+          LIVE_PRICE_PRIMARY: "OANDA"
+          LIVE_PRICE_REQUIRE_BID_ASK: "1"
+          LIVE_PRICE_MAX_AGE_SECONDS: "30"
+
+          OANDA_API_TOKEN: ${{ secrets.OANDA_API_TOKEN }}
+          OANDA_ACCOUNT_ID: ${{ secrets.OANDA_ACCOUNT_ID }}
+          OANDA_BASE_URL: "https://api-fxpractice.oanda.com"
+
+          OANDA_INSTRUMENT_MAP_JSON: ${{ secrets.OANDA_INSTRUMENT_MAP_JSON }}
+
+          TRADING_ECONOMICS_API_KEY: ${{ secrets.TRADING_ECONOMICS_API_KEY }}
+          TRADING_ECONOMICS_CLIENT: ${{ secrets.TRADING_ECONOMICS_CLIENT }}
+
+          # =========================
           # ON-DEMAND
           # =========================
 
           ON_DEMAND_ONLY: "1"
           ON_DEMAND_TELEGRAM_REQUEST: ${{ inputs.telegram_request }}
           ON_DEMAND_TELEGRAM_CHAT_ID: ${{ inputs.telegram_chat_id }}
-          ON_DEMAND_SCOPE: ${{ inputs.on_demand_scope }}
 
           # =========================
           # PAPER TRADING
@@ -142,16 +152,8 @@ jobs:
           MARKET_INTELLIGENCE_MODE: "PRICEPEDIA_STYLE"
           MARKET_INTELLIGENCE_OPTIONAL_SOURCES: "1"
 
-          # =========================
-          # POLITICAL / GEOPOLITICAL
-          # =========================
-
           POLITICAL_IMPACT_ENABLED: "1"
           GEOPOLITICAL_IMPACT_ENABLED: "1"
-
-          # =========================
-          # FUNDAMENTALS
-          # =========================
 
           COMMODITY_FUNDAMENTALS_ENABLED: "1"
           MARKET_REGIME_ENABLED: "1"
@@ -182,6 +184,15 @@ jobs:
           FUTURES_SYMBOLS_JSON: "{}"
 
           TRADING_KNOWLEDGE_URLS: ""
+
+          # =========================
+          # SOLE 24 ORE
+          # =========================
+
+          SOLE24_ENABLED: "1"
+          SOLE24_TIMEOUT: "12"
+          SOLE24_CACHE_HOURS: "3"
+          SOLE24_WEIGHT: "0.15"
 
           # =========================
           # ENTRY FILTERS
@@ -218,11 +229,10 @@ jobs:
           STAT_MFE_Q3: "0.82"
 
           # =========================
-          # PREDICTION
+          # PREDICTION JOURNAL
           # =========================
 
           PREDICTION_HORIZON_HOURS: "6"
-
           PERFORMANCE_RETENTION_DAYS: "90"
 
           # =========================
@@ -237,17 +247,11 @@ jobs:
           CROSS_COMMODITY_WEIGHT: "0.10"
           FUTURES_STRUCTURE_WEIGHT: "0.05"
 
-        run: |
-          python commodity_bot.py
-
-      # =========================
-      # SAVE STATE
-      # =========================
+        run: python runner_live.py
 
       - name: Persist bot state
         if: always()
         run: |
-
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
@@ -263,12 +267,11 @@ jobs:
             trading_knowledge_cache.json \
             validated_trading_rules.json \
             commodities_external_intelligence_cache.json \
+            sole24_context_cache.json \
+            commodities_demo_orders.json \
             2>/dev/null || true
 
           if ! git diff --cached --quiet; then
-
-            git commit -m "feat: optimize Telegram on-demand commodity analysis"
-
+            git commit -m "feat: add live price engine and demo-ready pricing"
             git push
-
           fi
