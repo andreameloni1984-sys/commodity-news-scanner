@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-09-14T20:21:59.288475+00:00",
-  "best": "Avena",
-  "direction": "LONG",
-  "action": "LONG — ASPETTARE CONFERMA",
-  "entry_state": "ACTIVE_SETUP",
+  "timestamp": "2026-09-14T20:56:54.157016+00:00",
+  "best": "Oro",
+  "direction": "SHORT",
+  "action": "NON ENTRARE",
+  "entry_state": "SAFETY_BLOCK",
   "trigger": "PULLBACK + RIPARTENZA",
-  "trigger_tf": "5m",
+  "trigger_tf": "1m",
   "position": null,
   "position_direction": null
 }
