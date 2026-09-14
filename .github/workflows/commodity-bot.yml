@@ -60,67 +60,48 @@ jobs:
           LIVE_PRICE_PRIMARY: "OANDA"
           LIVE_PRICE_REQUIRE_BID_ASK: "1"
           LIVE_PRICE_MAX_AGE_SECONDS: "30"
+
         run: |
           python - <<'PY'
           import os
           import sys
+          from live_price_engine import get_live_quote
 
-          try:
-              from live_price_engine import get_live_quote
-
-              token = os.getenv("OANDA_API_TOKEN", "").strip()
-              account = os.getenv("OANDA_ACCOUNT_ID", "").strip()
-
-              if not token:
-                  print("❌ LIVE PRICE BLOCCATO: OANDA_API_TOKEN mancante")
-                  sys.exit(1)
-
-              if not account:
-                  print("❌ LIVE PRICE BLOCCATO: OANDA_ACCOUNT_ID mancante")
-                  sys.exit(1)
-
-              tests = {
-                  "Oro": "GC=F",
-              }
-
-              for name, symbol in tests.items():
-                  quote = get_live_quote(name, symbol)
-
-                  if not quote:
-                      print(f"❌ LIVE PRICE BLOCCATO: nessuna quotazione live per {name}")
-                      sys.exit(1)
-
-                  bid = quote.get("bid")
-                  ask = quote.get("ask")
-
-                  if bid is None or ask is None:
-                      print(f"❌ LIVE PRICE BLOCCATO: BID/ASK mancanti per {name}")
-                      sys.exit(1)
-
-                  print(
-                      f"✅ OK LIVE {name} | "
-                      f"BID={bid} | ASK={ask} | "
-                      f"provider={quote.get('provider')} | "
-                      f"timestamp={quote.get('timestamp')}"
-                  )
-
-          except Exception as exc:
-              print(f"❌ LIVE PRICE BLOCCATO: {exc}")
+          if not os.getenv("OANDA_API_TOKEN", "").strip():
+              print("❌ OANDA_API_TOKEN mancante")
               sys.exit(1)
+
+          if not os.getenv("OANDA_ACCOUNT_ID", "").strip():
+              print("❌ OANDA_ACCOUNT_ID mancante")
+              sys.exit(1)
+
+          q = get_live_quote("Oro", "GC=F")
+
+          if not q:
+              print("❌ LIVE PRICE BLOCCATO")
+              print("❌ Nessuna quotazione LIVE disponibile")
+              sys.exit(1)
+
+          if q.get("bid") is None or q.get("ask") is None:
+              print("❌ LIVE PRICE BLOCCATO")
+              print("❌ BID/ASK OANDA non disponibili")
+              sys.exit(1)
+
+          print(
+              f"✅ LIVE PRICE OK | "
+              f"BID={q['bid']} | "
+              f"ASK={q['ask']} | "
+              f"provider={q['provider']}"
+          )
           PY
 
-      - name: Run Commodities Bot v4.6 Live Price On-Demand
+      - name: Run Commodities Bot v4.6
         env:
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
           NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ inputs.telegram_chat_id }}
           EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
-
-          LIVE_PRICE_ENABLED: "1"
-          LIVE_PRICE_PRIMARY: "OANDA"
-          LIVE_PRICE_REQUIRE_BID_ASK: "1"
-          LIVE_PRICE_MAX_AGE_SECONDS: "30"
 
           OANDA_API_TOKEN: ${{ secrets.OANDA_API_TOKEN }}
           OANDA_ACCOUNT_ID: ${{ secrets.OANDA_ACCOUNT_ID }}
@@ -130,6 +111,11 @@ jobs:
           TRADING_ECONOMICS_API_KEY: ${{ secrets.TRADING_ECONOMICS_API_KEY }}
           TRADING_ECONOMICS_CLIENT: ${{ secrets.TRADING_ECONOMICS_CLIENT }}
 
+          LIVE_PRICE_ENABLED: "1"
+          LIVE_PRICE_PRIMARY: "OANDA"
+          LIVE_PRICE_REQUIRE_BID_ASK: "1"
+          LIVE_PRICE_MAX_AGE_SECONDS: "30"
+
           ON_DEMAND_ONLY: "1"
           ON_DEMAND_TELEGRAM_REQUEST: ${{ inputs.telegram_request }}
           ON_DEMAND_TELEGRAM_CHAT_ID: ${{ inputs.telegram_chat_id }}
@@ -138,22 +124,10 @@ jobs:
           PAPER_TRADING_ONLY: "1"
           DEMO_TRADING_ENABLED: "0"
 
-          MONITOR_INTERVAL_MINUTES: "15"
-          MONITOR_TOP_N: "3"
-          MONITOR_SEND_FULL: "0"
-
           COMMUNICATION_MODE: "ON_DEMAND"
           SILENT_INTERNAL_ANALYSIS: "1"
           EVENT_ALERTS_ENABLED: "0"
-
-          EXTERNAL_INTELLIGENCE_ENABLED: "1"
-          EXTERNAL_INTELLIGENCE_SHADOW: "1"
-          EXTERNAL_INTELLIGENCE_TIMEOUT_SECONDS: "15"
-          EXTERNAL_INTELLIGENCE_CACHE_HOURS: "12"
-          EXTERNAL_INTELLIGENCE_CACHE_FILE: "commodities_external_intelligence_cache.json"
-
-          CFTC_ENABLED: "1"
-          EIA_ENABLED: "1"
+          MONITOR_SEND_FULL: "0"
 
           DAILY_BIAS_ENABLED: "1"
           CANDLE_ENGINE_ENABLED: "1"
@@ -163,37 +137,54 @@ jobs:
           REGIME_ENABLED: "1"
 
           EARLY_OPPORTUNITY_ENABLED: "1"
-          EARLY_TOP_N: "5"
-          EARLY_REFRESH_MINUTES: "60"
-          EARLY_HISTORY_MIN_MONTHS: "12"
-          EARLY_HISTORY_YEARS_TARGET: "5"
-
-          TELEGRAM_COMMANDS_ENABLED: "0"
-          TELEGRAM_COMMAND_MAX_AGE_SECONDS: "900"
 
           MARKET_INTELLIGENCE_ENABLED: "1"
           MARKET_INTELLIGENCE_MODE: "PRICEPEDIA_STYLE"
-          MARKET_INTELLIGENCE_OPTIONAL_SOURCES: "1"
+
+          EXTERNAL_INTELLIGENCE_ENABLED: "1"
+          EXTERNAL_INTELLIGENCE_SHADOW: "1"
 
           POLITICAL_IMPACT_ENABLED: "1"
           GEOPOLITICAL_IMPACT_ENABLED: "1"
 
-          COMMODITY_FUNDAMENTALS_ENABLED: "1"
-          MARKET_REGIME_ENABLED: "1"
-          CROSS_COMMODITY_ANALYSIS_ENABLED: "1"
           FUTURES_STRUCTURE_ENABLED: "1"
-          VOLATILITY_CONTEXT_ENABLED: "1"
-
-          CME_REQUIRED: "0"
-
-          TWELVE_DATA_COMMODITIES_ENABLED: "1"
-          TWELVE_DATA_DEBUG: "1"
-          TWELVE_DATA_TIMEOUT_SECONDS: "20"
 
           WEATHER_ENABLED: "1"
           DISASTER_ENABLED: "1"
 
-          WEATHER_CACHE_HOURS: "3"
-          FUTURES_CACHE_HOURS: "3"
+          CFTC_ENABLED: "1"
+          EIA_ENABLED: "1"
 
-          FUTURES_SYMBOLS_JSON:
+          SOLE24_ENABLED: "1"
+          SOLE24_TIMEOUT: "12"
+          SOLE24_CACHE_HOURS: "3"
+          SOLE24_WEIGHT: "0.15"
+
+          MIN_ENTRY_PROBABILITY: "62"
+          MIN_ENTRY_QUALITY: "55"
+          MIN_ENTRY_CONFIDENCE: "60"
+
+          MIN_ENTRY_RR: "2.5"
+          MIN_ENTRY_RR_TP1: "1.5"
+          MIN_ENTRY_RR_TP2: "2.0"
+          MIN_ENTRY_RR_TP3: "2.5"
+
+          MAX_ENTRY_STOP_ATR: "2.5"
+
+          SL_STRUCTURE_BUFFER_ATR: "0.15"
+          SL_MIN_ATR: "0.80"
+
+        run: python commodity_bot.py
+
+      - name: Persist bot state
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add *.json 2>/dev/null || true
+
+          if ! git diff --cached --quiet; then
+            git commit -m "feat: commodities bot v4.6 live price"
+            git push
+          fi
