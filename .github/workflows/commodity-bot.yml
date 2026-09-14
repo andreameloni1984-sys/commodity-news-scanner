@@ -191,4 +191,4 @@ jobs:
           if ! git diff --cached --quiet; then
             git commit -m "feat: commodities bot v4.5 telegram on-demand"
             git push
-          fi
+          fi 
