@@ -32,6 +32,7 @@ jobs:
     timeout-minutes: 15
 
     steps:
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -49,7 +50,9 @@ jobs:
 
       - name: Verify Python syntax
         run: |
-          python -m py_compile commodity_bot.py live_price_engine.py runner_live.py
+          python -m py_compile commodity_bot.py
+          python -m py_compile live_price_engine.py
+          python -m py_compile runner_live.py
 
       - name: LIVE PRICE PREFLIGHT
         env:
@@ -65,38 +68,53 @@ jobs:
           python - <<'PY'
           import os
           import sys
+
           from live_price_engine import get_live_quote
 
-          if not os.getenv("OANDA_API_TOKEN", "").strip():
+          token = os.getenv("OANDA_API_TOKEN", "").strip()
+          account = os.getenv("OANDA_ACCOUNT_ID", "").strip()
+
+          if not token:
               print("❌ OANDA_API_TOKEN mancante")
+              print("Aggiungere il Repository Secret: OANDA_API_TOKEN")
               sys.exit(1)
 
-          if not os.getenv("OANDA_ACCOUNT_ID", "").strip():
+          if not account:
               print("❌ OANDA_ACCOUNT_ID mancante")
+              print("Aggiungere il Repository Secret: OANDA_ACCOUNT_ID")
               sys.exit(1)
 
-          q = get_live_quote("Oro", "GC=F")
-
-          if not q:
-              print("❌ LIVE PRICE BLOCCATO")
-              print("❌ Nessuna quotazione LIVE disponibile")
+          try:
+              quote = get_live_quote("Oro", "GC=F")
+          except Exception as exc:
+              print(f"❌ Errore richiesta LIVE PRICE: {exc}")
               sys.exit(1)
 
-          if q.get("bid") is None or q.get("ask") is None:
+          if not quote:
               print("❌ LIVE PRICE BLOCCATO")
-              print("❌ BID/ASK OANDA non disponibili")
+              print("Nessuna quotazione OANDA disponibile.")
+              sys.exit(1)
+
+          bid = quote.get("bid")
+          ask = quote.get("ask")
+
+          if bid is None or ask is None:
+              print("❌ LIVE PRICE BLOCCATO")
+              print("BID/ASK mancanti.")
               sys.exit(1)
 
           print(
               f"✅ LIVE PRICE OK | "
-              f"BID={q['bid']} | "
-              f"ASK={q['ask']} | "
-              f"provider={q['provider']}"
+              f"BID={bid} | "
+              f"ASK={ask} | "
+              f"provider={quote.get('provider')} | "
+              f"timestamp={quote.get('timestamp')}"
           )
           PY
 
       - name: Run Commodities Bot v4.6
         env:
+
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
           NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -124,10 +142,12 @@ jobs:
           PAPER_TRADING_ONLY: "1"
           DEMO_TRADING_ENABLED: "0"
 
+          MONITOR_INTERVAL_MINUTES: "15"
+          MONITOR_SEND_FULL: "0"
+
           COMMUNICATION_MODE: "ON_DEMAND"
           SILENT_INTERNAL_ANALYSIS: "1"
           EVENT_ALERTS_ENABLED: "0"
-          MONITOR_SEND_FULL: "0"
 
           DAILY_BIAS_ENABLED: "1"
           CANDLE_ENGINE_ENABLED: "1"
@@ -149,11 +169,11 @@ jobs:
 
           FUTURES_STRUCTURE_ENABLED: "1"
 
-          WEATHER_ENABLED: "1"
-          DISASTER_ENABLED: "1"
-
           CFTC_ENABLED: "1"
           EIA_ENABLED: "1"
+
+          WEATHER_ENABLED: "1"
+          DISASTER_ENABLED: "1"
 
           SOLE24_ENABLED: "1"
           SOLE24_TIMEOUT: "12"
@@ -170,11 +190,11 @@ jobs:
           MIN_ENTRY_RR_TP3: "2.5"
 
           MAX_ENTRY_STOP_ATR: "2.5"
-
           SL_STRUCTURE_BUFFER_ATR: "0.15"
           SL_MIN_ATR: "0.80"
 
-        run: python commodity_bot.py
+        run: |
+          python commodity_bot.py
 
       - name: Persist bot state
         if: always()
