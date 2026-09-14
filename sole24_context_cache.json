@@ -141,5 +141,445 @@
         "Il Sole 24 Ore Agrisole"
       ]
     }
+  },
+  "Gas Naturale": {
+    "timestamp": "2026-09-14T20:17:59.400377+00:00",
+    "value": {
+      "enabled": true,
+      "available": true,
+      "score": 87.5,
+      "direction": "LONG",
+      "confidence": 100,
+      "delta": 3.0,
+      "sources": 3,
+      "pages": 3,
+      "bull_hits": 10,
+      "bear_hits": 4,
+      "data": {
+        "brent_max_usd": 118.35,
+        "gas_max_eur_mwh": 61.35,
+        "fuel_italy_eur_l": 2.184,
+        "wheat_monthly_pct": 2.5
+      },
+      "status": "OK",
+      "source_names": [
+        "Il Sole 24 Ore Lab24",
+        "Il Sole 24 Ore Agrisole"
+      ]
+    }
+  },
+  "Benzina RBOB": {
+    "timestamp": "2026-09-14T20:18:06.150038+00:00",
+    "value": {
+      "enabled": true,
+      "available": true,
+      "score": 87.5,
+      "direction": "LONG",
+      "confidence": 100,
+      "delta": 3.0,
+      "sources": 3,
+      "pages": 3,
+      "bull_hits": 10,
+      "bear_hits": 4,
+      "data": {
+        "brent_max_usd": 118.35,
+        "gas_max_eur_mwh": 61.35,
+        "fuel_italy_eur_l": 2.184,
+        "wheat_monthly_pct": 2.5
+      },
+      "status": "OK",
+      "source_names": [
+        "Il Sole 24 Ore Lab24",
+        "Il Sole 24 Ore Agrisole"
+      ]
+    }
+  },
+  "Heating Oil": {
+    "timestamp": "2026-09-14T20:18:14.625334+00:00",
+    "value": {
+      "enabled": true,
+      "available": true,
+      "score": 87.5,
+      "direction": "LONG",
+      "confidence": 100,
+      "delta": 3.0,
+      "sources": 3,
+      "pages": 3,
+      "bull_hits": 10,
+      "bear_hits": 4,
+      "data": {
+        "brent_max_usd": 118.35,
+        "gas_max_eur_mwh": 61.35,
+        "fuel_italy_eur_l": 2.184,
+        "wheat_monthly_pct": 2.5
+      },
+      "status": "OK",
+      "source_names": [
+        "Il Sole 24 Ore Lab24",
+        "Il Sole 24 Ore Agrisole"
+      ]
+    }
+  },
+  "Rame": {
+    "timestamp": "2026-09-14T20:18:48.385710+00:00",
+    "value": {
+      "enabled": true,
+      "available": true,
+      "score": 75.0,
+      "direction": "LONG",
+      "confidence": 85.0,
+      "delta": 2.0,
+      "sources": 1,
+      "pages": 3,
+      "bull_hits": 7,
+      "bear_hits": 3,
+      "data": {
+        "wheat_monthly_pct": 2.5
+      },
+      "status": "OK",
+      "source_names": [
+        "Il Sole 24 Ore Lab24",
+        "Il Sole 24 Ore Agrisole"
+      ]
+    }
+  },
+  "Grano": {
+    "timestamp": "2026-09-14T20:19:33.982840+00:00",
+    "value": {
+      "enabled": true,
+      "available": true,
+      "score": 93.8,
+      "direction": "LONG",
+      "confidence": 100,
+      "delta": 3.5,
+      "sources": 2,
+      "pages": 3,
+      "bull_hits": 11,
+      "bear_hits": 4,
+      "data": {
+        "brent_max_usd": 118.35,
+        "gas_max_eur_mwh": 61.35,
+        "wheat_monthly_pct": 2.5
+      },
+      "status": "OK",
+      "source_names": [
+        "Il Sole 24 Ore Lab24",
+        "Il Sole 24 Ore Agrisole"
+      ]
+    }
+  },
+  "Mais": {
+    "timestamp": "2026-09-14T20:19:55.113455+00:00",
+    "value": {
+      "enabled": true,
+      "available": true,
+      "score": 75.0,
+      "direction": "LONG",
+      "confidence": 85.0,
+      "delta": 2.0,
+      "sources": 1,
+      "pages": 3,
+      "bull_hits": 7,
+      "bear_hits": 3,
+      "data": {
+        "wheat_monthly_pct": 2.5
+      },
+      "status": "OK",
+      "source_names": [
+        "Il Sole 24 Ore Lab24",
+        "Il Sole 24 Ore Agrisole"
+      ]
+    }
+  },
+  "Soia": {
+    "timestamp": "2026-09-14T20:20:02.299949+00:00",
+    "value": {
+      "enabled": true,
+      "available": true,
+      "score": 75.0,
+      "direction": "LONG",
+      "confidence": 85.0,
+      "delta": 2.0,
+      "sources": 1,
+      "pages": 3,
+      "bull_hits": 7,
+      "bear_hits": 3,
+      "data": {
+        "wheat_monthly_pct": 2.5
+      },
+      "status": "OK",
+      "source_names": [
+        "Il Sole 24 Ore Lab24",
+        "Il Sole 24 Ore Agrisole"
+      ]
+    }
+  },
+  "Farina di soia": {
+    "timestamp": "2026-09-14T20:20:09.185231+00:00",
+    "value": {
+      "enabled": true,
+      "available": true,
+      "score": 75.0,
+      "direction": "LONG",
+      "confidence": 85.0,
+      "delta": 2.0,
+      "sources": 1,
+      "pages": 3,
+      "bull_hits": 7,
+      "bear_hits": 3,
+      "data": {
+        "wheat_monthly_pct": 2.5
+      },
+      "status": "OK",
+      "source_names": [
+        "Il Sole 24 Ore Lab24",
+        "Il Sole 24 Ore Agrisole"
+      ]
+    }
+  },
+  "Olio di soia": {
+    "timestamp": "2026-09-14T20:20:16.455464+00:00",
+    "value": {
+      "enabled": true,
+      "available": true,
+      "score": 75.0,
+      "direction": "LONG",
+      "confidence": 85.0,
+      "delta": 2.0,
+      "sources": 1,
+      "pages": 3,
+      "bull_hits": 7,
+      "bear_hits": 3,
+      "data": {
+        "wheat_monthly_pct": 2.5
+      },
+      "status": "OK",
+      "source_names": [
+        "Il Sole 24 Ore Lab24",
+        "Il Sole 24 Ore Agrisole"
+      ]
+    }
+  },
+  "Avena": {
+    "timestamp": "2026-09-14T20:20:23.729530+00:00",
+    "value": {
+      "enabled": true,
+      "available": true,
+      "score": 75.0,
+      "direction": "LONG",
+      "confidence": 85.0,
+      "delta": 2.0,
+      "sources": 1,
+      "pages": 3,
+      "bull_hits": 7,
+      "bear_hits": 3,
+      "data": {
+        "wheat_monthly_pct": 2.5
+      },
+      "status": "OK",
+      "source_names": [
+        "Il Sole 24 Ore Lab24",
+        "Il Sole 24 Ore Agrisole"
+      ]
+    }
+  },
+  "Riso": {
+    "timestamp": "2026-09-14T20:20:29.566176+00:00",
+    "value": {
+      "enabled": true,
+      "available": true,
+      "score": 75.0,
+      "direction": "LONG",
+      "confidence": 85.0,
+      "delta": 2.0,
+      "sources": 1,
+      "pages": 3,
+      "bull_hits": 7,
+      "bear_hits": 3,
+      "data": {
+        "wheat_monthly_pct": 2.5
+      },
+      "status": "OK",
+      "source_names": [
+        "Il Sole 24 Ore Lab24",
+        "Il Sole 24 Ore Agrisole"
+      ]
+    }
+  },
+  "Caffè": {
+    "timestamp": "2026-09-14T20:21:02.153724+00:00",
+    "value": {
+      "enabled": true,
+      "available": true,
+      "score": 50.0,
+      "direction": "NEUTRALE",
+      "confidence": 0,
+      "delta": 0.0,
+      "sources": 0,
+      "pages": 3,
+      "bull_hits": 0,
+      "bear_hits": 0,
+      "data": {},
+      "status": "OK",
+      "source_names": [
+        "Il Sole 24 Ore Lab24",
+        "Il Sole 24 Ore Agrisole"
+      ]
+    }
+  },
+  "Cacao": {
+    "timestamp": "2026-09-14T20:21:09.181922+00:00",
+    "value": {
+      "enabled": true,
+      "available": true,
+      "score": 75.0,
+      "direction": "LONG",
+      "confidence": 85.0,
+      "delta": 2.0,
+      "sources": 1,
+      "pages": 3,
+      "bull_hits": 7,
+      "bear_hits": 3,
+      "data": {
+        "wheat_monthly_pct": 2.5
+      },
+      "status": "OK",
+      "source_names": [
+        "Il Sole 24 Ore Lab24",
+        "Il Sole 24 Ore Agrisole"
+      ]
+    }
+  },
+  "Zucchero": {
+    "timestamp": "2026-09-14T20:21:16.439829+00:00",
+    "value": {
+      "enabled": true,
+      "available": true,
+      "score": 75.0,
+      "direction": "LONG",
+      "confidence": 85.0,
+      "delta": 2.0,
+      "sources": 1,
+      "pages": 3,
+      "bull_hits": 7,
+      "bear_hits": 3,
+      "data": {
+        "wheat_monthly_pct": 2.5
+      },
+      "status": "OK",
+      "source_names": [
+        "Il Sole 24 Ore Lab24",
+        "Il Sole 24 Ore Agrisole"
+      ]
+    }
+  },
+  "Cotone": {
+    "timestamp": "2026-09-14T20:21:23.037109+00:00",
+    "value": {
+      "enabled": true,
+      "available": true,
+      "score": 50.0,
+      "direction": "NEUTRALE",
+      "confidence": 0,
+      "delta": 0.0,
+      "sources": 0,
+      "pages": 3,
+      "bull_hits": 0,
+      "bear_hits": 0,
+      "data": {},
+      "status": "OK",
+      "source_names": [
+        "Il Sole 24 Ore Lab24",
+        "Il Sole 24 Ore Agrisole"
+      ]
+    }
+  },
+  "Succo d'arancia": {
+    "timestamp": "2026-09-14T20:21:29.537527+00:00",
+    "value": {
+      "enabled": true,
+      "available": true,
+      "score": 50.0,
+      "direction": "NEUTRALE",
+      "confidence": 0,
+      "delta": 0.0,
+      "sources": 0,
+      "pages": 3,
+      "bull_hits": 0,
+      "bear_hits": 0,
+      "data": {},
+      "status": "OK",
+      "source_names": [
+        "Il Sole 24 Ore Lab24",
+        "Il Sole 24 Ore Agrisole"
+      ]
+    }
+  },
+  "Bovini vivi": {
+    "timestamp": "2026-09-14T20:21:35.944573+00:00",
+    "value": {
+      "enabled": true,
+      "available": true,
+      "score": 75.0,
+      "direction": "LONG",
+      "confidence": 85.0,
+      "delta": 2.0,
+      "sources": 1,
+      "pages": 3,
+      "bull_hits": 7,
+      "bear_hits": 3,
+      "data": {
+        "wheat_monthly_pct": 2.5
+      },
+      "status": "OK",
+      "source_names": [
+        "Il Sole 24 Ore Lab24",
+        "Il Sole 24 Ore Agrisole"
+      ]
+    }
+  },
+  "Maiali magri": {
+    "timestamp": "2026-09-14T20:21:44.030555+00:00",
+    "value": {
+      "enabled": true,
+      "available": true,
+      "score": 75.0,
+      "direction": "LONG",
+      "confidence": 85.0,
+      "delta": 2.0,
+      "sources": 1,
+      "pages": 3,
+      "bull_hits": 7,
+      "bear_hits": 3,
+      "data": {
+        "wheat_monthly_pct": 2.5
+      },
+      "status": "OK",
+      "source_names": [
+        "Il Sole 24 Ore Lab24",
+        "Il Sole 24 Ore Agrisole"
+      ]
+    }
+  },
+  "Feeder Cattle": {
+    "timestamp": "2026-09-14T20:21:53.886801+00:00",
+    "value": {
+      "enabled": true,
+      "available": true,
+      "score": 50.0,
+      "direction": "NEUTRALE",
+      "confidence": 0,
+      "delta": 0.0,
+      "sources": 0,
+      "pages": 3,
+      "bull_hits": 0,
+      "bear_hits": 0,
+      "data": {},
+      "status": "OK",
+      "source_names": [
+        "Il Sole 24 Ore Lab24",
+        "Il Sole 24 Ore Agrisole"
+      ]
+    }
   }
 }
