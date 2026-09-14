@@ -4112,13 +4112,13 @@ def adaptive_risk_levels(analysis, candles, direction):
         stop=max(candidates) if candidates else price-sl_pct*price
         stop=min(stop, price-0.55*a)
         risk=max(price-stop,0.35*a)
-        tps=[price+max(tp1_pct*price,1.35*risk), price+max(tp2_pct*price,2.0*risk), price+max(tp3_pct*price,2.7*risk)]
+        tps=[price+max(tp1_pct*price,1.50*risk), price+max(tp2_pct*price,2.0*risk), price+max(tp3_pct*price,2.7*risk)]
     else:
         candidates=[x for x in (resistance,swing_high,price+sl_pct*price) if x is not None and x > price]
         stop=min(candidates) if candidates else price+sl_pct*price
         stop=max(stop, price+0.55*a)
         risk=max(stop-price,0.35*a)
-        tps=[price-max(tp1_pct*price,1.35*risk), price-max(tp2_pct*price,2.0*risk), price-max(tp3_pct*price,2.7*risk)]
+        tps=[price-max(tp1_pct*price,1.50*risk), price-max(tp2_pct*price,2.0*risk), price-max(tp3_pct*price,2.7*risk)]
     return {"available": True, "atr": round(a,6), "stop": _price_round(stop), "tp1": _price_round(tps[0]), "tp2": _price_round(tps[1]), "tp3": _price_round(tps[2]),
             "risk_distance": round(risk,6), "method": "STRUCTURA + ATR + PROFILE FALLBACK"}
 
