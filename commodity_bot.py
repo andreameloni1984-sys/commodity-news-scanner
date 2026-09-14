@@ -9,8 +9,6 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-from live_price_engine import apply_live_quote, get_live_quote
-
 
 # ============================================================
 # COMMODITY TRADING BOT v3.0
@@ -44,7 +42,7 @@ EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "21"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "4.6"
+BOT_VERSION = "4.5"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -122,6 +120,19 @@ MIN_ENTRY_RR = float(os.getenv("MIN_ENTRY_RR", "2.5"))
 MIN_ENTRY_RR_TP1 = float(os.getenv("MIN_ENTRY_RR_TP1", "1.5"))
 MIN_ENTRY_RR_TP2 = float(os.getenv("MIN_ENTRY_RR_TP2", "2.0"))
 MAX_ENTRY_STOP_ATR = float(os.getenv("MAX_ENTRY_STOP_ATR", "2.5"))
+
+# v4.5 — Sole 24 Ore Context Engine. Public pages only; no paywalled content
+# is bypassed. The module is advisory and can refine, never replace, the quant core.
+SOLE24_ENABLED = os.getenv("SOLE24_ENABLED", "1") == "1"
+SOLE24_TIMEOUT = int(os.getenv("SOLE24_TIMEOUT", "12"))
+SOLE24_CACHE_FILE = os.getenv("SOLE24_CACHE_FILE", "sole24_context_cache.json")
+SOLE24_CACHE_HOURS = int(os.getenv("SOLE24_CACHE_HOURS", "3"))
+SOLE24_WEIGHT = float(os.getenv("SOLE24_WEIGHT", "0.15"))
+SOLE24_URLS = [
+    "https://lab24.ilsole24ore.com/guerra-iran-impatto-energia-gas-economia/",
+    "https://lab24.ilsole24ore.com/prezzo-benzina/",
+    "https://www.agrisole.ilsole24ore.com/home/Mercati",
+]
 
 # v2.5 GLOBAL COMMODITY INTELLIGENCE
 WEATHER_CACHE_FILE = "commodities_weather_cache.json"
@@ -4114,13 +4125,13 @@ def adaptive_risk_levels(analysis, candles, direction):
         stop=max(candidates) if candidates else price-sl_pct*price
         stop=min(stop, price-0.55*a)
         risk=max(price-stop,0.35*a)
-        tps=[price+max(tp1_pct*price,1.35*risk), price+max(tp2_pct*price,2.0*risk), price+max(tp3_pct*price,2.7*risk)]
+        tps=[price+max(tp1_pct*price,1.50*risk), price+max(tp2_pct*price,2.0*risk), price+max(tp3_pct*price,2.7*risk)]
     else:
         candidates=[x for x in (resistance,swing_high,price+sl_pct*price) if x is not None and x > price]
         stop=min(candidates) if candidates else price+sl_pct*price
         stop=max(stop, price+0.55*a)
         risk=max(stop-price,0.35*a)
-        tps=[price-max(tp1_pct*price,1.35*risk), price-max(tp2_pct*price,2.0*risk), price-max(tp3_pct*price,2.7*risk)]
+        tps=[price-max(tp1_pct*price,1.50*risk), price-max(tp2_pct*price,2.0*risk), price-max(tp3_pct*price,2.7*risk)]
     return {"available": True, "atr": round(a,6), "stop": _price_round(stop), "tp1": _price_round(tps[0]), "tp2": _price_round(tps[1]), "tp3": _price_round(tps[2]),
             "risk_distance": round(risk,6), "method": "STRUCTURA + ATR + PROFILE FALLBACK"}
 
@@ -4254,7 +4265,7 @@ def smart_entry_engine(analysis):
     soft_missing = sum([not l2l_ok, not rr2_ok, not rr3_ok])
     relaxed_core_ok = (structural_ok and fast_ok and trigger_ok and rr1_ok and
                        stop_ok and prob >= 65 and quality >= 52 and
-                       confidence >= 55 and not safety_block)
+                       conf >= 55 and not safety_block)
     relaxed_entry_ok = relaxed_core_ok and soft_missing <= 2 and intraday >= 78
 
     if safety_block:
@@ -4876,7 +4887,6 @@ def _telegram_find_commodity(ranked, query):
 
 
 def _telegram_commodity_detail(item):
-    # v4.6 LIVE PRICE fields are available in analysis.
     """Build a single-commodity Telegram report with operational SL/TP levels."""
     if not item:
         return "⚪ Commodity non trovata. Scrivi HELP per vedere i comandi disponibili."
@@ -4916,8 +4926,7 @@ def _telegram_commodity_detail(item):
         f"📌 {name}",
         f"{icon} {direction} — {action_icon} {action}",
         "",
-        f"💰 Prezzo LIVE: {_fmt_price(a.get('live_price', a.get('price')))}",
-        f"💹 BID/ASK: {_fmt_price(a.get('live_price_bid'))} / {_fmt_price(a.get('live_price_ask'))} | Fonte: {a.get('live_price_provider','N/D')} | Base: {a.get('live_price_basis','N/D')}",
+        f"💰 Prezzo: {_fmt_price(a.get('price'))}",
         f"📊 Score: {score:.1f}/100 | Prob: {prob:.1f}%",
         f"🎯 Qualità: {quality:.1f} | Confidenza: {conf:.1f}",
         f"🧠 Intel v4.1: {intel_score:.0f} | Regime: {regime}",
@@ -6706,6 +6715,231 @@ def _v41_financial_context(analysis):
     return {"score": round(score, 1), "direction": d, "trend": round(trend, 1), "momentum": round(momentum, 1), "volatility": round(vol, 1)}
 
 
+
+def _sole24_strip_html(raw):
+    """Convert a public Sole 24 Ore HTML page into compact searchable text."""
+    if not raw:
+        return ""
+    text = re.sub(r"(?is)<script[^>]*>.*?</script>", " ", raw)
+    text = re.sub(r"(?is)<style[^>]*>.*?</style>", " ", text)
+    text = re.sub(r"(?is)<!--.*?-->", " ", text)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"&nbsp;", " ", text, flags=re.I)
+    text = re.sub(r"&amp;", "&", text, flags=re.I)
+    text = re.sub(r"&#39;|&apos;", "'", text, flags=re.I)
+    text = re.sub(r"&quot;", '"', text, flags=re.I)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
+def _sole24_fetch_page(url):
+    try:
+        r = requests.get(
+            url,
+            timeout=SOLE24_TIMEOUT,
+            headers={
+                "User-Agent": "Mozilla/5.0 (compatible; CommoditiesBot/4.5; +https://github.com/)"
+            },
+        )
+        if r.status_code != 200:
+            return "", f"HTTP {r.status_code}"
+        return _sole24_strip_html(r.text), "OK"
+    except Exception as exc:
+        return "", str(exc)
+
+
+def _sole24_cache_load():
+    try:
+        if not os.path.exists(SOLE24_CACHE_FILE):
+            return {}
+        data = _json_load(SOLE24_CACHE_FILE, {})
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _sole24_cache_save(data):
+    try:
+        _json_save(SOLE24_CACHE_FILE, data)
+    except Exception as exc:
+        print(f"   ⚠️ Sole24 cache: {exc}")
+
+
+def sole24_context_engine(name):
+    """Read public Sole 24 Ore/24 Ore Lab/Agrisole context for one commodity.
+
+    It uses public pages only. If a page is unavailable, the source is marked
+    unavailable and the rest of the bot continues with a neutral Sole24 score.
+    """
+    neutral = {
+        "enabled": False,
+        "available": False,
+        "score": 50.0,
+        "direction": "NEUTRALE",
+        "confidence": 0.0,
+        "delta": 0.0,
+        "sources": 0,
+        "pages": 0,
+        "bull_hits": 0,
+        "bear_hits": 0,
+        "data": {},
+        "status": "N/D",
+    }
+    if not SOLE24_ENABLED:
+        neutral["status"] = "DISATTIVATO"
+        return neutral
+
+    cache = _sole24_cache_load()
+    cache_key = str(name)
+    now = datetime.now(timezone.utc)
+    cached = cache.get(cache_key) if isinstance(cache, dict) else None
+    if isinstance(cached, dict):
+        try:
+            ts = datetime.fromisoformat(str(cached.get("timestamp")).replace("Z", "+00:00"))
+            if (now - ts).total_seconds() <= SOLE24_CACHE_HOURS * 3600:
+                return cached.get("value", neutral)
+        except Exception:
+            pass
+
+    terms = V41_FUNDAMENTAL_TERMS.get(name, {"bull": [], "bear": []})
+    commodity_aliases = {
+        "Oro": ["oro", "gold"], "Argento": ["argento", "silver"],
+        "Platino": ["platino", "platinum"], "Palladio": ["palladio", "palladium"],
+        "Petrolio WTI": ["wti", "petrolio", "greggio", "brent"],
+        "Petrolio Brent": ["brent", "petrolio", "greggio"],
+        "Gas Naturale": ["gas naturale", "gas", "lng"],
+        "Benzina RBOB": ["benzina", "carburanti", "gasoline", "raffiner"],
+        "Heating Oil": ["gasolio", "diesel", "carburanti"],
+        "Rame": ["rame", "copper", "metalli"], "Alluminio": ["alluminio", "metalli"],
+        "Nichel": ["nichel", "metalli"], "Zinco": ["zinco", "metalli"],
+        "Piombo": ["piombo", "metalli"],
+        "Grano": ["grano", "frumento", "cereali"], "Mais": ["mais", "cereali"],
+        "Soia": ["soia", "semi oleosi"], "Farina di soia": ["soia", "farina di soia"],
+        "Olio di soia": ["soia", "oli vegetali"], "Avena": ["avena", "cereali"],
+        "Riso": ["riso", "cereali"], "Caffè": ["caffè", "coffee"],
+        "Cacao": ["cacao", "cocoa"], "Zucchero": ["zucchero", "sugar"],
+        "Cotone": ["cotone", "cotton"], "Succo d'arancia": ["arancia", "agrumi"],
+        "Bovini vivi": ["bovini", "carne", "cattle"], "Maiali magri": ["maiali", "carne", "hog"],
+        "Feeder Cattle": ["bovini", "cattle"],
+    }
+    aliases = commodity_aliases.get(name, [name.lower()])
+    positive = [
+        "rialzo", "aumento", "aumenta", "crescita", "rincaro", "salita", "record",
+        "carenza", "scarsità", "deficit", "crisi dell'offerta", "supply disruption",
+        "tensione", "blocco", "supply shock", "domanda forte", "domanda in crescita",
+        "export demand", "drought", "siccità", "gelate", "raccolti in calo",
+    ]
+    negative = [
+        "ribasso", "calo", "diminuzione", "scende", "discesa", "surplus", "eccesso",
+        "offerta abbondante", "domanda debole", "rallentamento della domanda",
+        "raccolti in aumento", "scorte in aumento", "produzione in aumento",
+    ]
+
+    pages = []
+    data = {}
+    statuses = []
+    for url in SOLE24_URLS:
+        text, status = _sole24_fetch_page(url)
+        statuses.append(status)
+        if text:
+            pages.append((url, text))
+
+    if not pages:
+        neutral["status"] = "; ".join(statuses[:3]) if statuses else "N/D"
+        return neutral
+
+    relevant_text = []
+    source_hits = 0
+    for url, text in pages:
+        low = text.lower()
+        if any(a in low for a in aliases):
+            relevant_text.append(text)
+            source_hits += 1
+        elif name in ("Oro", "Argento", "Petrolio WTI", "Petrolio Brent", "Gas Naturale") and any(
+            x in low for x in ("inflazione", "tassi", "dollaro", "geopolitica", "hormuz", "energia")
+        ):
+            relevant_text.append(text)
+            source_hits += 1
+
+    text = " ".join(relevant_text).lower()
+    bull_hits = sum(1 for term in terms.get("bull", []) if term.lower() in text)
+    bear_hits = sum(1 for term in terms.get("bear", []) if term.lower() in text)
+    bull_hits += sum(1 for term in positive if term in text and any(a in text for a in aliases))
+    bear_hits += sum(1 for term in negative if term in text and any(a in text for a in aliases))
+
+    raw = clamp((bull_hits - bear_hits) / 8.0, -1.0, 1.0)
+    score = clamp(50.0 + raw * 50.0, 0, 100)
+    confidence = clamp(min(100.0, (bull_hits + bear_hits) * 7.5 + source_hits * 10), 0, 100)
+    direction = "LONG" if raw >= 0.12 else "SHORT" if raw <= -0.12 else "NEUTRALE"
+    delta = clamp(raw * 4.0, -4.0, 4.0)
+
+    # Public numeric indicators explicitly visible on Lab24 pages.
+    patterns = {
+        "brent_max_usd": r"(?:prezzo massimo\s+brent|brent[^0-9]{0,80}(?:prezzo massimo|maximum|superato))[^0-9]{0,40}(\d+[\.,]\d+)",
+        "gas_max_eur_mwh": r"(?:prezzo massimo\s+gas|gas[^0-9]{0,80}(?:prezzo massimo|maximum))[^0-9]{0,40}(\d+[\.,]\d+)",
+        "fuel_italy_eur_l": r"benzina[^0-9]{0,100}(\d+[\.,]\d+)\s*(?:euro|€)?\s*(?:/|al)?\s*litro",
+        "urea_monthly_pct": r"urea[^%]{0,180}(?:quasi|circa)?\s*(\d+[\.,]\d+)\s*%[^a-z]{0,30}(?:su base mensile|mensile)",
+        "wheat_monthly_pct": r"grano[^%]{0,100}(?:\+|aumento|rialzo)[^%]{0,60}(\d+[\.,]\d+)\s*%",
+    }
+    for key, pattern in patterns.items():
+        m = re.search(pattern, text, flags=re.I)
+        if m:
+            try:
+                data[key] = float(m.group(1).replace(".", "").replace(",", "."))
+            except Exception:
+                pass
+
+    result = {
+        "enabled": True,
+        "available": True,
+        "score": round(score, 1),
+        "direction": direction,
+        "confidence": round(confidence, 1),
+        "delta": round(delta, 2),
+        "sources": source_hits,
+        "pages": len(pages),
+        "bull_hits": bull_hits,
+        "bear_hits": bear_hits,
+        "data": data,
+        "status": "OK",
+        "source_names": ["Il Sole 24 Ore Lab24", "Il Sole 24 Ore Agrisole"],
+    }
+    cache[cache_key] = {"timestamp": now.isoformat(), "value": result}
+    _sole24_cache_save(cache)
+    return result
+
+
+def apply_sole24_context(analysis, name):
+    """Merge Sole24 context into the existing intelligence brain.
+
+    The Sole24 layer is deliberately bounded: it can refine the score and the
+    intelligence score, but it cannot remove safety blocks or create a trade alone.
+    """
+    sole = sole24_context_engine(name)
+    analysis["sole24_intelligence"] = sole
+    if not sole.get("available"):
+        return analysis
+
+    sole_delta = safe_float(sole.get("delta"), 0) or 0
+    analysis["score"] = clamp((safe_float(analysis.get("score"), 0) or 0) + sole_delta, 0, 100)
+    analysis["sole24_delta"] = round(sole_delta, 2)
+
+    intel = analysis.get("market_intelligence_v41")
+    if isinstance(intel, dict) and intel.get("enabled"):
+        old_intel_score = safe_float(intel.get("score"), 50) or 50
+        weight = clamp(SOLE24_WEIGHT, 0, 0.30)
+        combined = old_intel_score * (1.0 - weight) + (safe_float(sole.get("score"), 50) or 50) * weight
+        old_delta = safe_float(intel.get("delta"), 0) or 0
+        intel["score"] = round(clamp(combined, 0, 100), 1)
+        intel["sole24_weight"] = round(weight, 3)
+        intel["sole24_score"] = round(safe_float(sole.get("score"), 50) or 50, 1)
+        intel["sole24_direction"] = sole.get("direction", "NEUTRALE")
+        intel["sole24_confidence"] = round(safe_float(sole.get("confidence"), 0) or 0, 1)
+        intel["delta"] = round(clamp(old_delta + sole_delta, -12, 12), 2)
+        intel["direction"] = "FAVOREVOLE" if intel["score"] >= 60 else "SFAVOREVOLE" if intel["score"] <= 40 else "NEUTRALE"
+        analysis["market_intelligence_v41"] = intel
+    return analysis
+
 def market_intelligence_v41(name, analysis, news=None, political=None, global_intel=None):
     """Build the v4.1 four-lens intelligence block without inventing data."""
     if not MARKET_INTELLIGENCE_ENABLED:
@@ -6932,13 +7166,6 @@ def main():
             analysis["pattern_timeframes"] = pattern_timeframes or {}
             analysis["source_check"] = source_check or {}
 
-            # v4.6: broker-side LIVE BID/ASK is applied before every downstream
-            # adaptive SL/TP layer, so levels are calculated from the live quote.
-            if os.getenv("LIVE_PRICE_ENABLED", "1") == "1":
-                if not apply_live_quote(analysis, name, symbol):
-                    raise RuntimeError("LIVE PRICE non disponibile: BID/ASK broker non disponibili")
-                print(f"   💹 LIVE PRICE {name}: {analysis.get('live_price')} | {analysis.get('live_price_provider')} | {analysis.get('live_price_basis')} | BID={analysis.get('live_price_bid')} ASK={analysis.get('live_price_ask')}")
-
             weather = weather_intelligence(name)
             disasters = natural_disaster_intelligence(name)
             apply_weather_and_disaster_layers(analysis, weather, disasters)
@@ -6965,6 +7192,9 @@ def main():
             # v4.1: PricePedia-style Market Intelligence. Uses the data already
             # fetched by the existing engine; optional sources never block a run.
             apply_market_intelligence_v41(analysis, name, news, political, global_intel)
+            # v4.5: Sole 24 Ore public-data context is merged into the existing
+            # intelligence brain. It never bypasses safety or entry gates.
+            apply_sole24_context(analysis, name)
             analysis["v3_context"] = v3_context_summary(analysis)
 
             results.append({
@@ -7307,4 +7537,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-  
