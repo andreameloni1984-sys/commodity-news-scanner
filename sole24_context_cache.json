@@ -1,0 +1,145 @@
+{
+  "Oro": {
+    "timestamp": "2026-09-14T20:13:22.698326+00:00",
+    "value": {
+      "enabled": true,
+      "available": true,
+      "score": 87.5,
+      "direction": "LONG",
+      "confidence": 100,
+      "delta": 3.0,
+      "sources": 3,
+      "pages": 3,
+      "bull_hits": 10,
+      "bear_hits": 4,
+      "data": {
+        "brent_max_usd": 118.35,
+        "gas_max_eur_mwh": 61.35,
+        "fuel_italy_eur_l": 2.184,
+        "wheat_monthly_pct": 2.5
+      },
+      "status": "OK",
+      "source_names": [
+        "Il Sole 24 Ore Lab24",
+        "Il Sole 24 Ore Agrisole"
+      ]
+    }
+  },
+  "Argento": {
+    "timestamp": "2026-09-14T20:13:34.544974+00:00",
+    "value": {
+      "enabled": true,
+      "available": true,
+      "score": 50.0,
+      "direction": "NEUTRALE",
+      "confidence": 20.0,
+      "delta": 0.0,
+      "sources": 2,
+      "pages": 3,
+      "bull_hits": 0,
+      "bear_hits": 0,
+      "data": {
+        "brent_max_usd": 118.35,
+        "gas_max_eur_mwh": 61.35,
+        "wheat_monthly_pct": 2.5
+      },
+      "status": "OK",
+      "source_names": [
+        "Il Sole 24 Ore Lab24",
+        "Il Sole 24 Ore Agrisole"
+      ]
+    }
+  },
+  "Platino": {
+    "timestamp": "2026-09-14T20:13:43.407703+00:00",
+    "value": {
+      "enabled": true,
+      "available": true,
+      "score": 50.0,
+      "direction": "NEUTRALE",
+      "confidence": 0,
+      "delta": 0.0,
+      "sources": 0,
+      "pages": 3,
+      "bull_hits": 0,
+      "bear_hits": 0,
+      "data": {},
+      "status": "OK",
+      "source_names": [
+        "Il Sole 24 Ore Lab24",
+        "Il Sole 24 Ore Agrisole"
+      ]
+    }
+  },
+  "Palladio": {
+    "timestamp": "2026-09-14T20:13:52.897357+00:00",
+    "value": {
+      "enabled": true,
+      "available": true,
+      "score": 50.0,
+      "direction": "NEUTRALE",
+      "confidence": 0,
+      "delta": 0.0,
+      "sources": 0,
+      "pages": 3,
+      "bull_hits": 0,
+      "bear_hits": 0,
+      "data": {},
+      "status": "OK",
+      "source_names": [
+        "Il Sole 24 Ore Lab24",
+        "Il Sole 24 Ore Agrisole"
+      ]
+    }
+  },
+  "Petrolio WTI": {
+    "timestamp": "2026-09-14T20:14:04.699882+00:00",
+    "value": {
+      "enabled": true,
+      "available": true,
+      "score": 87.5,
+      "direction": "LONG",
+      "confidence": 100,
+      "delta": 3.0,
+      "sources": 2,
+      "pages": 3,
+      "bull_hits": 10,
+      "bear_hits": 4,
+      "data": {
+        "brent_max_usd": 118.35,
+        "gas_max_eur_mwh": 61.35,
+        "wheat_monthly_pct": 2.5
+      },
+      "status": "OK",
+      "source_names": [
+        "Il Sole 24 Ore Lab24",
+        "Il Sole 24 Ore Agrisole"
+      ]
+    }
+  },
+  "Petrolio Brent": {
+    "timestamp": "2026-09-14T20:14:28.656511+00:00",
+    "value": {
+      "enabled": true,
+      "available": true,
+      "score": 93.8,
+      "direction": "LONG",
+      "confidence": 100,
+      "delta": 3.5,
+      "sources": 2,
+      "pages": 3,
+      "bull_hits": 11,
+      "bear_hits": 4,
+      "data": {
+        "brent_max_usd": 118.35,
+        "gas_max_eur_mwh": 61.35,
+        "wheat_monthly_pct": 2.5
+      },
+      "status": "OK",
+      "source_names": [
+        "Il Sole 24 Ore Lab24",
+        "Il Sole 24 Ore Agrisole"
+      ]
+    }
+  }
+}

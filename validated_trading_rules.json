@@ -65,7 +65,7 @@
     "score": 0.0,
     "samples": 102,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-14T19:48:22.357672+00:00"
+    "updated_at": "2026-09-14T20:13:20.043770+00:00"
   },
   "Argento:SHORT": {
     "commodity": "Argento",
@@ -133,7 +133,7 @@
     "score": 0.0,
     "samples": 50,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-14T19:48:29.285092+00:00"
+    "updated_at": "2026-09-14T20:13:31.802935+00:00"
   },
   "Platino:SHORT": {
     "commodity": "Platino",
@@ -201,7 +201,7 @@
     "score": 0.0,
     "samples": 70,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-14T19:48:35.934354+00:00"
+    "updated_at": "2026-09-14T20:13:43.402003+00:00"
   },
   "Palladio:SHORT": {
     "commodity": "Palladio",
@@ -269,7 +269,7 @@
     "score": 0.0,
     "samples": 42,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-14T19:48:43.174940+00:00"
+    "updated_at": "2026-09-14T20:13:52.891999+00:00"
   },
   "Petrolio WTI:LONG": {
     "commodity": "Petrolio WTI",
@@ -337,7 +337,7 @@
     "score": 0.0,
     "samples": 67,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-14T19:48:51.200595+00:00"
+    "updated_at": "2026-09-14T20:14:01.820302+00:00"
   },
   "Petrolio Brent:LONG": {
     "commodity": "Petrolio Brent",
@@ -405,7 +405,7 @@
     "score": 0.0,
     "samples": 44,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-14T19:48:57.001649+00:00"
+    "updated_at": "2026-09-14T20:14:12.872415+00:00"
   },
   "Gas Naturale:SHORT": {
     "commodity": "Gas Naturale",
@@ -473,7 +473,7 @@
     "score": 0.0,
     "samples": 39,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-14T19:49:03.486087+00:00"
+    "updated_at": "2026-09-14T20:14:38.408061+00:00"
   },
   "Benzina RBOB:LONG": {
     "commodity": "Benzina RBOB",
