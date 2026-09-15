@@ -8316,28 +8316,17 @@ def soyuz_gagarin_pipeline(name, symbol, usd, global_intel, trading_knowledge):
 
 # --- GAGARIN TELEGRAM SAFETY LABEL ---
 def gagarin_plan_label(analysis):
-    """Return an explicit label distinguishing a potential plan from an authorized entry."""
+    """Render only a resolved user-facing plan label."""
     try:
-        state = str(
-            analysis.get("gagarin_state")
-            or analysis.get("gagarin", {}).get("state")
-            or analysis.get("state")
-            or ""
-        ).upper()
-        operational = bool(
-            analysis.get("operational_entry_allowed")
-            or analysis.get("gagarin", {}).get("operational_entry_allowed")
-        )
-        if operational and state in {"READY", "ENTRY_CONFIRMED", "ENTRY_AUTHORIZED"}:
+        snap = gagarin_display_snapshot(analysis)
+        if snap["operational_entry_allowed"] and str(snap["state"]).upper() in {
+            "READY", "ENTRY_CONFIRMED", "ENTRY_AUTHORIZED"
+        }:
             return "PIANO OPERATIVO — ENTRATA AUTORIZZATA"
     except Exception:
         pass
     return "PIANO POTENZIALE — NON ENTRARE"
 
-
-# ============================================================
-# SOYUZ GAGARIN FINAL CONSISTENCY / TELEGRAM RENDERING
-# ============================================================
 
 def gagarin_finalize_consistent_snapshot(analysis):
     """Create one authoritative, coherent Gagarin snapshot for display and gating."""
@@ -8431,9 +8420,11 @@ def gagarin_plan_label(analysis):
 
 
 def gagarin_display_snapshot(analysis):
-    """Return a display-safe snapshot with no contradictory UNKNOWN/NONE overwrite."""
+    """Return a display-safe snapshot regardless of nested dict/bool representations."""
     a = gagarin_finalize_consistent_snapshot(analysis)
     g = a.get("gagarin", {})
+    if not isinstance(g, dict):
+        g = {}
     return {
         "regime": g.get("regime", "UNKNOWN"),
         "setup": g.get("setup", "NONE"),
@@ -8480,6 +8471,16 @@ def main():
         symbol = resolved_symbols.get(name, COMMODITIES[name])
         print(f"🔎 Analizzo {name} [{symbol}]...")
 
+        # Safe per-commodity fallbacks used only if the analysis raises.
+        global_impact = global_intel or {
+            "score": 0.0, "direction": "NEUTRALE", "mode": "NORMAL",
+            "shock_intensity": 0.0,
+        }
+        candles = []
+        analysis = {}
+        bt = {}
+        source_check = {}
+
         try:
             pipeline = soyuz_gagarin_pipeline(
                 name=name, symbol=symbol, usd=usd, global_intel=global_intel,
@@ -8489,7 +8490,20 @@ def main():
             analysis = pipeline["analysis"]
             bt = pipeline["backtest"]
             source_check = pipeline["source_check"]
-            print(f"   🧭 GAGARIN: {analysis.get('gagarin_state')} | REGIME {analysis.get('gagarin',{}).get('regime',{}).get('state')} | SETUP {analysis.get('gagarin',{}).get('setup',{}).get('type')} | TRIGGER {analysis.get('gagarin',{}).get('trigger',{}).get('confirmed')}" )
+            gdisp = gagarin_display_snapshot(analysis)
+            greg = gdisp.get("regime")
+            if isinstance(greg, dict):
+                greg = greg.get("state") or greg.get("regime") or greg.get("label") or "UNKNOWN"
+            gsetup = gdisp.get("setup")
+            if isinstance(gsetup, dict):
+                gsetup = gsetup.get("type") or gsetup.get("setup") or gsetup.get("name") or "NONE"
+            gtrigger = gdisp.get("trigger")
+            if isinstance(gtrigger, dict):
+                gtrigger = gtrigger.get("confirmed")
+            print(
+                f"   🧭 GAGARIN: {gdisp.get('state')} | REGIME {greg} | "
+                f"SETUP {gsetup} | TRIGGER {gtrigger}"
+            )
 
             results.append({
                 "name": name,
