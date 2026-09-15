@@ -677,7 +677,7 @@
     "score": 0.0,
     "samples": 54,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T06:14:04.322142+00:00"
+    "updated_at": "2026-09-15T06:51:47.547956+00:00"
   },
   "Grano:SHORT": {
     "commodity": "Grano",

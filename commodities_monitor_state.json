@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-09-15T06:33:22.567672+00:00",
-  "best": "Oro",
+  "timestamp": "2026-09-15T06:51:50.906419+00:00",
+  "best": "Rame",
   "direction": "SHORT",
-  "action": "NON ENTRARE",
-  "entry_state": "SAFETY_BLOCK",
+  "action": "ATTENDERE",
+  "entry_state": "WATCH",
   "trigger": "PULLBACK + RIPARTENZA",
   "trigger_tf": "5m",
   "position": null,
