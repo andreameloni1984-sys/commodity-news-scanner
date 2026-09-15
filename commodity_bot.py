@@ -48,7 +48,7 @@ EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "21"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "4.9"
+BOT_VERSION = "4.11"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -111,8 +111,8 @@ COMMUNICATION_MODE = os.getenv("COMMUNICATION_MODE", "MORNING_USA_EVENT")
 ON_DEMAND_ONLY = os.getenv("ON_DEMAND_ONLY", "0") == "1"
 ON_DEMAND_TELEGRAM_REQUEST = os.getenv("ON_DEMAND_TELEGRAM_REQUEST", "").strip()
 ON_DEMAND_TELEGRAM_CHAT_ID = os.getenv("ON_DEMAND_TELEGRAM_CHAT_ID", "").strip()
-MORNING_REPORT_HOUR = int(os.getenv("MORNING_REPORT_HOUR", "5"))
-MORNING_REPORT_MINUTE = int(os.getenv("MORNING_REPORT_MINUTE", "30"))
+MORNING_REPORT_HOUR = int(os.getenv("MORNING_REPORT_HOUR", "8"))
+MORNING_REPORT_MINUTE = int(os.getenv("MORNING_REPORT_MINUTE", "0"))
 USA_REPORT_HOUR = int(os.getenv("USA_REPORT_HOUR", "14"))
 USA_REPORT_MINUTE = int(os.getenv("USA_REPORT_MINUTE", "30"))
 EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "21"))
@@ -220,7 +220,7 @@ def evaluate_entry_policy(
 
     if direction not in ("LONG", "SHORT"):
         return {
-            "policy_version": "4.8",
+            "policy_version": "4.10",
             "bias": "NEUTRAL",
             "bias_strength": "NONE",
             "entry_status": "NO_ENTRY",
@@ -274,12 +274,12 @@ def evaluate_entry_policy(
         )
 
     # Floating-point tolerance: 1.50 is accepted as 1.50.
-    if rr_tp1 + 1e-9 < RR_TP1_ENTRY_MIN:
+    if rr_tp1 + 0.005 < RR_TP1_ENTRY_MIN:
         blockers.append(
             f"RR TP1 INSUFFICIENTE {rr_tp1:.2f} < {RR_TP1_ENTRY_MIN:.2f}"
         )
 
-    if rr_tp2 + 1e-9 < RR_TP2_ENTRY_MIN:
+    if rr_tp2 + 0.005 < RR_TP2_ENTRY_MIN:
         blockers.append(
             f"RR TP2 INSUFFICIENTE {rr_tp2:.2f} < {RR_TP2_ENTRY_MIN:.2f}"
         )
@@ -301,7 +301,7 @@ def evaluate_entry_policy(
 
     if blockers:
         return {
-            "policy_version": "4.8",
+            "policy_version": "4.10",
             "bias": direction,
             "bias_strength": bias_strength,
             "entry_status": "NO_ENTRY",
@@ -327,14 +327,14 @@ def evaluate_entry_policy(
         and confidence >= CONFIDENCE_ENTRY_MIN
         and mtf_score >= MTF_ENTRY_MIN
         and trigger_score >= TRIGGER_ENTRY_MIN
-        and rr_tp1 + 1e-9 >= RR_TP1_ENTRY_MIN
-        and rr_tp2 + 1e-9 >= RR_TP2_ENTRY_MIN
+        and rr_tp1 + 0.005 >= RR_TP1_ENTRY_MIN
+        and rr_tp2 + 0.005 >= RR_TP2_ENTRY_MIN
         and l2l_state == "CONFIRMED"
     )
 
     if clean_entry:
         return {
-            "policy_version": "4.8",
+            "policy_version": "4.10",
             "bias": direction,
             "bias_strength": bias_strength,
             "entry_status": "ENTRY_CONFIRMED",
@@ -356,7 +356,7 @@ def evaluate_entry_policy(
 
     # Nessun hard blocker, ma manca una conferma di confluenza.
     return {
-        "policy_version": "4.8",
+        "policy_version": "4.10",
         "bias": direction,
         "bias_strength": bias_strength,
         "entry_status": "WAIT_CONFIRMATION",
@@ -4670,8 +4670,8 @@ def smart_entry_engine(analysis):
     rr3 = abs(tp3_price-entry_price) / risk_distance if risk_distance else 0
     atr_value = safe_float(analysis.get("atr"), 0) or 0
     stop_atr = risk_distance / atr_value if atr_value > 0 else 999.0
-    rr1_ok = rr1 + 1e-9 >= MIN_ENTRY_RR_TP1
-    rr2_ok = rr2 + 1e-9 >= MIN_ENTRY_RR_TP2
+    rr1_ok = rr1 + 0.005 >= MIN_ENTRY_RR_TP1
+    rr2_ok = rr2 + 0.005 >= MIN_ENTRY_RR_TP2
     rr3_ok = rr3 + 1e-9 >= MIN_ENTRY_RR
     stop_ok = stop_atr <= MAX_ENTRY_STOP_ATR
     l2l_ok = bool(l2l.get("gate", False))
@@ -5172,22 +5172,28 @@ def demo_execution_adapter(results, position):
 # ============================================================
 
 def send_telegram(message):
+    """Send a Telegram message safely, splitting oversized messages."""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         print("⚠️ Telegram non configurato.")
-        return
+        return False
+
+    text = str(message or "").strip()
+    if not text:
+        return False
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": message,
-    }
-
-    try:
-        response = requests.post(url, json=payload, timeout=20)
-        response.raise_for_status()
-    except Exception as error:
-        print(f"⚠️ Errore Telegram: {error}")
+    # Telegram's practical text limit is 4096 characters. Keep a small margin.
+    chunks = [text[i:i+3900] for i in range(0, len(text), 3900)]
+    ok = True
+    for chunk in chunks:
+        payload = {"chat_id": TELEGRAM_CHAT_ID, "text": chunk}
+        try:
+            response = requests.post(url, json=payload, timeout=20)
+            response.raise_for_status()
+        except Exception as error:
+            ok = False
+            print(f"⚠️ Errore Telegram: {error}")
+    return ok
 
 
 TELEGRAM_COMMAND_OFFSET_FILE = "telegram_update_offset.json"
@@ -5759,7 +5765,7 @@ def process_telegram_on_demand(ranked):
 
 def process_telegram_commands(ranked):
     """Poll Telegram and answer on-demand commands from the configured chat."""
-    if os.getenv("TELEGRAM_COMMANDS_ENABLED", "0") != "1":
+    if os.getenv("TELEGRAM_COMMANDS_ENABLED", "1") != "1":
         return
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         return
@@ -6971,16 +6977,16 @@ def signal_engine_v42(analysis, candles=None):
     if aligned < 2: blockers.append("MTF INCOMPLETO")
     if not trigger.get("confirmed"): blockers.append("TRIGGER NON CONFERMATO")
     if l2l.get("fakeout"): blockers.append("FAKEOUT")
-    if rr1 + 1e-9 < 1.5: blockers.append("RR TP1 INSUFFICIENTE")
+    if rr1 + 0.005 < 1.5: blockers.append("RR TP1 INSUFFICIENTE")
     if rd <= 0: blockers.append("SL NON VALIDO")
 
     if safety or l2l.get("fakeout"):
         decision = "NON ENTRARE"
         state = "BLOCKED"
-    elif trigger.get("confirmed") and raw_score >= 82 and rr1 + 1e-9 >= 1.5 and rd > 0:
+    elif trigger.get("confirmed") and raw_score >= 82 and rr1 + 0.005 >= 1.5 and rd > 0:
         decision = "ENTRARE"
         state = "CONFIRMED"
-    elif raw_score >= 68 and rd > 0 and rr1 + 1e-9 >= 1.5:
+    elif raw_score >= 68 and rd > 0 and rr1 + 0.005 >= 1.5:
         decision = f"ENTRATA POSSIBILE {d}"
         state = "POSSIBLE"
     elif raw_score >= 52:
@@ -6990,6 +6996,33 @@ def signal_engine_v42(analysis, candles=None):
         decision = "NON ENTRARE"
         state = "BLOCKED"
 
+    # v4.10 — reconcile Signal Engine with the single Entry Policy authority.
+    # The legacy SE may still calculate diagnostics, but it must not overwrite
+    # the final entry permission decided by evaluate_entry_policy().
+    _policy = analysis.get("entry_policy") or {}
+    _policy_status = str(_policy.get("entry_status", "")).upper()
+    if _policy_status:
+        if safety:
+            decision = "NON ENTRARE"
+            state = "BLOCKED"
+        elif _policy_status == "ENTRY_CONFIRMED":
+            decision = "ENTRARE"
+            state = "CONFIRMED"
+        elif _policy_status == "WAIT_CONFIRMATION":
+            decision = f"{d} — ASPETTARE"
+            state = "WAIT"
+        else:
+            decision = "NON ENTRARE"
+            state = "BLOCKED"
+
+        # Rebuild the visible blockers from the policy rather than the legacy
+        # confluence gate, avoiding false "RR TP1 INSUFFICIENTE" diagnostics.
+        _policy_blockers = list(_policy.get("blockers") or [])
+        if safety and "SAFETY BLOCK" not in _policy_blockers:
+            _policy_blockers.insert(0, "SAFETY BLOCK")
+        blockers = _policy_blockers[:6]
+
+    # v4.10 — reconcile Signal Engine with the single Entry Policy authority
     analysis["signal_engine_v42"] = {
         "available": True,
         "decision": decision,
@@ -7759,9 +7792,10 @@ def main():
                 finalize_v26_analysis(_a)
 
                 # IMPORTANT: live SL/TP can change RR, STOP/ATR and confluence.
-                # Re-run the entry/confluence engine so blockers and Telegram
-                # diagnostics use the exact same live levels as Signal Engine.
+                # Re-run the entry/confluence policy first, then rebuild the
+                # authoritative Signal Engine from the same live levels.
                 smart_entry_engine(_a)
+                signal_engine_v42(_a, _item.get("candles") or [])
 
     # v4.6 coherence: setup_direction is the single final analytical direction.
     # model_signal remains the raw quantitative model direction for diagnostics,
