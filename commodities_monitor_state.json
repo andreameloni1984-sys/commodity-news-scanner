@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-09-15T09:42:20.067717+00:00",
-  "best": "Benzina RBOB",
+  "timestamp": "2026-09-15T11:07:16.655348+00:00",
+  "best": "Avena",
   "direction": "LONG",
-  "action": "COMPRA ORA",
-  "entry_state": "ENTRY_CONFIRMED",
+  "action": "NON ENTRARE",
+  "entry_state": "BLOCKED",
   "trigger": "PULLBACK + RIPARTENZA",
   "trigger_tf": "5m",
   "position": null,
