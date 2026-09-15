@@ -4732,18 +4732,16 @@ def adaptive_risk_levels(analysis, candles, direction):
             structural_stop, sl_tf, sl_reason = price - fallback_distance, "FALLBACK", "ATR_THEORETICAL_ONLY"
             technical_stop = structural_stop
             execution_stop = technical_stop - CFD_SPREAD_BUFFER_MULT * spread
-            stop = _price_round(execution_stop)
-            risk_distance = abs(price - stop)
-            stop_atr = risk_distance / atr_value if atr_value else 999.0
             sl_structural_valid = False
-        # Prefer the nearest valid structural invalidation. A small ATR band around
-        # that level is considered the robust zone; we never optimize to a single
-        # lucky historical value.
-        nearest_distance = min(price - x[0] for x in viable)
-        robust_viable = [x for x in viable if (price - x[0]) <= nearest_distance + SL_ROBUSTNESS_BAND_ATR * atr_value]
-        structural_stop, sl_tf, sl_reason = max(robust_viable, key=lambda x: x[0])
-        technical_stop = min(structural_stop - SL_STRUCTURE_BUFFER_ATR * atr_value, price - min_stop_distance)
-        execution_stop = technical_stop - CFD_SPREAD_BUFFER_MULT * spread
+        else:
+            # Prefer the nearest valid structural invalidation. A small ATR band around
+            # that level is considered the robust zone; we never optimize to a single
+            # lucky historical value.
+            nearest_distance = min(price - x[0] for x in viable)
+            robust_viable = [x for x in viable if (price - x[0]) <= nearest_distance + SL_ROBUSTNESS_BAND_ATR * atr_value]
+            structural_stop, sl_tf, sl_reason = max(robust_viable, key=lambda x: x[0])
+            technical_stop = min(structural_stop - SL_STRUCTURE_BUFFER_ATR * atr_value, price - min_stop_distance)
+            execution_stop = technical_stop - CFD_SPREAD_BUFFER_MULT * spread
     else:
         for tf, arr in (("5m", t5), ("15m", t15), ("1H", t1h)):
             sl_candidates += [(v, tf, "PIVOT_HIGH") for v in pivots(arr, "high") if v > price]
@@ -4760,15 +4758,13 @@ def adaptive_risk_levels(analysis, candles, direction):
             structural_stop, sl_tf, sl_reason = price + fallback_distance, "FALLBACK", "ATR_THEORETICAL_ONLY"
             technical_stop = structural_stop
             execution_stop = technical_stop + CFD_SPREAD_BUFFER_MULT * spread
-            stop = _price_round(execution_stop)
-            risk_distance = abs(price - stop)
-            stop_atr = risk_distance / atr_value if atr_value else 999.0
             sl_structural_valid = False
-        nearest_distance = min(x[0] - price for x in viable)
-        robust_viable = [x for x in viable if (x[0] - price) <= nearest_distance + SL_ROBUSTNESS_BAND_ATR * atr_value]
-        structural_stop, sl_tf, sl_reason = min(robust_viable, key=lambda x: x[0])
-        technical_stop = max(structural_stop + SL_STRUCTURE_BUFFER_ATR * atr_value, price + min_stop_distance)
-        execution_stop = technical_stop + CFD_SPREAD_BUFFER_MULT * spread
+        else:
+            nearest_distance = min(x[0] - price for x in viable)
+            robust_viable = [x for x in viable if (x[0] - price) <= nearest_distance + SL_ROBUSTNESS_BAND_ATR * atr_value]
+            structural_stop, sl_tf, sl_reason = min(robust_viable, key=lambda x: x[0])
+            technical_stop = max(structural_stop + SL_STRUCTURE_BUFFER_ATR * atr_value, price + min_stop_distance)
+            execution_stop = technical_stop + CFD_SPREAD_BUFFER_MULT * spread
 
     stop = _price_round(execution_stop)
     risk_distance = abs(price - stop)
