@@ -7485,6 +7485,11 @@ def main():
                 # Refresh dependent final metrics using the live entry.
                 finalize_v26_analysis(_a)
 
+                # IMPORTANT: live SL/TP can change RR, STOP/ATR and confluence.
+                # Re-run the entry/confluence engine so blockers and Telegram
+                # diagnostics use the exact same live levels as Signal Engine.
+                smart_entry_engine(_a)
+
     # v4.6 coherence: setup_direction is the single final analytical direction.
     # model_signal remains the raw quantitative model direction for diagnostics,
     # while operational signal may be WAIT because of risk/confluence gates.
