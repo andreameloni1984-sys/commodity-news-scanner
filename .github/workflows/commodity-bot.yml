@@ -33,24 +33,44 @@ jobs:
 
     steps:
 
+      # ============================================================
+      # CHECKOUT
+      # ============================================================
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # ============================================================
+      # PYTHON
+      # ============================================================
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
+      # ============================================================
+      # DEPENDENCIES
+      # ============================================================
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install requests
 
+      # ============================================================
+      # VERIFY PYTHON
+      # ============================================================
+
       - name: Verify Python syntax
         run: |
           python -m py_compile commodity_bot.py
+
+      # ============================================================
+      # VERIFY SIFTINGIO
+      # ============================================================
 
       - name: Verify SiftingIO live quote engine
         env:
@@ -76,33 +96,47 @@ jobs:
 
           url = "https://api.sifting.io/v1/last/quote/commodities/XAUUSD"
 
-          r = requests.get(
-              url,
-              headers={
-                  "X-API-Key": key,
-                  "Accept": "application/json",
-                  "User-Agent": "CommoditiesBot/4.6",
-              },
-              timeout=8,
-          )
+          try:
+              r = requests.get(
+                  url,
+                  headers={
+                      "X-API-Key": key,
+                      "Accept": "application/json",
+                      "User-Agent": "CommoditiesBot/4.6",
+                  },
+                  timeout=8,
+              )
 
-          r.raise_for_status()
+              r.raise_for_status()
 
-          q = r.json()
+              q = r.json()
 
-          bid = q.get("b")
-          ask = q.get("a")
-          ts = q.get("t")
+              bid = q.get("b")
+              ask = q.get("a")
+              ts = q.get("t")
 
-          if bid is None and ask is None:
-              print("❌ SiftingIO non ha restituito BID/ASK per XAUUSD")
+              if bid is None and ask is None:
+                  print(
+                      "❌ SiftingIO non ha restituito "
+                      "BID/ASK per XAUUSD"
+                  )
+                  sys.exit(1)
+
+              print(
+                  "✅ SIFTINGIO LIVE OK | "
+                  f"XAUUSD | BID={bid} | "
+                  f"ASK={ask} | timestamp={ts}"
+              )
+
+          except Exception as e:
+              print(f"❌ ERRORE SIFTINGIO: {e}")
               sys.exit(1)
 
-          print(
-              f"✅ SIFTINGIO LIVE OK | XAUUSD | "
-              f"BID={bid} | ASK={ask} | timestamp={ts}"
-          )
           PY
+
+      # ============================================================
+      # RUN BOT
+      # ============================================================
 
       - name: Run Commodities Bot v4.6
         env:
@@ -239,21 +273,54 @@ jobs:
         run: |
           python commodity_bot.py
 
+      # ============================================================
+      # PERSIST STATE - CORRETTO
+      # ============================================================
+
       - name: Persist bot state
         if: always()
         run: |
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+          echo "🔄 Sincronizzazione con origin/main..."
+
           git fetch origin main
 
-          git reset --soft origin/main
+          echo "📦 Aggiunta stato bot..."
 
           git add *.json 2>/dev/null || true
 
-          if ! git diff --cached --quiet; then
-            git commit -m "feat: commodities bot v4.6 siftingio live price"
-            git push origin HEAD:main
-          else
+          if git diff --cached --quiet; then
             echo "ℹ️ Nessuna modifica JSON da salvare."
+            exit 0
+          fi
+
+          echo "💾 Commit dello stato bot..."
+
+          git commit -m "feat: commodities bot v4.6 siftingio live price"
+
+          echo "🔄 Aggiornamento branch remoto..."
+
+          if git rebase origin/main; then
+
+            echo "🚀 Push verso origin/main..."
+
+            git push origin HEAD:main
+
+          else
+
+            echo "⚠️ Rebase con conflitto."
+
+            git rebase --abort || true
+
+            echo "🔄 Tentativo di merge mantenendo lo stato locale..."
+
+            git merge origin/main -X ours --no-edit
+
+            echo "🚀 Push dopo merge..."
+
+            git push origin HEAD:main
+
           fi
