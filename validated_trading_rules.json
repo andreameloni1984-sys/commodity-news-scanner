@@ -133,7 +133,7 @@
     "score": 0.0,
     "samples": 50,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T02:09:07.779020+00:00"
+    "updated_at": "2026-09-15T06:01:11.197425+00:00"
   },
   "Platino:SHORT": {
     "commodity": "Platino",

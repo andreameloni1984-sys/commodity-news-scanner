@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-09-15T05:48:54.481507+00:00",
-  "best": "Oro",
+  "timestamp": "2026-09-15T06:01:19.987318+00:00",
+  "best": "Argento",
   "direction": "SHORT",
-  "action": "NON ENTRARE",
-  "entry_state": "SAFETY_BLOCK",
+  "action": "ATTENDERE",
+  "entry_state": "WATCH",
   "trigger": "PULLBACK + RIPARTENZA",
-  "trigger_tf": "1m",
+  "trigger_tf": "5m",
   "position": null,
   "position_direction": null
 }
