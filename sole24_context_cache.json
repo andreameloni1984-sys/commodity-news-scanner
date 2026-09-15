@@ -1,6 +1,6 @@
 {
   "Oro": {
-    "timestamp": "2026-09-15T09:14:55.289906+00:00",
+    "timestamp": "2026-09-15T14:45:31.562252+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -26,7 +26,7 @@
     }
   },
   "Argento": {
-    "timestamp": "2026-09-15T09:15:03.741081+00:00",
+    "timestamp": "2026-09-15T14:45:55.219127+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -72,7 +72,7 @@
     }
   },
   "Palladio": {
-    "timestamp": "2026-09-15T09:15:16.611180+00:00",
+    "timestamp": "2026-09-15T14:46:37.999431+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -93,7 +93,7 @@
     }
   },
   "Petrolio WTI": {
-    "timestamp": "2026-09-15T09:15:24.226551+00:00",
+    "timestamp": "2026-09-15T14:46:49.844076+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -118,7 +118,7 @@
     }
   },
   "Petrolio Brent": {
-    "timestamp": "2026-09-15T09:15:31.545028+00:00",
+    "timestamp": "2026-09-15T14:47:26.089900+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -169,7 +169,7 @@
     }
   },
   "Benzina RBOB": {
-    "timestamp": "2026-09-15T09:15:47.734571+00:00",
+    "timestamp": "2026-09-15T14:47:36.293161+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -221,7 +221,7 @@
     }
   },
   "Rame": {
-    "timestamp": "2026-09-15T09:16:02.157675+00:00",
+    "timestamp": "2026-09-15T14:46:30.008789+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -244,7 +244,7 @@
     }
   },
   "Grano": {
-    "timestamp": "2026-09-15T09:16:46.791527+00:00",
+    "timestamp": "2026-09-15T14:47:50.191536+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -269,7 +269,7 @@
     }
   },
   "Mais": {
-    "timestamp": "2026-09-15T09:16:54.010305+00:00",
+    "timestamp": "2026-09-15T14:48:23.969593+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -292,7 +292,7 @@
     }
   },
   "Soia": {
-    "timestamp": "2026-09-15T09:16:59.800782+00:00",
+    "timestamp": "2026-09-15T14:48:32.688481+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -384,7 +384,7 @@
     }
   },
   "Riso": {
-    "timestamp": "2026-09-15T09:17:24.310614+00:00",
+    "timestamp": "2026-09-15T14:48:43.522802+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -428,7 +428,7 @@
     }
   },
   "Cacao": {
-    "timestamp": "2026-09-15T09:17:37.488973+00:00",
+    "timestamp": "2026-09-15T14:49:00.976278+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -451,7 +451,7 @@
     }
   },
   "Zucchero": {
-    "timestamp": "2026-09-15T09:17:43.535425+00:00",
+    "timestamp": "2026-09-15T14:48:51.191548+00:00",
     "value": {
       "enabled": true,
       "available": true,

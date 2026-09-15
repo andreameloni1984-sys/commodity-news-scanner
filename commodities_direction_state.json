@@ -1,13 +1,13 @@
 {
   "Oro": {
     "direction": "SHORT",
-    "score": -27.875564256202647,
-    "updated_at": "2026-09-15T11:04:48.702013+00:00"
+    "score": -45.368052676111674,
+    "updated_at": "2026-09-15T14:45:29.280070+00:00"
   },
   "Argento": {
     "direction": "LONG",
-    "score": 12.070810724731137,
-    "updated_at": "2026-09-15T11:04:57.371352+00:00"
+    "score": 14.308872725792853,
+    "updated_at": "2026-09-15T14:45:41.644543+00:00"
   },
   "Platino": {
     "direction": "LONG",
@@ -15,19 +15,19 @@
     "updated_at": "2026-09-15T11:05:03.354961+00:00"
   },
   "Palladio": {
-    "direction": "NONE",
-    "score": 0.0,
-    "updated_at": "2026-09-15T11:05:10.675006+00:00"
+    "direction": "SHORT",
+    "score": -35.81293081698574,
+    "updated_at": "2026-09-15T14:46:37.995413+00:00"
   },
   "Petrolio WTI": {
     "direction": "LONG",
-    "score": 43.21055689293519,
-    "updated_at": "2026-09-15T11:05:15.384649+00:00"
+    "score": 73.78979549548127,
+    "updated_at": "2026-09-15T14:46:47.430589+00:00"
   },
   "Petrolio Brent": {
-    "direction": "SHORT",
-    "score": -34.42455176311308,
-    "updated_at": "2026-09-15T11:05:22.669298+00:00"
+    "direction": "LONG",
+    "score": 16.996577283471872,
+    "updated_at": "2026-09-15T14:46:59.678882+00:00"
   },
   "Gas Naturale": {
     "direction": "NONE",
@@ -36,8 +36,8 @@
   },
   "Benzina RBOB": {
     "direction": "LONG",
-    "score": 13.392203008370783,
-    "updated_at": "2026-09-15T11:08:48.632419+00:00"
+    "score": 85.49896971215682,
+    "updated_at": "2026-09-15T14:47:36.289310+00:00"
   },
   "Heating Oil": {
     "direction": "LONG",
@@ -45,24 +45,24 @@
     "updated_at": "2026-09-15T13:23:42.163835+00:00"
   },
   "Rame": {
-    "direction": "SHORT",
-    "score": -21.590660653756867,
-    "updated_at": "2026-09-15T11:05:47.695415+00:00"
+    "direction": "NONE",
+    "score": 0.0,
+    "updated_at": "2026-09-15T14:46:04.067750+00:00"
   },
   "Grano": {
-    "direction": "SHORT",
-    "score": -47.69548688041783,
-    "updated_at": "2026-09-15T11:05:54.995642+00:00"
+    "direction": "LONG",
+    "score": 10.070080275959544,
+    "updated_at": "2026-09-15T14:47:46.057277+00:00"
   },
   "Mais": {
-    "direction": "SHORT",
-    "score": -27.684350014323048,
-    "updated_at": "2026-09-15T11:06:01.738942+00:00"
+    "direction": "LONG",
+    "score": 47.34949156646341,
+    "updated_at": "2026-09-15T14:47:58.248799+00:00"
   },
   "Soia": {
     "direction": "LONG",
-    "score": 7.3149987573632655,
-    "updated_at": "2026-09-15T11:06:07.336237+00:00"
+    "score": 63.752860749991655,
+    "updated_at": "2026-09-15T14:48:32.684506+00:00"
   },
   "Farina di soia": {
     "direction": "LONG",
@@ -80,9 +80,9 @@
     "updated_at": "2026-09-15T11:06:20.801609+00:00"
   },
   "Riso": {
-    "direction": "LONG",
-    "score": 37.13322274644895,
-    "updated_at": "2026-09-15T11:06:25.893465+00:00"
+    "direction": "SHORT",
+    "score": -34.45270721531492,
+    "updated_at": "2026-09-15T14:48:43.518555+00:00"
   },
   "Caffè": {
     "direction": "NONE",
@@ -91,13 +91,13 @@
   },
   "Cacao": {
     "direction": "SHORT",
-    "score": -66.05298115550214,
-    "updated_at": "2026-09-15T11:06:37.430990+00:00"
+    "score": -5.408769329995034,
+    "updated_at": "2026-09-15T14:49:00.972382+00:00"
   },
   "Zucchero": {
     "direction": "SHORT",
-    "score": -59.338527886974006,
-    "updated_at": "2026-09-15T11:06:41.445680+00:00"
+    "score": -59.04042051731786,
+    "updated_at": "2026-09-15T14:48:51.187829+00:00"
   },
   "Cotone": {
     "direction": "SHORT",
