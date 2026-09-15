@@ -19,6 +19,12 @@ import requests
 # ============================================================
 
 API_KEY = os.getenv("TWELVE_DATA_API_KEY")
+SIFTING_API_KEY = os.getenv("SIFTING_API_KEY", "").strip()
+SIFTING_BASE_URL = os.getenv("SIFTING_BASE_URL", "https://api.sifting.io").rstrip("/")
+SIFTING_LIVE_ENABLED = os.getenv("SIFTING_LIVE_ENABLED", "1") == "1"
+SIFTING_LIVE_REQUIRED = os.getenv("SIFTING_LIVE_REQUIRED", "0") == "1"
+SIFTING_LIVE_MAX_AGE_SECONDS = float(os.getenv("SIFTING_LIVE_MAX_AGE_SECONDS", "30"))
+SIFTING_TIMEOUT_SECONDS = float(os.getenv("SIFTING_TIMEOUT_SECONDS", "8"))
 NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "8002086130")
@@ -42,7 +48,7 @@ EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "21"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "4.5"
+BOT_VERSION = "4.6"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -419,6 +425,178 @@ COMMODITIES = {
     "Maiali magri": "LEAN_HOGS/USD",
     "Feeder Cattle": "FEEDER_CATTLE/USD",
 }
+
+# ============================================================
+# v4.6 — SIFTINGIO LIVE PRICE ENGINE
+# REST top-of-book quote: BID / ASK / timestamp.
+# SiftingIO is a reference/aggregated market-data feed, not a broker.
+# ============================================================
+SIFTING_COMMODITY_SYMBOLS = {
+    "Oro": "XAUUSD",
+    "Argento": "XAGUSD",
+    "Platino": "XPTUSD",
+    "Palladio": "XPDUSD",
+    "Petrolio WTI": "WTIUSD",
+    "Petrolio Brent": "UKOUSD",
+    "Gas Naturale": "NATGAS",
+    "Heating Oil": "HOILUSD",
+    "Rame": "COPPERUSD",
+    "Alluminio": "XALUSD",
+    "Nichel": "XNIUSD",
+    "Zinco": "XZNUSD",
+    "Grano": "WHEATUSD",
+    "Mais": "CORNUSD",
+    "Soia": "SOYBUSD",
+    "Olio di soia": "SBOILUSD",
+    "Caffè": "COFFEEUSD",
+    "Cacao": "COCOAUSD",
+    "Zucchero": "SUGARUSD",
+    "Cotone": "COTTONUSD",
+    "Bovini vivi": "CATTLEUSD",
+    "Maiali magri": "HOGSUSD",
+    "Feeder Cattle": "FEEDCUSD",
+}
+
+
+def get_sifting_live_quote(name, symbol=None):
+    """Return the latest SiftingIO top-of-book quote for a commodity.
+
+    Returns a normalized dict with bid/ask/mid/spread/timestamp/provider.
+    A stale or malformed quote is rejected instead of being silently used.
+    """
+    if not SIFTING_LIVE_ENABLED:
+        return None
+    if not SIFTING_API_KEY:
+        return None
+
+    sifting_symbol = SIFTING_COMMODITY_SYMBOLS.get(name)
+    if not sifting_symbol:
+        return None
+
+    url = f"{SIFTING_BASE_URL}/v1/last/quote/commodities/{sifting_symbol}"
+    headers = {
+        "X-API-Key": SIFTING_API_KEY,
+        "Accept": "application/json",
+        "User-Agent": "CommoditiesBot/4.6",
+    }
+
+    response = requests.get(url, headers=headers, timeout=SIFTING_TIMEOUT_SECONDS)
+    response.raise_for_status()
+    data = response.json()
+    if not isinstance(data, dict):
+        raise RuntimeError("SiftingIO risposta non valida")
+
+    bid = safe_float(data.get("b"))
+    ask = safe_float(data.get("a"))
+    timestamp_ms = safe_float(data.get("t"))
+    if bid is None and ask is None:
+        raise RuntimeError(f"SiftingIO {sifting_symbol}: BID/ASK mancanti")
+
+    if bid is not None and bid <= 0:
+        bid = None
+    if ask is not None and ask <= 0:
+        ask = None
+
+    if bid is None and ask is None:
+        raise RuntimeError(f"SiftingIO {sifting_symbol}: quotazione non positiva")
+
+    if bid is not None and ask is not None and ask < bid:
+        raise RuntimeError(f"SiftingIO {sifting_symbol}: ASK < BID")
+
+    now_ms = datetime.now(timezone.utc).timestamp() * 1000.0
+    age_seconds = None
+    if timestamp_ms is not None and timestamp_ms > 0:
+        age_seconds = max(0.0, (now_ms - timestamp_ms) / 1000.0)
+        if age_seconds > SIFTING_LIVE_MAX_AGE_SECONDS:
+            raise RuntimeError(
+                f"SiftingIO {sifting_symbol}: dato vecchio {age_seconds:.1f}s "
+                f"> soglia {SIFTING_LIVE_MAX_AGE_SECONDS:.1f}s"
+            )
+
+    if bid is not None and ask is not None:
+        mid = (bid + ask) / 2.0
+        spread = ask - bid
+    else:
+        mid = bid if bid is not None else ask
+        spread = None
+
+    return {
+        "provider": "SIFTINGIO",
+        "symbol": sifting_symbol,
+        "bid": bid,
+        "ask": ask,
+        "mid": mid,
+        "spread": spread,
+        "timestamp_ms": timestamp_ms,
+        "age_seconds": age_seconds,
+    }
+
+
+def apply_sifting_live_price(analysis, name):
+    """Replace analytical candle price with the current SiftingIO quote.
+
+    LONG entries use ASK, SHORT entries use BID, and neutral/WAIT uses MID.
+    The historical candles remain untouched: they continue to drive ATR and
+    structure, while the current entry reference is the live quote.
+    """
+    if not SIFTING_LIVE_ENABLED:
+        analysis["live_price_status"] = "DISABLED"
+        return analysis
+
+    try:
+        quote = get_sifting_live_quote(name, analysis.get("symbol"))
+        if not quote:
+            analysis["live_price_status"] = "UNAVAILABLE"
+            if SIFTING_LIVE_REQUIRED:
+                raise RuntimeError("SiftingIO live price non disponibile")
+            return analysis
+
+        direction = str(
+            analysis.get("setup_direction")
+            or analysis.get("signal")
+            or analysis.get("model_signal")
+            or ""
+        ).upper()
+
+        if direction == "LONG" and quote.get("ask") is not None:
+            execution_price = quote["ask"]
+            execution_side = "ASK"
+        elif direction == "SHORT" and quote.get("bid") is not None:
+            execution_price = quote["bid"]
+            execution_side = "BID"
+        else:
+            execution_price = quote.get("mid")
+            execution_side = "MID"
+
+        if execution_price is None or execution_price <= 0:
+            raise RuntimeError("SiftingIO prezzo live non valido")
+
+        old_price = safe_float(analysis.get("price"))
+        analysis["historical_price"] = old_price
+        analysis["price"] = _price_round(execution_price)
+        analysis["entry"] = _price_round(execution_price)
+        analysis["live_price"] = _price_round(execution_price)
+        analysis["live_price_bid"] = quote.get("bid")
+        analysis["live_price_ask"] = quote.get("ask")
+        analysis["live_price_mid"] = quote.get("mid")
+        analysis["live_price_spread"] = quote.get("spread")
+        analysis["live_price_timestamp_ms"] = quote.get("timestamp_ms")
+        analysis["live_price_age_seconds"] = quote.get("age_seconds")
+        analysis["live_price_provider"] = quote.get("provider")
+        analysis["live_price_symbol"] = quote.get("symbol")
+        analysis["live_price_side"] = execution_side
+        analysis["live_price_status"] = "LIVE"
+
+        return analysis
+
+    except Exception as exc:
+        analysis["live_price_status"] = "ERROR"
+        analysis["live_price_error"] = str(exc)
+        if SIFTING_LIVE_REQUIRED:
+            raise
+        print(f"   ⚠️ SiftingIO LIVE {name}: {exc}")
+        return analysis
+
 
 NEWS_TERMS = {
     "Oro": "gold OR bullion OR XAU", "Argento": "silver OR XAG",
@@ -7163,6 +7341,7 @@ def main():
             if analysis is None:
                 raise RuntimeError("Analisi Gold Engine non disponibile")
 
+            analysis["symbol"] = symbol
             analysis["pattern_timeframes"] = pattern_timeframes or {}
             analysis["source_check"] = source_check or {}
 
@@ -7274,6 +7453,37 @@ def main():
     for _item in results:
         if _item.get("available"):
             finalize_v26_analysis(_item["analysis"])
+
+    # v4.6: SiftingIO LIVE PRICE.
+    # The analytical history remains unchanged. Only the current price/entry
+    # reference is replaced by the live BID/ASK quote, then SL/TP and the final
+    # signal engine are recalculated from that live reference.
+    if SIFTING_LIVE_ENABLED:
+        for _item in results:
+            if not _item.get("available"):
+                continue
+            _a = _item["analysis"]
+            _name = _item.get("name")
+            apply_sifting_live_price(_a, _name)
+
+            if _a.get("live_price_status") == "LIVE":
+                _direction = _a.get("setup_direction") or _a.get("model_signal") or _a.get("signal")
+                _adaptive_live = adaptive_risk_levels(
+                    _a,
+                    _item.get("candles") or [],
+                    _direction,
+                )
+                if _adaptive_live.get("available"):
+                    _a.update({
+                        "stop": _adaptive_live["stop"],
+                        "tp1": _adaptive_live["tp1"],
+                        "tp2": _adaptive_live["tp2"],
+                        "tp3": _adaptive_live["tp3"],
+                    })
+                    _a["adaptive_risk"] = _adaptive_live
+
+                # Refresh dependent final metrics using the live entry.
+                finalize_v26_analysis(_a)
 
     # v4.2: build one actionable, explainable signal from the finalized layers.
     apply_signal_engine_v42(results)
@@ -7460,6 +7670,15 @@ def main():
     print(f"Probabilità: {a['probability'] * 100:.1f}%")
     print(f"Confidenza: {a['confidence']:.1f}/100")
     print(f"Qualità: {a['quality']:.1f}/100")
+    if a.get("live_price_status") == "LIVE":
+        print(
+            f"LIVE PRICE: {a.get('live_price', a.get('price'))} | "
+            f"BID {a.get('live_price_bid')} | ASK {a.get('live_price_ask')} | "
+            f"age {safe_float(a.get('live_price_age_seconds'), 0):.1f}s | "
+            f"provider {a.get('live_price_provider')}"
+        )
+    else:
+        print(f"LIVE PRICE: {a.get('live_price_status', 'N/D')}")
     print(f"Knowledge Engine: {a.get('trading_knowledge', {}).get('usable', 0)} fonti | bias {a.get('knowledge_bias', 0):+.1f}")
     print(f"Learning Engine: {len(a.get('learning_validated_rules', []))} regole validate | attive {', '.join(a.get('learning_current_hits', [])) or 'nessuna'} | score {a.get('learning_score', 0):.1f}")
     print(f"Market Intelligence v4.1: {intelligence_v41_summary(a)} | delta {a.get('intelligence_delta', 0):+.1f}")
