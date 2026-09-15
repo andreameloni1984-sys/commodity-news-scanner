@@ -742,6 +742,12 @@ def get_sifting_live_quote(name, symbol=None):
     if not sifting_symbol:
         return None
 
+    # Per-cycle/in-process cache: never request the same quote twice within the TTL.
+    now = time.time()
+    cached = SIFTING_QUOTE_CACHE.get(sifting_symbol)
+    if cached and now - cached.get("cached_at", 0) <= SIFTING_CACHE_TTL_SECONDS:
+        return dict(cached.get("quote") or {})
+
     url = f"{SIFTING_BASE_URL}/v1/last/quote/commodities/{sifting_symbol}"
     headers = {
         "X-API-Key": SIFTING_API_KEY,
@@ -789,7 +795,7 @@ def get_sifting_live_quote(name, symbol=None):
         mid = bid if bid is not None else ask
         spread = None
 
-    return {
+    quote = {
         "provider": "SIFTINGIO",
         "symbol": sifting_symbol,
         "bid": bid,
@@ -799,6 +805,8 @@ def get_sifting_live_quote(name, symbol=None):
         "timestamp_ms": timestamp_ms,
         "age_seconds": age_seconds,
     }
+    SIFTING_QUOTE_CACHE[sifting_symbol] = {"cached_at": now, "quote": dict(quote)}
+    return quote
 
 
 def apply_sifting_live_price(analysis, name):
@@ -7798,7 +7806,11 @@ def intelligence_v41_summary(analysis):
 # adapters; they no longer define the architecture by themselves.
 # PAPER ONLY: this layer never places broker orders.
 
-GAGARIN_ARCHITECTURE_VERSION = "5.2-GAGARIN-ARCH-1"
+GAGARIN_ARCHITECTURE_VERSION = "5.2-GAGARIN-ARCH-3-POSITION"
+GAGARIN_FINAL_AUTHORITY = True
+GAGARIN_REQUIRE_LIVE_FOR_ENTRY = os.getenv("GAGARIN_REQUIRE_LIVE_FOR_ENTRY", "1") == "1"
+SIFTING_CACHE_TTL_SECONDS = float(os.getenv("SIFTING_CACHE_TTL_SECONDS", "20"))
+SIFTING_QUOTE_CACHE = {}
 GAGARIN_STATES = {
     "NO_DATA", "WAIT_SETUP", "SETUP_ACTIVE_ENTRY_BLOCKED",
     "READY_LONG", "READY_SHORT", "MANAGED", "NO_TRADE"
@@ -8014,6 +8026,138 @@ def gagarin_entry_policy(analysis, setup, trigger, risk, safety):
             "direction": d, "probability": prob, "blockers": []}
 
 
+def gagarin_apply_final_authority(item):
+    """Rebuild Gagarin after every legacy/finalization layer and make it authoritative."""
+    if not item.get("available"):
+        return
+    a = item.get("analysis") or {}
+    candles = item.get("candles") or []
+    timeframes = a.get("timeframes") or {}
+    intraday = a.get("intraday_candles") or []
+    dq = gagarin_data_quality(item.get("name", a.get("commodity_name", "N/D")), candles, timeframes, intraday)
+    live_status = a.get("live_price_status", "NOT_CHECKED")
+    if GAGARIN_REQUIRE_LIVE_FOR_ENTRY and live_status != "LIVE":
+        dq.setdefault("issues", []).append("LIVE_PRICE_NOT_FRESH")
+        dq["state"] = "DEGRADED"
+        dq["quality"] = min(float(dq.get("quality", 100.0)), 50.0)
+    regime = gagarin_regime_engine(a, candles)
+    structure = gagarin_structure_engine(a)
+    location = gagarin_location_engine(a)
+    router = gagarin_strategy_router(regime, structure)
+    setup = gagarin_setup_engine(a, router)
+    trigger = gagarin_trigger_engine(a)
+    risk = gagarin_risk_engine(a)
+    safety = gagarin_safety_engine(a, dq, regime, setup, trigger, risk)
+    policy = gagarin_entry_policy(a, setup, trigger, risk, safety)
+    # Absolute final authority: legacy signal can never override Gagarin.
+    legacy_signal = a.get("signal")
+    a["legacy_signal_shadow"] = legacy_signal
+    if policy["state"] == "READY_LONG":
+        a["signal"] = "LONG"
+    elif policy["state"] == "READY_SHORT":
+        a["signal"] = "SHORT"
+    else:
+        a["signal"] = "WAIT"
+        a["action_label"] = "ATTENDERE"
+        a["strong_confirmation"] = False
+    a["gagarin"] = {
+        "architecture_version": GAGARIN_ARCHITECTURE_VERSION,
+        "data_quality": dq, "regime": regime, "structure": structure,
+        "location": location, "strategy_router": router, "setup": setup,
+        "trigger": trigger, "risk": risk, "safety": safety, "entry_policy": policy,
+    }
+    a["gagarin_state"] = policy["state"]
+    a["gagarin_blockers"] = policy.get("blockers", [])
+    a["gagarin_authority"] = True
+    a["operational_entry_allowed"] = policy["state"] in ("READY_LONG", "READY_SHORT")
+
+
+
+def gagarin_position_management(position, analysis, current_price):
+    """Gagarin position-management decision for an already-open paper position.
+
+    This is deliberately different from the entry policy: an existing position
+    is not required to satisfy the fresh-entry thresholds again.  The question
+    is whether the original thesis is still valid, invalidated, or needs risk
+    protection.
+    """
+    if not position or not analysis or current_price is None:
+        return {"action": "HOLD", "status": "HOLD", "reason": "DATI INSUFFICIENTI PER UNA NUOVA DECISIONE"}
+
+    direction = str(position.get("direction", "WAIT")).upper()
+    opposite = "SHORT" if direction == "LONG" else "LONG"
+    g = analysis.get("gagarin", {}) or {}
+    regime = (g.get("regime") or {}).get("state", "UNKNOWN")
+    structure = g.get("structure") or {}
+    setup = g.get("setup") or {}
+    trigger = g.get("trigger") or {}
+    dq = g.get("data_quality") or {}
+
+    blockers = []
+    if dq.get("state") == "DEGRADED":
+        # Data degradation alone does not force an exit; it prevents a new
+        # thesis from being declared and keeps the position under observation.
+        blockers.extend(dq.get("issues", [])[:4])
+
+    if regime == "SHOCK":
+        return {
+            "action": "HOLD_PROTECT", "status": "HOLD_PROTECT",
+            "reason": "REGIME SHOCK — NON CHIUDERE AUTOMATICAMENTE, PROTEGGERE IL RISCHIO",
+            "blockers": ["REGIME_SHOCK"],
+        }
+
+    structural_direction = structure.get("direction", "NONE")
+    aligned = int(structure.get("aligned", 0) or 0)
+    conflicts = int(structure.get("conflicts", 0) or 0)
+    reversal_stage = str((analysis.get("reversal") or {}).get("stage", "")).upper()
+    opposite_signal = str(analysis.get("signal", "WAIT")).upper() == opposite
+
+    # Absolute invalidation: confirmed reversal against the held direction.
+    if reversal_stage == "CONFIRMED" and opposite_signal:
+        return {
+            "action": "EXIT", "status": "EXIT",
+            "reason": "TESI INVALIDATA — INVERSIONE OPPOSTA CONFERMATA",
+            "blockers": ["REVERSAL_CONFIRMED"],
+        }
+
+    # Structural invalidation is stronger than a temporary weak trigger.
+    if structural_direction == opposite and aligned >= 2 and conflicts >= 2:
+        return {
+            "action": "EXIT", "status": "EXIT",
+            "reason": f"STRUTTURA MTF CONTRO {direction} — TESI INVALIDATA",
+            "blockers": ["STRUCTURE_OPPOSITE"],
+        }
+
+    # If the setup has disappeared but higher-timeframe structure is still on
+    # our side, keep the position rather than forcing an exit.
+    if structural_direction == direction and aligned >= 1 and conflicts <= 1:
+        return {
+            "action": "HOLD", "status": "HOLD",
+            "reason": f"NON CHIUDERE — TESI {direction} ANCORA VALIDA",
+            "details": {
+                "regime": regime,
+                "aligned_htf": aligned,
+                "conflicts": conflicts,
+                "setup": setup.get("type", "N/D"),
+                "trigger_confirmed": bool(trigger.get("confirmed")),
+            },
+        }
+
+    # Transition/range with no confirmed opposite signal is a caution state,
+    # not an automatic exit.
+    return {
+        "action": "HOLD_PROTECT", "status": "HOLD_PROTECT",
+        "reason": f"MANTENERE CON ATTENZIONE — TESI {direction} NON INVALIDATA",
+        "details": {
+            "regime": regime,
+            "aligned_htf": aligned,
+            "conflicts": conflicts,
+            "setup": setup.get("type", "N/D"),
+            "trigger_confirmed": bool(trigger.get("confirmed")),
+        },
+        "blockers": blockers,
+    }
+
 def soyuz_gagarin_pipeline(name, symbol, usd, global_intel, trading_knowledge):
     """Single commodity orchestration pipeline for Soyuz v5.2 Gagarin."""
     candles = get_daily_data(symbol)
@@ -8050,7 +8194,7 @@ def soyuz_gagarin_pipeline(name, symbol, usd, global_intel, trading_knowledge):
                        trading_knowledge=trading_knowledge)
     if analysis is None:
         raise RuntimeError("Analisi quantitativa non disponibile")
-    analysis.update({"symbol": symbol, "pattern_timeframes": pattern_timeframes or {}, "source_check": source_check or {}, "commodity_name": name})
+    analysis.update({"symbol": symbol, "pattern_timeframes": pattern_timeframes or {}, "source_check": source_check or {}, "commodity_name": name, "timeframes": timeframes, "intraday_candles": intraday_candles})
     weather = weather_intelligence(name)
     disasters = natural_disaster_intelligence(name)
     apply_weather_and_disaster_layers(analysis, weather, disasters)
@@ -8279,7 +8423,7 @@ def main():
     print(f"\n🔬 DIAGNOSTICA ENTRY v{BOT_VERSION}")
     for _it in _diag[:5]:
         _a=_it["analysis"]; _t=_a.get("entry_trigger",{}) or {}; _r=_a.get("risk",{}) or {}; _l=_a.get("level_to_level",{}) or {}
-        print(f"   {_it['name']}: {_a.get('setup_direction')} | score={_a.get('score',0):.1f} q={_a.get('quality',0):.1f} conf={_a.get('confidence',0):.1f} prob={_a.get('entry_probability',0):.1f}% | L2L={_l.get('score',0):.1f} {_l.get('behaviour','-')} gate={_l.get('gate')} | MTF={_a.get('structural_same',0)} | fast_opp={_a.get('fast_conflicts',0)} | risk={_r.get('mode')} mq={_r.get('market_quality',0):.1f} rb={safe_float(_a.get('risk_benefit',{}).get('score'),0) or 0:.1f} | trigger={_t.get('kind')} {_t.get('timeframe','-')} {_t.get('score',0):.1f} confirmed={_t.get('confirmed')} | state={_a.get('entry_state')} | regime={(_a.get('market_regime',{}) or {}).get('state','N/D')} | blockers={','.join(_a.get('entry_blockers',[])) or 'NESSUNO'} | warnings={','.join(_a.get('entry_warnings',[])) or 'NESSUNO'}")
+        print(f"   {_it['name']}: {_a.get('setup_direction')} | score={_a.get('score',0):.1f} q={_a.get('quality',0):.1f} conf={_a.get('confidence',0):.1f} prob={_a.get('entry_probability',0):.1f}% | L2L={_l.get('score',0):.1f} {_l.get('behaviour','-')} gate={_l.get('gate')} | MTF={_a.get('structural_same',0)} | fast_opp={_a.get('fast_conflicts',0)} | risk={_r.get('mode')} mq={_r.get('market_quality',0):.1f} rb={safe_float(_a.get('risk_benefit',{}).get('score'),0) or 0:.1f} | trigger={_t.get('kind')} {_t.get('timeframe','-')} {_t.get('score',0):.1f} confirmed={_t.get('confirmed')} | state={_a.get('entry_state')} | GAGARIN={_a.get('gagarin_state','N/D')} | regime={(_a.get('market_regime',{}) or {}).get('state','N/D')} | blockers={','.join(_a.get('gagarin_blockers',[]) or _a.get('entry_blockers',[])) or 'NESSUNO'} | warnings={','.join(_a.get('entry_warnings',[])) or 'NESSUNO'}")
 
     new_predictions, _prediction_log = record_predictions(results)
     print(f"📝 Prediction Journal: {new_predictions} nuove previsioni registrate")
@@ -8303,27 +8447,38 @@ def main():
         )
 
     # ========================================================
-    # RANKING
+    # FINAL GAGARIN AUTHORITY + DUAL RANKING
     # ========================================================
+    # Re-run the architecture after ALL legacy/finalization/live layers.
+    # This closes the previous failure where RBOB could be LONG 99 while
+    # Gagarin simultaneously reported SHOCK/NO_SETUP/BLOCKED.
+    for item in results:
+        gagarin_apply_final_authority(item)
 
-    # Ranking finale: non basta il segnale; privilegiamo opportunità, rischio e R/R.
+    # MARKET RANKING = analytical opportunity, regardless of entry permission.
     for item in results:
         if item.get("available"):
-            rb = item["analysis"].get("risk_benefit", {})
-            base_rb = safe_float(rb.get("score"), item["analysis"].get("score", 0)) or 0
-            q = safe_float(item["analysis"].get("quality"), 0) or 0
-            conf = safe_float(item["analysis"].get("confidence"), 0) or 0
-            # Ranking coerente: opportunità + qualità + confidenza, senza
-            # permettere a una sola metrica di dominare.
-            item["ranking_score"] = clamp(base_rb * 0.60 + q * 0.25 + conf * 0.15 + safe_float(item["analysis"].get("early_alignment_bonus"), 0), 0, 100)
+            a = item["analysis"]
+            rb = a.get("risk_benefit", {})
+            base_rb = safe_float(rb.get("score"), a.get("score", 0)) or 0
+            q = safe_float(a.get("quality"), 0) or 0
+            conf = safe_float(a.get("confidence"), 0) or 0
+            item["market_ranking_score"] = clamp(base_rb * 0.60 + q * 0.25 + conf * 0.15 + safe_float(a.get("early_alignment_bonus"), 0), 0, 100)
+            # OPERATIONAL RANKING = only setups that Gagarin explicitly permits.
+            item["ranking_score"] = item["market_ranking_score"] if a.get("operational_entry_allowed") else -1
         else:
+            item["market_ranking_score"] = -1
             item["ranking_score"] = -1
 
+    market_ranked = sorted(results, key=lambda x: x.get("market_ranking_score", -1), reverse=True)
     ranked = sorted(results, key=lambda x: x.get("ranking_score", -1), reverse=True)
-    available_ranked = [x for x in ranked if x.get("available") and x["analysis"]["score"] >= 0]
-    if not available_ranked:
+    available_ranked = [x for x in ranked if x.get("available") and x.get("analysis",{}).get("operational_entry_allowed")]
+    market_available_ranked = [x for x in market_ranked if x.get("available") and x.get("analysis",{}).get("score", -1) >= 0]
+    # If there is no executable setup, still report the best MARKET opportunity,
+    # but it is explicitly WAIT and can never open a position.
+    best = available_ranked[0] if available_ranked else (market_available_ranked[0] if market_available_ranked else None)
+    if best is None:
         raise RuntimeError("Nessuna commodity dispone di dati sufficienti per il Gold Engine. Controllare simboli/API quota.")
-    best = available_ranked[0]
 
     demo_execution = demo_execution_adapter(results, position)
     print(f"🤖 Demo adapter: {demo_execution.get('reason', 'ordine registrato')}" if not demo_execution.get('executed') else f"🤖 DEMO ORDER: {demo_execution['order']['commodity']} {demo_execution['order']['side']}")
@@ -8344,11 +8499,28 @@ def main():
             current = matching[0]
             current_price = current["analysis"]["price"]
 
+            # Existing-position thesis check is separate from fresh-entry policy.
+            gagarin_management = gagarin_position_management(
+                position, current["analysis"], current_price
+            )
             management = manage_position(
                 position,
                 current["analysis"],
                 current_price,
             )
+            # Gagarin has final authority for thesis invalidation. Mechanical
+            # SL/TP handling from manage_position remains active underneath it.
+            if gagarin_management.get("action") == "EXIT":
+                management = {
+                    "action": "EXIT",
+                    "reason": gagarin_management.get("reason", "GAGARIN EXIT"),
+                    "new_stop": position.get("stop"),
+                }
+            elif management.get("action") == "HOLD":
+                management["gagarin_status"] = gagarin_management.get("status", "HOLD")
+                management["gagarin_reason"] = gagarin_management.get("reason", "NON CHIUDERE")
+                if gagarin_management.get("action") == "HOLD_PROTECT":
+                    management["action"] = "HOLD_PROTECT"
 
             if management["action"] == "EXIT":
                 position_message = (
@@ -8367,10 +8539,17 @@ def main():
                     position["tp2_reached"] = True
                 save_position(position)
 
-                icon = "🟡" if management["action"] == "MOVE_STOP" else "🟢"
+                if management["action"] == "MOVE_STOP":
+                    icon = "🟡"
+                    headline = management["reason"]
+                elif management["action"] == "HOLD_PROTECT":
+                    icon = "🟠"
+                    headline = management.get("gagarin_reason", management["reason"])
+                else:
+                    icon = "🟢"
+                    headline = management.get("gagarin_reason", "NON CHIUDERE")
                 position_message = (
-                    f"{icon} POSIZIONE {position['direction']} — "
-                    f"{management['reason']}\n"
+                    f"{icon} POSIZIONE {position['direction']} — {headline}\n"
                     f"STOP ATTUALE: {position['stop']:.4f}"
                 )
 
@@ -8378,7 +8557,7 @@ def main():
     # NUOVA POSIZIONE
     # ========================================================
 
-    if not position and best["analysis"]["signal"] in ("LONG", "SHORT"):
+    if not position and best["analysis"].get("operational_entry_allowed") and best["analysis"]["signal"] in ("LONG", "SHORT"):
         second_score = available_ranked[1].get("ranking_score", available_ranked[1]["analysis"]["score"]) if len(available_ranked) > 1 else 0
         a = best["analysis"]
 
@@ -8449,7 +8628,8 @@ def main():
     final_prob = final_prob * 100 if final_prob <= 1.5 else final_prob
     print(f"Segnale modello quantitativo: {a['model_signal']}")
     print(f"Direzione finale setup: {final_direction}")
-    print(f"Segnale operativo: {a['signal']}")
+    print(f"Segnale operativo GAGARIN: {a['signal']} | authority={a.get('gagarin_authority', False)} | legacy-shadow={a.get('legacy_signal_shadow', 'N/D')}")
+    print(f"Market ranking: {best.get('market_ranking_score', -1):.1f} | Operational ranking: {best.get('ranking_score', -1):.1f}")
     print(f"Score: {a['score']:.1f}/100")
     print(f"Probabilità modello: {model_prob:.1f}%")
     print(f"Probabilità direzione finale: {final_prob:.1f}%")
