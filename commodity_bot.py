@@ -62,7 +62,7 @@ KNOWLEDGE_DELTA_CAP = float(os.getenv("KNOWLEDGE_DELTA_CAP", "4.0"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "5.2-GAGARIN-EXPANDED"
+BOT_VERSION = "5.2-GAGARIN-EXPANDED-FINAL"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -5474,6 +5474,8 @@ def _telegram_commodity_detail(item):
     if not item:
         return "⚪ Commodity non trovata. Scrivi HELP."
     a = item.get("analysis", {}) or {}
+    a = gagarin_finalize_consistent_snapshot(a)
+    plan_label = gagarin_plan_label(a)
     name = item.get("name", "N/D")
     direction = a.get("final_direction") or a.get("setup_direction") or a.get("model_signal") or "N/D"
     action = str(a.get("action_label", "ATTENDERE"))
@@ -5507,7 +5509,7 @@ def _telegram_commodity_detail(item):
         f"📊 Score {score:.0f} | Prob {prob:.0f}% | Qualità {quality:.0f} | Conf {conf:.0f}",
     ]
     if entry > 0:
-        lines += ["", "📐 {gagarin_plan_label(analysis)}", f"📍 Entry: {_fmt_price(entry)}"]
+        lines += ["", f"📐 {plan_label}", f"📍 Entry: {_fmt_price(entry)}"]
         if stop > 0: lines.append(f"🛑 SL: {_fmt_price(stop)}")
         if tp1 > 0: lines.append(f"🎯 TP1: {_fmt_price(tp1)}")
         if tp2 > 0: lines.append(f"🎯 TP2: {_fmt_price(tp2)}")
@@ -5654,7 +5656,7 @@ def _telegram_weekly(ranked):
         f"📉 Trend 20 sessioni: {best['trend20']:+.2f}%",
         f"🔄 Ciclo settimanale: {best['cyc_quality']:.0f}/100",
         "",
-        "📐 {gagarin_plan_label(analysis)} SETTIMANALE — SCENARIO",
+        "📐 {plan_label} SETTIMANALE — SCENARIO",
         f"💰 Prezzo/Entry scenario: {_fmt_price(best['entry'])}",
         f"🛑 SL: {_fmt_price(best['stop'])}",
         f"🎯 TP1: {_fmt_price(best['tp1'])} | R/R 1:1.5",
@@ -8307,6 +8309,7 @@ def soyuz_gagarin_pipeline(name, symbol, usd, global_intel, trading_knowledge):
     analysis["gagarin_blockers"] = policy.get("blockers", [])
     # The legacy signal remains available for diagnostics; Gagarin is the
     # authoritative architecture state once all later finalization layers run.
+    analysis = gagarin_finalize_consistent_snapshot(analysis)
     return {"candles": candles, "analysis": analysis, "backtest": bt, "source_check": source_check}
 
 # ============================================================
@@ -8330,6 +8333,115 @@ def gagarin_plan_label(analysis):
     except Exception:
         pass
     return "PIANO POTENZIALE — NON ENTRARE"
+
+
+# ============================================================
+# SOYUZ GAGARIN FINAL CONSISTENCY / TELEGRAM RENDERING
+# ============================================================
+
+def gagarin_finalize_consistent_snapshot(analysis):
+    """Create one authoritative, coherent Gagarin snapshot for display and gating."""
+    if not isinstance(analysis, dict):
+        return analysis
+
+    g = analysis.get("gagarin")
+    if not isinstance(g, dict):
+        g = {}
+        analysis["gagarin"] = g
+
+    # Recover the last concrete values before any generic fallback can overwrite them.
+    regime_candidates = [
+        g.get("regime"),
+        analysis.get("gagarin_regime"),
+        analysis.get("regime"),
+    ]
+    setup_candidates = [
+        g.get("setup"),
+        analysis.get("gagarin_setup"),
+    ]
+
+    def concrete(value, invalid=("UNKNOWN", "NONE", "N/A", "NULL", "")):
+        if value is None:
+            return None
+        s = str(value).strip()
+        return None if s.upper() in invalid else value
+
+    regime = next((concrete(v) for v in regime_candidates if concrete(v) is not None), None)
+    setup = next((concrete(v) for v in setup_candidates if concrete(v) is not None), None)
+
+    # Preserve explicit trigger information, but never treat it as authorization.
+    trigger = g.get("trigger")
+    if trigger is None:
+        trigger = analysis.get("gagarin_trigger")
+    if trigger is not None:
+        trigger = bool(trigger)
+
+    # Prefer explicit final state; otherwise derive a safe state.
+    state = str(
+        g.get("state")
+        or analysis.get("gagarin_state")
+        or analysis.get("state")
+        or "WAIT"
+    ).upper()
+
+    blockers = g.get("blockers")
+    if not isinstance(blockers, list):
+        blockers = list(analysis.get("gagarin_blockers") or [])
+    blockers = [str(x) for x in blockers if x]
+
+    if regime is not None:
+        blockers = [x for x in blockers if x != "REGIME_UNKNOWN"]
+    if setup is not None:
+        blockers = [x for x in blockers if x != "NO_SETUP"]
+
+    # Operational authorization remains a separate boolean.
+    allowed = bool(analysis.get("operational_entry_allowed") or g.get("operational_entry_allowed"))
+
+    # Safety/threshold blockers always prevent an unauthorized READY state.
+    if not allowed and state in {"READY", "ENTRY_CONFIRMED", "ENTRY_AUTHORIZED"}:
+        state = "BLOCKED"
+
+    g["regime"] = regime or "UNKNOWN"
+    g["setup"] = setup or "NONE"
+    g["trigger"] = trigger
+    g["state"] = state
+    g["blockers"] = blockers
+    g["operational_entry_allowed"] = allowed
+
+    analysis["gagarin"] = g
+    analysis["gagarin_state"] = state
+    analysis["gagarin_blockers"] = blockers
+    analysis["operational_entry_allowed"] = allowed
+
+    return analysis
+
+
+def gagarin_plan_label(analysis):
+    """Render only a resolved user-facing plan label."""
+    try:
+        a = gagarin_finalize_consistent_snapshot(analysis)
+        g = a.get("gagarin", {})
+        allowed = bool(a.get("operational_entry_allowed"))
+        state = str(g.get("state", "")).upper()
+        if allowed and state in {"READY", "ENTRY_CONFIRMED", "ENTRY_AUTHORIZED"}:
+            return "PIANO OPERATIVO — ENTRATA AUTORIZZATA"
+    except Exception:
+        pass
+    return "PIANO POTENZIALE — NON ENTRARE"
+
+
+def gagarin_display_snapshot(analysis):
+    """Return a display-safe snapshot with no contradictory UNKNOWN/NONE overwrite."""
+    a = gagarin_finalize_consistent_snapshot(analysis)
+    g = a.get("gagarin", {})
+    return {
+        "regime": g.get("regime", "UNKNOWN"),
+        "setup": g.get("setup", "NONE"),
+        "trigger": g.get("trigger"),
+        "state": g.get("state", "WAIT"),
+        "blockers": list(g.get("blockers") or []),
+        "operational_entry_allowed": bool(g.get("operational_entry_allowed")),
+    }
 
 # MAIN
 # ============================================================
