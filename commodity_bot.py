@@ -48,7 +48,7 @@ EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "21"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "4.11"
+BOT_VERSION = "4.12"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -220,7 +220,7 @@ def evaluate_entry_policy(
 
     if direction not in ("LONG", "SHORT"):
         return {
-            "policy_version": "4.10",
+            "policy_version": "4.12",
             "bias": "NEUTRAL",
             "bias_strength": "NONE",
             "entry_status": "NO_ENTRY",
@@ -301,7 +301,7 @@ def evaluate_entry_policy(
 
     if blockers:
         return {
-            "policy_version": "4.10",
+            "policy_version": "4.12",
             "bias": direction,
             "bias_strength": bias_strength,
             "entry_status": "NO_ENTRY",
@@ -334,7 +334,7 @@ def evaluate_entry_policy(
 
     if clean_entry:
         return {
-            "policy_version": "4.10",
+            "policy_version": "4.12",
             "bias": direction,
             "bias_strength": bias_strength,
             "entry_status": "ENTRY_CONFIRMED",
@@ -356,7 +356,7 @@ def evaluate_entry_policy(
 
     # Nessun hard blocker, ma manca una conferma di confluenza.
     return {
-        "policy_version": "4.10",
+        "policy_version": "4.12",
         "bias": direction,
         "bias_strength": bias_strength,
         "entry_status": "WAIT_CONFIRMATION",
@@ -4753,6 +4753,23 @@ def smart_entry_engine(analysis):
     analysis["strong_confirmation"] = bool(state == "ENTRY_CONFIRMED")
     analysis["entry_probability"] = round(prob, 2)
     analysis["entry_policy"] = entry_policy
+    # v4.12: explicit separation between directional BIAS/SETUP and entry permission.
+    _risk_mode = str((analysis.get("risk", {}) or {}).get("mode", "")).upper()
+    _safety = (
+        _risk_mode in ("SHOCK", "ALERT")
+        or (analysis.get("reversal", {}) or {}).get("stage") == "CONFIRMED"
+    )
+    if d in ("LONG", "SHORT"):
+        if _safety:
+            analysis["setup_status"] = "SETUP_ACTIVE_ENTRY_BLOCKED"
+        elif entry_policy.get("entry_status") == "ENTRY_CONFIRMED":
+            analysis["setup_status"] = "ENTRY_CONFIRMED"
+        elif entry_policy.get("entry_status") == "WAIT_CONFIRMATION":
+            analysis["setup_status"] = "SETUP_ACTIVE_WAIT_CONFIRMATION"
+        else:
+            analysis["setup_status"] = "SETUP_BLOCKED"
+    else:
+        analysis["setup_status"] = "NO_SETUP"
     analysis["intraday_score"] = round(intraday, 1)
     analysis["intraday_core"] = {
         "trend": d,
@@ -5343,6 +5360,38 @@ def _telegram_find_commodity(ranked, query):
     return partial[0] if partial else None
 
 
+def _telegram_entry_status(a):
+    """v4.12: separate directional setup from actual entry authorization."""
+    direction = a.get("final_direction") or a.get("setup_direction") or a.get("model_signal") or "N/D"
+    policy = a.get("entry_policy", {}) or {}
+    status = str(policy.get("entry_status", "")).upper()
+    risk = a.get("risk", {}) or {}
+    reversal = a.get("reversal", {}) or {}
+    se = a.get("signal_engine_v42", {}) or {}
+
+    safety = (
+        risk.get("mode") in ("SHOCK", "ALERT")
+        or reversal.get("stage") == "CONFIRMED"
+        or "SAFETY BLOCK" in [str(x).upper() for x in (a.get("entry_blockers") or [])]
+        or "SAFETY BLOCK" in [str(x).upper() for x in (se.get("blockers") or [])]
+    )
+
+    if direction not in ("LONG", "SHORT"):
+        return "⚪ NO SETUP", "NEUTRAL", "NO_SETUP"
+
+    if status == "ENTRY_CONFIRMED" and not safety:
+        return f"🟢 {direction} — 🟢 ENTRATA CONFERMATA", "ENTRY", status
+
+    if safety:
+        # The direction remains visible, but the safety layer has absolute authority.
+        return f"🟠 {direction} — 🛑 SETUP ATTIVO, ENTRATA BLOCCATA", "BLOCKED", "SAFETY_BLOCK"
+
+    if status == "WAIT_CONFIRMATION":
+        return f"🟡 {direction} — ⏳ SETUP ATTIVO, ASPETTARE CONFERMA", "WAIT", status
+
+    return f"⚪ {direction} — 🔴 NON ENTRARE", "BLOCKED", status or "NO_ENTRY"
+
+
 def _telegram_commodity_detail(item):
     """Build a single-commodity Telegram report with operational SL/TP levels."""
     if not item:
@@ -5375,18 +5424,22 @@ def _telegram_commodity_detail(item):
     rr3 = safe_float(se.get("rr_tp3"), 0) or 0
 
     icon = "🟢" if direction == "LONG" else "🔴" if direction == "SHORT" else "⚪"
-    action_icon = "🟢" if action in ("ENTRARE", "ENTRATA POSSIBILE") else "🔴" if action == "NON ENTRARE" else "🟡"
+    status_text, status_kind, status_code = _telegram_entry_status(a)
 
+    # v4.12: make the hierarchy explicit: BIAS -> SETUP -> TRIGGER -> ENTRY.
+    # This prevents a strong directional setup from being confused with an authorized entry.
+    setup_strength = str((a.get("entry_policy", {}) or {}).get("bias_strength", "N/D")).upper()
     lines = [
         f"🌍 COMMODITIES BOT v{BOT_VERSION}",
         "",
         f"📌 {name}",
-        f"{icon} {direction} — {action_icon} {action}",
+        f"🧭 BIAS: {direction} | Forza: {setup_strength}",
+        status_text,
         "",
         f"💰 Prezzo: {_fmt_price(a.get('price'))}",
         f"📊 Score: {score:.1f}/100 | Prob: {prob:.1f}%",
         f"🎯 Qualità: {quality:.1f} | Confidenza: {conf:.1f}",
-        f"🧠 Intel v4.1: {intel_score:.0f} | Regime: {regime}",
+        f"🧠 Intel v4.1: {intel_score:.0f} | Regime: {(regime.get("state", "N/D") if isinstance(regime, dict) else regime)}",
     ]
 
     if se.get("available"):
@@ -5414,16 +5467,43 @@ def _telegram_commodity_detail(item):
     if trigger.get("kind"):
         lines.append(f"🔥 Trigger: {trigger.get('kind')} {trigger.get('timeframe','')}")
 
-    blockers = list(a.get("entry_blockers") or [])
-    blockers += list(se.get("blockers") or [])
-    # Deduplicate while preserving order.
-    blockers = list(dict.fromkeys(str(x) for x in blockers if x))
-    if blockers:
-        lines.append("⏳ Blocco: " + " | ".join(blockers[:4]))
+    # v4.12: show the reason for the current state without mixing diagnostic
+    # confluence checks with the authoritative safety/entry policy.
+    policy = a.get("entry_policy", {}) or {}
+    policy_blockers = [str(x) for x in (policy.get("blockers") or []) if x]
+    policy_warnings = [str(x) for x in (policy.get("warnings") or []) if x]
 
-    warnings = a.get("entry_warnings") or []
+    safety_reasons = []
+    risk_mode = str((a.get("risk", {}) or {}).get("mode", "")).upper()
+    if risk_mode in ("SHOCK", "ALERT"):
+        safety_reasons.append(f"RISCHIO {risk_mode}")
+    if (a.get("reversal", {}) or {}).get("stage") == "CONFIRMED":
+        safety_reasons.append("INVERSIONE CONFERMATA")
+
+    if status_kind == "BLOCKED" and safety_reasons:
+        lines.append("🛑 BLOCCO SICUREZZA: " + " | ".join(safety_reasons[:3]))
+    elif policy_blockers:
+        lines.append("⏳ ENTRY NON AUTORIZZATA: " + " | ".join(policy_blockers[:4]))
+    elif status_kind == "WAIT":
+        lines.append("⏳ ENTRY IN ATTESA: manca una conferma di confluenza.")
+
+    # v4.12: expose the actionable missing conditions instead of the opaque
+    # legacy aggregate "CONFLUENZA INCOMPLETA".
+    diagnostic_missing = []
+    if not bool((a.get("l2l", {}) or {}).get("gate", False)):
+        diagnostic_missing.append("L2L")
+    if quality < QUALITY_ENTRY_MIN:
+        diagnostic_missing.append("QUALITÀ")
+    if conf < CONFIDENCE_ENTRY_MIN:
+        diagnostic_missing.append("CONFIDENZA")
+    if diagnostic_missing and not safety_reasons:
+        lines.append("📌 Da confermare: " + ", ".join(diagnostic_missing))
+
+    # The legacy engine can still contain detailed diagnostics, but v4.12 does
+    # not expose its aggregate 'CONFLUENZA INCOMPLETA' as the primary reason.
+    warnings = policy_warnings or list(a.get("entry_warnings") or [])
     if warnings:
-        lines.append("ℹ️ " + " | ".join(map(str, warnings[:2])))
+        lines.append("ℹ️ " + " | ".join(map(str, warnings[:3])))
 
     lines += ["", "🧪 PAPER ONLY — nessun ordine reale."]
     return "\n".join(lines)
