@@ -48,7 +48,7 @@ EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "21"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "4.12"
+BOT_VERSION = "4.13"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -220,7 +220,7 @@ def evaluate_entry_policy(
 
     if direction not in ("LONG", "SHORT"):
         return {
-            "policy_version": "4.12",
+            "policy_version": "4.13",
             "bias": "NEUTRAL",
             "bias_strength": "NONE",
             "entry_status": "NO_ENTRY",
@@ -301,7 +301,7 @@ def evaluate_entry_policy(
 
     if blockers:
         return {
-            "policy_version": "4.12",
+            "policy_version": "4.13",
             "bias": direction,
             "bias_strength": bias_strength,
             "entry_status": "NO_ENTRY",
@@ -334,7 +334,7 @@ def evaluate_entry_policy(
 
     if clean_entry:
         return {
-            "policy_version": "4.12",
+            "policy_version": "4.13",
             "bias": direction,
             "bias_strength": bias_strength,
             "entry_status": "ENTRY_CONFIRMED",
@@ -356,7 +356,7 @@ def evaluate_entry_policy(
 
     # Nessun hard blocker, ma manca una conferma di confluenza.
     return {
-        "policy_version": "4.12",
+        "policy_version": "4.13",
         "bias": direction,
         "bias_strength": bias_strength,
         "entry_status": "WAIT_CONFIRMATION",
@@ -5404,8 +5404,12 @@ def _telegram_commodity_detail(item):
     score = safe_float(a.get("score"), 0) or 0
     prob_raw = safe_float(a.get("entry_probability", a.get("probability", 0)), 0) or 0
     prob = prob_raw * 100 if prob_raw <= 1.5 else prob_raw
-    conf = safe_float(a.get("confidence"), 0) or 0
-    quality = safe_float(a.get("entry_quality", a.get("quality", 0)), 0) or 0
+    # v4.13: Entry Policy is the single source of truth for entry diagnostics.
+    # This prevents Telegram from showing a different quality/confidence than
+    # the values actually used by the final entry gate.
+    policy = a.get("entry_policy", {}) or {}
+    conf = safe_float(policy.get("confidence"), safe_float(a.get("confidence"), 0)) or 0
+    quality = safe_float(policy.get("quality"), safe_float(a.get("entry_quality", a.get("quality", 0)), 0)) or 0
     intel = a.get("market_intelligence_v41", {}) or {}
     intel_score = safe_float(intel.get("score"), 50) or 50
     regime = (intel.get("regime") or a.get("market_regime") or "N/D")
@@ -5467,9 +5471,9 @@ def _telegram_commodity_detail(item):
     if trigger.get("kind"):
         lines.append(f"🔥 Trigger: {trigger.get('kind')} {trigger.get('timeframe','')}")
 
-    # v4.12: show the reason for the current state without mixing diagnostic
+    # v4.13: show the reason for the current state without mixing diagnostic
     # confluence checks with the authoritative safety/entry policy.
-    policy = a.get("entry_policy", {}) or {}
+    # `policy` was already loaded above and remains the authoritative source.
     policy_blockers = [str(x) for x in (policy.get("blockers") or []) if x]
     policy_warnings = [str(x) for x in (policy.get("warnings") or []) if x]
 
@@ -5490,16 +5494,24 @@ def _telegram_commodity_detail(item):
     # v4.12: expose the actionable missing conditions instead of the opaque
     # legacy aggregate "CONFLUENZA INCOMPLETA".
     diagnostic_missing = []
-    if not bool((a.get("l2l", {}) or {}).get("gate", False)):
-        diagnostic_missing.append("L2L")
+    l2l_score = safe_float(policy.get("l2l_score"), safe_float(se.get("level_to_level"), safe_float((a.get("level_to_level", {}) or {}).get("score"), 50))) or 50
+    l2l_state = str(policy.get("l2l_state", "")).upper()
+    l2l_ok = l2l_state == "CONFIRMED" or l2l_score >= L2L_CONFIRMED
+    if not l2l_ok:
+        diagnostic_missing.append(f"L2L ≥ {L2L_CONFIRMED:.0f} (ora {l2l_score:.1f})")
     if quality < QUALITY_ENTRY_MIN:
-        diagnostic_missing.append("QUALITÀ")
+        diagnostic_missing.append(f"QUALITÀ ≥ {QUALITY_ENTRY_MIN:.0f} (ora {quality:.1f})")
     if conf < CONFIDENCE_ENTRY_MIN:
-        diagnostic_missing.append("CONFIDENZA")
-    if diagnostic_missing and not safety_reasons:
-        lines.append("📌 Da confermare: " + ", ".join(diagnostic_missing))
+        diagnostic_missing.append(f"CONFIDENZA ≥ {CONFIDENCE_ENTRY_MIN:.0f} (ora {conf:.1f})")
 
-    # The legacy engine can still contain detailed diagnostics, but v4.12 does
+    # Show actionable technical conditions even when a safety block is active.
+    # Safety remains absolute: these conditions do NOT override the safety gate.
+    if diagnostic_missing:
+        lines.append("📌 Condizioni tecniche da completare: " + " | ".join(diagnostic_missing[:3]))
+    if safety_reasons:
+        lines.append("🔒 La Safety Policy resta prioritaria: nessun ingresso finché il blocco non rientra.")
+
+    # The legacy engine can still contain detailed diagnostics, but v4.13 does
     # not expose its aggregate 'CONFLUENZA INCOMPLETA' as the primary reason.
     warnings = policy_warnings or list(a.get("entry_warnings") or [])
     if warnings:
