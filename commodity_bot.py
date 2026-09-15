@@ -5507,7 +5507,7 @@ def _telegram_commodity_detail(item):
         f"📊 Score {score:.0f} | Prob {prob:.0f}% | Qualità {quality:.0f} | Conf {conf:.0f}",
     ]
     if entry > 0:
-        lines += ["", "📐 {GAGARIN_PLAN_LABEL}", f"📍 Entry: {_fmt_price(entry)}"]
+        lines += ["", "📐 {gagarin_plan_label(analysis)}", f"📍 Entry: {_fmt_price(entry)}"]
         if stop > 0: lines.append(f"🛑 SL: {_fmt_price(stop)}")
         if tp1 > 0: lines.append(f"🎯 TP1: {_fmt_price(tp1)}")
         if tp2 > 0: lines.append(f"🎯 TP2: {_fmt_price(tp2)}")
@@ -5654,7 +5654,7 @@ def _telegram_weekly(ranked):
         f"📉 Trend 20 sessioni: {best['trend20']:+.2f}%",
         f"🔄 Ciclo settimanale: {best['cyc_quality']:.0f}/100",
         "",
-        "📐 {GAGARIN_PLAN_LABEL} SETTIMANALE — SCENARIO",
+        "📐 {gagarin_plan_label(analysis)} SETTIMANALE — SCENARIO",
         f"💰 Prezzo/Entry scenario: {_fmt_price(best['entry'])}",
         f"🛑 SL: {_fmt_price(best['stop'])}",
         f"🎯 TP1: {_fmt_price(best['tp1'])} | R/R 1:1.5",
@@ -8041,6 +8041,65 @@ def gagarin_entry_policy(analysis, setup, trigger, risk, safety):
     return {"state": "READY_LONG" if d == "LONG" else "READY_SHORT", "decision": "ENTRARE",
             "direction": d, "probability": prob, "blockers": []}
 
+
+
+def gagarin_normalize_final_state(analysis):
+    """Keep one coherent final Gagarin snapshot; never overwrite valid values with UNKNOWN/NONE."""
+    try:
+        g = analysis.get("gagarin")
+        if not isinstance(g, dict):
+            g = {}
+            analysis["gagarin"] = g
+
+        # Accept both nested and legacy top-level representations.
+        regime = g.get("regime") or analysis.get("gagarin_regime")
+        setup = g.get("setup") or analysis.get("gagarin_setup")
+        trigger = g.get("trigger")
+        if trigger is None:
+            trigger = analysis.get("gagarin_trigger")
+
+        # Prefer an already computed, meaningful value.
+        if regime and str(regime).upper() not in {"UNKNOWN", "NONE", "N/A", "NULL"}:
+            g["regime"] = regime
+        elif analysis.get("regime") and str(analysis.get("regime")).upper() not in {"UNKNOWN", "NONE"}:
+            g["regime"] = analysis["regime"]
+
+        if setup and str(setup).upper() not in {"UNKNOWN", "NONE", "N/A", "NULL"}:
+            g["setup"] = setup
+
+        if trigger is not None:
+            g["trigger"] = bool(trigger)
+
+        # If the state is blocked/waiting, preserve the concrete blockers but
+        # don't invent UNKNOWN/NO_SETUP when a valid setup/regime exists.
+        blockers = g.get("blockers")
+        if not isinstance(blockers, list):
+            blockers = list(analysis.get("gagarin_blockers") or [])
+
+        regime_final = str(g.get("regime") or "").upper()
+        setup_final = str(g.get("setup") or "").upper()
+
+        blockers = [str(x) for x in blockers if x]
+        if regime_final not in {"", "UNKNOWN", "NONE"}:
+            blockers = [x for x in blockers if x != "REGIME_UNKNOWN"]
+        if setup_final not in {"", "UNKNOWN", "NONE"}:
+            blockers = [x for x in blockers if x != "NO_SETUP"]
+
+        g["blockers"] = blockers
+        analysis["gagarin"] = g
+        analysis["gagarin_blockers"] = blockers
+
+        # Keep the displayed state separate from fresh-entry eligibility.
+        # A present trigger never authorizes an entry by itself.
+        if not analysis.get("operational_entry_allowed"):
+            current_state = str(g.get("state") or analysis.get("gagarin_state") or "WAIT").upper()
+            if current_state in {"READY", "ENTRY_CONFIRMED", "ENTRY_AUTHORIZED"}:
+                g["state"] = "BLOCKED"
+                analysis["gagarin_state"] = "BLOCKED"
+
+        return analysis
+    except Exception:
+        return analysis
 
 def gagarin_apply_final_authority(item):
     """Rebuild Gagarin after every legacy/finalization layer and make it authoritative."""
