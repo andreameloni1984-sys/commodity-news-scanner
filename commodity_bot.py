@@ -4725,7 +4725,7 @@ def adaptive_risk_levels(analysis, candles, direction):
                   if price - x[0] >= min_stop_distance
                   and (price - x[0]) / atr_value <= MAX_ENTRY_STOP_ATR]
         if not viable:
-            return {"available": True, "engine_version": SLTP_ENGINE_VERSION,
+            return {"available": True, "valid": False, "engine_version": SLTP_ENGINE_VERSION,
                     "reason": "NO_STRUCTURAL_SL_WITHIN_MAX_ATR",
                     "sl_candidates": [{"price": _price_round(x[0]), "tf": x[1], "reason": x[2],
                                        "distance_atr": round(abs(price-x[0])/atr_value,3)}
@@ -4748,7 +4748,7 @@ def adaptive_risk_levels(analysis, candles, direction):
                   if x[0] - price >= min_stop_distance
                   and (x[0] - price) / atr_value <= MAX_ENTRY_STOP_ATR]
         if not viable:
-            return {"available": True, "engine_version": SLTP_ENGINE_VERSION,
+            return {"available": True, "valid": False, "engine_version": SLTP_ENGINE_VERSION,
                     "reason": "NO_STRUCTURAL_SL_WITHIN_MAX_ATR",
                     "sl_candidates": [{"price": _price_round(x[0]), "tf": x[1], "reason": x[2],
                                        "distance_atr": round(abs(price-x[0])/atr_value,3)}
@@ -4796,7 +4796,7 @@ def adaptive_risk_levels(analysis, candles, direction):
 
     if not grouped:
         return {
-            "available": True, "engine_version": SLTP_ENGINE_VERSION, "reason": "NO_STRUCTURAL_TP",
+            "available": True, "valid": False, "engine_version": SLTP_ENGINE_VERSION, "reason": "NO_STRUCTURAL_TP",
             "stop": stop, "structural_stop": _price_round(structural_stop),
             "technical_stop": _price_round(technical_stop), "execution_stop": stop,
             "risk_distance": round(risk_distance, 6), "stop_atr": round(stop_atr, 3),
@@ -8484,9 +8484,14 @@ def soyuz_gagarin_pipeline(name, symbol, usd, global_intel, trading_knowledge):
     level_to_level_engine(analysis, commodity_name=name, candles=candles, pattern_timeframes=pattern_timeframes)
     analysis["price_action"] = price_action_context_engine(analysis)
     adaptive_levels = adaptive_risk_levels(analysis, candles, analysis.get("setup_direction") or analysis.get("model_signal"))
-    if adaptive_levels.get("available"):
+    # SLTP 3.0 can be computationally available but intentionally unable to
+    # produce a valid structural stop/target plan. Never index missing keys and
+    # never fall back to the legacy synthetic levels in that case.
+    analysis["adaptive_risk"] = adaptive_levels
+    if adaptive_levels.get("available") and all(k in adaptive_levels for k in ("stop", "tp1", "tp2", "tp3")):
         analysis.update({k: adaptive_levels[k] for k in ("stop", "tp1", "tp2", "tp3")})
-        analysis["adaptive_risk"] = adaptive_levels
+    elif adaptive_levels.get("reason") == "NO_STRUCTURAL_SL_WITHIN_MAX_ATR":
+        analysis.update({"stop": None, "tp1": None, "tp2": None, "tp3": None})
     apply_futures_structure(analysis, futures_structure_engine(name))
     apply_market_intelligence_v41(analysis, name, news, political, global_intel)
     apply_sole24_context(analysis, name)
@@ -8816,14 +8821,16 @@ def main():
                     _item.get("candles") or [],
                     _direction,
                 )
-                if _adaptive_live.get("available"):
+                _a["adaptive_risk"] = _adaptive_live
+                if _adaptive_live.get("available") and all(k in _adaptive_live for k in ("stop", "tp1", "tp2", "tp3")):
                     _a.update({
                         "stop": _adaptive_live["stop"],
                         "tp1": _adaptive_live["tp1"],
                         "tp2": _adaptive_live["tp2"],
                         "tp3": _adaptive_live["tp3"],
                     })
-                    _a["adaptive_risk"] = _adaptive_live
+                elif _adaptive_live.get("reason") == "NO_STRUCTURAL_SL_WITHIN_MAX_ATR":
+                    _a.update({"stop": None, "tp1": None, "tp2": None, "tp3": None})
 
                 # Refresh dependent final metrics using the live entry.
                 finalize_v26_analysis(_a)
