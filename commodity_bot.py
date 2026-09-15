@@ -4715,6 +4715,7 @@ def adaptive_risk_levels(analysis, candles, direction):
     min_stop_distance = max(SL_MIN_ATR * atr_value, 2.0 * spread)
 
     sl_candidates = []
+    sl_structural_valid = True
     if direction == "LONG":
         for tf, arr in (("5m", t5), ("15m", t15), ("1H", t1h)):
             sl_candidates += [(v, tf, "PIVOT_LOW") for v in pivots(arr, "low") if v < price]
@@ -4725,11 +4726,16 @@ def adaptive_risk_levels(analysis, candles, direction):
                   if price - x[0] >= min_stop_distance
                   and (price - x[0]) / atr_value <= MAX_ENTRY_STOP_ATR]
         if not viable:
-            return {"available": True, "valid": False, "engine_version": SLTP_ENGINE_VERSION,
-                    "reason": "NO_STRUCTURAL_SL_WITHIN_MAX_ATR",
-                    "sl_candidates": [{"price": _price_round(x[0]), "tf": x[1], "reason": x[2],
-                                       "distance_atr": round(abs(price-x[0])/atr_value,3)}
-                                      for x in sl_candidates[-50:]]}
+            # Theoretical fallback only: keep SL visible for diagnostics/journaling.
+            # It can NEVER authorize an operational entry.
+            fallback_distance = min(max(SL_MIN_ATR * atr_value, 1.0 * atr_value), MAX_ENTRY_STOP_ATR * atr_value)
+            structural_stop, sl_tf, sl_reason = price - fallback_distance, "FALLBACK", "ATR_THEORETICAL_ONLY"
+            technical_stop = structural_stop
+            execution_stop = technical_stop - CFD_SPREAD_BUFFER_MULT * spread
+            stop = _price_round(execution_stop)
+            risk_distance = abs(price - stop)
+            stop_atr = risk_distance / atr_value if atr_value else 999.0
+            sl_structural_valid = False
         # Prefer the nearest valid structural invalidation. A small ATR band around
         # that level is considered the robust zone; we never optimize to a single
         # lucky historical value.
@@ -4748,11 +4754,16 @@ def adaptive_risk_levels(analysis, candles, direction):
                   if x[0] - price >= min_stop_distance
                   and (x[0] - price) / atr_value <= MAX_ENTRY_STOP_ATR]
         if not viable:
-            return {"available": True, "valid": False, "engine_version": SLTP_ENGINE_VERSION,
-                    "reason": "NO_STRUCTURAL_SL_WITHIN_MAX_ATR",
-                    "sl_candidates": [{"price": _price_round(x[0]), "tf": x[1], "reason": x[2],
-                                       "distance_atr": round(abs(price-x[0])/atr_value,3)}
-                                      for x in sl_candidates[-50:]]}
+            # Theoretical fallback only: keep SL visible for diagnostics/journaling.
+            # It can NEVER authorize an operational entry.
+            fallback_distance = min(max(SL_MIN_ATR * atr_value, 1.0 * atr_value), MAX_ENTRY_STOP_ATR * atr_value)
+            structural_stop, sl_tf, sl_reason = price + fallback_distance, "FALLBACK", "ATR_THEORETICAL_ONLY"
+            technical_stop = structural_stop
+            execution_stop = technical_stop + CFD_SPREAD_BUFFER_MULT * spread
+            stop = _price_round(execution_stop)
+            risk_distance = abs(price - stop)
+            stop_atr = risk_distance / atr_value if atr_value else 999.0
+            sl_structural_valid = False
         nearest_distance = min(x[0] - price for x in viable)
         robust_viable = [x for x in viable if (x[0] - price) <= nearest_distance + SL_ROBUSTNESS_BAND_ATR * atr_value]
         structural_stop, sl_tf, sl_reason = min(robust_viable, key=lambda x: x[0])
@@ -4795,14 +4806,23 @@ def adaptive_risk_levels(analysis, candles, direction):
         g["htf"] = any(tf in ("4H", "Daily") for tf in g["timeframes"])
 
     if not grouped:
+        # No structural TP exists. Expose a theoretical R-multiple ladder for
+        # diagnostics/journaling only; this does NOT make the setup tradable.
+        if direction == "LONG":
+            tp1, tp2, tp3 = price + 1.5 * risk_distance, price + 2.0 * risk_distance, price + 2.5 * risk_distance
+        else:
+            tp1, tp2, tp3 = price - 1.5 * risk_distance, price - 2.0 * risk_distance, price - 2.5 * risk_distance
         return {
-            "available": True, "valid": False, "engine_version": SLTP_ENGINE_VERSION, "reason": "NO_STRUCTURAL_TP",
-            "stop": stop, "structural_stop": _price_round(structural_stop),
-            "technical_stop": _price_round(technical_stop), "execution_stop": stop,
-            "risk_distance": round(risk_distance, 6), "stop_atr": round(stop_atr, 3),
+            "available": True, "valid": False, "engine_version": SLTP_ENGINE_VERSION,
+            "reason": "NO_STRUCTURAL_TP", "theoretical_only": True,
+            "stop": stop, "tp1": _price_round(tp1), "tp2": _price_round(tp2), "tp3": _price_round(tp3),
+            "structural_stop": _price_round(structural_stop), "technical_stop": _price_round(technical_stop),
+            "execution_stop": stop, "risk_distance": round(risk_distance, 6), "stop_atr": round(stop_atr, 3),
+            "sl_structural_valid": bool(sl_structural_valid),
             "sl_selected": {"price": _price_round(structural_stop), "tf": sl_tf, "reason": sl_reason},
             "sl_candidates": [{"price": _price_round(x[0]), "tf": x[1], "reason": x[2]} for x in sl_candidates[-50:]],
-            "tp_candidates": [], "rr_tp1": 0.0, "rr_tp2": 0.0, "rr_tp3": 0.0
+            "tp_candidates": [], "tp_method": "THEORETICAL_R_MULTIPLE_FALLBACK",
+            "rr_tp1": 1.5, "rr_tp2": 2.0, "rr_tp3": 2.5
         }
 
     tp1_obj = grouped[0]
@@ -4829,12 +4849,15 @@ def adaptive_risk_levels(analysis, candles, direction):
 
     return {
         "available": True, "engine_version": SLTP_ENGINE_VERSION,
+        "valid": bool(sl_structural_valid and ordering_ok),
+        "theoretical_only": bool(not sl_structural_valid),
         "method": "STRUCTURAL INVALIDATION + MICRO/SETUP/HTF + ATR BUFFER + CFD EXECUTION",
         "atr": round(atr_value, 6), "entry": _price_round(price),
         "stop": stop, "tp1": _price_round(tp1 or 0.0), "tp2": _price_round(tp2 or 0.0), "tp3": _price_round(tp3 or 0.0),
         "risk_distance": round(risk_distance, 6), "stop_atr": round(stop_atr, 3),
         "rr_tp1": round(rr1, 3), "rr_tp2": round(rr2, 3), "rr_tp3": round(rr3, 3),
         "structural_stop": _price_round(structural_stop), "technical_stop": _price_round(technical_stop),
+        "sl_structural_valid": bool(sl_structural_valid),
         "execution_stop": stop, "spread": round(spread, 8),
         "robustness_band_atr": round(SL_ROBUSTNESS_BAND_ATR, 3),
         "ema_references": [{"tf": tf, "kind": kind, "price": _price_round(v)} for tf, kind, v in ema_refs],
