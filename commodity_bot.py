@@ -61,7 +61,7 @@ KNOWLEDGE_DELTA_CAP = float(os.getenv("KNOWLEDGE_DELTA_CAP", "4.0"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "5.2-GAGARIN"
+BOT_VERSION = "5.2-GAGARIN-EXPANDED"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -678,18 +678,27 @@ COMMODITIES = {
     "Oro": "XAU/USD",
     "Argento": "XAG/USD",
     "Rame": "COPPER/USD",
+    "Platino": "XPT/USD",
     "Palladio": "XPD/USD",
-    # Crude oil / gasoline
+    # Energy
     "Petrolio WTI": "WTI/USD",
     "Petrolio Brent": "BRN/USD",
     "Benzina RBOB": "RB/USD",
-    # Agricultural / food commodities
+    "Heating Oil": "HOIL/USD",
+    "Gas Naturale": "NATGAS/USD",
+    # Agriculture / food / soft commodities
     "Grano": "WHEAT/USD",
     "Mais": "CORN/USD",
     "Soia": "SOYBEAN/USD",
     "Riso": "RICE/USD",
     "Zucchero": "SUGAR/USD",
     "Cacao": "COCOA/USD",
+    "Caffè": "COFFEE/USD",
+    "Cotone": "COTTON/USD",
+    # Livestock
+    "Bovini vivi": "CATTLE/USD",
+    "Feeder Cattle": "FEEDC/USD",
+    "Maiali magri": "HOGS/USD",
 }
 
 
@@ -5335,6 +5344,12 @@ def telegram_requested_scope(request):
         "gas": "Gas Naturale", "gas naturale": "Gas Naturale", "natural gas": "Gas Naturale",
         "benzina": "Benzina RBOB", "rbob": "Benzina RBOB", "gasoline": "Benzina RBOB",
         "heating oil": "Heating Oil", "gasolio": "Heating Oil",
+        "gas naturale": "Gas Naturale", "natural gas": "Gas Naturale",
+        "caffè": "Caffè", "caffe": "Caffè", "coffee": "Caffè",
+        "cotone": "Cotone", "cotton": "Cotone",
+        "live cattle": "Bovini vivi", "bovini vivi": "Bovini vivi", "cattle": "Bovini vivi",
+        "feeder cattle": "Feeder Cattle",
+        "lean hogs": "Maiali magri", "lean hog": "Maiali magri", "hogs": "Maiali magri", "maiali magri": "Maiali magri",
         "rame": "Rame", "copper": "Rame",
         "alluminio": "Alluminio", "aluminum": "Alluminio", "aluminium": "Alluminio",
         "nichel": "Nichel", "nickel": "Nichel",
@@ -7806,7 +7821,7 @@ def intelligence_v41_summary(analysis):
 # adapters; they no longer define the architecture by themselves.
 # PAPER ONLY: this layer never places broker orders.
 
-GAGARIN_ARCHITECTURE_VERSION = "5.2-GAGARIN-ARCH-3-POSITION"
+GAGARIN_ARCHITECTURE_VERSION = "5.2-GAGARIN-ARCH-4-EXPANDED-POSITION"
 GAGARIN_FINAL_AUTHORITY = True
 GAGARIN_REQUIRE_LIVE_FOR_ENTRY = os.getenv("GAGARIN_REQUIRE_LIVE_FOR_ENTRY", "1") == "1"
 SIFTING_CACHE_TTL_SECONDS = float(os.getenv("SIFTING_CACHE_TTL_SECONDS", "20"))
