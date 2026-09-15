@@ -48,7 +48,7 @@ EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "21"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "4.7"
+BOT_VERSION = "4.8"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -220,7 +220,7 @@ def evaluate_entry_policy(
 
     if direction not in ("LONG", "SHORT"):
         return {
-            "policy_version": "4.7",
+            "policy_version": "4.8",
             "bias": "NEUTRAL",
             "bias_strength": "NONE",
             "entry_status": "NO_ENTRY",
@@ -301,7 +301,7 @@ def evaluate_entry_policy(
 
     if blockers:
         return {
-            "policy_version": "4.7",
+            "policy_version": "4.8",
             "bias": direction,
             "bias_strength": bias_strength,
             "entry_status": "NO_ENTRY",
@@ -334,7 +334,7 @@ def evaluate_entry_policy(
 
     if clean_entry:
         return {
-            "policy_version": "4.7",
+            "policy_version": "4.8",
             "bias": direction,
             "bias_strength": bias_strength,
             "entry_status": "ENTRY_CONFIRMED",
@@ -356,7 +356,7 @@ def evaluate_entry_policy(
 
     # Nessun hard blocker, ma manca una conferma di confluenza.
     return {
-        "policy_version": "4.7",
+        "policy_version": "4.8",
         "bias": direction,
         "bias_strength": bias_strength,
         "entry_status": "WAIT_CONFIRMATION",
@@ -4670,9 +4670,9 @@ def smart_entry_engine(analysis):
     rr3 = abs(tp3_price-entry_price) / risk_distance if risk_distance else 0
     atr_value = safe_float(analysis.get("atr"), 0) or 0
     stop_atr = risk_distance / atr_value if atr_value > 0 else 999.0
-    rr1_ok = rr1 >= MIN_ENTRY_RR_TP1
-    rr2_ok = rr2 >= MIN_ENTRY_RR_TP2
-    rr3_ok = rr3 >= MIN_ENTRY_RR
+    rr1_ok = rr1 + 1e-9 >= MIN_ENTRY_RR_TP1
+    rr2_ok = rr2 + 1e-9 >= MIN_ENTRY_RR_TP2
+    rr3_ok = rr3 + 1e-9 >= MIN_ENTRY_RR
     stop_ok = stop_atr <= MAX_ENTRY_STOP_ATR
     l2l_ok = bool(l2l.get("gate", False))
     structural_ok = structural_same >= 2
@@ -4696,16 +4696,38 @@ def smart_entry_engine(analysis):
                        conf >= 55 and not safety_block)
     relaxed_entry_ok = relaxed_core_ok and soft_missing <= 2 and intraday >= 78
 
-    if safety_block:
-        state, action, signal = "SAFETY_BLOCK", "NON ENTRARE", "WAIT"
-    elif intraday >= 80 and confluence_ok:
+    # v4.8 — the Entry Policy is now the final authority for entry permission.
+    # It separates directional BIAS from actual ENTRY authorization and prevents
+    # a merely strong trend/trigger from being treated as an immediate entry.
+    policy_mtf_score = clamp(structural_same / 3 * 75 + fast_same / 2 * 25, 0, 100)
+    entry_policy = evaluate_entry_policy(
+        direction=d,
+        probability=prob,
+        quality=quality,
+        confidence=conf,
+        mtf_score=policy_mtf_score,
+        trigger_score=safe_float(trigger.get("score"), 0) or 0,
+        l2l_score=l2l_score,
+        rr_tp1=rr1,
+        rr_tp2=rr2,
+        regime=analysis.get("regime"),
+    )
+
+    if entry_policy["entry_status"] == "ENTRY_CONFIRMED":
         state, action, signal = "ENTRY_CONFIRMED", ("COMPRA ORA" if d == "LONG" else "VENDI ORA"), d
-    elif relaxed_entry_ok:
-        state, action, signal = "ENTRY_POSSIBLE", ("ENTRATA POSSIBILE LONG" if d == "LONG" else "ENTRATA POSSIBILE SHORT"), d
-    elif intraday >= 65 and not safety_block:
+    elif entry_policy["entry_status"] == "WAIT_CONFIRMATION":
         state, action, signal = "ACTIVE_SETUP", ("LONG — ASPETTARE CONFERMA" if d == "LONG" else "SHORT — ASPETTARE CONFERMA"), "WAIT"
     else:
-        state, action, signal = "WATCH", "ATTENDERE", "WAIT"
+        state, action, signal = "BLOCKED", "NON ENTRARE", "WAIT"
+
+    if safety_block:
+        state, action, signal = "SAFETY_BLOCK", "NON ENTRARE", "WAIT"
+    elif entry_policy["entry_status"] == "ENTRY_CONFIRMED":
+        state, action, signal = "ENTRY_CONFIRMED", ("COMPRA ORA" if d == "LONG" else "VENDI ORA"), d
+    elif entry_policy["entry_status"] == "WAIT_CONFIRMATION":
+        state, action, signal = "ACTIVE_SETUP", ("LONG — ASPETTARE CONFERMA" if d == "LONG" else "SHORT — ASPETTARE CONFERMA"), "WAIT"
+    else:
+        state, action, signal = "BLOCKED", "NON ENTRARE", "WAIT"
     if not confluence_ok:
         missing=[]
         if not structural_ok: missing.append("MTF")
@@ -4730,6 +4752,7 @@ def smart_entry_engine(analysis):
     analysis["signal"] = signal
     analysis["strong_confirmation"] = bool(state == "ENTRY_CONFIRMED")
     analysis["entry_probability"] = round(prob, 2)
+    analysis["entry_policy"] = entry_policy
     analysis["intraday_score"] = round(intraday, 1)
     analysis["intraday_core"] = {
         "trend": d,
@@ -6948,16 +6971,16 @@ def signal_engine_v42(analysis, candles=None):
     if aligned < 2: blockers.append("MTF INCOMPLETO")
     if not trigger.get("confirmed"): blockers.append("TRIGGER NON CONFERMATO")
     if l2l.get("fakeout"): blockers.append("FAKEOUT")
-    if rr1 < 1.5: blockers.append("RR TP1 INSUFFICIENTE")
+    if rr1 + 1e-9 < 1.5: blockers.append("RR TP1 INSUFFICIENTE")
     if rd <= 0: blockers.append("SL NON VALIDO")
 
     if safety or l2l.get("fakeout"):
         decision = "NON ENTRARE"
         state = "BLOCKED"
-    elif trigger.get("confirmed") and raw_score >= 82 and rr1 >= 1.5 and rd > 0:
+    elif trigger.get("confirmed") and raw_score >= 82 and rr1 + 1e-9 >= 1.5 and rd > 0:
         decision = "ENTRARE"
         state = "CONFIRMED"
-    elif raw_score >= 68 and rd > 0 and rr1 >= 1.5:
+    elif raw_score >= 68 and rd > 0 and rr1 + 1e-9 >= 1.5:
         decision = f"ENTRATA POSSIBILE {d}"
         state = "POSSIBLE"
     elif raw_score >= 52:
