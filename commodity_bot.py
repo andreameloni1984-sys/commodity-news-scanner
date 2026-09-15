@@ -9218,5 +9218,137 @@ def main():
     print("=" * 70)
 
 
+
+# ========================= ENTRY NOW ALERT ENGINE =========================
+ENTRY_NOW_ALERT_ENABLED = os.getenv("ENTRY_NOW_ALERT_ENABLED", "1") == "1"
+ENTRY_NOW_COOLDOWN_SECONDS = int(os.getenv("ENTRY_NOW_COOLDOWN_SECONDS", "1800"))
+ENTRY_NOW_MIN_SCORE = float(os.getenv("ENTRY_NOW_MIN_SCORE", "62"))
+ENTRY_NOW_MIN_QUALITY = float(os.getenv("MIN_ENTRY_QUALITY", "55"))
+ENTRY_NOW_MIN_CONFIDENCE = float(os.getenv("MIN_ENTRY_CONFIDENCE", "60"))
+ENTRY_NOW_MIN_PROBABILITY = float(os.getenv("MIN_ENTRY_PROBABILITY", "62"))
+ENTRY_NOW_MIN_RR = float(os.getenv("MIN_ENTRY_RR", "2.5"))
+_ENTRY_NOW_LAST_ALERT = {}
+
+def _entry_now_float(d, *keys, default=0.0):
+    if not isinstance(d, dict):
+        return default
+    for k in keys:
+        try:
+            v = d.get(k)
+            if v is not None:
+                return float(v)
+        except (TypeError, ValueError):
+            pass
+    return default
+
+def gagarin_entry_now_check(item):
+    if not isinstance(item, dict):
+        return {"state": "WAIT", "authorized": False, "blockers": ["NO_ITEM"]}
+    a = item.get("analysis", {}) or {}
+    if not isinstance(a, dict):
+        a = {}
+    g = a.get("gagarin", {}) or {}
+    if not isinstance(g, dict):
+        g = {}
+    policy = g.get("entry_policy", {}) or {}
+    if not isinstance(policy, dict):
+        policy = {}
+
+    direction = str(a.get("direction_final") or a.get("signal") or policy.get("direction") or "").upper()
+    if direction not in {"LONG", "SHORT"}:
+        return {"state": "WAIT", "authorized": False, "blockers": ["NO_DIRECTION"]}
+
+    state = str(a.get("gagarin_state") or policy.get("state") or "").upper()
+    quality = _entry_now_float(a, "quality", "entry_quality")
+    confidence = _entry_now_float(a, "confidence", "entry_confidence")
+    probability = _entry_now_float(a, "probability_final", "probability", "entry_probability")
+    score = _entry_now_float(a, "score", "final_score")
+    rr = _entry_now_float(a, "rr", "risk_reward", "rr_tp3")
+
+    if not rr:
+        entry = _entry_now_float(a, "entry", "entry_price")
+        sl = _entry_now_float(a, "sl", "stop_loss")
+        tp3 = _entry_now_float(a, "tp3")
+        risk = abs(entry - sl) if entry and sl else 0.0
+        if risk and tp3:
+            rr = abs(tp3 - entry) / risk
+
+    blockers = []
+    authorized = bool(policy.get("authorized") or policy.get("entry_authorized") or a.get("operational_entry_allowed"))
+    if state not in {"READY", "ENTRY", "ENTRY_NOW", "AUTHORIZED"} and not authorized:
+        blockers.append("GAGARIN_NOT_READY")
+    if probability < ENTRY_NOW_MIN_PROBABILITY: blockers.append("PROBABILITY")
+    if quality < ENTRY_NOW_MIN_QUALITY: blockers.append("QUALITY")
+    if confidence < ENTRY_NOW_MIN_CONFIDENCE: blockers.append("CONFIDENCE")
+    if score and score < ENTRY_NOW_MIN_SCORE: blockers.append("SCORE")
+    if rr < ENTRY_NOW_MIN_RR: blockers.append("RR")
+
+    risk = g.get("risk", {})
+    risk_state = ""
+    if isinstance(risk, dict):
+        risk_state = str(risk.get("state") or "").upper()
+    risk_state = risk_state or str(a.get("risk_state") or "").upper()
+    if any(x in risk_state for x in ("ALERT", "BLOCK", "DANGER", "HIGH_RISK")):
+        blockers.append("RISK")
+
+    safety = g.get("safety", {})
+    if isinstance(safety, dict) and safety.get("ok") is False:
+        blockers.append("SAFETY")
+
+    trigger = g.get("trigger", {})
+    if isinstance(trigger, dict):
+        if not bool(trigger.get("confirmed")):
+            blockers.append("TRIGGER")
+    elif not bool(trigger):
+        blockers.append("TRIGGER")
+
+    blockers = list(dict.fromkeys(blockers))
+    if blockers:
+        return {"state": "WAIT", "authorized": False, "direction": direction,
+                "quality": quality, "confidence": confidence, "probability": probability,
+                "score": score, "rr": rr, "blockers": blockers}
+    return {"state": "ENTRY_NOW", "authorized": True, "direction": direction,
+            "quality": quality, "confidence": confidence, "probability": probability,
+            "score": score, "rr": rr, "blockers": []}
+
+def gagarin_entry_now_alert(item):
+    if not ENTRY_NOW_ALERT_ENABLED:
+        return None
+    d = gagarin_entry_now_check(item)
+    if d.get("state") != "ENTRY_NOW":
+        return None
+
+    import time as _entry_now_time
+    name = item.get("name") or item.get("commodity") or item.get("label") or "Commodity"
+    key = f"{name}:{d.get('direction')}"
+    now = _entry_now_time.time()
+    if now - _ENTRY_NOW_LAST_ALERT.get(key, 0.0) < ENTRY_NOW_COOLDOWN_SECONDS:
+        return None
+    _ENTRY_NOW_LAST_ALERT[key] = now
+
+    a = item.get("analysis", {}) or {}
+    entry = _entry_now_float(a, "entry", "entry_price")
+    sl = _entry_now_float(a, "sl", "stop_loss")
+    tp1 = _entry_now_float(a, "tp1")
+    tp2 = _entry_now_float(a, "tp2")
+    tp3 = _entry_now_float(a, "tp3")
+    return "\n".join([
+        "🚨 ENTRA ORA — GAGARIN",
+        "",
+        f"📌 {name}",
+        "🟢 LONG" if d["direction"] == "LONG" else "🔴 SHORT",
+        f"💰 Entry: {entry:.4f}" if entry else "💰 Entry: N/D",
+        f"🛑 SL: {sl:.4f}" if sl else "🛑 SL: N/D",
+        f"🎯 TP1: {tp1:.4f}" if tp1 else "🎯 TP1: N/D",
+        f"🎯 TP2: {tp2:.4f}" if tp2 else "🎯 TP2: N/D",
+        f"🎯 TP3: {tp3:.4f}" if tp3 else "🎯 TP3: N/D",
+        f"📐 R/R: {d['rr']:.2f}",
+        "",
+        "✅ GAGARIN: ENTRY AUTHORIZED",
+        "🔥 Trigger confermato",
+        "🧪 PAPER ONLY",
+    ])
+
+
 if __name__ == "__main__":
     main()
