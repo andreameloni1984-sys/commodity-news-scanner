@@ -1,0 +1,14 @@
+{
+  "name": "Heating Oil",
+  "symbol": "HO/USD",
+  "direction": "LONG",
+  "entry": 4.8844,
+  "stop": 4.5418,
+  "tp1": 5.4473,
+  "tp2": 5.6284,
+  "tp3": 5.882,
+  "risk_pct": 0.07466540522566213,
+  "break_even": false,
+  "tp2_reached": false,
+  "opened_at": "2026-09-15T13:23:44.547184+00:00"
+}
