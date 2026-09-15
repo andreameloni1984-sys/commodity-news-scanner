@@ -48,7 +48,7 @@ EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "21"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "4.6"
+BOT_VERSION = "4.7"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -126,6 +126,256 @@ MIN_ENTRY_RR = float(os.getenv("MIN_ENTRY_RR", "2.5"))
 MIN_ENTRY_RR_TP1 = float(os.getenv("MIN_ENTRY_RR_TP1", "1.5"))
 MIN_ENTRY_RR_TP2 = float(os.getenv("MIN_ENTRY_RR_TP2", "2.0"))
 MAX_ENTRY_STOP_ATR = float(os.getenv("MAX_ENTRY_STOP_ATR", "2.5"))
+
+# ============================================================
+# v4.7 — ENTRY POLICY
+# Separa BIAS da ENTRY reale.
+# Il motore mantiene il proprio calcolo di direzione, ma
+# autorizza un ingresso solo quando la confluenza è sufficiente.
+# ============================================================
+
+L2L_STRONG_CONTRARY = float(os.getenv("L2L_STRONG_CONTRARY", "35"))
+L2L_WEAK_CONTRARY = float(os.getenv("L2L_WEAK_CONTRARY", "45"))
+L2L_CONFIRMED = float(os.getenv("L2L_CONFIRMED", "55"))
+
+QUALITY_HARD_FLOOR = float(os.getenv("QUALITY_HARD_FLOOR", "45"))
+CONFIDENCE_HARD_FLOOR = float(os.getenv("CONFIDENCE_HARD_FLOOR", "50"))
+
+TRIGGER_ENTRY_MIN = float(os.getenv("TRIGGER_ENTRY_MIN", "85"))
+MTF_ENTRY_MIN = float(os.getenv("MTF_ENTRY_MIN", "80"))
+
+PROBABILITY_ENTRY_MIN = float(
+    os.getenv("PROBABILITY_ENTRY_MIN", str(MIN_ENTRY_PROBABILITY))
+)
+QUALITY_ENTRY_MIN = float(
+    os.getenv("QUALITY_ENTRY_MIN", str(MIN_ENTRY_QUALITY))
+)
+CONFIDENCE_ENTRY_MIN = float(
+    os.getenv("CONFIDENCE_ENTRY_MIN", str(MIN_ENTRY_CONFIDENCE))
+)
+RR_TP1_ENTRY_MIN = float(
+    os.getenv("RR_TP1_ENTRY_MIN", str(MIN_ENTRY_RR_TP1))
+)
+RR_TP2_ENTRY_MIN = float(
+    os.getenv("RR_TP2_ENTRY_MIN", str(MIN_ENTRY_RR_TP2))
+)
+
+
+def classify_l2l(score):
+    try:
+        score = float(score)
+    except (TypeError, ValueError):
+        score = 50.0
+
+    if score < L2L_STRONG_CONTRARY:
+        return "STRONG_CONTRARY"
+    if score < L2L_WEAK_CONTRARY:
+        return "WEAK_CONTRARY"
+    if score >= L2L_CONFIRMED:
+        return "CONFIRMED"
+    return "NEUTRAL"
+
+
+def evaluate_entry_policy(
+    direction,
+    probability,
+    quality,
+    confidence,
+    mtf_score,
+    trigger_score,
+    l2l_score,
+    rr_tp1,
+    rr_tp2,
+    regime=None,
+):
+    """
+    v4.7:
+    - BIAS = direzione del modello
+    - ENTRY = autorizzazione effettiva
+    - L2L contrario forte = blocco
+    - L2L debole/neutro = attesa conferma
+    """
+
+    direction = str(direction or "").upper()
+
+    def _num(value, default=0.0):
+        try:
+            value = float(value)
+            return value if math.isfinite(value) else default
+        except (TypeError, ValueError):
+            return default
+
+    probability = _num(probability)
+    quality = _num(quality)
+    confidence = _num(confidence)
+    mtf_score = _num(mtf_score)
+    trigger_score = _num(trigger_score)
+    l2l_score = _num(l2l_score, 50.0)
+    rr_tp1 = _num(rr_tp1)
+    rr_tp2 = _num(rr_tp2)
+
+    l2l_state = classify_l2l(l2l_score)
+    blockers = []
+    warnings = []
+
+    if direction not in ("LONG", "SHORT"):
+        return {
+            "policy_version": "4.7",
+            "bias": "NEUTRAL",
+            "bias_strength": "NONE",
+            "entry_status": "NO_ENTRY",
+            "entry_label": "🔴 NO ENTRY",
+            "entry_allowed": False,
+            "l2l_state": l2l_state,
+            "l2l_score": l2l_score,
+            "quality": quality,
+            "confidence": confidence,
+            "mtf": mtf_score,
+            "trigger": trigger_score,
+            "probability": probability,
+            "rr_tp1": rr_tp1,
+            "rr_tp2": rr_tp2,
+            "blockers": ["DIREZIONE NON VALIDA"],
+            "warnings": [],
+            "regime": regime,
+        }
+
+    if probability >= 80 and mtf_score >= 85 and trigger_score >= 85:
+        bias_strength = "STRONG"
+    elif probability >= PROBABILITY_ENTRY_MIN and mtf_score >= 70:
+        bias_strength = "MODERATE"
+    else:
+        bias_strength = "WEAK"
+
+    # Hard gates
+    if probability < PROBABILITY_ENTRY_MIN:
+        blockers.append(
+            f"PROBABILITÀ {probability:.1f} < {PROBABILITY_ENTRY_MIN:.1f}"
+        )
+
+    if quality < QUALITY_HARD_FLOOR:
+        blockers.append(
+            f"QUALITÀ TROPPO BASSA {quality:.1f} < {QUALITY_HARD_FLOOR:.1f}"
+        )
+
+    if confidence < CONFIDENCE_HARD_FLOOR:
+        blockers.append(
+            f"CONFIDENZA TROPPO BASSA {confidence:.1f} < {CONFIDENCE_HARD_FLOOR:.1f}"
+        )
+
+    if mtf_score < MTF_ENTRY_MIN:
+        blockers.append(
+            f"MTF INSUFFICIENTE {mtf_score:.1f} < {MTF_ENTRY_MIN:.1f}"
+        )
+
+    if trigger_score < TRIGGER_ENTRY_MIN:
+        blockers.append(
+            f"TRIGGER INSUFFICIENTE {trigger_score:.1f} < {TRIGGER_ENTRY_MIN:.1f}"
+        )
+
+    # Floating-point tolerance: 1.50 is accepted as 1.50.
+    if rr_tp1 + 1e-9 < RR_TP1_ENTRY_MIN:
+        blockers.append(
+            f"RR TP1 INSUFFICIENTE {rr_tp1:.2f} < {RR_TP1_ENTRY_MIN:.2f}"
+        )
+
+    if rr_tp2 + 1e-9 < RR_TP2_ENTRY_MIN:
+        blockers.append(
+            f"RR TP2 INSUFFICIENTE {rr_tp2:.2f} < {RR_TP2_ENTRY_MIN:.2f}"
+        )
+
+    if l2l_state == "STRONG_CONTRARY":
+        blockers.append(f"L2L FORTEMENTE CONTRARIO ({l2l_score:.1f})")
+
+    # Soft conditions
+    if QUALITY_HARD_FLOOR <= quality < QUALITY_ENTRY_MIN:
+        warnings.append(f"QUALITÀ DA CONFERMARE ({quality:.1f})")
+
+    if CONFIDENCE_HARD_FLOOR <= confidence < CONFIDENCE_ENTRY_MIN:
+        warnings.append(f"CONFIDENZA DA CONFERMARE ({confidence:.1f})")
+
+    if l2l_state == "WEAK_CONTRARY":
+        warnings.append(f"L2L DEBOLMENTE CONTRARIO ({l2l_score:.1f})")
+    elif l2l_state == "NEUTRAL":
+        warnings.append(f"L2L NEUTRALE ({l2l_score:.1f})")
+
+    if blockers:
+        return {
+            "policy_version": "4.7",
+            "bias": direction,
+            "bias_strength": bias_strength,
+            "entry_status": "NO_ENTRY",
+            "entry_label": f"🔴 NO ENTRY — BIAS {direction}",
+            "entry_allowed": False,
+            "l2l_state": l2l_state,
+            "l2l_score": l2l_score,
+            "quality": quality,
+            "confidence": confidence,
+            "mtf": mtf_score,
+            "trigger": trigger_score,
+            "probability": probability,
+            "rr_tp1": rr_tp1,
+            "rr_tp2": rr_tp2,
+            "blockers": blockers,
+            "warnings": warnings,
+            "regime": regime,
+        }
+
+    clean_entry = (
+        probability >= PROBABILITY_ENTRY_MIN
+        and quality >= QUALITY_ENTRY_MIN
+        and confidence >= CONFIDENCE_ENTRY_MIN
+        and mtf_score >= MTF_ENTRY_MIN
+        and trigger_score >= TRIGGER_ENTRY_MIN
+        and rr_tp1 + 1e-9 >= RR_TP1_ENTRY_MIN
+        and rr_tp2 + 1e-9 >= RR_TP2_ENTRY_MIN
+        and l2l_state == "CONFIRMED"
+    )
+
+    if clean_entry:
+        return {
+            "policy_version": "4.7",
+            "bias": direction,
+            "bias_strength": bias_strength,
+            "entry_status": "ENTRY_CONFIRMED",
+            "entry_label": f"🟢 ENTRY CONFERMATA {direction}",
+            "entry_allowed": True,
+            "l2l_state": l2l_state,
+            "l2l_score": l2l_score,
+            "quality": quality,
+            "confidence": confidence,
+            "mtf": mtf_score,
+            "trigger": trigger_score,
+            "probability": probability,
+            "rr_tp1": rr_tp1,
+            "rr_tp2": rr_tp2,
+            "blockers": [],
+            "warnings": warnings,
+            "regime": regime,
+        }
+
+    # Nessun hard blocker, ma manca una conferma di confluenza.
+    return {
+        "policy_version": "4.7",
+        "bias": direction,
+        "bias_strength": bias_strength,
+        "entry_status": "WAIT_CONFIRMATION",
+        "entry_label": f"🟡 ASPETTARE CONFERMA {direction}",
+        "entry_allowed": False,
+        "l2l_state": l2l_state,
+        "l2l_score": l2l_score,
+        "quality": quality,
+        "confidence": confidence,
+        "mtf": mtf_score,
+        "trigger": trigger_score,
+        "probability": probability,
+        "rr_tp1": rr_tp1,
+        "rr_tp2": rr_tp2,
+        "blockers": [],
+        "warnings": warnings + ["CONFLUENZA NON ANCORA COMPLETA"],
+        "regime": regime,
+    }
+
 
 # v4.5 — Sole 24 Ore Context Engine. Public pages only; no paywalled content
 # is bypassed. The module is advisory and can refine, never replace, the quant core.
