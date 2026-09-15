@@ -65,7 +65,7 @@
     "score": 0.0,
     "samples": 102,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T07:31:06.670062+00:00"
+    "updated_at": "2026-09-15T07:37:02.538373+00:00"
   },
   "Argento:SHORT": {
     "commodity": "Argento",
