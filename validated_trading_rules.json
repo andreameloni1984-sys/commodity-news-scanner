@@ -609,7 +609,7 @@
     "score": 0.0,
     "samples": 62,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T13:23:42.160296+00:00"
+    "updated_at": "2026-09-15T15:53:57.158331+00:00"
   },
   "Rame:SHORT": {
     "commodity": "Rame",
