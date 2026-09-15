@@ -46,9 +46,22 @@ ADAPTIVE_RISK_ENABLED = os.getenv("ADAPTIVE_RISK_ENABLED", "1") == "1"
 EXIT_ENGINE_ENABLED = os.getenv("EXIT_ENGINE_ENABLED", "1") == "1"
 EOD_REPORT_HOUR = int(os.getenv("EOD_REPORT_HOUR", "21"))
 
+# v5.0 — COMMODITY KNOWLEDGE + PRE-USA TIMING ENGINE
+# Source-derived principles are encoded as bounded, explainable context.
+# They refine ranking/timing but never bypass the existing safety/entry policy.
+KNOWLEDGE_ENGINE_V5_ENABLED = os.getenv("KNOWLEDGE_ENGINE_V5_ENABLED", "1") == "1"
+PRE_USA_ENGINE_ENABLED = os.getenv("PRE_USA_ENGINE_ENABLED", "1") == "1"
+PRE_USA_REPORT_HOUR = int(os.getenv("PRE_USA_REPORT_HOUR", "14"))
+PRE_USA_REPORT_MINUTE = int(os.getenv("PRE_USA_REPORT_MINUTE", "30"))
+PRE_USA_WINDOW_MINUTES = int(os.getenv("PRE_USA_WINDOW_MINUTES", "90"))
+US_OPEN_CONFIRM_MINUTES = int(os.getenv("US_OPEN_CONFIRM_MINUTES", "60"))
+KNOWLEDGE_SCORE_WEIGHT = float(os.getenv("KNOWLEDGE_SCORE_WEIGHT", "0.08"))
+KNOWLEDGE_DELTA_CAP = float(os.getenv("KNOWLEDGE_DELTA_CAP", "4.0"))
+
+
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "4.13"
+BOT_VERSION = "5.2-GAGARIN"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -103,6 +116,7 @@ FUTURES_STRUCTURE_WEIGHT = float(os.getenv("FUTURES_STRUCTURE_WEIGHT", "0.05"))
 MONITOR_INTERVAL_MINUTES = int(os.getenv("MONITOR_INTERVAL_MINUTES", "15"))
 MONITOR_TOP_N = int(os.getenv("MONITOR_TOP_N", "3"))
 MONITOR_SEND_FULL = os.getenv("MONITOR_SEND_FULL", "0") == "1"
+TELEGRAM_COMPACT_MODE = os.getenv("TELEGRAM_COMPACT_MODE", "1") == "1"
 
 # v3.6 — Morning / USA / Event Driven communication. Internal analysis can run often,
 # but Telegram is intentionally quiet except for scheduled decision points,
@@ -432,7 +446,15 @@ WORLDWIDE_KNOWLEDGE_SOURCES = [
 
 
 YOUTUBE_KNOWLEDGE_URLS = [
-    # "https://www.youtube.com/watch?v=VIDEO_ID",
+    # Metaskill — complete trading course (multiday, risk, SL/TP, inversioni, R/R)
+    "https://www.youtube.com/watch?v=ZG4VUC8ilnY",
+    # Marco Casario — Commodity Spread Trading / seasonality
+    "https://www.youtube.com/watch?v=AEOybn3gfRk",
+    "https://www.youtube.com/watch?v=tRcm3sBmvRs",
+    # Alpha4All — introduction to commodities and spread trading
+    "https://www.youtube.com/watch?v=YREvTwb61ZQ",
+    # Alfio Bardolla — commodity spread trading / paper trading / business-like risk discipline
+    "https://www.youtube.com/watch?v=lVBjUOJPVjU",
 ]
 KNOWLEDGE_SOURCES.extend(WORLDWIDE_KNOWLEDGE_SOURCES)
 # v2.9 — fonti didattiche aggiuntive studiate per il motore Level-to-Level.
@@ -467,6 +489,19 @@ KNOWLEDGE_CONCEPTS = {
     "levels": ["level to level", "key level", "support", "resistance", "livelli chiave"],
     "entry_exit": ["entry", "entrata", "exit", "uscita", "trigger", "breakout", "retest"],
     "retracement": ["retracement", "pullback", "ritracciamento", "fibonacci"],
+    "seasonality": ["seasonality", "stagionalità", "seasonal", "stagionale"],
+    "spread_trading": ["spread trading", "spread", "commodity spread", "spread multileg"],
+    "contango_backwardation": ["contango", "backwardation"],
+    "volume_orderflow": ["volume", "volumi", "volume profile", "order flow", "volumetrico"],
+    "wyckoff": ["wyckoff", "accumulation", "distribution", "markup", "markdown", "effort vs result"],
+    "chart_patterns": [
+        "double top", "double bottom", "head and shoulders", "head & shoulders",
+        "cup and handle", "triangle", "wedge", "flag", "pennant", "rectangle",
+        "ascending triangle", "descending triangle", "symmetrical triangle",
+    ],
+    "backtesting": ["backtest", "backtesting", "test storico", "testing"],
+    "mechanical_rules": ["mechanical", "rule-based", "regole", "replicable", "replicabile"],
+    "position_sizing": ["position sizing", "size della posizione", "dimensionamento", "risk per trade"],
 }
 
 
@@ -639,42 +674,24 @@ GLOBAL_BEARISH_TERMS = {
 }
 
 COMMODITIES = {
-    # Precious metals
+    # Precious / industrial metals
     "Oro": "XAU/USD",
     "Argento": "XAG/USD",
-    "Platino": "XPT/USD",
+    "Rame": "COPPER/USD",
     "Palladio": "XPD/USD",
-    # Energy
+    # Crude oil / gasoline
     "Petrolio WTI": "WTI/USD",
     "Petrolio Brent": "BRN/USD",
-    "Gas Naturale": "NG/USD",
     "Benzina RBOB": "RB/USD",
-    "Heating Oil": "HO/USD",
-    # Industrial metals
-    "Rame": "COPPER/USD",
-    "Alluminio": "ALUMINUM/USD",
-    "Nichel": "NICKEL/USD",
-    "Zinco": "ZINC/USD",
-    "Piombo": "LEAD/USD",
-    # Grains / oilseeds
+    # Agricultural / food commodities
     "Grano": "WHEAT/USD",
     "Mais": "CORN/USD",
     "Soia": "SOYBEAN/USD",
-    "Farina di soia": "SOYBEAN_MEAL/USD",
-    "Olio di soia": "SOYBEAN_OIL/USD",
-    "Avena": "OATS/USD",
     "Riso": "RICE/USD",
-    # Soft commodities
-    "Caffè": "COFFEE/USD",
-    "Cacao": "COCOA/USD",
     "Zucchero": "SUGAR/USD",
-    "Cotone": "COTTON/USD",
-    "Succo d'arancia": "ORANGE_JUICE/USD",
-    # Livestock
-    "Bovini vivi": "LIVE_CATTLE/USD",
-    "Maiali magri": "LEAN_HOGS/USD",
-    "Feeder Cattle": "FEEDER_CATTLE/USD",
+    "Cacao": "COCOA/USD",
 }
+
 
 # ============================================================
 # v4.6 — SIFTINGIO LIVE PRICE ENGINE
@@ -688,6 +705,7 @@ SIFTING_COMMODITY_SYMBOLS = {
     "Palladio": "XPDUSD",
     "Petrolio WTI": "WTIUSD",
     "Petrolio Brent": "UKOUSD",
+    "Benzina RBOB": "RBUSD",
     "Gas Naturale": "NATGAS",
     "Heating Oil": "HOILUSD",
     "Rame": "COPPERUSD",
@@ -697,6 +715,7 @@ SIFTING_COMMODITY_SYMBOLS = {
     "Grano": "WHEATUSD",
     "Mais": "CORNUSD",
     "Soia": "SOYBUSD",
+    "Riso": "RICEUSD",
     "Olio di soia": "SBOILUSD",
     "Caffè": "COFFEEUSD",
     "Cacao": "COCOAUSD",
@@ -1042,6 +1061,58 @@ def refresh_trading_knowledge():
         "updated_at": now.isoformat(),
     }
 
+
+def educational_methodology_engine(knowledge):
+    """Summarizes the educational methods found in public sources.
+
+    This layer is deliberately descriptive: it never creates a trade direction.
+    It can only provide a small, capped validation bonus to the existing model.
+    """
+    profile = (knowledge or {}).get("profile", {}) or {}
+    def c(name):
+        return float(profile.get(name, 0) or 0)
+
+    groups = {
+        "technical_structure": c("trend") + c("structure") + c("support_resistance") + c("breakout") + c("pullback"),
+        "risk": c("risk") + c("position_sizing"),
+        "commodity": c("seasonality") + c("spread_trading") + c("contango_backwardation") + c("fundamental"),
+        "systematic": c("backtesting") + c("mechanical_rules"),
+        "flow": c("volume_orderflow") + c("wyckoff"),
+        "patterns": c("chart_patterns") + c("candlestick"),
+    }
+    total = sum(groups.values())
+    if total <= 0:
+        return {"score": 0.0, "label": "NO_TEXT", "groups": groups, "delta": 0.0}
+
+    # Normalize each group independently so one long transcript cannot dominate.
+    normalized = {k: min(100.0, v / max(1.0, total) * 600.0) for k, v in groups.items()}
+    score = (
+        normalized["technical_structure"] * 0.24 +
+        normalized["risk"] * 0.22 +
+        normalized["commodity"] * 0.20 +
+        normalized["systematic"] * 0.16 +
+        normalized["flow"] * 0.10 +
+        normalized["patterns"] * 0.08
+    )
+    if score >= 70:
+        label = "FORTE"
+    elif score >= 50:
+        label = "BUONA"
+    elif score >= 30:
+        label = "MISTA"
+    else:
+        label = "DEBOLE"
+
+    # Educational material may refine validation only; it cannot override Safety Policy.
+    delta = clamp((score - 50.0) / 20.0, -1.5, 1.5)
+    return {
+        "score": round(score, 1),
+        "label": label,
+        "groups": {k: round(v, 1) for k, v in normalized.items()},
+        "delta": round(delta, 2),
+    }
+
+
 def knowledge_bias_for_setup(knowledge, direction, analysis):
     """Small, capped educational prior. Market data always dominates."""
     profile = (knowledge or {}).get("profile", {})
@@ -1049,6 +1120,7 @@ def knowledge_bias_for_setup(knowledge, direction, analysis):
         return 0.0
     total = max(1, sum(profile.values()))
     # Knowledge increases validation quality rather than inventing a direction.
+    method = educational_methodology_engine(knowledge)
     emphasis = sum(profile.get(k, 0) for k in ("trend", "structure", "breakout", "pullback", "risk"))
     density = clamp(emphasis / total, 0, 1)
     base = 2.5 * density
@@ -4918,26 +4990,7 @@ def run_end_of_day_test(force=False):
     accuracy=correct/(correct+wrong)*100 if correct+wrong else 0.0
     lines=[f"📊 COMMODITIES BOT v{BOT_VERSION} — PERFORMANCE INTRADAY", "", f"📅 {local_now.strftime('%d/%m/%Y')}","━━━━━━━━━━━━━━━━━━━━",
            f"🎯 Segnali valutati: {len(evaluated)}",f"✅ Azzeccati: {correct}",f"❌ Sbagliati: {wrong}",f"⚪ Ambigui: {ambiguous}",f"🟡 Ancora in valutazione: {len(pending)}",f"📈 Accuratezza: {accuracy:.1f}%"]
-    for bucket in ("80-100","70-79"):
-        rows=[p for p in evaluated if p.get("score_bucket")==bucket]; c=sum(p.get("verdict")=="CORRETTA" for p in rows); w=sum(p.get("verdict")=="ERRATA" for p in rows); acc=c/(c+w)*100 if c+w else 0
-        lines.append(f"⭐ Score {bucket}: {len(rows)} | {acc:.1f}%")
-    by_setup={}
-    for p in evaluated: by_setup.setdefault(p.get("setup","N/D"),[]).append(p)
-    if by_setup:
-        lines += ["","🔥 PER SETUP"]
-        rows=[]
-        for name,vals in by_setup.items():
-            c=sum(x.get("verdict")=="CORRETTA" for x in vals); w=sum(x.get("verdict")=="ERRATA" for x in vals); acc=c/(c+w)*100 if c+w else 0; rows.append((acc,name,len(vals)))
-        for acc,name,n in sorted(rows,reverse=True)[:5]: lines.append(f"• {name}: {acc:.1f}% ({n})")
-    by_name={}
-    for p in evaluated: by_name.setdefault(p["name"],[]).append(p)
-    if by_name:
-        lines += ["","🏆 PER COMMODITY"]
-        rows=[]
-        for name,vals in by_name.items():
-            c=sum(x.get("verdict")=="CORRETTA" for x in vals); w=sum(x.get("verdict")=="ERRATA" for x in vals); acc=c/(c+w)*100 if c+w else 0; rows.append((acc,name,len(vals)))
-        for acc,name,n in sorted(rows,reverse=True)[:5]: lines.append(f"• {name}: {acc:.1f}% ({n})")
-    lines += ["","🔒 PAPER ONLY — nessun ordine reale"]
+    lines += ["", "🔒 PAPER ONLY"]
     state=_json_load(DAILY_REPORT_FILE,{})
     if state.get("last_report_date")==today and not force: return None
     state.update({"last_report_date":today,"accuracy":accuracy,"evaluated":len(evaluated),"pending":len(pending)})
@@ -5218,25 +5271,25 @@ TELEGRAM_COMMAND_MAX_AGE_SECONDS = int(os.getenv("TELEGRAM_COMMAND_MAX_AGE_SECON
 
 
 def _telegram_command_ranking(ranked):
-    """Build a user-facing ranking on demand, without technical debug noise."""
+    """Compact user-facing ranking: only decision-relevant fields."""
     available = [x for x in ranked if x.get("available")]
     available.sort(key=lambda x: safe_float(x.get("ranking_score", x.get("analysis", {}).get("score", 0)), 0) or 0, reverse=True)
-    lines = [f"🌍 COMMODITIES BOT v{BOT_VERSION}", "", "🏆 CLASSIFICA ATTUALE", "━━━━━━━━━━━━━━━━━━━━"]
+    lines = [f"🌍 COMMODITIES BOT v{BOT_VERSION}", "", "🏆 CLASSIFICA", "━━━━━━━━━━━━━━━━━━━━"]
     medals = ["🥇", "🥈", "🥉"]
-    for i, item in enumerate(available[:10], 1):
+    for i, item in enumerate(available[:5], 1):
         a = item.get("analysis", {}) or {}
-        action = a.get("action_label", "ATTENDERE")
-        direction = a.get("setup_direction") or a.get("model_signal") or "N/D"
+        direction = a.get("final_direction") or a.get("setup_direction") or a.get("model_signal") or "N/D"
+        action = str(a.get("action_label", "ATTENDERE"))
         score = safe_float(a.get("score"), 0) or 0
         prob_raw = safe_float(a.get("entry_probability", a.get("probability", 0)), 0) or 0
         prob = prob_raw * 100 if prob_raw <= 1.5 else prob_raw
-        intel = safe_float((a.get("market_intelligence_v41", {}) or {}).get("score"), 50) or 50
-        icon = "🟢" if action in ("ENTRARE", "ENTRATA POSSIBILE") else "🔴" if action == "NON ENTRARE" else "🟡"
+        icon = "🟢" if direction == "LONG" else "🔴" if direction == "SHORT" else "🟡"
+        state = "ENTRA" if action == "ENTRARE" else "ATTENDI" if action in ("ATTENDERE", "ENTRATA POSSIBILE") else "NO"
         rank_icon = medals[i-1] if i <= 3 else f"{i}."
-        lines.append(f"{rank_icon} {item['name']} | {icon} {action} | {direction} | Score {score:.0f} | Prob {prob:.0f}% | Intel {intel:.0f}")
+        lines.append(f"{rank_icon} {item['name']} | {icon} {direction} | {state} | {score:.0f} | {prob:.0f}%")
     if not available:
         lines.append("⚪ Nessuna commodity disponibile.")
-    lines += ["", "🧪 PAPER ONLY — nessun ordine reale."]
+    lines += ["", "🧪 PAPER ONLY"]
     return "\n".join(lines)
 
 
@@ -5393,131 +5446,61 @@ def _telegram_entry_status(a):
 
 
 def _telegram_commodity_detail(item):
-    """Build a single-commodity Telegram report with operational SL/TP levels."""
+    """Compact single-commodity Telegram report. Analysis stays internal."""
     if not item:
-        return "⚪ Commodity non trovata. Scrivi HELP per vedere i comandi disponibili."
-
+        return "⚪ Commodity non trovata. Scrivi HELP."
     a = item.get("analysis", {}) or {}
     name = item.get("name", "N/D")
     direction = a.get("final_direction") or a.get("setup_direction") or a.get("model_signal") or "N/D"
-    action = a.get("action_label", "ATTENDERE")
+    action = str(a.get("action_label", "ATTENDERE"))
     score = safe_float(a.get("score"), 0) or 0
     prob_raw = safe_float(a.get("entry_probability", a.get("probability", 0)), 0) or 0
     prob = prob_raw * 100 if prob_raw <= 1.5 else prob_raw
-    # v4.13: Entry Policy is the single source of truth for entry diagnostics.
-    # This prevents Telegram from showing a different quality/confidence than
-    # the values actually used by the final entry gate.
     policy = a.get("entry_policy", {}) or {}
-    conf = safe_float(policy.get("confidence"), safe_float(a.get("confidence"), 0)) or 0
     quality = safe_float(policy.get("quality"), safe_float(a.get("entry_quality", a.get("quality", 0)), 0)) or 0
-    intel = a.get("market_intelligence_v41", {}) or {}
-    intel_score = safe_float(intel.get("score"), 50) or 50
-    regime = (intel.get("regime") or a.get("market_regime") or "N/D")
-    trigger = a.get("entry_trigger", {}) or {}
+    conf = safe_float(policy.get("confidence"), safe_float(a.get("confidence", 0), 0)) or 0
     se = a.get("signal_engine_v42", {}) or {}
-
-    # v4.2 keeps the authoritative calculated entry/SL/TP in the Signal Engine.
-    # Fall back to the legacy analysis fields when needed.
     entry = safe_float(se.get("entry"), safe_float(a.get("entry"), safe_float(a.get("price"), 0))) or 0
     stop = safe_float(se.get("stop"), safe_float(a.get("stop"), 0)) or 0
     tp1 = safe_float(se.get("tp1"), safe_float(a.get("tp1"), 0)) or 0
     tp2 = safe_float(se.get("tp2"), safe_float(a.get("tp2"), 0)) or 0
     tp3 = safe_float(se.get("tp3"), safe_float(a.get("tp3"), 0)) or 0
-    rr1 = safe_float(se.get("rr_tp1"), 0) or 0
-    rr2 = safe_float(se.get("rr_tp2"), 0) or 0
-    rr3 = safe_float(se.get("rr_tp3"), 0) or 0
-
-    icon = "🟢" if direction == "LONG" else "🔴" if direction == "SHORT" else "⚪"
-    status_text, status_kind, status_code = _telegram_entry_status(a)
-
-    # v4.12: make the hierarchy explicit: BIAS -> SETUP -> TRIGGER -> ENTRY.
-    # This prevents a strong directional setup from being confused with an authorized entry.
-    setup_strength = str((a.get("entry_policy", {}) or {}).get("bias_strength", "N/D")).upper()
+    rr = safe_float(se.get("rr_tp3"), safe_float((a.get("intraday_core", {}) or {}).get("rr_tp3"), 0)) or 0
+    trigger = a.get("entry_trigger", {}) or {}
+    icon = "🟢" if direction == "LONG" else "🔴" if direction == "SHORT" else "🟡"
+    if action == "ENTRARE":
+        status = "🟢 ENTRATA CONFERMATA"
+    elif action == "ENTRATA POSSIBILE":
+        status = "🟡 ENTRATA POSSIBILE"
+    elif action == "NON ENTRARE":
+        status = "🔴 NON ENTRARE"
+    else:
+        status = "🟡 ATTENDERE"
     lines = [
-        f"🌍 COMMODITIES BOT v{BOT_VERSION}",
-        "",
-        f"📌 {name}",
-        f"🧭 BIAS: {direction} | Forza: {setup_strength}",
-        status_text,
-        "",
+        f"🌍 COMMODITIES BOT v{BOT_VERSION}", "", f"📌 {name}",
+        f"{icon} {direction} — {status}",
         f"💰 Prezzo: {_fmt_price(a.get('price'))}",
-        f"📊 Score: {score:.1f}/100 | Prob: {prob:.1f}%",
-        f"🎯 Qualità: {quality:.1f} | Confidenza: {conf:.1f}",
-        f"🧠 Intel v4.1: {intel_score:.0f} | Regime: {(regime.get('state', 'N/D') if isinstance(regime, dict) else regime)}",
+        f"📊 Score {score:.0f} | Prob {prob:.0f}% | Qualità {quality:.0f} | Conf {conf:.0f}",
     ]
-
-    if se.get("available"):
-        lines += [
-            "",
-            f"🧩 SIGNAL ENGINE v4.2: {se.get('decision','N/D')}",
-            f"📈 Score SE: {safe_float(se.get('score'),0) or 0:.1f} | MTF {safe_float(se.get('mtf'),0) or 0:.0f} | L2L {safe_float(se.get('level_to_level'),0) or 0:.0f}",
-            f"🔥 Trigger {safe_float(se.get('trigger'),0) or 0:.0f} | RR score {safe_float(se.get('rr'),0) or 0:.0f}",
-        ]
-
-    # Always show the risk plan when the engine has valid levels.
     if entry > 0:
-        lines.append("")
-        lines.append("📐 PIANO TP / SL")
-        lines.append(f"📍 Entry: {_fmt_price(entry)}")
-        if stop > 0:
-            lines.append(f"🛑 SL: {_fmt_price(stop)}")
-        if tp1 > 0:
-            lines.append(f"🎯 TP1: {_fmt_price(tp1)}" + (f" | R/R {rr1:.2f}" if rr1 > 0 else ""))
-        if tp2 > 0:
-            lines.append(f"🎯 TP2: {_fmt_price(tp2)}" + (f" | R/R {rr2:.2f}" if rr2 > 0 else ""))
-        if tp3 > 0:
-            lines.append(f"🎯 TP3: {_fmt_price(tp3)}" + (f" | R/R {rr3:.2f}" if rr3 > 0 else ""))
-
+        lines += ["", "📐 PIANO", f"📍 Entry: {_fmt_price(entry)}"]
+        if stop > 0: lines.append(f"🛑 SL: {_fmt_price(stop)}")
+        if tp1 > 0: lines.append(f"🎯 TP1: {_fmt_price(tp1)}")
+        if tp2 > 0: lines.append(f"🎯 TP2: {_fmt_price(tp2)}")
+        if tp3 > 0: lines.append(f"🎯 TP3: {_fmt_price(tp3)}" + (f" | R/R {rr:.1f}" if rr > 0 else ""))
     if trigger.get("kind"):
         lines.append(f"🔥 Trigger: {trigger.get('kind')} {trigger.get('timeframe','')}")
-
-    # v4.13: show the reason for the current state without mixing diagnostic
-    # confluence checks with the authoritative safety/entry policy.
-    # `policy` was already loaded above and remains the authoritative source.
     policy_blockers = [str(x) for x in (policy.get("blockers") or []) if x]
-    policy_warnings = [str(x) for x in (policy.get("warnings") or []) if x]
-
-    safety_reasons = []
     risk_mode = str((a.get("risk", {}) or {}).get("mode", "")).upper()
     if risk_mode in ("SHOCK", "ALERT"):
-        safety_reasons.append(f"RISCHIO {risk_mode}")
-    if (a.get("reversal", {}) or {}).get("stage") == "CONFIRMED":
-        safety_reasons.append("INVERSIONE CONFERMATA")
-
-    if status_kind == "BLOCKED" and safety_reasons:
-        lines.append("🛑 BLOCCO SICUREZZA: " + " | ".join(safety_reasons[:3]))
+        lines.append(f"🛑 BLOCCO SICUREZZA: RISCHIO {risk_mode}")
     elif policy_blockers:
-        lines.append("⏳ ENTRY NON AUTORIZZATA: " + " | ".join(policy_blockers[:4]))
-    elif status_kind == "WAIT":
-        lines.append("⏳ ENTRY IN ATTESA: manca una conferma di confluenza.")
-
-    # v4.12: expose the actionable missing conditions instead of the opaque
-    # legacy aggregate "CONFLUENZA INCOMPLETA".
-    diagnostic_missing = []
-    l2l_score = safe_float(policy.get("l2l_score"), safe_float(se.get("level_to_level"), safe_float((a.get("level_to_level", {}) or {}).get("score"), 50))) or 50
-    l2l_state = str(policy.get("l2l_state", "")).upper()
-    l2l_ok = l2l_state == "CONFIRMED" or l2l_score >= L2L_CONFIRMED
-    if not l2l_ok:
-        diagnostic_missing.append(f"L2L ≥ {L2L_CONFIRMED:.0f} (ora {l2l_score:.1f})")
-    if quality < QUALITY_ENTRY_MIN:
-        diagnostic_missing.append(f"QUALITÀ ≥ {QUALITY_ENTRY_MIN:.0f} (ora {quality:.1f})")
-    if conf < CONFIDENCE_ENTRY_MIN:
-        diagnostic_missing.append(f"CONFIDENZA ≥ {CONFIDENCE_ENTRY_MIN:.0f} (ora {conf:.1f})")
-
-    # Show actionable technical conditions even when a safety block is active.
-    # Safety remains absolute: these conditions do NOT override the safety gate.
-    if diagnostic_missing:
-        lines.append("📌 Condizioni tecniche da completare: " + " | ".join(diagnostic_missing[:3]))
-    if safety_reasons:
-        lines.append("🔒 La Safety Policy resta prioritaria: nessun ingresso finché il blocco non rientra.")
-
-    # The legacy engine can still contain detailed diagnostics, but v4.13 does
-    # not expose its aggregate 'CONFLUENZA INCOMPLETA' as the primary reason.
-    warnings = policy_warnings or list(a.get("entry_warnings") or [])
-    if warnings:
-        lines.append("ℹ️ " + " | ".join(map(str, warnings[:3])))
-
-    lines += ["", "🧪 PAPER ONLY — nessun ordine reale."]
+        lines.append("⏳ " + " | ".join(policy_blockers[:2]))
+    # Show only a material event, never a headline dump.
+    global_impact = a.get("global_impact", {}) or {}
+    if global_impact.get("mode") in ("SHOCK", "ALERT"):
+        lines.append(f"⚠️ EVENTO MERCATO: {global_impact.get('mode')}")
+    lines += ["", "🧪 PAPER ONLY"]
     return "\n".join(lines)
 
 
@@ -5744,42 +5727,31 @@ def _telegram_signals(ranked):
         if not item.get("available"):
             continue
         a = item.get("analysis", {}) or {}
-        action = str(a.get("action_label", "")).upper()
-        if action == "ENTRARE" or action.startswith("ENTRATA POSSIBILE"):
+        if str(a.get("action_label", "")).upper() in ("ENTRARE", "ENTRATA POSSIBILE"):
             candidates.append(item)
     candidates.sort(key=lambda x: safe_float(x.get("ranking_score", x.get("analysis", {}).get("score", 0)), 0) or 0, reverse=True)
-    lines = [f"🌍 COMMODITIES BOT v{BOT_VERSION}", "", "🎯 SEGNALI OPERATIVI", "━━━━━━━━━━━━━━━━━━━━"]
+    lines = [f"🌍 COMMODITIES BOT v{BOT_VERSION}", "", "🎯 SEGNALI", "━━━━━━━━━━━━━━━━━━━━"]
     if not candidates:
-        lines.append("🟡 Nessun segnale operativo confermato adesso.")
+        lines.append("🟡 Nessun segnale operativo confermato.")
     else:
-        for i, item in enumerate(candidates[:10], 1):
+        for i, item in enumerate(candidates[:5], 1):
             a = item.get("analysis", {}) or {}
             d = a.get("setup_direction") or a.get("model_signal") or "N/D"
-            score = safe_float(a.get("score"), 0) or 0
-            prob_raw = safe_float(a.get("entry_probability", a.get("probability", 0)), 0) or 0
-            prob = prob_raw * 100 if prob_raw <= 1.5 else prob_raw
-            lines.append(f"{i}. {item['name']} | {d} | Score {score:.0f} | Prob {prob:.0f}%")
-    lines += ["", "🧪 PAPER ONLY — nessun ordine reale."]
+            lines.append(f"{i}. {item['name']} | {'🟢' if d=='LONG' else '🔴'} {d} | {safe_float(a.get('score'),0) or 0:.0f}")
+    lines += ["", "🧪 PAPER ONLY"]
     return "\n".join(lines)
 
 
 def _telegram_help():
     return (
         f"🌍 COMMODITIES BOT v{BOT_VERSION}\n\n"
-        "🤖 COMANDI DISPONIBILI\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "🏆 classifica — classifica attuale\n"
-        "🥇 migliore — miglior setup adesso\n"
-        "📅 settimanale — migliore commodity della settimana\n"
-        "📆 mensile — migliore commodity del mese\n"
-        "🎯 segnali — soli segnali operativi\n"
-        "📌 oro — analisi completa Oro + TP/SL\n"
-        "📌 brent — analisi completa Brent + TP/SL\n"
-        "📌 wti — analisi completa WTI + TP/SL\n"
-        "📌 rame / grano / caffè / cacao / ecc. — analisi + TP/SL\n"
-        "💬 Puoi anche scrivere: \"dammi oro con tp e sl\", \"analizza Brent\", \"fammi il piano del caffè\"\n"
-        "❓ help — elenco comandi\n\n"
-        "🧪 PAPER ONLY — nessun ordine reale."
+        "🤖 COMANDI\n"
+        "🏆 classifica — top commodity\n"
+        "🥇 migliore — miglior setup\n"
+        "🎯 segnali — soli segnali\n"
+        "📌 oro / brent / wti / rame / grano / cacao — analisi + TP/SL\n"
+        "💬 Puoi scrivere: \"dammi oro con tp e sl\"\n\n"
+        "🧪 PAPER ONLY"
     )
 
 
@@ -6393,38 +6365,24 @@ def _fmt_price(v):
 
 
 def build_intraday_alert(ranked, position_message=None):
+    """Compact intraday alert: action, levels and one reason only."""
     candidates=[x for x in ranked if x.get("available") and x.get("analysis",{}).get("setup_direction") in ("LONG","SHORT")]
     candidates.sort(key=lambda x:safe_float(x["analysis"].get("intraday_score",0),0) or 0, reverse=True)
     if not candidates:
-        return "⚡ INTRADAY ALERT\n\n⚪ Nessun setup operativo disponibile."
-    item=candidates[0]; a=item["analysis"]; d=a.get("setup_direction"); s=a.get("intraday_score",a.get("score",0)); action=a.get("action_label","ATTENDERE")
-    icon="🟢" if d=="LONG" else "🔴"; action_icon="🟢" if "COMPRA" in action or "ENTRATA" in action else "🔴" if "VENDI" in action else "🟡"
-    trig=a.get("entry_trigger",{}) or {}; trigger=trig.get("kind","SETUP")
-    if action=="NON ENTRARE": status="NON ENTRARE"
-    elif action=="ATTENDERE": status="ATTENDERE"
-    elif action=="ENTRATA POSSIBILE": status="ENTRATA POSSIBILE"
-    else: status="ENTRARE"
-    lines=["⚡ INTRADAY ALERT","",f"🥇 {item['name']}",f"{icon} {d} — {action_icon} {status}",""]
-    lines.append(f"💰 {_fmt_price(a.get('price'))}")
-    if a.get("entry") is not None: lines.append(f"🎯 Entry {_fmt_price(a.get('entry'))}")
-    if a.get("stop") is not None: lines.append(f"🛑 SL {_fmt_price(a.get('stop'))}")
-    if a.get("tp1") is not None: lines.append(f"🎯 TP1 {_fmt_price(a.get('tp1'))}")
-    if a.get("tp2") is not None: lines.append(f"🎯 TP2 {_fmt_price(a.get('tp2'))}")
-    pa=a.get("price_action",{}) or {}
-    lines += ["",f"📊 Score {s:.0f}/100 | Prob. {a.get('entry_probability',0):.0f}%",f"🔥 {trigger} {trig.get('timeframe','')}"]
-    if pa.get("patterns"):
-        lines.append("🕯️ " + " + ".join(pa.get("patterns",[])[:2]))
-    if pa.get("retracement",{}).get("state") not in (None, "N/D"):
-        lines.append("↩️ " + str(pa.get("retracement",{}).get("state")))
-    if pa.get("breakout_retest",{}).get("state") not in (None, "N/D", "NESSUN BREAKOUT"):
-        lines.append("📍 " + str(pa.get("breakout_retest",{}).get("state")))
-    if action in ("ATTENDERE","NON ENTRARE") and a.get("entry_blockers"):
-        lines.append("⏳ " + " | ".join(a["entry_blockers"][:2]))
-    if a.get("entry_warnings"):
-        lines.append("ℹ️ " + " | ".join(a["entry_warnings"][:2]))
-    if position_message:
-        lines += ["", "📌 POSIZIONE", position_message]
-    lines += ["",f"🔄 Aggiornamento ogni {MONITOR_INTERVAL_MINUTES} minuti"]
+        return "⚡ INTRADAY\n\n⚪ Nessun setup operativo."
+    item=candidates[0]; a=item["analysis"]; d=a.get("setup_direction"); action=str(a.get("action_label","ATTENDERE"))
+    icon="🟢" if d=="LONG" else "🔴"
+    lines=["⚡ INTRADAY", "", f"🥇 {item['name']}", f"{icon} {d} — {action}", f"💰 {_fmt_price(a.get('price'))}"]
+    for label,key in (("📍 Entry","entry"),("🛑 SL","stop"),("🎯 TP1","tp1"),("🎯 TP2","tp2")):
+        if a.get(key) is not None: lines.append(f"{label} {_fmt_price(a.get(key))}")
+    trig=a.get("entry_trigger",{}) or {}
+    if trig.get("kind"): lines.append(f"🔥 {trig.get('kind')} {trig.get('timeframe','')}")
+    blockers=a.get("entry_blockers",[]) or []
+    if blockers and action in ("ATTENDERE","NON ENTRARE"): lines.append("⏳ " + " | ".join(blockers[:2]))
+    risk_mode=str((a.get("risk",{}) or {}).get("mode","")).upper()
+    if risk_mode in ("SHOCK","ALERT"): lines.append(f"🛑 RISCHIO {risk_mode}")
+    if position_message: lines += ["", "📌 POSIZIONE", position_message]
+    lines += ["", "🧪 PAPER ONLY"]
     return "\n".join(lines)
 
 
@@ -7150,6 +7108,191 @@ def apply_signal_engine_v42(results):
 
 
 # ============================================================
+# v5.0 COMMODITY KNOWLEDGE ENGINE
+# ============================================================
+# Principles distilled from the requested educational sources:
+# - commodity price is driven by supply/demand, macro conditions,
+#   USD/rates, geopolitics and weather;
+# - different commodity families require different drivers;
+# - spot/continuous and futures can behave differently around expiry/roll;
+# - risk management and timing are part of the setup, not an afterthought.
+# These are contextual features, not claims of guaranteed predictive power.
+
+COMMODITY_KNOWLEDGE_PROFILES = {
+    "Oro": {"family":"PRECIOUS_METAL", "drivers":["USD","rates","safe_haven","central_banks","real_yields","geopolitics"], "pre_usa_weight":1.00},
+    "Argento": {"family":"PRECIOUS_METAL", "drivers":["USD","rates","industrial_demand","solar","gold_beta"], "pre_usa_weight":0.95},
+    "Platino": {"family":"PRECIOUS_METAL", "drivers":["USD","auto_demand","supply","industrial_demand"], "pre_usa_weight":0.90},
+    "Palladio": {"family":"PRECIOUS_METAL", "drivers":["USD","auto_demand","supply","industrial_demand"], "pre_usa_weight":0.90},
+    "Petrolio WTI": {"family":"ENERGY", "drivers":["supply","demand","inventories","geopolitics","USD","OPEC"], "pre_usa_weight":1.00},
+    "Petrolio Brent": {"family":"ENERGY", "drivers":["supply","demand","inventories","geopolitics","USD","OPEC"], "pre_usa_weight":1.00},
+    "Gas Naturale": {"family":"ENERGY", "drivers":["weather","storage","production","LNG","demand"], "pre_usa_weight":0.95},
+    "Benzina RBOB": {"family":"ENERGY", "drivers":["refinery","inventories","seasonality","crude","demand"], "pre_usa_weight":0.95},
+    "Heating Oil": {"family":"ENERGY", "drivers":["refinery","inventories","weather","diesel_demand","crude"], "pre_usa_weight":0.95},
+    "Rame": {"family":"INDUSTRIAL_METAL", "drivers":["China","global_growth","USD","inventories","supply"], "pre_usa_weight":0.90},
+    "Alluminio": {"family":"INDUSTRIAL_METAL", "drivers":["China","global_growth","USD","inventories","energy_costs"], "pre_usa_weight":0.85},
+    "Nichel": {"family":"INDUSTRIAL_METAL", "drivers":["China","stainless_demand","inventories","supply","USD"], "pre_usa_weight":0.85},
+    "Zinco": {"family":"INDUSTRIAL_METAL", "drivers":["China","construction","inventories","supply","USD"], "pre_usa_weight":0.85},
+    "Piombo": {"family":"INDUSTRIAL_METAL", "drivers":["industrial_demand","inventories","supply","USD"], "pre_usa_weight":0.80},
+    "Grano": {"family":"AGRICULTURAL", "drivers":["weather","crop","exports","stocks","USD","seasonality"], "pre_usa_weight":0.80},
+    "Mais": {"family":"AGRICULTURAL", "drivers":["weather","crop","ethanol","exports","stocks","USD"], "pre_usa_weight":0.80},
+    "Soia": {"family":"AGRICULTURAL", "drivers":["weather","crop","China","exports","stocks","USD"], "pre_usa_weight":0.80},
+    "Farina di soia": {"family":"AGRICULTURAL", "drivers":["weather","feed_demand","China","crush","stocks"], "pre_usa_weight":0.75},
+    "Olio di soia": {"family":"AGRICULTURAL", "drivers":["biofuel","crush","stocks","weather","vegetable_oils"], "pre_usa_weight":0.75},
+    "Avena": {"family":"AGRICULTURAL", "drivers":["weather","crop","stocks","exports","USD"], "pre_usa_weight":0.70},
+    "Riso": {"family":"AGRICULTURAL", "drivers":["weather","crop","exports","stocks","seasonality"], "pre_usa_weight":0.70},
+    "Caffè": {"family":"SOFT", "drivers":["weather","crop","Brazil","Vietnam","stocks","USD"], "pre_usa_weight":0.75},
+    "Cacao": {"family":"SOFT", "drivers":["weather","crop","West_Africa","stocks","demand"], "pre_usa_weight":0.75},
+    "Zucchero": {"family":"SOFT", "drivers":["weather","crop","Brazil","ethanol","stocks","USD"], "pre_usa_weight":0.75},
+    "Cotone": {"family":"SOFT", "drivers":["weather","crop","China","textile_demand","stocks","USD"], "pre_usa_weight":0.70},
+    "Succo d'arancia": {"family":"SOFT", "drivers":["weather","hurricane","crop","disease","stocks"], "pre_usa_weight":0.75},
+    "Bovini vivi": {"family":"LIVESTOCK", "drivers":["herd","feed_cost","slaughter","exports","demand"], "pre_usa_weight":0.65},
+    "Maiali magri": {"family":"LIVESTOCK", "drivers":["herd","feed_cost","slaughter","exports","demand"], "pre_usa_weight":0.65},
+    "Feeder Cattle": {"family":"LIVESTOCK", "drivers":["herd","feed_cost","cattle_demand","supply"], "pre_usa_weight":0.65},
+}
+
+FAMILY_RULES_V5 = {
+    "PRECIOUS_METAL": {"news_terms":["gold","silver","metals","central bank","rates","dollar","safe haven","yield"], "timing":"USD/rates and US session can dominate short-term moves."},
+    "ENERGY": {"news_terms":["oil","energy","opec","inventory","refinery","gas","lng","crude"], "timing":"US inventory/energy headlines can produce abrupt intraday repricing."},
+    "INDUSTRIAL_METAL": {"news_terms":["copper","aluminium","aluminum","nickel","zinc","china","manufacturing","construction"], "timing":"China/global-growth signals matter; USD can amplify moves."},
+    "AGRICULTURAL": {"news_terms":["wheat","corn","soybean","crop","harvest","weather","export","stocks"], "timing":"Weather/crop reports can dominate technical signals."},
+    "SOFT": {"news_terms":["coffee","cocoa","sugar","cotton","orange","weather","crop","harvest"], "timing":"Weather and crop/supply shocks can overwhelm normal trend signals."},
+    "LIVESTOCK": {"news_terms":["cattle","hog","livestock","feed","slaughter","export"], "timing":"Supply/feed/demand reports can create discontinuous moves."},
+}
+
+
+def _knowledge_news_bias(name, news, global_intel):
+    profile = COMMODITY_KNOWLEDGE_PROFILES.get(name, {})
+    family = profile.get("family", "")
+    rules = FAMILY_RULES_V5.get(family, {})
+    corpus = " ".join(str(x.get("title", "")) + " " + str(x.get("description", "")) for x in (global_intel or {}).get("articles", []) or [])
+    corpus += " " + str((news or {}).get("label", ""))
+    low = corpus.lower()
+    relevant = sum(1 for term in rules.get("news_terms", []) if term.lower() in low)
+    bull_terms = (V41_FUNDAMENTAL_TERMS.get(name, {}) or {}).get("bull", [])
+    bear_terms = (V41_FUNDAMENTAL_TERMS.get(name, {}) or {}).get("bear", [])
+    bull = sum(1 for term in bull_terms if term.lower() in low)
+    bear = sum(1 for term in bear_terms if term.lower() in low)
+    raw = clamp((bull - bear) / 6.0, -1.0, 1.0)
+    return raw, relevant, bull, bear
+
+
+def commodity_knowledge_engine_v5(name, analysis, news=None, usd=None, global_intel=None):
+    if not KNOWLEDGE_ENGINE_V5_ENABLED:
+        return {"enabled":False,"score":50.0,"direction":"NEUTRALE","confidence":0.0,"family":"N/D","drivers":[],"delta":0.0}
+    profile = COMMODITY_KNOWLEDGE_PROFILES.get(name, {"family":"GENERIC","drivers":[],"pre_usa_weight":0.7})
+    family = profile.get("family", "GENERIC")
+    d = analysis.get("setup_direction") or analysis.get("model_signal") or "NONE"
+    raw_news, relevant, bull, bear = _knowledge_news_bias(name, news, global_intel)
+    usd_score = safe_float((usd or {}).get("score"), 0) or 0
+    # USD score is assumed directional from the existing USD engine; invert for commodities
+    # when the setup is LONG and keep the sign aligned with the proposed direction.
+    usd_raw = clamp(usd_score / 100.0 if abs(usd_score) > 1 else usd_score, -1.0, 1.0)
+    usd_component = -usd_raw
+    regime = str((analysis.get("market_regime", {}) or {}).get("state", "N/D"))
+    regime_component = 0.25 if regime in ("TREND", "TREND UP", "TREND DOWN") else 0.0
+    weather = safe_float((analysis.get("weather_impact") or {}).get("score"), 50) or 50
+    weather_component = clamp((weather - 50) / 50.0, -1, 1)
+    contextual = clamp(0.50 * raw_news + 0.25 * usd_component + 0.15 * weather_component + 0.10 * regime_component, -1, 1)
+    if d == "SHORT":
+        aligned = -contextual
+    else:
+        aligned = contextual
+    score = clamp(50 + aligned * 50, 0, 100)
+    confidence = clamp(abs(aligned) * 100 + min(relevant * 4, 20), 0, 100)
+    direction = "FAVOREVOLE" if aligned >= .20 else "SFAVOREVOLE" if aligned <= -.20 else "NEUTRALE"
+    delta = clamp(aligned * KNOWLEDGE_DELTA_CAP, -KNOWLEDGE_DELTA_CAP, KNOWLEDGE_DELTA_CAP)
+    method = educational_methodology_engine({"profile": {
+        "trend": analysis.get("knowledge_trend", 0),
+        "structure": analysis.get("knowledge_structure", 0),
+        "support_resistance": analysis.get("knowledge_support_resistance", 0),
+        "breakout": analysis.get("knowledge_breakout", 0),
+        "pullback": analysis.get("knowledge_pullback", 0),
+        "risk": analysis.get("knowledge_risk", 0),
+        "position_sizing": analysis.get("knowledge_position_sizing", 0),
+        "seasonality": analysis.get("knowledge_seasonality", 0),
+        "spread_trading": analysis.get("knowledge_spread_trading", 0),
+        "contango_backwardation": analysis.get("knowledge_contango_backwardation", 0),
+        "fundamental": analysis.get("knowledge_fundamental", 0),
+        "backtesting": analysis.get("knowledge_backtesting", 0),
+        "mechanical_rules": analysis.get("knowledge_mechanical_rules", 0),
+        "volume_orderflow": analysis.get("knowledge_volume_orderflow", 0),
+        "wyckoff": analysis.get("knowledge_wyckoff", 0),
+        "chart_patterns": analysis.get("knowledge_chart_patterns", 0),
+        "candlestick": analysis.get("knowledge_candlestick", 0),
+    }})
+    return {
+        "enabled":True,"version":"5.1","family":family,"drivers":profile.get("drivers",[]),
+        "direction":direction,"score":round(score,1),"confidence":round(confidence,1),"delta":round(delta,2),
+        "news_relevance":relevant,"bull_hits":bull,"bear_hits":bear,"regime":regime,
+        "timing_note":FAMILY_RULES_V5.get(family,{}).get("timing","Context-specific commodity drivers."),
+        "pre_usa_weight":profile.get("pre_usa_weight",0.7),
+    }
+
+
+def apply_commodity_knowledge_engine_v5(analysis, name, news=None, usd=None, global_intel=None):
+    k = commodity_knowledge_engine_v5(name, analysis, news, usd, global_intel)
+    analysis["commodity_knowledge_v5"] = k
+    if k.get("enabled"):
+        # Small bounded refinement only. Existing safety/entry gates remain authoritative.
+        delta = safe_float(k.get("delta"), 0) or 0
+        analysis["score"] = clamp((safe_float(analysis.get("score"), 0) or 0) + delta, 0, 100)
+        analysis["knowledge_delta_v5"] = delta
+    return analysis
+
+
+def pre_usa_timing_engine_v5(analysis, name=None, now=None):
+    if not PRE_USA_ENGINE_ENABLED:
+        return {"enabled":False,"phase":"DISABLED"}
+    now = now or datetime.now(ZoneInfo("Europe/Rome"))
+    ny = now.astimezone(ZoneInfo("America/New_York"))
+    open_dt = ny.replace(hour=9, minute=30, second=0, microsecond=0)
+    diff_min = (open_dt - ny).total_seconds() / 60.0
+    if 0 < diff_min <= PRE_USA_WINDOW_MINUTES:
+        phase = "PRE_USA"
+    elif -US_OPEN_CONFIRM_MINUTES <= diff_min <= 0:
+        phase = "USA_OPEN_CONFIRM"
+    elif diff_min > PRE_USA_WINDOW_MINUTES:
+        phase = "BEFORE_PRE_USA"
+    elif diff_min < -US_OPEN_CONFIRM_MINUTES:
+        phase = "POST_USA_OPEN"
+    else:
+        phase = "USA_OPEN_CONFIRM"
+    d = analysis.get("setup_direction") or analysis.get("model_signal") or "NONE"
+    state = analysis.get("entry_state", "WATCH")
+    if phase == "PRE_USA":
+        recommendation = "PRE-SIGNAL" if d in ("LONG","SHORT") else "NO-SIGNAL"
+    elif phase == "USA_OPEN_CONFIRM":
+        recommendation = "CONFIRM/INVALIDATE" if d in ("LONG","SHORT") else "WAIT"
+    else:
+        recommendation = "MONITOR"
+    k = analysis.get("commodity_knowledge_v5", {}) or {}
+    return {
+        "enabled":True,"phase":phase,"rome_time":now.strftime("%H:%M"),"ny_time":ny.strftime("%H:%M"),
+        "minutes_to_open":round(diff_min,1),"direction":d,"entry_state":state,
+        "recommendation":recommendation,"knowledge_score":safe_float(k.get("score"),50) or 50,
+        "timing_note":k.get("timing_note",""),
+    }
+
+
+def apply_pre_usa_timing_v5(analysis, name=None, now=None):
+    timing = pre_usa_timing_engine_v5(analysis, name, now)
+    analysis["pre_usa_v5"] = timing
+    return analysis
+
+
+def pre_usa_summary_v5(analysis):
+    t = analysis.get("pre_usa_v5", {}) or {}
+    if not t.get("enabled"):
+        return "N/D"
+    mins = safe_float(t.get("minutes_to_open"), 0) or 0
+    if t.get("phase") == "PRE_USA":
+        return f"PRE-USA | {t.get('recommendation')} | open ~{mins:.0f}m"
+    if t.get("phase") == "USA_OPEN_CONFIRM":
+        return "USA OPEN | CONFERMA/INVALIDA"
+    return str(t.get("phase", "N/D"))
+
+
+# ============================================================
 # v3.6 COMMUNICATION ENGINE
 # ============================================================
 def _communication_state():
@@ -7159,42 +7302,34 @@ def _save_communication_state(state):
     _json_save("commodities_communication_state.json", state)
 
 def _session_message(label, ranked, best, position_message=None):
+    """Compact scheduled Telegram message; detailed intelligence stays internal."""
     a = best.get("analysis", {}) or {}
-    direction = a.get("setup_direction") or a.get("model_signal") or "NONE"
-    state = a.get("entry_state", "WATCH")
-    confluence_ok = bool((a.get("intraday_core", {}) or {}).get("confluence_ok", False))
-    if state == "ENTRY_CONFIRMED" and confluence_ok and direction in ("LONG", "SHORT"):
-        action = "COMPRA ORA" if direction == "LONG" else "VENDI ORA"
-        icon = "🟢" if direction == "LONG" else "🔴"
-        display_signal = f"{icon} {direction} — {action}"
-    elif direction in ("LONG", "SHORT") and state not in ("SAFETY_BLOCK",):
-        icon = "🟡"
-        display_signal = f"{icon} {direction} — ASPETTARE CONFERMA"
-    else:
-        display_signal = "⚪ NO TRADE"
-    lines = [f"{label}", "", f"🥇 {best.get('name','N/D')}", display_signal, "",
-             f"💰 Prezzo: {_fmt_price(a.get('price'))}",
-             f"📊 Score: {safe_float(a.get('score'),0) or 0:.0f}/100",
-             f"📈 Probabilità modello: {safe_float(a.get('entry_probability'),0) or 0:.1f}%",
-             f"🧠 Confidenza: {safe_float(a.get('confidence'),0) or 0:.1f}/100"]
-    if a.get("entry") is not None: lines.append(f"🎯 Entry: {_fmt_price(a.get('entry'))}")
-    if a.get("stop") is not None: lines.append(f"🛑 Stop: {_fmt_price(a.get('stop'))}")
-    if a.get("tp1") is not None: lines.append(f"🎯 TP1: {_fmt_price(a.get('tp1'))}")
-    if a.get("tp2") is not None: lines.append(f"🎯 TP2: {_fmt_price(a.get('tp2'))}")
-    if a.get("tp3") is not None: lines.append(f"🎯 TP3: {_fmt_price(a.get('tp3'))}")
-    core = a.get("intraday_core", {}) or {}
-    if core.get("rr_tp1") is not None: lines.append(f"📐 R/R: TP1 {core.get('rr_tp1'):.2f} | TP2 {core.get('rr_tp2'):.2f} | TP3 {core.get('rr_tp3'):.2f}")
-    if core.get("stop_atr") is not None and core.get("stop_atr") < 900: lines.append(f"🛡️ Stop/ATR: {core.get('stop_atr'):.2f}x")
-    reg = (a.get("market_regime", {}) or {}).get("state")
-    if reg: lines.append(f"🌍 Regime: {reg}")
-    blockers = a.get("entry_blockers", []) or []
-    if blockers: lines.append("⚠️ " + " | ".join(blockers[:4]))
-    pa = a.get("price_action", {}) or {}
-    patterns = pa.get("patterns", []) or []
-    if patterns: lines.append("🕯️ " + " + ".join(patterns[:3]))
+    direction = a.get("final_direction") or a.get("setup_direction") or a.get("model_signal") or "NONE"
+    action = str(a.get("action_label", "ATTENDERE"))
+    icon = "🟢" if direction == "LONG" else "🔴" if direction == "SHORT" else "🟡"
+    status = "ENTRARE" if action == "ENTRARE" else "ATTENDERE" if action in ("ATTENDERE", "ENTRATA POSSIBILE") else "NON ENTRARE"
+    policy = a.get("entry_policy", {}) or {}
+    quality = safe_float(policy.get("quality"), safe_float(a.get("quality"), 0)) or 0
+    conf = safe_float(policy.get("confidence"), safe_float(a.get("confidence"), 0)) or 0
+    lines = [label, "", f"🥇 {best.get('name','N/D')}", f"{icon} {direction} — {status}",
+             f"💰 {_fmt_price(a.get('price'))}",
+             f"📊 Score {safe_float(a.get('score'),0) or 0:.0f} | Prob {safe_float(a.get('entry_probability'),0) or 0:.0f}% | Q {quality:.0f} | C {conf:.0f}"]
+    if a.get("entry") is not None: lines.append(f"📍 Entry {_fmt_price(a.get('entry'))}")
+    if a.get("stop") is not None: lines.append(f"🛑 SL {_fmt_price(a.get('stop'))}")
+    if a.get("tp1") is not None: lines.append(f"🎯 TP1 {_fmt_price(a.get('tp1'))}")
+    if a.get("tp2") is not None: lines.append(f"🎯 TP2 {_fmt_price(a.get('tp2'))}")
+    if a.get("tp3") is not None: lines.append(f"🎯 TP3 {_fmt_price(a.get('tp3'))}")
+    trig = a.get("entry_trigger", {}) or {}
+    if trig.get("kind"): lines.append(f"🔥 {trig.get('kind')} {trig.get('timeframe','')}")
+    risk_mode = str((a.get("risk", {}) or {}).get("mode", "")).upper()
+    if risk_mode in ("SHOCK", "ALERT"): lines.append(f"🛑 BLOCCO: RISCHIO {risk_mode}")
+    gi = a.get("global_impact", {}) or {}
+    if gi.get("mode") in ("SHOCK", "ALERT") and risk_mode not in ("SHOCK", "ALERT"):
+        lines.append(f"⚠️ EVENTO MERCATO: {gi.get('mode')}")
     if position_message: lines += ["", "📌 POSIZIONE", position_message]
-    lines += ["", "🧪 PAPER ONLY — nessun ordine reale"]
+    lines += ["", "🧪 PAPER ONLY"]
     return "\n".join(lines)
+
 
 def maybe_send_session_reports(ranked, best, position_message=None):
     if COMMUNICATION_MODE != "MORNING_USA_EVENT": return
@@ -7203,6 +7338,9 @@ def maybe_send_session_reports(ranked, best, position_message=None):
     if now.hour==MORNING_REPORT_HOUR and MORNING_REPORT_MINUTE <= now.minute < MORNING_REPORT_MINUTE+30 and sent.get("morning") != today:
         send_telegram(_session_message("🌅 MORNING SIGNAL", ranked, best, position_message))
         sent["morning"]=today
+    if now.hour==PRE_USA_REPORT_HOUR and PRE_USA_REPORT_MINUTE <= now.minute < PRE_USA_REPORT_MINUTE+30 and sent.get("pre_usa") != today:
+        send_telegram(_session_message("🇺🇸 PRE-USA SIGNAL — APERTURA AMERICA", ranked, best, position_message))
+        sent["pre_usa"]=today
     if now.hour==USA_REPORT_HOUR and USA_REPORT_MINUTE <= now.minute < USA_REPORT_MINUTE+30 and sent.get("usa") != today:
         send_telegram(_session_message("🇺🇸 USA SESSION UPDATE", ranked, best, position_message))
         sent["usa"]=today
@@ -7653,6 +7791,306 @@ def intelligence_v41_summary(analysis):
 
 
 # ============================================================
+# SOYUZ v5.2 GAGARIN — ARCHITECTURE ORCHESTRATOR
+# ============================================================
+# The Gagarin layer consolidates the legacy engines into one explicit
+# decision pipeline. Legacy engines remain available as implementation
+# adapters; they no longer define the architecture by themselves.
+# PAPER ONLY: this layer never places broker orders.
+
+GAGARIN_ARCHITECTURE_VERSION = "5.2-GAGARIN-ARCH-1"
+GAGARIN_STATES = {
+    "NO_DATA", "WAIT_SETUP", "SETUP_ACTIVE_ENTRY_BLOCKED",
+    "READY_LONG", "READY_SHORT", "MANAGED", "NO_TRADE"
+}
+
+
+def gagarin_data_quality(name, candles, timeframes, intraday_candles=None):
+    """Hard data-quality gate. Missing data becomes an explicit state."""
+    issues = []
+    if not candles or len(candles) < 120:
+        issues.append("DAILY_DATA_INSUFFICIENT")
+    if not intraday_candles or len(intraday_candles) < 80:
+        issues.append("INTRADAY_DATA_INSUFFICIENT")
+    required = ("4H", "1H", "15m")
+    missing = [tf for tf in required if not (timeframes or {}).get(tf)]
+    if missing:
+        issues.append("MTF_MISSING:" + ",".join(missing))
+    quality = 100.0
+    quality -= 35.0 if "DAILY_DATA_INSUFFICIENT" in issues else 0.0
+    quality -= 35.0 if "INTRADAY_DATA_INSUFFICIENT" in issues else 0.0
+    quality -= min(30.0, 10.0 * len(missing))
+    return {
+        "state": "OK" if not issues else "DEGRADED",
+        "quality": max(0.0, quality),
+        "issues": issues,
+        "commodity": name,
+    }
+
+
+def gagarin_regime_engine(analysis, candles):
+    """Explainable regime layer using existing quantitative OHLC features."""
+    inst = institutional_style_features(candles or [])
+    legacy = (analysis.get("market_regime") or {})
+    state = str(legacy.get("state") or legacy.get("regime") or inst.get("regime") or "UNKNOWN").upper()
+    mapping = {
+        "HIGH_VOL": "SHOCK" if safe_float(inst.get("volatility_percentile"), 0.0) >= 0.92 else "TRANSITION",
+        "LOW_VOL": "RANGE",
+        "NORMAL": "TREND" if inst.get("direction") in ("LONG", "SHORT") and inst.get("score", 0) >= 45 else "RANGE",
+    }
+    if state in mapping:
+        state = mapping[state]
+    if state not in {"TREND", "RANGE", "TRANSITION", "SHOCK", "UNKNOWN"}:
+        state = "UNKNOWN"
+    direction = inst.get("direction") or analysis.get("setup_direction") or analysis.get("model_signal") or "NONE"
+    return {
+        "state": state,
+        "direction": direction,
+        "score": round(safe_float(inst.get("score"), 0.0) or 0.0, 1),
+        "volatility_percentile": round(safe_float(inst.get("volatility_percentile"), 0.5) or 0.5, 3),
+        "source": "institutional_style_features + existing market_regime",
+    }
+
+
+def gagarin_structure_engine(analysis):
+    """Unify MTF structure and Level-to-Level into one structural object."""
+    d = analysis.get("setup_direction") or analysis.get("model_signal") or "NONE"
+    tfs = analysis.get("timeframes") or {}
+    structural = {tf: (tfs.get(tf, {}) or {}).get("direction", "NONE") for tf in ("4H", "1H", "15m")}
+    fast = {tf: (tfs.get(tf, {}) or {}).get("direction", "NONE") for tf in ("5m", "1m")}
+    aligned = sum(v == d for v in structural.values()) if d in ("LONG", "SHORT") else 0
+    conflicts = sum(v not in ("NONE", d) for v in structural.values()) if d in ("LONG", "SHORT") else 0
+    l2l = analysis.get("level_to_level") or {}
+    return {
+        "direction": d,
+        "higher_tf": structural,
+        "fast_tf": fast,
+        "aligned": aligned,
+        "conflicts": conflicts,
+        "l2l_state": l2l.get("state", "N/D"),
+        "l2l_score": safe_float(l2l.get("score"), 0.0) or 0.0,
+        "behaviour": l2l.get("behaviour", "NESSUNA"),
+        "breakout": bool(l2l.get("breakout")),
+        "retest": bool(l2l.get("retest")),
+        "fakeout": bool(l2l.get("fakeout")),
+    }
+
+
+def gagarin_location_engine(analysis):
+    """Location is context, never an independent directional vote."""
+    l2l = analysis.get("level_to_level") or {}
+    avwap = analysis.get("anchored_vwap") or analysis.get("avwap") or {}
+    vp = analysis.get("volume_profile") or {}
+    return {
+        "support": l2l.get("support"),
+        "resistance": l2l.get("resistance"),
+        "poc": vp.get("poc"),
+        "vah": vp.get("vah"),
+        "val": vp.get("val"),
+        "avwap": avwap.get("value") if isinstance(avwap, dict) else avwap,
+        "behaviour": l2l.get("behaviour", "NESSUNA"),
+        "source": "L2L / structural levels / optional VP / AVWAP",
+    }
+
+
+def gagarin_strategy_router(regime, structure):
+    """Select compatible strategy families before looking for a trigger."""
+    state = regime.get("state", "UNKNOWN")
+    behaviour = structure.get("behaviour")
+    strategies = []
+    if state == "TREND":
+        strategies += ["TREND_PULLBACK", "BREAKOUT_RETEST"]
+        if structure.get("breakout"):
+            strategies.append("BREAKOUT")
+    elif state == "RANGE":
+        strategies += ["RANGE_REJECTION", "MEAN_REVERSION"]
+        if structure.get("fakeout"):
+            strategies.append("REVERSAL_SFP")
+    elif state == "TRANSITION":
+        strategies += ["BREAKOUT_RETEST", "REVERSAL_SFP"]
+    elif state == "SHOCK":
+        strategies = []
+    else:
+        strategies = []
+    if behaviour == "BREAKOUT_RETEST" and "BREAKOUT_RETEST" not in strategies:
+        strategies.append("BREAKOUT_RETEST")
+    return {"regime": state, "allowed": list(dict.fromkeys(strategies))}
+
+
+def gagarin_setup_engine(analysis, router):
+    d = analysis.get("setup_direction") or analysis.get("model_signal") or "NONE"
+    l2l = analysis.get("level_to_level") or {}
+    behaviour = l2l.get("behaviour", "NESSUNA")
+    if d not in ("LONG", "SHORT") or not router.get("allowed"):
+        return {"state": "NONE", "direction": d, "type": "NONE", "quality": 0.0}
+    if behaviour == "BREAKOUT_RETEST" and "BREAKOUT_RETEST" in router["allowed"]:
+        stype = "BREAKOUT_RETEST"
+    elif behaviour == "BREAKOUT" and "BREAKOUT" in router["allowed"]:
+        stype = "BREAKOUT"
+    elif behaviour == "FAKEOUT" and "REVERSAL_SFP" in router["allowed"]:
+        stype = "REVERSAL_SFP"
+    elif router["regime"] == "TREND":
+        stype = "TREND_PULLBACK"
+    elif router["regime"] == "RANGE":
+        stype = "RANGE_REJECTION"
+    else:
+        stype = "TRANSITION"
+    quality = safe_float(l2l.get("score"), 0.0) or 0.0
+    return {"state": "ACTIVE" if quality >= 50 else "FORMING", "direction": d, "type": stype, "quality": round(quality, 1)}
+
+
+def gagarin_trigger_engine(analysis):
+    trigger = analysis.get("entry_trigger") or {}
+    l2l = analysis.get("level_to_level") or {}
+    confirmed = bool(trigger.get("confirmed"))
+    if l2l.get("retest") and not l2l.get("fakeout"):
+        confirmed = True
+    if l2l.get("fakeout"):
+        confirmed = False
+    return {
+        "confirmed": confirmed,
+        "kind": trigger.get("kind") or l2l.get("behaviour", "NONE"),
+        "timeframe": trigger.get("timeframe", "5m"),
+        "score": safe_float(trigger.get("score"), 0.0) or 0.0,
+        "source": "entry_trigger + L2L retest/fakeout",
+    }
+
+
+def gagarin_risk_engine(analysis):
+    entry = safe_float(analysis.get("entry"), safe_float(analysis.get("price"), 0.0)) or 0.0
+    stop = safe_float(analysis.get("stop"), 0.0) or 0.0
+    atrv = safe_float(analysis.get("atr"), 0.0) or 0.0
+    risk_distance = abs(entry - stop) if entry and stop else 0.0
+    stop_atr = risk_distance / atrv if atrv > 0 else 999.0
+    tp = [safe_float(analysis.get(k), 0.0) or 0.0 for k in ("tp1", "tp2", "tp3")]
+    rr = [abs(x-entry)/risk_distance if risk_distance else 0.0 for x in tp]
+    return {
+        "valid_stop": risk_distance > 0,
+        "stop_distance": risk_distance,
+        "stop_atr": stop_atr,
+        "rr_tp1": rr[0], "rr_tp2": rr[1], "rr_tp3": rr[2],
+        "rr_main": rr[2],
+        "risk_mode": (analysis.get("risk") or {}).get("mode", "UNKNOWN"),
+    }
+
+
+def gagarin_safety_engine(analysis, data_quality, regime, setup, trigger, risk):
+    blockers = []
+    if data_quality.get("state") == "DEGRADED": blockers += data_quality.get("issues", [])
+    if regime.get("state") in ("SHOCK", "UNKNOWN"): blockers.append("REGIME_" + regime.get("state"))
+    if setup.get("state") == "NONE": blockers.append("NO_SETUP")
+    if not risk.get("valid_stop"): blockers.append("INVALID_STOP")
+    if risk.get("stop_atr", 999) > MAX_ENTRY_STOP_ATR: blockers.append("STOP_GT_MAX_ATR")
+    if risk.get("rr_tp1", 0) + 0.005 < MIN_ENTRY_RR_TP1: blockers.append("RR_TP1_FAIL")
+    if risk.get("rr_tp2", 0) + 0.005 < MIN_ENTRY_RR_TP2: blockers.append("RR_TP2_FAIL")
+    if risk.get("rr_main", 0) + 1e-9 < MIN_ENTRY_RR: blockers.append("RR_MAIN_FAIL")
+    legacy_risk = analysis.get("risk") or {}
+    if legacy_risk.get("mode") in ("SHOCK", "ERROR"): blockers.append("LEGACY_RISK_" + str(legacy_risk.get("mode")))
+    if (analysis.get("reversal") or {}).get("stage") == "CONFIRMED": blockers.append("REVERSAL_CONFIRMED")
+    return {"safe": not blockers, "blockers": list(dict.fromkeys(blockers))}
+
+
+def gagarin_entry_policy(analysis, setup, trigger, risk, safety):
+    """Final permission: hard blockers first, then existing thresholds."""
+    d = setup.get("direction")
+    prob = safe_float(analysis.get("entry_probability"), safe_float(analysis.get("probability"), 0.0)) or 0.0
+    prob = prob * 100.0 if prob <= 1.5 else prob
+    quality = safe_float(analysis.get("quality"), 0.0) or 0.0
+    confidence = safe_float(analysis.get("confidence"), 0.0) or 0.0
+    if not safety.get("safe"):
+        return {"state": "BLOCKED", "decision": "NO TRADE", "direction": d, "probability": prob,
+                "blockers": safety["blockers"]}
+    missing = []
+    if d not in ("LONG", "SHORT"): missing.append("DIRECTION")
+    if not trigger.get("confirmed"): missing.append("TRIGGER")
+    if prob < MIN_ENTRY_PROBABILITY: missing.append("PROBABILITY")
+    if quality < MIN_ENTRY_QUALITY: missing.append("QUALITY")
+    if confidence < MIN_ENTRY_CONFIDENCE: missing.append("CONFIDENCE")
+    if risk.get("rr_main", 0) + 1e-9 < MIN_ENTRY_RR: missing.append("RR")
+    if missing:
+        return {"state": "WAIT", "decision": f"{d} — ASPETTARE" if d in ("LONG", "SHORT") else "WAIT",
+                "direction": d, "probability": prob, "blockers": missing}
+    return {"state": "READY_LONG" if d == "LONG" else "READY_SHORT", "decision": "ENTRARE",
+            "direction": d, "probability": prob, "blockers": []}
+
+
+def soyuz_gagarin_pipeline(name, symbol, usd, global_intel, trading_knowledge):
+    """Single commodity orchestration pipeline for Soyuz v5.2 Gagarin."""
+    candles = get_daily_data(symbol)
+    if len(candles) < 120:
+        raise RuntimeError(f"Dati giornalieri insufficienti ({len(candles)}/120)")
+    source_check = compare_sources(name, symbol, candles)
+    dataset = build_dataset(candles)
+    if len(dataset) < 80:
+        raise RuntimeError(f"Dataset insufficiente ({len(dataset)}/80)")
+    bt = backtest(dataset)
+    model = train_final(dataset)
+    if model is None:
+        raise RuntimeError("Modello non disponibile")
+    timeframes = get_multitimeframe(symbol)
+    news = analyze_news(name)
+    political = political_impact_v3(name, political_impact(name))
+    global_impact = commodity_global_impact(name, global_intel)
+    hint = analysis_direction_hint(timeframes)
+    session = session_engine(name, symbol, hint if hint in ("LONG", "SHORT") else "NONE")
+    intraday_candles = get_data(symbol, "1h", 1200)
+    if len(intraday_candles) < 80:
+        raise RuntimeError(f"Storico 1H insufficiente per Entry/Timing ({len(intraday_candles)}/80)")
+    pattern_timeframes = {"1H": intraday_candles}
+    for tf, interval, size in (("4H", "4h", 500), ("15m", "15min", 500), ("5m", "5min", 500), ("1m", "1min", 500)):
+        try:
+            c = get_data(symbol, interval, size)
+            if len(c) >= 30:
+                pattern_timeframes[tf] = c
+        except Exception as exc:
+            print(f"   ⚠️ Pattern {tf}: {exc}")
+    analysis = analyze(candles, dataset, model, bt, usd, news, timeframes, political,
+                       commodity_name=name, global_impact=global_impact, session=session,
+                       intraday_candles=intraday_candles, pattern_timeframes=pattern_timeframes,
+                       trading_knowledge=trading_knowledge)
+    if analysis is None:
+        raise RuntimeError("Analisi quantitativa non disponibile")
+    analysis.update({"symbol": symbol, "pattern_timeframes": pattern_timeframes or {}, "source_check": source_check or {}, "commodity_name": name})
+    weather = weather_intelligence(name)
+    disasters = natural_disaster_intelligence(name)
+    apply_weather_and_disaster_layers(analysis, weather, disasters)
+    level_to_level_engine(analysis, commodity_name=name, candles=candles, pattern_timeframes=pattern_timeframes)
+    analysis["price_action"] = price_action_context_engine(analysis)
+    adaptive_levels = adaptive_risk_levels(analysis, candles, analysis.get("setup_direction") or analysis.get("model_signal"))
+    if adaptive_levels.get("available"):
+        analysis.update({k: adaptive_levels[k] for k in ("stop", "tp1", "tp2", "tp3")})
+        analysis["adaptive_risk"] = adaptive_levels
+    apply_futures_structure(analysis, futures_structure_engine(name))
+    apply_market_intelligence_v41(analysis, name, news, political, global_intel)
+    apply_sole24_context(analysis, name)
+    apply_commodity_knowledge_engine_v5(analysis, name, news, usd, global_intel)
+    apply_pre_usa_timing_v5(analysis, name)
+    analysis["v3_context"] = v3_context_summary(analysis)
+
+    # Explicit architecture objects.
+    dq = gagarin_data_quality(name, candles, timeframes, intraday_candles)
+    regime = gagarin_regime_engine(analysis, candles)
+    structure = gagarin_structure_engine(analysis)
+    location = gagarin_location_engine(analysis)
+    router = gagarin_strategy_router(regime, structure)
+    setup = gagarin_setup_engine(analysis, router)
+    trigger = gagarin_trigger_engine(analysis)
+    risk = gagarin_risk_engine(analysis)
+    safety = gagarin_safety_engine(analysis, dq, regime, setup, trigger, risk)
+    policy = gagarin_entry_policy(analysis, setup, trigger, risk, safety)
+    analysis["gagarin"] = {
+        "architecture_version": GAGARIN_ARCHITECTURE_VERSION,
+        "data_quality": dq, "regime": regime, "structure": structure,
+        "location": location, "strategy_router": router, "setup": setup,
+        "trigger": trigger, "risk": risk, "safety": safety, "entry_policy": policy,
+    }
+    analysis["gagarin_state"] = policy["state"]
+    analysis["gagarin_blockers"] = policy.get("blockers", [])
+    # The legacy signal remains available for diagnostics; Gagarin is the
+    # authoritative architecture state once all later finalization layers run.
+    return {"candles": candles, "analysis": analysis, "backtest": bt, "source_check": source_check}
+
+# ============================================================
 # MAIN
 # ============================================================
 
@@ -7661,7 +8099,7 @@ def main():
     print("=" * 70)
     print(f"🌍 COMMODITIES BOT v{BOT_VERSION}")
     print("MORNING + USA + EVENT-DRIVEN + DAILY STATS | PAPER ONLY")
-    print("v4.1 MARKET INTELLIGENCE: MICRO + MACRO + QUALITATIVA + FINANCIAL | STRICT CONFLUENCE")
+    print("SOYUZ GAGARIN ARCHITECTURE | DATA → REGIME → STRUCTURE → SETUP → TRIGGER → RISK → SAFETY")
     print("COMMUNICATION: MORNING + USA + MATERIAL EVENTS | INTERNAL ANALYSIS SILENT")
     print("=" * 70)
     print()
@@ -7691,88 +8129,15 @@ def main():
         print(f"🔎 Analizzo {name} [{symbol}]...")
 
         try:
-            candles = get_daily_data(symbol)
-            print(f"   📥 Dati giornalieri: {len(candles)}")
-
-            if len(candles) < 120:
-                raise RuntimeError(f"Dati giornalieri insufficienti ({len(candles)}/120)")
-
-            source_check = compare_sources(name, symbol, candles)
-            dataset = build_dataset(candles)
-            print(f"   🧮 Dataset: {len(dataset)} | Fonte: {DATA_SOURCE_STATS.get(name, {}).get('1day', 'N/D')}")
-
-            if len(dataset) < 80:
-                raise RuntimeError(f"Dataset insufficiente ({len(dataset)}/80)")
-
-            bt = backtest(dataset)
-            model = train_final(dataset)
-            if model is None:
-                raise RuntimeError("Modello non disponibile")
-
-            timeframes = get_multitimeframe(symbol)
-            news = analyze_news(name)
-            political = political_impact_v3(name, political_impact(name))
-            global_impact = commodity_global_impact(name, global_intel)
-            session = session_engine(name, symbol, "LONG" if analysis_direction_hint(timeframes) == "LONG" else "SHORT" if analysis_direction_hint(timeframes) == "SHORT" else "NONE")
-
-            # Dati 1H dedicati a candlestick, entry e timing storico.
-            intraday_candles = get_data(symbol, "1h", 1200)
-            if len(intraday_candles) < 80:
-                raise RuntimeError(f"Storico 1H insufficiente per Entry/Timing ({len(intraday_candles)}/80)")
-
-            # Libreria pattern multi-timeframe: 4H, 1H, 15m, 5m e 1m.
-            # Se un timeframe non è disponibile, gli altri continuano a pesare.
-            pattern_timeframes = {"1H": intraday_candles}
-            for _tf, _interval, _size in (("4H", "4h", 500), ("15m", "15min", 500), ("5m", "5min", 500), ("1m", "1min", 500)):
-                try:
-                    _c = get_data(symbol, _interval, _size)
-                    if len(_c) >= 30:
-                        pattern_timeframes[_tf] = _c
-                except Exception as _e:
-                    print(f"   ⚠️ Pattern {_tf}: {_e}")
-
-            analysis = analyze(
-                candles, dataset, model, bt, usd, news, timeframes, political, commodity_name=name,
-                global_impact=global_impact, session=session, intraday_candles=intraday_candles, pattern_timeframes=pattern_timeframes,
-                trading_knowledge=trading_knowledge
+            pipeline = soyuz_gagarin_pipeline(
+                name=name, symbol=symbol, usd=usd, global_intel=global_intel,
+                trading_knowledge=trading_knowledge,
             )
-            if analysis is None:
-                raise RuntimeError("Analisi Gold Engine non disponibile")
-
-            analysis["symbol"] = symbol
-            analysis["pattern_timeframes"] = pattern_timeframes or {}
-            analysis["source_check"] = source_check or {}
-
-            weather = weather_intelligence(name)
-            disasters = natural_disaster_intelligence(name)
-            apply_weather_and_disaster_layers(analysis, weather, disasters)
-
-            # v2.9: Level-to-Level technical structure after all current context layers.
-            level_to_level_engine(
-                analysis, commodity_name=name, candles=candles,
-                pattern_timeframes=pattern_timeframes
-            )
-
-            # v3.5: price action + adaptive structure/ATR levels. These layers
-            # are confirmations and fallbacks; missing risk data never deletes a setup.
-            analysis["commodity_name"] = name
-            analysis["price_action"] = price_action_context_engine(analysis)
-            adaptive_levels = adaptive_risk_levels(analysis, candles, analysis.get("setup_direction") or analysis.get("model_signal"))
-            if adaptive_levels.get("available"):
-                analysis.update({k: adaptive_levels[k] for k in ("stop","tp1","tp2","tp3")})
-                analysis["adaptive_risk"] = adaptive_levels
-
-            # v3.0: optional futures curve context. No data -> no invented signal.
-            _curve = futures_structure_engine(name)
-            apply_futures_structure(analysis, _curve)
-
-            # v4.1: PricePedia-style Market Intelligence. Uses the data already
-            # fetched by the existing engine; optional sources never block a run.
-            apply_market_intelligence_v41(analysis, name, news, political, global_intel)
-            # v4.5: Sole 24 Ore public-data context is merged into the existing
-            # intelligence brain. It never bypasses safety or entry gates.
-            apply_sole24_context(analysis, name)
-            analysis["v3_context"] = v3_context_summary(analysis)
+            candles = pipeline["candles"]
+            analysis = pipeline["analysis"]
+            bt = pipeline["backtest"]
+            source_check = pipeline["source_check"]
+            print(f"   🧭 GAGARIN: {analysis.get('gagarin_state')} | REGIME {analysis.get('gagarin',{}).get('regime',{}).get('state')} | SETUP {analysis.get('gagarin',{}).get('setup',{}).get('type')} | TRIGGER {analysis.get('gagarin',{}).get('trigger',{}).get('confirmed')}" )
 
             results.append({
                 "name": name,
@@ -7888,6 +8253,7 @@ def main():
                 # authoritative Signal Engine from the same live levels.
                 smart_entry_engine(_a)
                 signal_engine_v42(_a, _item.get("candles") or [])
+                apply_pre_usa_timing_v5(_a, _name)
 
     # v4.6 coherence: setup_direction is the single final analytical direction.
     # model_signal remains the raw quantitative model direction for diagnostics,
@@ -8089,6 +8455,10 @@ def main():
     print(f"Probabilità direzione finale: {final_prob:.1f}%")
     print(f"Confidenza: {a['confidence']:.1f}/100")
     print(f"Qualità: {a['quality']:.1f}/100")
+    _g = a.get("gagarin", {}) or {}
+    print(f"GAGARIN: {_g.get('regime',{}).get('state','N/D')} | SETUP {_g.get('setup',{}).get('type','N/D')} | TRIGGER {_g.get('trigger',{}).get('confirmed',False)} | STATE {a.get('gagarin_state','N/D')}")
+    if a.get("gagarin_blockers"):
+        print("GAGARIN BLOCKERS: " + ", ".join(a.get("gagarin_blockers", [])[:8]))
     if a.get("live_price_status") == "LIVE":
         print(
             f"LIVE PRICE: {a.get('live_price', a.get('price'))} | "
