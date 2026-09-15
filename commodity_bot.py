@@ -5439,7 +5439,7 @@ def _telegram_commodity_detail(item):
         f"💰 Prezzo: {_fmt_price(a.get('price'))}",
         f"📊 Score: {score:.1f}/100 | Prob: {prob:.1f}%",
         f"🎯 Qualità: {quality:.1f} | Confidenza: {conf:.1f}",
-        f"🧠 Intel v4.1: {intel_score:.0f} | Regime: {(regime.get("state", "N/D") if isinstance(regime, dict) else regime)}",
+        f"🧠 Intel v4.1: {intel_score:.0f} | Regime: {(regime.get('state', 'N/D') if isinstance(regime, dict) else regime)}",
     ]
 
     if se.get("available"):
