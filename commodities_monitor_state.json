@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-09-15T09:18:24.201219+00:00",
-  "best": "Heating Oil",
+  "timestamp": "2026-09-15T09:42:20.067717+00:00",
+  "best": "Benzina RBOB",
   "direction": "LONG",
-  "action": "NON ENTRARE",
-  "entry_state": "BLOCKED",
-  "trigger": "BREAKOUT",
+  "action": "COMPRA ORA",
+  "entry_state": "ENTRY_CONFIRMED",
+  "trigger": "PULLBACK + RIPARTENZA",
   "trigger_tf": "5m",
   "position": null,
   "position_direction": null

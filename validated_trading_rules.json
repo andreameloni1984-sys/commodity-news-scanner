@@ -65,7 +65,7 @@
     "score": 0.0,
     "samples": 102,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T09:14:54.077295+00:00"
+    "updated_at": "2026-09-15T09:39:21.518244+00:00"
   },
   "Argento:SHORT": {
     "commodity": "Argento",
@@ -133,7 +133,7 @@
     "score": 0.0,
     "samples": 50,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T09:15:02.498366+00:00"
+    "updated_at": "2026-09-15T09:39:30.963721+00:00"
   },
   "Platino:SHORT": {
     "commodity": "Platino",
@@ -201,7 +201,7 @@
     "score": 0.0,
     "samples": 70,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T09:15:10.213913+00:00"
+    "updated_at": "2026-09-15T09:39:40.314740+00:00"
   },
   "Palladio:SHORT": {
     "commodity": "Palladio",
@@ -269,7 +269,7 @@
     "score": 0.0,
     "samples": 42,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T09:15:16.604517+00:00"
+    "updated_at": "2026-09-15T09:39:47.258787+00:00"
   },
   "Petrolio WTI:LONG": {
     "commodity": "Petrolio WTI",
@@ -337,7 +337,7 @@
     "score": 0.0,
     "samples": 67,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T09:15:23.026541+00:00"
+    "updated_at": "2026-09-15T09:39:55.084968+00:00"
   },
   "Petrolio Brent:LONG": {
     "commodity": "Petrolio Brent",
@@ -473,7 +473,7 @@
     "score": 0.0,
     "samples": 39,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T02:10:55.656951+00:00"
+    "updated_at": "2026-09-15T09:40:12.742137+00:00"
   },
   "Benzina RBOB:LONG": {
     "commodity": "Benzina RBOB",
@@ -541,7 +541,7 @@
     "score": 0.0,
     "samples": 61,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T09:15:47.727618+00:00"
+    "updated_at": "2026-09-15T09:40:20.685826+00:00"
   },
   "Heating Oil:LONG": {
     "commodity": "Heating Oil",
@@ -609,7 +609,7 @@
     "score": 0.0,
     "samples": 62,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T09:15:54.600067+00:00"
+    "updated_at": "2026-09-15T09:40:27.215345+00:00"
   },
   "Rame:SHORT": {
     "commodity": "Rame",
@@ -677,7 +677,7 @@
     "score": 0.0,
     "samples": 54,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T09:16:01.073900+00:00"
+    "updated_at": "2026-09-15T09:40:33.679200+00:00"
   },
   "Grano:SHORT": {
     "commodity": "Grano",
@@ -745,7 +745,7 @@
     "score": 0.0,
     "samples": 34,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T02:12:32.144888+00:00"
+    "updated_at": "2026-09-15T09:40:41.871977+00:00"
   },
   "Mais:LONG": {
     "commodity": "Mais",
@@ -881,7 +881,7 @@
     "score": 0.0,
     "samples": 86,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T09:16:59.793982+00:00"
+    "updated_at": "2026-09-15T09:40:59.278785+00:00"
   },
   "Farina di soia:LONG": {
     "commodity": "Farina di soia",
@@ -949,7 +949,7 @@
     "score": 0.0,
     "samples": 68,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T09:17:05.553157+00:00"
+    "updated_at": "2026-09-15T09:41:04.553287+00:00"
   },
   "Olio di soia:SHORT": {
     "commodity": "Olio di soia",
@@ -1024,36 +1024,36 @@
     "direction": "LONG",
     "validated": {
       "TREND_FOLLOWING": {
-        "train_samples": 54,
-        "train_win_rate": 0.2778,
-        "test_samples": 24,
-        "test_win_rate": 0.3333,
+        "train_samples": 59,
+        "train_win_rate": 0.3051,
+        "test_samples": 27,
+        "test_win_rate": 0.2963,
         "validated": false,
-        "expectancy_proxy": -0.0
+        "expectancy_proxy": -0.111
       },
       "MOMENTUM": {
-        "train_samples": 49,
-        "train_win_rate": 0.3061,
-        "test_samples": 20,
-        "test_win_rate": 0.25,
+        "train_samples": 54,
+        "train_win_rate": 0.3704,
+        "test_samples": 26,
+        "test_win_rate": 0.2692,
         "validated": false,
-        "expectancy_proxy": -0.25
+        "expectancy_proxy": -0.192
       },
       "PULLBACK": {
-        "train_samples": 12,
-        "train_win_rate": 0.4167,
+        "train_samples": 10,
+        "train_win_rate": 0.4,
         "test_samples": 2,
-        "test_win_rate": 1.0,
+        "test_win_rate": 0.5,
         "validated": false,
-        "expectancy_proxy": 2.0
+        "expectancy_proxy": 0.5
       },
       "BREAKOUT": {
-        "train_samples": 7,
-        "train_win_rate": 0.2857,
-        "test_samples": 7,
-        "test_win_rate": 0.5714,
+        "train_samples": 9,
+        "train_win_rate": 0.3333,
+        "test_samples": 8,
+        "test_win_rate": 0.625,
         "validated": false,
-        "expectancy_proxy": 0.714
+        "expectancy_proxy": 0.875
       },
       "VOLATILITY_FILTER": {
         "train_samples": 2,
@@ -1064,28 +1064,28 @@
         "expectancy_proxy": 0.0
       },
       "TREND_MOMENTUM": {
-        "train_samples": 44,
-        "train_win_rate": 0.2955,
-        "test_samples": 16,
-        "test_win_rate": 0.3125,
+        "train_samples": 46,
+        "train_win_rate": 0.3696,
+        "test_samples": 20,
+        "test_win_rate": 0.3,
         "validated": false,
-        "expectancy_proxy": -0.062
+        "expectancy_proxy": -0.1
       },
       "PULLBACK_MOMENTUM": {
-        "train_samples": 8,
-        "train_win_rate": 0.5,
-        "test_samples": 0,
+        "train_samples": 4,
+        "train_win_rate": 0.75,
+        "test_samples": 1,
         "test_win_rate": 0.0,
         "validated": false,
-        "expectancy_proxy": 0.0
+        "expectancy_proxy": -1.0
       }
     },
     "active": [],
     "current_hits": [],
     "score": 0.0,
-    "samples": 69,
+    "samples": 84,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T09:17:17.343621+00:00"
+    "updated_at": "2026-09-15T09:41:16.506354+00:00"
   },
   "Cacao:SHORT": {
     "commodity": "Cacao",
@@ -1153,7 +1153,7 @@
     "score": 0.0,
     "samples": 46,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T09:17:37.481910+00:00"
+    "updated_at": "2026-09-15T09:41:35.340061+00:00"
   },
   "Zucchero:SHORT": {
     "commodity": "Zucchero",
@@ -1221,7 +1221,7 @@
     "score": 0.0,
     "samples": 42,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T06:16:14.553541+00:00"
+    "updated_at": "2026-09-15T09:41:40.405714+00:00"
   },
   "Cotone:SHORT": {
     "commodity": "Cotone",
@@ -1289,7 +1289,7 @@
     "score": 0.0,
     "samples": 65,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T09:17:49.959932+00:00"
+    "updated_at": "2026-09-15T09:41:46.233905+00:00"
   },
   "Succo d'arancia:LONG": {
     "commodity": "Succo d'arancia",
@@ -1357,108 +1357,108 @@
     "score": 0.0,
     "samples": 80,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T09:17:56.302029+00:00"
+    "updated_at": "2026-09-15T09:41:51.678050+00:00"
   },
   "Bovini vivi:LONG": {
     "commodity": "Bovini vivi",
     "direction": "LONG",
     "validated": {
       "TREND_FOLLOWING": {
-        "train_samples": 63,
-        "train_win_rate": 0.2857,
-        "test_samples": 43,
-        "test_win_rate": 0.4186,
+        "train_samples": 66,
+        "train_win_rate": 0.2576,
+        "test_samples": 47,
+        "test_win_rate": 0.3404,
         "validated": false,
-        "expectancy_proxy": 0.256
+        "expectancy_proxy": 0.021
       },
       "MOMENTUM": {
-        "train_samples": 43,
-        "train_win_rate": 0.3256,
-        "test_samples": 23,
-        "test_win_rate": 0.2609,
-        "validated": false,
-        "expectancy_proxy": -0.217
-      },
-      "PULLBACK": {
-        "train_samples": 9,
-        "train_win_rate": 0.4444,
-        "test_samples": 4,
-        "test_win_rate": 1.0,
-        "validated": false,
-        "expectancy_proxy": 2.0
-      },
-      "BREAKOUT": {
-        "train_samples": 16,
-        "train_win_rate": 0.4375,
-        "test_samples": 13,
-        "test_win_rate": 0.2308,
-        "validated": false,
-        "expectancy_proxy": -0.308
-      },
-      "VOLATILITY_FILTER": {
-        "train_samples": 86,
-        "train_win_rate": 0.3721,
-        "test_samples": 56,
+        "train_samples": 49,
+        "train_win_rate": 0.2449,
+        "test_samples": 28,
         "test_win_rate": 0.3929,
         "validated": false,
         "expectancy_proxy": 0.179
       },
-      "TREND_MOMENTUM": {
-        "train_samples": 42,
-        "train_win_rate": 0.3333,
-        "test_samples": 16,
-        "test_win_rate": 0.375,
+      "PULLBACK": {
+        "train_samples": 8,
+        "train_win_rate": 0.375,
+        "test_samples": 1,
+        "test_win_rate": 0.0,
         "validated": false,
-        "expectancy_proxy": 0.125
+        "expectancy_proxy": -1.0
+      },
+      "BREAKOUT": {
+        "train_samples": 17,
+        "train_win_rate": 0.3529,
+        "test_samples": 15,
+        "test_win_rate": 0.3333,
+        "validated": false,
+        "expectancy_proxy": -0.0
+      },
+      "VOLATILITY_FILTER": {
+        "train_samples": 99,
+        "train_win_rate": 0.3636,
+        "test_samples": 66,
+        "test_win_rate": 0.3939,
+        "validated": false,
+        "expectancy_proxy": 0.182
+      },
+      "TREND_MOMENTUM": {
+        "train_samples": 48,
+        "train_win_rate": 0.25,
+        "test_samples": 21,
+        "test_win_rate": 0.4762,
+        "validated": false,
+        "expectancy_proxy": 0.429
       },
       "PULLBACK_MOMENTUM": {
-        "train_samples": 7,
-        "train_win_rate": 0.5714,
-        "test_samples": 4,
-        "test_win_rate": 1.0,
+        "train_samples": 8,
+        "train_win_rate": 0.375,
+        "test_samples": 1,
+        "test_win_rate": 0.0,
         "validated": false,
-        "expectancy_proxy": 2.0
+        "expectancy_proxy": -1.0
       }
     },
     "active": [],
     "current_hits": [],
     "score": 0.0,
-    "samples": 159,
+    "samples": 179,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T09:18:01.521441+00:00"
+    "updated_at": "2026-09-15T09:41:56.522641+00:00"
   },
   "Maiali magri:LONG": {
     "commodity": "Maiali magri",
     "direction": "LONG",
     "validated": {
       "TREND_FOLLOWING": {
-        "train_samples": 43,
-        "train_win_rate": 0.1628,
-        "test_samples": 28,
-        "test_win_rate": 0.0714,
+        "train_samples": 48,
+        "train_win_rate": 0.125,
+        "test_samples": 30,
+        "test_win_rate": 0.1333,
         "validated": false,
-        "expectancy_proxy": -0.786
+        "expectancy_proxy": -0.6
       },
       "MOMENTUM": {
-        "train_samples": 37,
-        "train_win_rate": 0.1622,
-        "test_samples": 31,
-        "test_win_rate": 0.1613,
+        "train_samples": 43,
+        "train_win_rate": 0.186,
+        "test_samples": 32,
+        "test_win_rate": 0.2812,
         "validated": false,
-        "expectancy_proxy": -0.516
+        "expectancy_proxy": -0.156
       },
       "PULLBACK": {
-        "train_samples": 10,
-        "train_win_rate": 0.2,
-        "test_samples": 3,
+        "train_samples": 8,
+        "train_win_rate": 0.0,
+        "test_samples": 2,
         "test_win_rate": 0.0,
         "validated": false,
         "expectancy_proxy": -1.0
       },
       "BREAKOUT": {
-        "train_samples": 7,
-        "train_win_rate": 0.1429,
-        "test_samples": 5,
+        "train_samples": 10,
+        "train_win_rate": 0.1,
+        "test_samples": 7,
         "test_win_rate": 0.0,
         "validated": false,
         "expectancy_proxy": -1.0
@@ -1472,17 +1472,17 @@
         "expectancy_proxy": 0.0
       },
       "TREND_MOMENTUM": {
-        "train_samples": 34,
-        "train_win_rate": 0.1471,
-        "test_samples": 22,
-        "test_win_rate": 0.0455,
+        "train_samples": 36,
+        "train_win_rate": 0.1389,
+        "test_samples": 23,
+        "test_win_rate": 0.1739,
         "validated": false,
-        "expectancy_proxy": -0.864
+        "expectancy_proxy": -0.478
       },
       "PULLBACK_MOMENTUM": {
-        "train_samples": 6,
+        "train_samples": 4,
         "train_win_rate": 0.0,
-        "test_samples": 1,
+        "test_samples": 2,
         "test_win_rate": 0.0,
         "validated": false,
         "expectancy_proxy": -1.0
@@ -1491,77 +1491,79 @@
     "active": [],
     "current_hits": [],
     "score": 0.0,
-    "samples": 90,
+    "samples": 96,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T09:18:07.112211+00:00"
+    "updated_at": "2026-09-15T09:42:01.341847+00:00"
   },
   "Feeder Cattle:LONG": {
     "commodity": "Feeder Cattle",
     "direction": "LONG",
     "validated": {
       "TREND_FOLLOWING": {
-        "train_samples": 52,
-        "train_win_rate": 0.3462,
-        "test_samples": 34,
-        "test_win_rate": 0.5,
+        "train_samples": 60,
+        "train_win_rate": 0.3167,
+        "test_samples": 39,
+        "test_win_rate": 0.4615,
         "validated": false,
-        "expectancy_proxy": 0.5
+        "expectancy_proxy": 0.385
       },
       "MOMENTUM": {
-        "train_samples": 28,
-        "train_win_rate": 0.2857,
-        "test_samples": 19,
-        "test_win_rate": 0.4737,
+        "train_samples": 37,
+        "train_win_rate": 0.3243,
+        "test_samples": 21,
+        "test_win_rate": 0.3333,
         "validated": false,
-        "expectancy_proxy": 0.421
+        "expectancy_proxy": -0.0
       },
       "PULLBACK": {
-        "train_samples": 3,
-        "train_win_rate": 0.0,
+        "train_samples": 7,
+        "train_win_rate": 0.2857,
         "test_samples": 2,
         "test_win_rate": 1.0,
         "validated": false,
         "expectancy_proxy": 2.0
       },
       "BREAKOUT": {
-        "train_samples": 18,
-        "train_win_rate": 0.5,
-        "test_samples": 13,
-        "test_win_rate": 0.6154,
-        "validated": false,
-        "expectancy_proxy": 0.846
+        "train_samples": 20,
+        "train_win_rate": 0.55,
+        "test_samples": 15,
+        "test_win_rate": 0.6667,
+        "validated": true,
+        "expectancy_proxy": 1.0
       },
       "VOLATILITY_FILTER": {
-        "train_samples": 92,
-        "train_win_rate": 0.4348,
-        "test_samples": 53,
-        "test_win_rate": 0.4151,
+        "train_samples": 107,
+        "train_win_rate": 0.4206,
+        "test_samples": 59,
+        "test_win_rate": 0.4068,
         "validated": false,
-        "expectancy_proxy": 0.245
+        "expectancy_proxy": 0.22
       },
       "TREND_MOMENTUM": {
-        "train_samples": 25,
-        "train_win_rate": 0.24,
-        "test_samples": 15,
-        "test_win_rate": 0.6,
+        "train_samples": 32,
+        "train_win_rate": 0.25,
+        "test_samples": 18,
+        "test_win_rate": 0.3889,
         "validated": false,
-        "expectancy_proxy": 0.8
+        "expectancy_proxy": 0.167
       },
       "PULLBACK_MOMENTUM": {
-        "train_samples": 2,
-        "train_win_rate": 0.0,
-        "test_samples": 2,
-        "test_win_rate": 1.0,
+        "train_samples": 5,
+        "train_win_rate": 0.4,
+        "test_samples": 0,
+        "test_win_rate": 0.0,
         "validated": false,
-        "expectancy_proxy": 2.0
+        "expectancy_proxy": 0.0
       }
     },
-    "active": [],
+    "active": [
+      "BREAKOUT"
+    ],
     "current_hits": [],
-    "score": 0.0,
-    "samples": 138,
+    "score": 0,
+    "samples": 154,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T09:18:13.118080+00:00"
+    "updated_at": "2026-09-15T09:42:06.830264+00:00"
   },
   "Oro:LONG": {
     "commodity": "Oro",
@@ -1707,57 +1709,57 @@
     "direction": "LONG",
     "validated": {
       "TREND_FOLLOWING": {
-        "train_samples": 40,
-        "train_win_rate": 0.55,
-        "test_samples": 29,
-        "test_win_rate": 0.3103,
+        "train_samples": 43,
+        "train_win_rate": 0.4651,
+        "test_samples": 33,
+        "test_win_rate": 0.3333,
         "validated": false,
-        "expectancy_proxy": -0.069
+        "expectancy_proxy": -0.0
       },
       "MOMENTUM": {
-        "train_samples": 15,
-        "train_win_rate": 0.4,
-        "test_samples": 17,
-        "test_win_rate": 0.1765,
+        "train_samples": 20,
+        "train_win_rate": 0.55,
+        "test_samples": 19,
+        "test_win_rate": 0.4737,
         "validated": false,
-        "expectancy_proxy": -0.471
+        "expectancy_proxy": 0.421
       },
       "PULLBACK": {
-        "train_samples": 4,
-        "train_win_rate": 0.25,
+        "train_samples": 3,
+        "train_win_rate": 0.0,
         "test_samples": 4,
         "test_win_rate": 0.0,
         "validated": false,
         "expectancy_proxy": -1.0
       },
       "BREAKOUT": {
-        "train_samples": 13,
-        "train_win_rate": 0.6923,
-        "test_samples": 2,
-        "test_win_rate": 0.5,
+        "train_samples": 14,
+        "train_win_rate": 0.5,
+        "test_samples": 9,
+        "test_win_rate": 0.4444,
         "validated": false,
-        "expectancy_proxy": 0.5
+        "expectancy_proxy": 0.333
       },
       "VOLATILITY_FILTER": {
-        "train_samples": 20,
-        "train_win_rate": 0.6,
-        "test_samples": 14,
-        "test_win_rate": 0.5,
+        "train_samples": 25,
+        "train_win_rate": 0.48,
+        "test_samples": 20,
+        "test_win_rate": 0.55,
         "validated": false,
-        "expectancy_proxy": 0.5
+        "expectancy_proxy": 0.65
       },
       "TREND_MOMENTUM": {
-        "train_samples": 11,
-        "train_win_rate": 0.2727,
-        "test_samples": 16,
-        "test_win_rate": 0.1875,
+        "train_samples": 17,
+        "train_win_rate": 0.4706,
+        "test_samples": 19,
+        "test_win_rate": 0.4737,
         "validated": false,
-        "expectancy_proxy": -0.438
+        "expectancy_proxy": 0.421
       },
       "PULLBACK_MOMENTUM": {
         "train_samples": 2,
         "train_win_rate": 0.0,
-        "test_samples": 3,
+        "test_samples": 2,
         "test_win_rate": 0.0,
         "validated": false,
         "expectancy_proxy": -1.0
@@ -1766,9 +1768,9 @@
     "active": [],
     "current_hits": [],
     "score": 0.0,
-    "samples": 85,
+    "samples": 106,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T09:17:24.303692+00:00"
+    "updated_at": "2026-09-15T09:41:22.671779+00:00"
   },
   "Platino:LONG": {
     "commodity": "Platino",
@@ -2042,7 +2044,7 @@
     "score": 0,
     "samples": 74,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T09:17:11.399284+00:00"
+    "updated_at": "2026-09-15T09:41:10.682716+00:00"
   },
   "Petrolio Brent:SHORT": {
     "commodity": "Petrolio Brent",
@@ -2110,7 +2112,7 @@
     "score": 0.0,
     "samples": 56,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T09:15:29.695379+00:00"
+    "updated_at": "2026-09-15T09:40:03.597495+00:00"
   },
   "Caffè:SHORT": {
     "commodity": "Caffè",
@@ -2178,7 +2180,7 @@
     "score": 0.0,
     "samples": 59,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T09:17:30.135532+00:00"
+    "updated_at": "2026-09-15T09:41:28.071944+00:00"
   },
   "Zucchero:LONG": {
     "commodity": "Zucchero",
