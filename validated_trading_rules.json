@@ -1632,7 +1632,7 @@
     "score": 0,
     "samples": 201,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T16:07:58.528519+00:00"
+    "updated_at": "2026-09-15T16:51:11.437283+00:00"
   },
   "Soia:SHORT": {
     "commodity": "Soia",
