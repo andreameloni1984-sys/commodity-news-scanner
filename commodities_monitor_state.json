@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-09-15T09:18:24.201219+00:00",
-  "best": "Heating Oil",
+  "timestamp": "2026-09-15T09:37:17.842368+00:00",
+  "best": "Bovini vivi",
   "direction": "LONG",
   "action": "NON ENTRARE",
   "entry_state": "BLOCKED",
-  "trigger": "BREAKOUT",
+  "trigger": "PULLBACK + RIPARTENZA",
   "trigger_tf": "5m",
   "position": null,
   "position_direction": null
