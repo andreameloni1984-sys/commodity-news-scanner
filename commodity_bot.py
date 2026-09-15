@@ -62,7 +62,7 @@ KNOWLEDGE_DELTA_CAP = float(os.getenv("KNOWLEDGE_DELTA_CAP", "4.0"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "5.2-GAGARIN-EXPANDED-SLTP2"
+BOT_VERSION = "5.2-GAGARIN-EXPANDED-SLTP3"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -143,12 +143,14 @@ MIN_ENTRY_RR_TP2 = float(os.getenv("MIN_ENTRY_RR_TP2", "2.0"))
 MAX_ENTRY_STOP_ATR = float(os.getenv("MAX_ENTRY_STOP_ATR", "2.5"))
 
 # ============================================================
-# v5.2-GAGARIN SL/TP 2.0 — STRUCTURE + CFD EXECUTION
+# v5.2-GAGARIN SL/TP 3.0 — ROBUST STRUCTURE + VOLATILITY + CFD EXECUTION
 # Technical levels are determined before R/R. ATR is a volatility
 # buffer/validation layer, not the target generator.
 # ============================================================
-SLTP_ENGINE_VERSION = os.getenv("SLTP_ENGINE_VERSION", "2.0-STRUCTURAL-CFD")
+SLTP_ENGINE_VERSION = os.getenv("SLTP_ENGINE_VERSION", "3.0-ROBUST-STRUCTURAL-CFD")
 SL_STRUCTURE_BUFFER_ATR = float(os.getenv("SL_STRUCTURE_BUFFER_ATR", "0.15"))
+SL_ROBUSTNESS_BAND_ATR = float(os.getenv("SL_ROBUSTNESS_BAND_ATR", "0.35"))
+SL_EMA_REFERENCE_ENABLED = os.getenv("SL_EMA_REFERENCE_ENABLED", "1") == "1"
 SL_MIN_ATR = float(os.getenv("SL_MIN_ATR", "0.80"))
 CFD_SPREAD_BUFFER_MULT = float(os.getenv("CFD_SPREAD_BUFFER_MULT", "1.0"))
 SL_STRUCTURE_LOOKBACK_15M = int(os.getenv("SL_STRUCTURE_LOOKBACK_15M", "80"))
@@ -4639,18 +4641,22 @@ def price_action_context_engine(analysis):
 
 
 def adaptive_risk_levels(analysis, candles, direction):
-    """SL/TP Engine 2.1 — structural invalidation + CFD execution."""
+    """SL/TP Engine 3.0 — structural invalidation, volatility/robustness validation and CFD execution.
+
+    Structural levels determine the stop; ATR only validates breathing room and
+    rejects structurally distant stops. R/R is a filter, never a target generator.
+    """
     if not ADAPTIVE_RISK_ENABLED or direction not in ("LONG", "SHORT") or not candles:
-        return {"available": False, "engine_version": "SLTP-2.1"}
+        return {"available": False, "engine_version": SLTP_ENGINE_VERSION}
 
     price = safe_float(analysis.get("entry"), safe_float(analysis.get("price"), 0.0)) or 0.0
     if price <= 0:
-        return {"available": False, "engine_version": "SLTP-2.1", "reason": "NO_ENTRY_PRICE"}
+        return {"available": False, "engine_version": SLTP_ENGINE_VERSION, "reason": "NO_ENTRY_PRICE"}
     atr_value = safe_float(analysis.get("atr"), 0.0) or 0.0
     if atr_value <= 0:
         atr_value = atr(candles, 14) or price * 0.01
     if atr_value <= 0:
-        return {"available": False, "engine_version": "SLTP-2.1", "reason": "NO_ATR"}
+        return {"available": False, "engine_version": SLTP_ENGINE_VERSION, "reason": "NO_ATR"}
 
     def rows(obj): return obj if isinstance(obj, list) else []
     def vals(arr, field):
@@ -4696,6 +4702,15 @@ def adaptive_risk_levels(analysis, candles, direction):
     avwap = analysis.get("anchored_vwap") or analysis.get("avwap") or {}
     avwap_value = safe_float(avwap.get("value")) if isinstance(avwap, dict) else safe_float(avwap)
     poc, vah, val = safe_float(vp.get("poc")), safe_float(vp.get("vah")), safe_float(vp.get("val"))
+    # EMA is a reference/validation layer, never the sole invalidation level.
+    ema_refs = []
+    if SL_EMA_REFERENCE_ENABLED:
+        for tf, arr in (("15m", t15), ("1H", t1h)):
+            closes = vals(arr, "close")
+            if len(closes) >= 50:
+                ema50 = ema(closes, 50) if 'ema' in globals() else None
+                if ema50 is not None:
+                    ema_refs.append((tf, "EMA50", float(ema50)))
     spread = safe_float(analysis.get("live_price_spread"), 0.0) or 0.0
     min_stop_distance = max(SL_MIN_ATR * atr_value, 2.0 * spread)
 
@@ -4706,11 +4721,21 @@ def adaptive_risk_levels(analysis, candles, direction):
             sl_candidates += [(v, tf, "RECENT_LOW") for v in vals(arr[-30:], "low") if v < price]
         if support is not None and support < price: sl_candidates.append((support, "L2L", "SUPPORT"))
         if val is not None and val < price: sl_candidates.append((val, "VP", "VALUE_LOW"))
-        viable = [x for x in sl_candidates if price - x[0] >= min_stop_distance]
+        viable = [x for x in sl_candidates
+                  if price - x[0] >= min_stop_distance
+                  and (price - x[0]) / atr_value <= MAX_ENTRY_STOP_ATR]
         if not viable:
-            return {"available": True, "engine_version": "SLTP-2.1", "reason": "NO_VALID_STRUCTURAL_SL",
-                    "sl_candidates": [{"price": _price_round(x[0]), "tf": x[1], "reason": x[2]} for x in sl_candidates[-50:]]}
-        structural_stop, sl_tf, sl_reason = max(viable, key=lambda x: x[0])
+            return {"available": True, "engine_version": SLTP_ENGINE_VERSION,
+                    "reason": "NO_STRUCTURAL_SL_WITHIN_MAX_ATR",
+                    "sl_candidates": [{"price": _price_round(x[0]), "tf": x[1], "reason": x[2],
+                                       "distance_atr": round(abs(price-x[0])/atr_value,3)}
+                                      for x in sl_candidates[-50:]]}
+        # Prefer the nearest valid structural invalidation. A small ATR band around
+        # that level is considered the robust zone; we never optimize to a single
+        # lucky historical value.
+        nearest_distance = min(price - x[0] for x in viable)
+        robust_viable = [x for x in viable if (price - x[0]) <= nearest_distance + SL_ROBUSTNESS_BAND_ATR * atr_value]
+        structural_stop, sl_tf, sl_reason = max(robust_viable, key=lambda x: x[0])
         technical_stop = min(structural_stop - SL_STRUCTURE_BUFFER_ATR * atr_value, price - min_stop_distance)
         execution_stop = technical_stop - CFD_SPREAD_BUFFER_MULT * spread
     else:
@@ -4719,11 +4744,18 @@ def adaptive_risk_levels(analysis, candles, direction):
             sl_candidates += [(v, tf, "RECENT_HIGH") for v in vals(arr[-30:], "high") if v > price]
         if resistance is not None and resistance > price: sl_candidates.append((resistance, "L2L", "RESISTANCE"))
         if vah is not None and vah > price: sl_candidates.append((vah, "VP", "VALUE_HIGH"))
-        viable = [x for x in sl_candidates if x[0] - price >= min_stop_distance]
+        viable = [x for x in sl_candidates
+                  if x[0] - price >= min_stop_distance
+                  and (x[0] - price) / atr_value <= MAX_ENTRY_STOP_ATR]
         if not viable:
-            return {"available": True, "engine_version": "SLTP-2.1", "reason": "NO_VALID_STRUCTURAL_SL",
-                    "sl_candidates": [{"price": _price_round(x[0]), "tf": x[1], "reason": x[2]} for x in sl_candidates[-50:]]}
-        structural_stop, sl_tf, sl_reason = min(viable, key=lambda x: x[0])
+            return {"available": True, "engine_version": SLTP_ENGINE_VERSION,
+                    "reason": "NO_STRUCTURAL_SL_WITHIN_MAX_ATR",
+                    "sl_candidates": [{"price": _price_round(x[0]), "tf": x[1], "reason": x[2],
+                                       "distance_atr": round(abs(price-x[0])/atr_value,3)}
+                                      for x in sl_candidates[-50:]]}
+        nearest_distance = min(x[0] - price for x in viable)
+        robust_viable = [x for x in viable if (x[0] - price) <= nearest_distance + SL_ROBUSTNESS_BAND_ATR * atr_value]
+        structural_stop, sl_tf, sl_reason = min(robust_viable, key=lambda x: x[0])
         technical_stop = max(structural_stop + SL_STRUCTURE_BUFFER_ATR * atr_value, price + min_stop_distance)
         execution_stop = technical_stop + CFD_SPREAD_BUFFER_MULT * spread
 
@@ -4764,7 +4796,7 @@ def adaptive_risk_levels(analysis, candles, direction):
 
     if not grouped:
         return {
-            "available": True, "engine_version": "SLTP-2.1", "reason": "NO_STRUCTURAL_TP",
+            "available": True, "engine_version": SLTP_ENGINE_VERSION, "reason": "NO_STRUCTURAL_TP",
             "stop": stop, "structural_stop": _price_round(structural_stop),
             "technical_stop": _price_round(technical_stop), "execution_stop": stop,
             "risk_distance": round(risk_distance, 6), "stop_atr": round(stop_atr, 3),
@@ -4796,7 +4828,7 @@ def adaptive_risk_levels(analysis, candles, direction):
             })
 
     return {
-        "available": True, "engine_version": "SLTP-2.1",
+        "available": True, "engine_version": SLTP_ENGINE_VERSION,
         "method": "STRUCTURAL INVALIDATION + MICRO/SETUP/HTF + ATR BUFFER + CFD EXECUTION",
         "atr": round(atr_value, 6), "entry": _price_round(price),
         "stop": stop, "tp1": _price_round(tp1 or 0.0), "tp2": _price_round(tp2 or 0.0), "tp3": _price_round(tp3 or 0.0),
@@ -4804,6 +4836,8 @@ def adaptive_risk_levels(analysis, candles, direction):
         "rr_tp1": round(rr1, 3), "rr_tp2": round(rr2, 3), "rr_tp3": round(rr3, 3),
         "structural_stop": _price_round(structural_stop), "technical_stop": _price_round(technical_stop),
         "execution_stop": stop, "spread": round(spread, 8),
+        "robustness_band_atr": round(SL_ROBUSTNESS_BAND_ATR, 3),
+        "ema_references": [{"tf": tf, "kind": kind, "price": _price_round(v)} for tf, kind, v in ema_refs],
         "sl_selected": {"price": _price_round(structural_stop), "tf": sl_tf, "reason": sl_reason,
                         "distance_atr": round(abs(price - structural_stop) / atr_value, 3)},
         "sl_candidates": [{"price": _price_round(x[0]), "tf": x[1], "reason": x[2]} for x in sl_candidates[-50:]],
@@ -8530,6 +8564,14 @@ def gagarin_finalize_consistent_snapshot(analysis):
     regime = next((concrete(v) for v in regime_candidates if concrete(v) is not None), None)
     setup = next((concrete(v) for v in setup_candidates if concrete(v) is not None), None)
 
+    # Gagarin objects are dictionaries; display must use their explicit state/type
+    # rather than stringifying the whole dictionary (which previously produced
+    # UNKNOWN/NONE in the final summary despite valid earlier values).
+    if isinstance(regime, dict):
+        regime = concrete(regime.get("state") or regime.get("regime"))
+    if isinstance(setup, dict):
+        setup = concrete(setup.get("type") or setup.get("state"))
+
     # Preserve explicit trigger information, but never treat it as authorization.
     trigger = g.get("trigger")
     if trigger is None:
@@ -8614,7 +8656,7 @@ def main():
     print("=" * 70)
     print(f"🌍 COMMODITIES BOT v{BOT_VERSION}")
     print("MORNING + USA + EVENT-DRIVEN + DAILY STATS | PAPER ONLY")
-    print("SOYUZ GAGARIN ARCHITECTURE | DATA → REGIME → STRUCTURE → SETUP → TRIGGER → SL/TP 2.0 → RISK → SAFETY")
+    print("SOYUZ GAGARIN ARCHITECTURE | DATA → REGIME → STRUCTURE → SETUP → TRIGGER → SL/TP 3.0 → RISK → SAFETY")
     print("COMMUNICATION: MORNING + USA + MATERIAL EVENTS | INTERNAL ANALYSIS SILENT")
     print("=" * 70)
     print()
