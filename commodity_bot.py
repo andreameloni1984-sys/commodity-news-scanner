@@ -1,3 +1,4 @@
+import time
 import os
 import json
 import math
@@ -5506,7 +5507,7 @@ def _telegram_commodity_detail(item):
         f"📊 Score {score:.0f} | Prob {prob:.0f}% | Qualità {quality:.0f} | Conf {conf:.0f}",
     ]
     if entry > 0:
-        lines += ["", "📐 PIANO", f"📍 Entry: {_fmt_price(entry)}"]
+        lines += ["", "📐 {GAGARIN_PLAN_LABEL}", f"📍 Entry: {_fmt_price(entry)}"]
         if stop > 0: lines.append(f"🛑 SL: {_fmt_price(stop)}")
         if tp1 > 0: lines.append(f"🎯 TP1: {_fmt_price(tp1)}")
         if tp2 > 0: lines.append(f"🎯 TP2: {_fmt_price(tp2)}")
@@ -5653,7 +5654,7 @@ def _telegram_weekly(ranked):
         f"📉 Trend 20 sessioni: {best['trend20']:+.2f}%",
         f"🔄 Ciclo settimanale: {best['cyc_quality']:.0f}/100",
         "",
-        "📐 PIANO SETTIMANALE — SCENARIO",
+        "📐 {GAGARIN_PLAN_LABEL} SETTIMANALE — SCENARIO",
         f"💰 Prezzo/Entry scenario: {_fmt_price(best['entry'])}",
         f"🛑 SL: {_fmt_price(best['stop'])}",
         f"🎯 TP1: {_fmt_price(best['tp1'])} | R/R 1:1.5",
@@ -8250,6 +8251,27 @@ def soyuz_gagarin_pipeline(name, symbol, usd, global_intel, trading_knowledge):
     return {"candles": candles, "analysis": analysis, "backtest": bt, "source_check": source_check}
 
 # ============================================================
+
+# --- GAGARIN TELEGRAM SAFETY LABEL ---
+def gagarin_plan_label(analysis):
+    """Return an explicit label distinguishing a potential plan from an authorized entry."""
+    try:
+        state = str(
+            analysis.get("gagarin_state")
+            or analysis.get("gagarin", {}).get("state")
+            or analysis.get("state")
+            or ""
+        ).upper()
+        operational = bool(
+            analysis.get("operational_entry_allowed")
+            or analysis.get("gagarin", {}).get("operational_entry_allowed")
+        )
+        if operational and state in {"READY", "ENTRY_CONFIRMED", "ENTRY_AUTHORIZED"}:
+            return "PIANO OPERATIVO — ENTRATA AUTORIZZATA"
+    except Exception:
+        pass
+    return "PIANO POTENZIALE — NON ENTRARE"
+
 # MAIN
 # ============================================================
 
