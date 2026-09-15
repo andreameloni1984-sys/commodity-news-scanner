@@ -19918,5 +19918,29 @@
     "trigger_tf": "1m",
     "regime": "TREND UP",
     "status": "PENDING"
+  },
+  {
+    "id": "Benzina RBOB|2026-09-15T15:45:00+00:00|LONG|PULLBACK + RIPARTENZA",
+    "created_at": "2026-09-15T15:45:04.462276+00:00",
+    "name": "Benzina RBOB",
+    "symbol": "RB/USD",
+    "direction": "LONG",
+    "action": "COMPRA ORA",
+    "price": 3.2362000942230225,
+    "entry": 3.2226,
+    "stop": 2.9774,
+    "tp1": 3.6244,
+    "tp2": 3.7538,
+    "tp3": 3.935,
+    "atr": 0.16181000471115115,
+    "score": 100.0,
+    "score_bucket": "80-100",
+    "probability": 95.43,
+    "confidence": 77.37,
+    "quality": 66.52,
+    "setup": "PULLBACK + RIPARTENZA",
+    "trigger_tf": "5m",
+    "regime": "TREND UP",
+    "status": "PENDING"
   }
 ]
