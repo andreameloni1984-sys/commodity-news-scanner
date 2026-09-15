@@ -62,7 +62,7 @@ KNOWLEDGE_DELTA_CAP = float(os.getenv("KNOWLEDGE_DELTA_CAP", "4.0"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "5.2-GAGARIN-EXPANDED-SLTP3"
+BOT_VERSION = "5.2-GAGARIN-EXPANDED-SLTP4"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -5699,7 +5699,6 @@ def _telegram_commodity_detail(item):
     if not item:
         return "⚪ Commodity non trovata. Scrivi HELP."
     a = item.get("analysis", {}) or {}
-    a = gagarin_finalize_consistent_snapshot(a)
     plan_label = gagarin_plan_label(a)
     name = item.get("name", "N/D")
     direction = a.get("final_direction") or a.get("setup_direction") or a.get("model_signal") or "N/D"
@@ -5711,12 +5710,15 @@ def _telegram_commodity_detail(item):
     quality = safe_float(policy.get("quality"), safe_float(a.get("entry_quality", a.get("quality", 0)), 0)) or 0
     conf = safe_float(policy.get("confidence"), safe_float(a.get("confidence", 0), 0)) or 0
     se = a.get("signal_engine_v42", {}) or {}
-    entry = safe_float(se.get("entry"), safe_float(a.get("entry"), safe_float(a.get("price"), 0))) or 0
-    stop = safe_float(se.get("stop"), safe_float(a.get("stop"), 0)) or 0
-    tp1 = safe_float(se.get("tp1"), safe_float(a.get("tp1"), 0)) or 0
-    tp2 = safe_float(se.get("tp2"), safe_float(a.get("tp2"), 0)) or 0
-    tp3 = safe_float(se.get("tp3"), safe_float(a.get("tp3"), 0)) or 0
-    rr = safe_float(se.get("rr_tp3"), safe_float((a.get("intraday_core", {}) or {}).get("rr_tp3"), 0)) or 0
+    ar = a.get("adaptive_risk", {}) or {}
+    entry = safe_float(ar.get("entry"), safe_float(a.get("entry"), safe_float(se.get("entry"), safe_float(a.get("price"), 0)))) or 0
+    stop = safe_float(ar.get("stop"), safe_float(a.get("stop"), safe_float(se.get("stop"), 0))) or 0
+    tp1 = safe_float(ar.get("tp1"), safe_float(a.get("tp1"), safe_float(se.get("tp1"), 0))) or 0
+    tp2 = safe_float(ar.get("tp2"), safe_float(a.get("tp2"), safe_float(se.get("tp2"), 0))) or 0
+    tp3 = safe_float(ar.get("tp3"), safe_float(a.get("tp3"), safe_float(se.get("tp3"), 0))) or 0
+    rr1 = safe_float(ar.get("rr_tp1"), 0) or 0
+    rr2 = safe_float(ar.get("rr_tp2"), 0) or 0
+    rr3 = safe_float(ar.get("rr_tp3"), safe_float(se.get("rr_tp3"), safe_float((a.get("intraday_core", {}) or {}).get("rr_tp3"), 0))) or 0
     trigger = a.get("entry_trigger", {}) or {}
     icon = "🟢" if direction == "LONG" else "🔴" if direction == "SHORT" else "🟡"
     if action == "ENTRARE":
@@ -5736,9 +5738,11 @@ def _telegram_commodity_detail(item):
     if entry > 0:
         lines += ["", f"📐 {plan_label}", f"📍 Entry: {_fmt_price(entry)}"]
         if stop > 0: lines.append(f"🛑 SL: {_fmt_price(stop)}")
-        if tp1 > 0: lines.append(f"🎯 TP1: {_fmt_price(tp1)}")
-        if tp2 > 0: lines.append(f"🎯 TP2: {_fmt_price(tp2)}")
-        if tp3 > 0: lines.append(f"🎯 TP3: {_fmt_price(tp3)}" + (f" | R/R {rr:.1f}" if rr > 0 else ""))
+        if tp1 > 0: lines.append(f"🎯 TP1: {_fmt_price(tp1)}" + (f" | R/R {rr1:.2f}" if rr1 > 0 else ""))
+        if tp2 > 0: lines.append(f"🎯 TP2: {_fmt_price(tp2)}" + (f" | R/R {rr2:.2f}" if rr2 > 0 else ""))
+        if tp3 > 0: lines.append(f"🎯 TP3: {_fmt_price(tp3)}" + (f" | R/R {rr3:.2f}" if rr3 > 0 else ""))
+        if ar.get("theoretical_only"):
+            lines.append("🧪 SL/TP: TEORICI — nessuna autorizzazione all'ingresso")
     if trigger.get("kind"):
         lines.append(f"🔥 Trigger: {trigger.get('kind')} {trigger.get('timeframe','')}")
     policy_blockers = [str(x) for x in (policy.get("blockers") or []) if x]
@@ -8502,11 +8506,40 @@ def soyuz_gagarin_pipeline(name, symbol, usd, global_intel, trading_knowledge):
     apply_weather_and_disaster_layers(analysis, weather, disasters)
     level_to_level_engine(analysis, commodity_name=name, candles=candles, pattern_timeframes=pattern_timeframes)
     analysis["price_action"] = price_action_context_engine(analysis)
-    adaptive_levels = adaptive_risk_levels(analysis, candles, analysis.get("setup_direction") or analysis.get("model_signal"))
+    try:
+        adaptive_levels = adaptive_risk_levels(analysis, candles, analysis.get("setup_direction") or analysis.get("model_signal"))
+    except Exception as _sltp_exc:
+        # SL/TP failure must never turn valid market data into DATA_UNAVAILABLE.
+        _price = safe_float(analysis.get("entry"), safe_float(analysis.get("price"), 0)) or 0
+        _atr = safe_float(analysis.get("atr"), 0) or 0
+        _atr = _atr if _atr > 0 else max(_price * 0.01, 1e-9)
+        _dir = analysis.get("setup_direction") or analysis.get("model_signal")
+        _risk = _atr
+        if _dir == "LONG":
+            _stop = _price - _risk
+            _tp1, _tp2, _tp3 = _price + 1.5*_risk, _price + 2.0*_risk, _price + 2.5*_risk
+        elif _dir == "SHORT":
+            _stop = _price + _risk
+            _tp1, _tp2, _tp3 = _price - 1.5*_risk, _price - 2.0*_risk, _price - 2.5*_risk
+        else:
+            _stop = _tp1 = _tp2 = _tp3 = None
+        adaptive_levels = {
+            "available": bool(_price > 0 and _dir in ("LONG","SHORT")), "valid": False,
+            "theoretical_only": True, "engine_version": SLTP_ENGINE_VERSION,
+            "reason": f"SLTP_ENGINE_ERROR:{str(_sltp_exc)[:120]}",
+            "entry": _price, "stop": _price_round(_stop) if _stop else None,
+            "tp1": _price_round(_tp1) if _tp1 else None, "tp2": _price_round(_tp2) if _tp2 else None,
+            "tp3": _price_round(_tp3) if _tp3 else None, "risk_distance": round(_risk,6),
+            "rr_tp1": 1.5 if _stop else 0.0, "rr_tp2": 2.0 if _stop else 0.0, "rr_tp3": 2.5 if _stop else 0.0,
+        }
     # SLTP 3.0 can be computationally available but intentionally unable to
     # produce a valid structural stop/target plan. Never index missing keys and
     # never fall back to the legacy synthetic levels in that case.
     analysis["adaptive_risk"] = adaptive_levels
+    analysis["data_available"] = True
+    analysis["sl_tp_available"] = bool(adaptive_levels.get("available"))
+    analysis["sl_tp_theoretical_only"] = bool(adaptive_levels.get("theoretical_only"))
+    analysis["plan_status"] = "THEORETICAL_ONLY" if adaptive_levels.get("theoretical_only") or not adaptive_levels.get("valid") else "OPERATIONAL_CANDIDATE"
     if adaptive_levels.get("available") and all(k in adaptive_levels for k in ("stop", "tp1", "tp2", "tp3")):
         analysis.update({k: adaptive_levels[k] for k in ("stop", "tp1", "tp2", "tp3")})
     elif adaptive_levels.get("reason") == "NO_STRUCTURAL_SL_WITHIN_MAX_ATR":
@@ -8644,32 +8677,43 @@ def gagarin_finalize_consistent_snapshot(analysis):
 
 
 def gagarin_plan_label(analysis):
-    """Render only a resolved user-facing plan label."""
+    """Render the plan label from the already-finalized canonical Gagarin state."""
     try:
-        a = gagarin_finalize_consistent_snapshot(analysis)
-        g = a.get("gagarin", {})
-        allowed = bool(a.get("operational_entry_allowed"))
-        state = str(g.get("state", "")).upper()
-        if allowed and state in {"READY", "ENTRY_CONFIRMED", "ENTRY_AUTHORIZED"}:
+        snap = gagarin_display_snapshot(analysis)
+        state = str(snap.get("state", "")).upper()
+        if snap.get("operational_entry_allowed") and state in {"READY", "ENTRY_CONFIRMED", "ENTRY_AUTHORIZED", "READY_LONG", "READY_SHORT"}:
             return "PIANO OPERATIVO — ENTRATA AUTORIZZATA"
     except Exception:
         pass
-    return "PIANO POTENZIALE — NON ENTRARE"
+    return "PIANO TEORICO — NON OPERATIVO"
 
 
 def gagarin_display_snapshot(analysis):
-    """Return a display-safe snapshot regardless of nested dict/bool representations."""
-    a = gagarin_finalize_consistent_snapshot(analysis)
-    g = a.get("gagarin", {})
-    if not isinstance(g, dict):
-        g = {}
+    """Return the single canonical Gagarin state already stored in analysis.
+
+    IMPORTANT: this function is display-only. It must never re-run the full
+    commodity pipeline, because doing so can create recursive/recomputed states.
+    """
+    a = analysis if isinstance(analysis, dict) else {}
+    g = a.get("gagarin") if isinstance(a.get("gagarin"), dict) else {}
+    policy = g.get("entry_policy") if isinstance(g.get("entry_policy"), dict) else {}
+    regime = g.get("regime", {})
+    setup = g.get("setup", {})
+    trigger = g.get("trigger", {})
+    state = a.get("gagarin_state") or policy.get("state") or "WAIT"
+    blockers = a.get("gagarin_blockers")
+    if blockers is None:
+        blockers = policy.get("blockers", [])
+    allowed = a.get("operational_entry_allowed")
+    if allowed is None:
+        allowed = policy.get("operational_entry_allowed", False)
     return {
-        "regime": g.get("regime", "UNKNOWN"),
-        "setup": g.get("setup", "NONE"),
-        "trigger": g.get("trigger"),
-        "state": g.get("state", "WAIT"),
-        "blockers": list(g.get("blockers") or []),
-        "operational_entry_allowed": bool(g.get("operational_entry_allowed")),
+        "regime": regime,
+        "setup": setup,
+        "trigger": trigger,
+        "state": state,
+        "blockers": list(blockers or []),
+        "operational_entry_allowed": bool(allowed),
     }
 
 # MAIN
@@ -8742,6 +8786,12 @@ def main():
                 f"   🧭 GAGARIN: {gdisp.get('state')} | REGIME {greg} | "
                 f"SETUP {gsetup} | TRIGGER {gtrigger}"
             )
+            _ar_diag = analysis.get("adaptive_risk", {}) or {}
+            print(
+                f"   🧪 DATA=OK | SLTP={'THEORETICAL' if _ar_diag.get('theoretical_only') else 'OK' if _ar_diag.get('available') else 'N/A'} | "
+                f"ENTRY={'YES' if analysis.get('operational_entry_allowed') else 'NO'} | "
+                f"PLAN={analysis.get('plan_status','N/D')}"
+            )
 
             results.append({
                 "name": name,
@@ -8753,12 +8803,15 @@ def main():
                 "source_check": source_check,
             })
 
-            print(
-                f"   ✅ ANALIZZATA | MODELLO {analysis['model_signal']} | "
-                f"OPERATIVO {analysis['signal']} | SCORE {analysis['score']:.0f} | "
-                f"QUALITÀ {analysis['risk']['market_quality']:.0f} | "
-                f"SESSIONE {analysis['session']['current_band']}"
-            )
+            try:
+                print(
+                    f"   ✅ ANALIZZATA | MODELLO {analysis.get('model_signal','N/D')} | "
+                    f"OPERATIVO {analysis.get('signal','WAIT')} | SCORE {safe_float(analysis.get('score'),0) or 0:.0f} | "
+                    f"QUALITÀ {safe_float((analysis.get('risk') or {}).get('market_quality'),0) or 0:.0f} | "
+                    f"SESSIONE {(analysis.get('session') or {}).get('current_band','N/D')}"
+                )
+            except Exception as _display_error:
+                print(f"   ⚠️ ANALISI OK | errore sola visualizzazione: {_display_error}")
 
         except Exception as error:
             # La commodity resta nel ranking come NON DISPONIBILE, così il
@@ -8841,6 +8894,10 @@ def main():
                     _direction,
                 )
                 _a["adaptive_risk"] = _adaptive_live
+                _a["data_available"] = True
+                _a["sl_tp_available"] = bool(_adaptive_live.get("available"))
+                _a["sl_tp_theoretical_only"] = bool(_adaptive_live.get("theoretical_only"))
+                _a["plan_status"] = "THEORETICAL_ONLY" if _adaptive_live.get("theoretical_only") or not _adaptive_live.get("valid") else "OPERATIONAL_CANDIDATE"
                 if _adaptive_live.get("available") and all(k in _adaptive_live for k in ("stop", "tp1", "tp2", "tp3")):
                     _a.update({
                         "stop": _adaptive_live["stop"],
@@ -8967,7 +9024,7 @@ def main():
     # but it is explicitly WAIT and can never open a position.
     best = available_ranked[0] if available_ranked else (market_available_ranked[0] if market_available_ranked else None)
     if best is None:
-        raise RuntimeError("Nessuna commodity dispone di dati sufficienti per il Gold Engine. Controllare simboli/API quota.")
+        raise RuntimeError("Nessuna commodity analizzabile: tutte le pipeline dati hanno fallito.")
 
     demo_execution = demo_execution_adapter(results, position)
     print(f"🤖 Demo adapter: {demo_execution.get('reason', 'ordine registrato')}" if not demo_execution.get('executed') else f"🤖 DEMO ORDER: {demo_execution['order']['commodity']} {demo_execution['order']['side']}")
