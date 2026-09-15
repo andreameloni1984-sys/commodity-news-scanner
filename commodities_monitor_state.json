@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-09-15T19:09:30.293984+00:00",
+  "timestamp": "2026-09-15T19:39:48.560352+00:00",
   "best": "Oro",
   "direction": "LONG",
   "action": "ATTENDERE",
   "entry_state": "SAFETY_BLOCK",
   "trigger": "PULLBACK + RIPARTENZA",
-  "trigger_tf": "1m",
+  "trigger_tf": "5m",
   "position": "Heating Oil",
   "position_direction": "LONG"
 }
