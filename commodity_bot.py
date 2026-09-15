@@ -5071,7 +5071,7 @@ def _telegram_commodity_detail(item):
 
     a = item.get("analysis", {}) or {}
     name = item.get("name", "N/D")
-    direction = a.get("setup_direction") or a.get("model_signal") or "N/D"
+    direction = a.get("final_direction") or a.get("setup_direction") or a.get("model_signal") or "N/D"
     action = a.get("action_label", "ATTENDERE")
     score = safe_float(a.get("score"), 0) or 0
     prob_raw = safe_float(a.get("entry_probability", a.get("probability", 0)), 0) or 0
@@ -5592,7 +5592,7 @@ def compact_tf(timeframes):
 
 
 def confirmation_text(analysis):
-    signal = analysis["signal"] if analysis["signal"] in ("LONG", "SHORT") else analysis["model_signal"]
+    signal = analysis.get("final_direction") or analysis.get("setup_direction") or analysis.get("model_signal")
     tfs = analysis["timeframes"]
 
     if signal not in ("LONG", "SHORT"):
@@ -7485,6 +7485,14 @@ def main():
                 # Refresh dependent final metrics using the live entry.
                 finalize_v26_analysis(_a)
 
+    # v4.6 coherence: setup_direction is the single final analytical direction.
+    # model_signal remains the raw quantitative model direction for diagnostics,
+    # while operational signal may be WAIT because of risk/confluence gates.
+    for _item in results:
+        if _item.get("available"):
+            _a = _item["analysis"]
+            _a["final_direction"] = _a.get("setup_direction") or _a.get("model_signal") or "WAIT"
+
     # v4.2: build one actionable, explainable signal from the finalized layers.
     apply_signal_engine_v42(results)
 
@@ -7664,10 +7672,17 @@ def main():
     a = best["analysis"]
 
     print(f"Materia prima: {best['name']}")
-    print(f"Segnale modello: {a['model_signal']}")
+    final_direction = a.get("setup_direction") or a.get("model_signal") or "WAIT"
+    model_prob = safe_float(a.get("probability"), 0) or 0
+    model_prob = model_prob * 100 if model_prob <= 1.5 else model_prob
+    final_prob = safe_float(a.get("entry_probability", a.get("probability", 0)), 0) or 0
+    final_prob = final_prob * 100 if final_prob <= 1.5 else final_prob
+    print(f"Segnale modello quantitativo: {a['model_signal']}")
+    print(f"Direzione finale setup: {final_direction}")
     print(f"Segnale operativo: {a['signal']}")
     print(f"Score: {a['score']:.1f}/100")
-    print(f"Probabilità: {a['probability'] * 100:.1f}%")
+    print(f"Probabilità modello: {model_prob:.1f}%")
+    print(f"Probabilità direzione finale: {final_prob:.1f}%")
     print(f"Confidenza: {a['confidence']:.1f}/100")
     print(f"Qualità: {a['quality']:.1f}/100")
     if a.get("live_price_status") == "LIVE":
@@ -7702,12 +7717,18 @@ def main():
         if not item.get("available"):
             print(f"{i}. ⚪ {item['name']} | DATI NON DISPONIBILI | {item.get('error', '')}")
             continue
+        final_direction = x.get("setup_direction") or x.get("model_signal") or "WAIT"
+        direction_prob = safe_float(
+            x.get("entry_probability"),
+            x.get("short_probability", 0) if final_direction == "SHORT" else x.get("long_probability", 0),
+        ) or 0
+        direction_prob = direction_prob * 100 if direction_prob <= 1.5 else direction_prob
         print(
             f"{i}. {icon_for_signal(x['signal'])} "
             f"{item['name']} | "
-            f"{x['signal']} | "
+            f"{final_direction} | "
             f"R/B {item.get('ranking_score', x['score']):.0f}/100 | "
-            f"SHORT {x['short_probability'] * 100:.1f}% | "
+            f"Prob {direction_prob:.1f}% | "
             f"storico {x['repetition']['direction']} | fonte {item.get('source_check', {}).get('status', 'N/D')} | "
             f"INTEL {safe_float(x.get('market_intelligence_v41', {}).get('score'), 50):.0f}"
         )
