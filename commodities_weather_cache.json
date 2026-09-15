@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-09-15T14:47:48.616043+00:00",
+  "timestamp": "2026-09-15T15:38:32.725169+00:00",
   "data": {
     "Oro": {
       "enabled": true,
@@ -159,6 +159,104 @@
         }
       ],
       "temperature_change_mean": 1.84,
+      "historical_context": "recent 30-day observations + 10-day forecast"
+    },
+    "Argento": {
+      "enabled": true,
+      "score": 0.0,
+      "label": "NEUTRALE",
+      "confidence": 52,
+      "regions": [
+        {
+          "region": "Mexico/US",
+          "lat": 25.0,
+          "lon": -105.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 26.860000000000003,
+          "forecast_min_mean": 14.550000000000002,
+          "forecast_rain_total": 10.5,
+          "forecast_wind_max": 28.1,
+          "recent_temp_mean": 20.525806451612905,
+          "recent_rain_total": 81.1,
+          "recent_wind_max": 16.3,
+          "raw_forecast_dates": [
+            "2026-09-15",
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20",
+            "2026-09-21",
+            "2026-09-22",
+            "2026-09-23",
+            "2026-09-24"
+          ]
+        }
+      ],
+      "temperature_change_mean": 6.33,
+      "historical_context": "recent 30-day observations + 10-day forecast"
+    },
+    "Petrolio Brent": {
+      "enabled": true,
+      "score": 0.1,
+      "label": "NEUTRALE",
+      "confidence": 64,
+      "regions": [
+        {
+          "region": "North Sea",
+          "lat": 57.0,
+          "lon": 2.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 15.05,
+          "forecast_min_mean": 13.530000000000001,
+          "forecast_rain_total": 14.2,
+          "forecast_wind_max": 54.5,
+          "recent_temp_mean": 15.070967741935483,
+          "recent_rain_total": 70.80000000000003,
+          "recent_wind_max": 51.8,
+          "raw_forecast_dates": [
+            "2026-09-15",
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20",
+            "2026-09-21",
+            "2026-09-22",
+            "2026-09-23",
+            "2026-09-24"
+          ]
+        },
+        {
+          "region": "US Gulf",
+          "lat": 29.0,
+          "lon": -95.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 29.79,
+          "forecast_min_mean": 29.03,
+          "forecast_rain_total": 17.1,
+          "forecast_wind_max": 29.8,
+          "recent_temp_mean": 29.429032258064513,
+          "recent_rain_total": 105.19999999999997,
+          "recent_wind_max": 32.3,
+          "raw_forecast_dates": [
+            "2026-09-15",
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20",
+            "2026-09-21",
+            "2026-09-22",
+            "2026-09-23",
+            "2026-09-24"
+          ]
+        }
+      ],
+      "temperature_change_mean": 0.17,
       "historical_context": "recent 30-day observations + 10-day forecast"
     }
   }
