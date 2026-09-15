@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-09-15T06:01:13.259401+00:00",
+  "timestamp": "2026-09-15T06:16:01.895938+00:00",
   "data": {
     "Oro": {
       "enabled": true,
@@ -71,6 +71,227 @@
         }
       ],
       "temperature_change_mean": 5.21,
+      "historical_context": "recent 30-day observations + 10-day forecast"
+    },
+    "Petrolio WTI": {
+      "enabled": true,
+      "score": 0.4,
+      "label": "NEUTRALE",
+      "confidence": 52,
+      "regions": [
+        {
+          "region": "US Gulf",
+          "lat": 29.0,
+          "lon": -95.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 29.74,
+          "forecast_min_mean": 29.020000000000003,
+          "forecast_rain_total": 25.8,
+          "forecast_wind_max": 30.7,
+          "recent_temp_mean": 29.429032258064513,
+          "recent_rain_total": 105.19999999999997,
+          "recent_wind_max": 32.3,
+          "raw_forecast_dates": [
+            "2026-09-15",
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20",
+            "2026-09-21",
+            "2026-09-22",
+            "2026-09-23",
+            "2026-09-24"
+          ]
+        }
+      ],
+      "temperature_change_mean": 0.31,
+      "historical_context": "recent 30-day observations + 10-day forecast"
+    },
+    "Petrolio Brent": {
+      "enabled": true,
+      "score": 0.4,
+      "label": "NEUTRALE",
+      "confidence": 52,
+      "regions": [
+        {
+          "region": "North Sea",
+          "error": "HTTPSConnectionPool(host='api.open-meteo.com', port=443): Read timed out. (read timeout=12)",
+          "source": "Open-Meteo"
+        },
+        {
+          "region": "US Gulf",
+          "lat": 29.0,
+          "lon": -95.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 29.74,
+          "forecast_min_mean": 29.020000000000003,
+          "forecast_rain_total": 25.8,
+          "forecast_wind_max": 30.7,
+          "recent_temp_mean": 29.429032258064513,
+          "recent_rain_total": 105.19999999999997,
+          "recent_wind_max": 32.3,
+          "raw_forecast_dates": [
+            "2026-09-15",
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20",
+            "2026-09-21",
+            "2026-09-22",
+            "2026-09-23",
+            "2026-09-24"
+          ]
+        }
+      ],
+      "temperature_change_mean": 0.31,
+      "historical_context": "recent 30-day observations + 10-day forecast"
+    },
+    "Rame": {
+      "enabled": true,
+      "score": 2.2,
+      "label": "NEUTRALE",
+      "confidence": 52,
+      "regions": [
+        {
+          "region": "Chile/Peru",
+          "error": "HTTPSConnectionPool(host='api.open-meteo.com', port=443): Read timed out. (read timeout=12)",
+          "source": "Open-Meteo"
+        },
+        {
+          "region": "China",
+          "lat": 30.0,
+          "lon": 105.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 25.96,
+          "forecast_min_mean": 21.249999999999996,
+          "forecast_rain_total": 146.6,
+          "forecast_wind_max": 14.6,
+          "recent_temp_mean": 26.796774193548387,
+          "recent_rain_total": 105.89999999999999,
+          "recent_wind_max": 33.4,
+          "raw_forecast_dates": [
+            "2026-09-15",
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20",
+            "2026-09-21",
+            "2026-09-22",
+            "2026-09-23",
+            "2026-09-24"
+          ]
+        }
+      ],
+      "temperature_change_mean": -0.84,
+      "historical_context": "recent 30-day observations + 10-day forecast"
+    },
+    "Mais": {
+      "enabled": true,
+      "score": -31.8,
+      "label": "BEARISH",
+      "confidence": 64,
+      "regions": [
+        {
+          "region": "US Corn Belt",
+          "lat": 41.0,
+          "lon": -93.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 27.03,
+          "forecast_min_mean": 17.39,
+          "forecast_rain_total": 57.6,
+          "forecast_wind_max": 32.8,
+          "recent_temp_mean": 24.032258064516128,
+          "recent_rain_total": 153.9,
+          "recent_wind_max": 27.9,
+          "raw_forecast_dates": [
+            "2026-09-15",
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20",
+            "2026-09-21",
+            "2026-09-22",
+            "2026-09-23",
+            "2026-09-24"
+          ]
+        },
+        {
+          "region": "Brazil",
+          "lat": -15.0,
+          "lon": -52.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 38.019999999999996,
+          "forecast_min_mean": 25.649999999999995,
+          "forecast_rain_total": 6.4,
+          "forecast_wind_max": 17.9,
+          "recent_temp_mean": 29.083870967741937,
+          "recent_rain_total": 20.3,
+          "recent_wind_max": 20.3,
+          "raw_forecast_dates": [
+            "2026-09-15",
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20",
+            "2026-09-21",
+            "2026-09-22",
+            "2026-09-23",
+            "2026-09-24"
+          ]
+        }
+      ],
+      "temperature_change_mean": 5.97,
+      "historical_context": "recent 30-day observations + 10-day forecast"
+    },
+    "Caffè": {
+      "enabled": true,
+      "score": -31.3,
+      "label": "BEARISH",
+      "confidence": 52,
+      "regions": [
+        {
+          "region": "Brazil",
+          "error": "HTTPSConnectionPool(host='api.open-meteo.com', port=443): Read timed out. (read timeout=12)",
+          "source": "Open-Meteo"
+        },
+        {
+          "region": "Vietnam",
+          "lat": 12.0,
+          "lon": 108.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 27.78,
+          "forecast_min_mean": 20.389999999999997,
+          "forecast_rain_total": 84.6,
+          "forecast_wind_max": 12.0,
+          "recent_temp_mean": 23.067741935483873,
+          "recent_rain_total": 373.80000000000007,
+          "recent_wind_max": 23.5,
+          "raw_forecast_dates": [
+            "2026-09-15",
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20",
+            "2026-09-21",
+            "2026-09-22",
+            "2026-09-23",
+            "2026-09-24"
+          ]
+        }
+      ],
+      "temperature_change_mean": 4.71,
       "historical_context": "recent 30-day observations + 10-day forecast"
     }
   }
