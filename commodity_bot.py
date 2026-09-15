@@ -62,7 +62,7 @@ KNOWLEDGE_DELTA_CAP = float(os.getenv("KNOWLEDGE_DELTA_CAP", "4.0"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "5.2-GAGARIN-EXPANDED-FINAL"
+BOT_VERSION = "5.2-GAGARIN-EXPANDED-SLTP2"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -141,6 +141,23 @@ MIN_ENTRY_RR = float(os.getenv("MIN_ENTRY_RR", "2.5"))
 MIN_ENTRY_RR_TP1 = float(os.getenv("MIN_ENTRY_RR_TP1", "1.5"))
 MIN_ENTRY_RR_TP2 = float(os.getenv("MIN_ENTRY_RR_TP2", "2.0"))
 MAX_ENTRY_STOP_ATR = float(os.getenv("MAX_ENTRY_STOP_ATR", "2.5"))
+
+# ============================================================
+# v5.2-GAGARIN SL/TP 2.0 — STRUCTURE + CFD EXECUTION
+# Technical levels are determined before R/R. ATR is a volatility
+# buffer/validation layer, not the target generator.
+# ============================================================
+SLTP_ENGINE_VERSION = os.getenv("SLTP_ENGINE_VERSION", "2.0-STRUCTURAL-CFD")
+SL_STRUCTURE_BUFFER_ATR = float(os.getenv("SL_STRUCTURE_BUFFER_ATR", "0.15"))
+SL_MIN_ATR = float(os.getenv("SL_MIN_ATR", "0.80"))
+CFD_SPREAD_BUFFER_MULT = float(os.getenv("CFD_SPREAD_BUFFER_MULT", "1.0"))
+SL_STRUCTURE_LOOKBACK_15M = int(os.getenv("SL_STRUCTURE_LOOKBACK_15M", "80"))
+SL_STRUCTURE_LOOKBACK_1H = int(os.getenv("SL_STRUCTURE_LOOKBACK_1H", "80"))
+TP_STRUCTURE_LOOKBACK_15M = int(os.getenv("TP_STRUCTURE_LOOKBACK_15M", "120"))
+TP_STRUCTURE_LOOKBACK_1H = int(os.getenv("TP_STRUCTURE_LOOKBACK_1H", "120"))
+TP_STRUCTURE_LOOKBACK_4H = int(os.getenv("TP_STRUCTURE_LOOKBACK_4H", "120"))
+TP_STRUCTURE_LOOKBACK_DAILY = int(os.getenv("TP_STRUCTURE_LOOKBACK_DAILY", "120"))
+
 
 # ============================================================
 # v4.7 — ENTRY POLICY
@@ -4622,36 +4639,256 @@ def price_action_context_engine(analysis):
 
 
 def adaptive_risk_levels(analysis, candles, direction):
-    """Adaptive SL/TP: structure first, ATR second, percentage profile as fallback."""
-    if not ADAPTIVE_RISK_ENABLED or direction not in ("LONG","SHORT") or not candles:
+    """SL/TP Engine 2.0: structural invalidation first, CFD execution second.
+
+    Design rules:
+      1) Entry uses the live CFD execution side (ASK for LONG, BID for SHORT).
+      2) SL is anchored to recent intraday structural invalidation, not a
+         30-day daily extreme. ATR only supplies a noise buffer and minimum
+         distance check.
+      3) TP levels come from real structural obstacles on 15m/1H/4H/Daily.
+         They are NOT manufactured from R/R multiples.
+      4) R/R is calculated only after structural SL/TP candidates exist.
+      5) A structurally distant stop is not clipped to force a trade; the
+         existing MAX_ENTRY_STOP_ATR policy can veto it.
+      6) CFD spread is recorded and included in execution-risk diagnostics.
+    """
+    if not ADAPTIVE_RISK_ENABLED or direction not in ("LONG", "SHORT") or not candles:
         return {"available": False}
-    price=safe_float(analysis.get("price"))
-    if not price: return {"available": False}
-    a=atr(candles,14) or price*0.01
-    l2l=analysis.get("level_to_level",{}) or {}
-    support=safe_float(l2l.get("support")); resistance=safe_float(l2l.get("resistance"))
-    lows=[safe_float(x.get("low")) for x in candles[-30:] if safe_float(x.get("low")) is not None]
-    highs=[safe_float(x.get("high")) for x in candles[-30:] if safe_float(x.get("high")) is not None]
-    swing_low=min(lows) if lows else None; swing_high=max(highs) if highs else None
-    profile=LEVEL_PROFILES.get(analysis.get("commodity_name") or "", {})
-    sl_pct=profile.get("sl_pct", min(STOP_ATR*a/max(price,1e-9),0.025))
-    tp1_pct=profile.get("tp1_pct", min(TP1_ATR*a/max(price,1e-9),0.035))
-    tp2_pct=profile.get("tp2_pct", min(TP2_ATR*a/max(price,1e-9),0.055))
-    tp3_pct=profile.get("tp3_pct", min(TP3_ATR*a/max(price,1e-9),0.08))
-    if direction=="LONG":
-        candidates=[x for x in (support,swing_low,price-sl_pct*price) if x is not None and x < price]
-        stop=max(candidates) if candidates else price-sl_pct*price
-        stop=min(stop, price-0.55*a)
-        risk=max(price-stop,0.35*a)
-        tps=[price+max(tp1_pct*price,1.50*risk), price+max(tp2_pct*price,2.0*risk), price+max(tp3_pct*price,2.7*risk)]
+
+    price = safe_float(analysis.get("entry"), safe_float(analysis.get("price"), 0.0)) or 0.0
+    if price <= 0:
+        return {"available": False}
+
+    atr_value = safe_float(analysis.get("atr"), 0.0) or 0.0
+    if atr_value <= 0:
+        atr_value = atr(candles, 14) or price * 0.01
+    if atr_value <= 0:
+        return {"available": False}
+
+    # ---------- helpers ----------
+    def rows(obj):
+        return obj if isinstance(obj, list) else []
+
+    def levels_from(tf_rows, side):
+        vals = []
+        for r in rows(tf_rows):
+            if not isinstance(r, dict):
+                continue
+            v = safe_float(r.get(side))
+            if v is not None and v > 0:
+                vals.append(v)
+        return vals
+
+    def pivot_candidates(tf_rows, direction_side):
+        """Local extrema, deliberately avoiding the old min/max-30-day logic."""
+        data = rows(tf_rows)
+        if len(data) < 5:
+            return []
+        out = []
+        # Use the latest 3-bar pivots; they are much more relevant to an
+        # intraday entry than a monthly extreme.
+        for i in range(2, len(data) - 2):
+            c = data[i] if isinstance(data[i], dict) else {}
+            if direction_side == "LOW":
+                v = safe_float(c.get("low"))
+                left = [safe_float(data[j].get("low")) for j in (i-2, i-1) if isinstance(data[j], dict)]
+                right = [safe_float(data[j].get("low")) for j in (i+1, i+2) if isinstance(data[j], dict)]
+                if v is not None and left and right and all(v <= x for x in left + right if x is not None):
+                    out.append(v)
+            else:
+                v = safe_float(c.get("high"))
+                left = [safe_float(data[j].get("high")) for j in (i-2, i-1) if isinstance(data[j], dict)]
+                right = [safe_float(data[j].get("high")) for j in (i+1, i+2) if isinstance(data[j], dict)]
+                if v is not None and left and right and all(v >= x for x in left + right if x is not None):
+                    out.append(v)
+        return out
+
+    def cluster_levels(values, tolerance):
+        """Collapse repeated highs/lows from consecutive candles into zones."""
+        vals = sorted(set(round(x, 8) for x in values if x is not None and x > 0))
+        if not vals:
+            return []
+        clusters = [[vals[0]]]
+        for v in vals[1:]:
+            center = sum(clusters[-1]) / len(clusters[-1])
+            if abs(v - center) <= tolerance:
+                clusters[-1].append(v)
+            else:
+                clusters.append([v])
+        return [sum(c) / len(c) for c in clusters]
+
+    pattern_tfs = analysis.get("pattern_timeframes") or {}
+    intraday_1h = analysis.get("intraday_candles") or []
+    t15 = rows(pattern_tfs.get("15m"))[-SL_STRUCTURE_LOOKBACK_15M:]
+    t1h = rows(pattern_tfs.get("1H") or intraday_1h)[-SL_STRUCTURE_LOOKBACK_1H:]
+    t4h = rows(pattern_tfs.get("4H"))[-TP_STRUCTURE_LOOKBACK_4H:]
+    td = rows(candles)[-TP_STRUCTURE_LOOKBACK_DAILY:]
+
+    l2l = analysis.get("level_to_level") or {}
+    support = safe_float(l2l.get("support"))
+    resistance = safe_float(l2l.get("resistance"))
+    vp = analysis.get("volume_profile") or {}
+    avwap = analysis.get("anchored_vwap") or analysis.get("avwap") or {}
+    avwap_value = safe_float(avwap.get("value")) if isinstance(avwap, dict) else safe_float(avwap)
+    poc = safe_float(vp.get("poc"))
+    vah = safe_float(vp.get("vah"))
+    val = safe_float(vp.get("val"))
+
+    # ---------- structural SL ----------
+    if direction == "LONG":
+        lows = pivot_candidates(t15, "LOW") + pivot_candidates(t1h, "LOW")
+        # Add recent raw lows only as fallback/reference, never a distant
+        # 30-day extreme. Prefer the nearest meaningful invalidation below entry.
+        recent_lows = levels_from(t15[-20:] + t1h[-12:], "low")
+        lows += recent_lows
+        if support is not None and support < price:
+            lows.append(support)
+        if val is not None and val < price:
+            lows.append(val)
+        lows = [x for x in lows if x < price]
+        if not lows:
+            return {"available": False, "reason": "NO_STRUCTURAL_SL"}
+        # Select the nearest structural level that is not absurdly close.
+        min_distance = max(SL_MIN_ATR * atr_value, 2.0 * (safe_float(analysis.get("live_price_spread"), 0.0) or 0.0))
+        viable = [x for x in lows if price - x >= min_distance]
+        structural_stop = max(viable) if viable else max(lows)
+        buffer = SL_STRUCTURE_BUFFER_ATR * atr_value
+        # Never tighten the stop to satisfy a minimum-distance rule. If the
+        # nearest structural invalidation is too close, extend the buffer;
+        # if the structure is too far away, leave it far away and let the
+        # MAX_ENTRY_STOP_ATR safety gate reject the trade rather than corrupt
+        # the invalidation level.
+        technical_stop = structural_stop - buffer
+        technical_stop = min(technical_stop, price - min_distance)
+        spread = safe_float(analysis.get("live_price_spread"), 0.0) or 0.0
+        execution_stop = technical_stop - CFD_SPREAD_BUFFER_MULT * spread
     else:
-        candidates=[x for x in (resistance,swing_high,price+sl_pct*price) if x is not None and x > price]
-        stop=min(candidates) if candidates else price+sl_pct*price
-        stop=max(stop, price+0.55*a)
-        risk=max(stop-price,0.35*a)
-        tps=[price-max(tp1_pct*price,1.50*risk), price-max(tp2_pct*price,2.0*risk), price-max(tp3_pct*price,2.7*risk)]
-    return {"available": True, "atr": round(a,6), "stop": _price_round(stop), "tp1": _price_round(tps[0]), "tp2": _price_round(tps[1]), "tp3": _price_round(tps[2]),
-            "risk_distance": round(risk,6), "method": "STRUCTURA + ATR + PROFILE FALLBACK"}
+        highs = pivot_candidates(t15, "HIGH") + pivot_candidates(t1h, "HIGH")
+        recent_highs = levels_from(t15[-20:] + t1h[-12:], "high")
+        highs += recent_highs
+        if resistance is not None and resistance > price:
+            highs.append(resistance)
+        if vah is not None and vah > price:
+            highs.append(vah)
+        highs = [x for x in highs if x > price]
+        if not highs:
+            return {"available": False, "reason": "NO_STRUCTURAL_SL"}
+        min_distance = max(SL_MIN_ATR * atr_value, 2.0 * (safe_float(analysis.get("live_price_spread"), 0.0) or 0.0))
+        viable = [x for x in highs if x - price >= min_distance]
+        structural_stop = min(viable) if viable else min(highs)
+        buffer = SL_STRUCTURE_BUFFER_ATR * atr_value
+        technical_stop = structural_stop + buffer
+        technical_stop = max(technical_stop, price + min_distance)
+        spread = safe_float(analysis.get("live_price_spread"), 0.0) or 0.0
+        execution_stop = technical_stop + CFD_SPREAD_BUFFER_MULT * spread
+
+    stop = execution_stop
+    risk_distance = abs(price - stop)
+    stop_atr = risk_distance / atr_value if atr_value else 999.0
+
+    # ---------- structural TP candidates ----------
+    if direction == "LONG":
+        candidates = []
+        for arr in (t15, t1h, t4h, td):
+            candidates += pivot_candidates(arr, "HIGH")
+            candidates += levels_from(arr, "high")
+        for v in (resistance, vah, poc, avwap_value):
+            if v is not None and v > price:
+                candidates.append(v)
+        # Deduplicate nearby levels into actual price zones; raw candle highs
+        # are not independent targets.
+        candidates = cluster_levels([x for x in candidates if x > price], max(0.30 * atr_value, 1e-9))
+        candidates = sorted(candidates)
+    else:
+        candidates = []
+        for arr in (t15, t1h, t4h, td):
+            candidates += pivot_candidates(arr, "LOW")
+            candidates += levels_from(arr, "low")
+        for v in (support, val, poc, avwap_value):
+            if v is not None and v < price:
+                candidates.append(v)
+        candidates = cluster_levels([x for x in candidates if x < price], max(0.30 * atr_value, 1e-9))
+        candidates = sorted(candidates, reverse=True)
+
+    # Target ladder: TP1 = nearest meaningful obstacle, TP2 = next HTF obstacle,
+    # TP3 = farther HTF extension. No target is invented merely to hit 1.5R/2R/2.5R.
+    min_target_distance = max(0.35 * atr_value, safe_float(analysis.get("live_price_spread"), 0.0) or 0.0)
+    if direction == "LONG":
+        candidates = [x for x in candidates if x - price >= min_target_distance]
+        # preserve chronological ascending order
+        candidates = sorted(candidates)
+        tp1 = candidates[0] if len(candidates) >= 1 else None
+        tp2 = candidates[1] if len(candidates) >= 2 else None
+        tp3 = candidates[2] if len(candidates) >= 3 else None
+    else:
+        candidates = [x for x in candidates if price - x >= min_target_distance]
+        candidates = sorted(candidates, reverse=True)
+        tp1 = candidates[0] if len(candidates) >= 1 else None
+        tp2 = candidates[1] if len(candidates) >= 2 else None
+        tp3 = candidates[2] if len(candidates) >= 3 else None
+
+    # A higher-timeframe target is preferred for TP2/TP3 when available.
+    htf_candidates = []
+    for arr in (t4h, td):
+        htf_candidates += pivot_candidates(arr, "HIGH" if direction == "LONG" else "LOW")
+        htf_candidates += levels_from(arr, "high" if direction == "LONG" else "low")
+    if direction == "LONG":
+        htf_candidates = cluster_levels([x for x in htf_candidates if x > price + min_target_distance], max(0.40 * atr_value, 1e-9))
+        htf_candidates = sorted(htf_candidates)
+    else:
+        htf_candidates = cluster_levels([x for x in htf_candidates if x < price - min_target_distance], max(0.40 * atr_value, 1e-9))
+        htf_candidates = sorted(htf_candidates, reverse=True)
+    if htf_candidates:
+        # TP2/TP3 prefer higher-timeframe structure. This prevents a cluster
+        # of nearby 15m highs/lows from masquerading as multiple independent
+        # profit targets.
+        tp2 = htf_candidates[0]
+        if len(htf_candidates) >= 2:
+            tp3 = htf_candidates[1]
+
+    if tp1 is None:
+        return {
+            "available": True,
+            "atr": round(atr_value, 6),
+            "stop": _price_round(stop),
+            "tp1": 0.0, "tp2": 0.0, "tp3": 0.0,
+            "risk_distance": round(risk_distance, 6),
+            "stop_atr": round(stop_atr, 3),
+            "rr_tp1": 0.0, "rr_tp2": 0.0, "rr_tp3": 0.0,
+            "method": "STRUCTURAL INVALIDATION + CFD EXECUTION | NO STRUCTURAL TP",
+            "engine_version": SLTP_ENGINE_VERSION,
+            "structural_stop": _price_round(structural_stop),
+            "technical_stop": _price_round(technical_stop),
+            "execution_stop": _price_round(execution_stop),
+            "spread": round(safe_float(analysis.get("live_price_spread"), 0.0) or 0.0, 8),
+            "tp_candidates": [],
+        }
+
+    def rr_for(x):
+        return abs(x - price) / risk_distance if risk_distance > 0 and x else 0.0
+
+    return {
+        "available": True,
+        "atr": round(atr_value, 6),
+        "stop": _price_round(stop),
+        "tp1": _price_round(tp1 or 0.0),
+        "tp2": _price_round(tp2 or 0.0),
+        "tp3": _price_round(tp3 or 0.0),
+        "risk_distance": round(risk_distance, 6),
+        "stop_atr": round(stop_atr, 3),
+        "rr_tp1": round(rr_for(tp1), 3),
+        "rr_tp2": round(rr_for(tp2), 3),
+        "rr_tp3": round(rr_for(tp3), 3),
+        "method": "STRUCTURAL SL + ATR BUFFER + CFD EXECUTION + HTF TARGETS",
+        "engine_version": SLTP_ENGINE_VERSION,
+        "structural_stop": _price_round(structural_stop),
+        "technical_stop": _price_round(technical_stop),
+        "execution_stop": _price_round(execution_stop),
+        "spread": round(safe_float(analysis.get("live_price_spread"), 0.0) or 0.0, 8),
+        "target_source": "15m/1H/4H/Daily structure",
+        "tp_candidates": [_price_round(x) for x in candidates[:12]],
+    }
 
 
 def exit_engine(position, analysis, current_price):
@@ -7824,7 +8061,7 @@ def intelligence_v41_summary(analysis):
 # adapters; they no longer define the architecture by themselves.
 # PAPER ONLY: this layer never places broker orders.
 
-GAGARIN_ARCHITECTURE_VERSION = "5.2-GAGARIN-ARCH-4-EXPANDED-POSITION"
+GAGARIN_ARCHITECTURE_VERSION = "5.2-GAGARIN-ARCH-5-SLTP2-CFD"
 GAGARIN_FINAL_AUTHORITY = True
 GAGARIN_REQUIRE_LIVE_FOR_ENTRY = os.getenv("GAGARIN_REQUIRE_LIVE_FOR_ENTRY", "1") == "1"
 SIFTING_CACHE_TTL_SECONDS = float(os.getenv("SIFTING_CACHE_TTL_SECONDS", "20"))
@@ -8442,7 +8679,7 @@ def main():
     print("=" * 70)
     print(f"🌍 COMMODITIES BOT v{BOT_VERSION}")
     print("MORNING + USA + EVENT-DRIVEN + DAILY STATS | PAPER ONLY")
-    print("SOYUZ GAGARIN ARCHITECTURE | DATA → REGIME → STRUCTURE → SETUP → TRIGGER → RISK → SAFETY")
+    print("SOYUZ GAGARIN ARCHITECTURE | DATA → REGIME → STRUCTURE → SETUP → TRIGGER → SL/TP 2.0 → RISK → SAFETY")
     print("COMMUNICATION: MORNING + USA + MATERIAL EVENTS | INTERNAL ANALYSIS SILENT")
     print("=" * 70)
     print()
@@ -8620,6 +8857,33 @@ def main():
                 smart_entry_engine(_a)
                 signal_engine_v42(_a, _item.get("candles") or [])
                 apply_pre_usa_timing_v5(_a, _name)
+                # SL/TP 2.0 is now part of final Gagarin authority: after live
+                # execution price and every legacy recalculation, rebuild the
+                # structural CFD risk/target model and re-run policy.
+                try:
+                    _a["final_direction"] = _a.get("setup_direction") or _a.get("model_signal") or _a.get("signal")
+                    _g = _a.get("gagarin") or {}
+                    _dq = gagarin_data_quality(_name, _item.get("candles") or [], _a.get("timeframes") or {}, _a.get("intraday_candles") or [])
+                    _reg = gagarin_regime_engine(_a, _item.get("candles") or [])
+                    _str = gagarin_structure_engine(_a)
+                    _loc = gagarin_location_engine(_a)
+                    _router = gagarin_strategy_router(_reg, _str)
+                    _setup = gagarin_setup_engine(_a, _router)
+                    _trig = gagarin_trigger_engine(_a)
+                    _risk = gagarin_risk_engine(_a)
+                    _safe = gagarin_safety_engine(_a, _dq, _reg, _setup, _trig, _risk)
+                    _policy = gagarin_entry_policy(_a, _setup, _trig, _risk, _safe)
+                    _a["gagarin"] = {"architecture_version": GAGARIN_ARCHITECTURE_VERSION, "data_quality": _dq, "regime": _reg, "structure": _str, "location": _loc, "strategy_router": _router, "setup": _setup, "trigger": _trig, "risk": _risk, "safety": _safe, "entry_policy": _policy}
+                    _a["gagarin_state"] = _policy["state"]
+                    _a["gagarin_blockers"] = _policy.get("blockers", [])
+                    _a["gagarin_authority"] = True
+                    _a["operational_entry_allowed"] = _policy["state"] in ("READY_LONG", "READY_SHORT")
+                    if not _a["operational_entry_allowed"]:
+                        _a["signal"] = "WAIT"
+                        _a["action_label"] = "ATTENDERE"
+                        _a["strong_confirmation"] = False
+                except Exception as _gexc:
+                    _a["gagarin_sltp2_error"] = str(_gexc)
 
     # v4.6 coherence: setup_direction is the single final analytical direction.
     # model_signal remains the raw quantitative model direction for diagnostics,
@@ -8870,6 +9134,9 @@ def main():
         )
     else:
         print(f"LIVE PRICE: {a.get('live_price_status', 'N/D')}")
+        if a.get("adaptive_risk"):
+            _ar = a.get("adaptive_risk") or {}
+            print(f"SL/TP 2.0: {_ar.get('method')} | StructSL {_ar.get('structural_stop')} | TechSL {_ar.get('technical_stop')} | ExecSL {_ar.get('execution_stop')} | StopATR {_ar.get('stop_atr')} | RR1 {_ar.get('rr_tp1')} RR2 {_ar.get('rr_tp2')} RR3 {_ar.get('rr_tp3')} | Spread {_ar.get('spread')}")
     print(f"Knowledge Engine: {a.get('trading_knowledge', {}).get('usable', 0)} fonti | bias {a.get('knowledge_bias', 0):+.1f}")
     print(f"Learning Engine: {len(a.get('learning_validated_rules', []))} regole validate | attive {', '.join(a.get('learning_current_hits', [])) or 'nessuna'} | score {a.get('learning_score', 0):.1f}")
     print(f"Market Intelligence v4.1: {intelligence_v41_summary(a)} | delta {a.get('intelligence_delta', 0):+.1f}")
