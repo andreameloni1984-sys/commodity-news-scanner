@@ -745,7 +745,7 @@
     "score": 0.0,
     "samples": 34,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T13:23:41.705690+00:00"
+    "updated_at": "2026-09-16T13:38:09.762140+00:00"
   },
   "Mais:LONG": {
     "commodity": "Mais",
@@ -2450,7 +2450,7 @@
     "score": 0.0,
     "samples": 56,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T13:23:59.696575+00:00"
+    "updated_at": "2026-09-16T13:38:34.136413+00:00"
   },
   "Palladio:LONG": {
     "commodity": "Palladio",
