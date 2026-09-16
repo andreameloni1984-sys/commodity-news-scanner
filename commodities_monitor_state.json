@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-09-16T19:19:12.298850+00:00",
-  "best": "Benzina RBOB",
-  "direction": "LONG",
+  "timestamp": "2026-09-16T20:28:54.224512+00:00",
+  "best": "Oro",
+  "direction": "SHORT",
   "action": "ATTENDERE",
-  "entry_state": "BLOCKED",
-  "trigger": "BREAKOUT",
+  "entry_state": "SAFETY_BLOCK",
+  "trigger": "PULLBACK + RIPARTENZA",
   "trigger_tf": "5m",
-  "position": null,
-  "position_direction": null
+  "position": "Heating Oil",
+  "position_direction": "LONG"
 }

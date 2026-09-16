@@ -1,7 +1,7 @@
 {
   "https://www.cmegroup.com/education/courses/technical-analysis": {
     "name": "CME Technical Analysis",
-    "updated_at": "2026-09-15T19:52:08.807063+00:00",
+    "updated_at": "2026-09-16T20:26:27.062367+00:00",
     "counts": {
       "trend": 0,
       "reversal": 0,
@@ -31,7 +31,7 @@
   },
   "https://www.cmegroup.com/education/courses/trading-and-analysis": {
     "name": "CME Trading and Analysis",
-    "updated_at": "2026-09-15T19:52:08.807063+00:00",
+    "updated_at": "2026-09-16T20:26:27.062367+00:00",
     "counts": {
       "trend": 0,
       "reversal": 0,
@@ -61,7 +61,7 @@
   },
   "https://www.cmegroup.com/education/courses/technical-analysis/technical-patterns-reversals": {
     "name": "CME Technical Patterns Reversals",
-    "updated_at": "2026-09-15T19:52:08.807063+00:00",
+    "updated_at": "2026-09-16T20:26:27.062367+00:00",
     "counts": {
       "trend": 0,
       "reversal": 0,
@@ -91,7 +91,7 @@
   },
   "https://www.cftc.gov/MarketReports/CommitmentsofTraders/index.htm": {
     "name": "CFTC Commitments of Traders",
-    "updated_at": "2026-09-15T19:52:08.807063+00:00",
+    "updated_at": "2026-09-16T20:26:27.062367+00:00",
     "counts": {
       "trend": 1,
       "reversal": 0,
@@ -121,7 +121,7 @@
   },
   "https://www.cftc.gov/MarketReports/CommitmentsofTraders/HistoricalViewable/index.htm": {
     "name": "CFTC COT Historical",
-    "updated_at": "2026-09-15T19:52:08.807063+00:00",
+    "updated_at": "2026-09-16T20:26:27.062367+00:00",
     "counts": {
       "trend": 0,
       "reversal": 0,
@@ -151,7 +151,7 @@
   },
   "https://www.cftc.gov/LearnAndProtect/AdvisoriesAndArticles/CustomerAdvisory_SocialMedia_Metals.html": {
     "name": "CFTC Trading Risk Advisory",
-    "updated_at": "2026-09-15T19:52:08.807063+00:00",
+    "updated_at": "2026-09-16T20:26:27.062367+00:00",
     "counts": {
       "trend": 0,
       "reversal": 0,
@@ -181,7 +181,7 @@
   },
   "https://www.ice.com/support/education": {
     "name": "ICE Education",
-    "updated_at": "2026-09-15T19:52:08.807063+00:00",
+    "updated_at": "2026-09-16T20:26:27.062367+00:00",
     "counts": {
       "trend": 0,
       "reversal": 0,
@@ -211,7 +211,7 @@
   },
   "https://www.ice.com/publicdocs/Charting_and_Technical_Analysis_for_Commodity_Markets.pdf": {
     "name": "ICE Commodity Technical Analysis",
-    "updated_at": "2026-09-15T19:52:08.807063+00:00",
+    "updated_at": "2026-09-16T20:26:27.062367+00:00",
     "counts": {
       "trend": 0,
       "reversal": 0,
@@ -241,7 +241,7 @@
   },
   "https://www.ncei.noaa.gov/cdo-web/": {
     "name": "NOAA Climate Data Online",
-    "updated_at": "2026-09-15T19:52:08.807063+00:00",
+    "updated_at": "2026-09-16T20:26:27.062367+00:00",
     "counts": {
       "trend": 0,
       "reversal": 0,
@@ -271,7 +271,7 @@
   },
   "https://www.cmegroup.com/education.html": {
     "name": "CME Education",
-    "updated_at": "2026-09-15T19:52:08.807063+00:00",
+    "updated_at": "2026-09-16T20:26:27.062367+00:00",
     "counts": {
       "trend": 0,
       "reversal": 0,
@@ -301,7 +301,7 @@
   },
   "https://www.cftc.gov/LearnAndProtect/AdvisoriesAndArticles/index.htm": {
     "name": "CFTC Education",
-    "updated_at": "2026-09-15T19:52:08.807063+00:00",
+    "updated_at": "2026-09-16T20:26:27.062367+00:00",
     "counts": {
       "trend": 0,
       "reversal": 0,
@@ -331,7 +331,7 @@
   },
   "https://www.cftc.gov/MarketReports/CommitmentsofTraders/DisaggregatedExplanatoryNotes/index.htm": {
     "name": "CFTC COT Explanatory Notes",
-    "updated_at": "2026-09-15T19:52:08.807063+00:00",
+    "updated_at": "2026-09-16T20:26:27.062367+00:00",
     "counts": {
       "trend": 0,
       "reversal": 0,
@@ -361,7 +361,7 @@
   },
   "https://www.ice.com/education": {
     "name": "ICE Education",
-    "updated_at": "2026-09-15T19:52:08.807063+00:00",
+    "updated_at": "2026-09-16T20:26:27.062367+00:00",
     "counts": {
       "trend": 0,
       "reversal": 0,
@@ -391,7 +391,7 @@
   },
   "https://www.ice.com/support/education/sample-our-trading-market-education": {
     "name": "ICE Trading Concepts",
-    "updated_at": "2026-09-15T19:52:08.807063+00:00",
+    "updated_at": "2026-09-16T20:26:27.062367+00:00",
     "counts": {
       "trend": 0,
       "reversal": 0,
@@ -421,7 +421,7 @@
   },
   "https://www.eurex.com/ex-en/": {
     "name": "Eurex Global Derivatives",
-    "updated_at": "2026-09-15T19:52:08.807063+00:00",
+    "updated_at": "2026-09-16T20:26:27.062367+00:00",
     "counts": {
       "trend": 1,
       "reversal": 0,
@@ -451,127 +451,127 @@
   },
   "https://ungeracademy.com/it/blog/metodo-o-sistema": {
     "name": "Unger Academy - Metodo e Sistema",
-    "updated_at": "2026-09-15T19:52:08.807063+00:00",
+    "updated_at": "2026-09-16T20:26:27.062367+00:00",
     "counts": {
-      "trend": 12,
-      "reversal": 3,
-      "support_resistance": 3,
+      "trend": 0,
+      "reversal": 0,
+      "support_resistance": 0,
       "breakout": 0,
       "pullback": 0,
-      "momentum": 15,
-      "volatility": 2,
-      "risk": 5,
+      "momentum": 0,
+      "volatility": 0,
+      "risk": 0,
       "fundamental": 0,
       "candlestick": 0,
-      "levels": 3,
+      "levels": 0,
       "entry_exit": 0,
       "retracement": 0,
-      "seasonality": 3,
-      "spread_trading": 6,
+      "seasonality": 0,
+      "spread_trading": 0,
       "contango_backwardation": 0,
       "volume_orderflow": 0,
       "wyckoff": 0,
       "chart_patterns": 0,
-      "backtesting": 1,
+      "backtesting": 0,
       "mechanical_rules": 0,
-      "position_sizing": 3
+      "position_sizing": 0
     },
-    "total": 56,
-    "status": "OK"
+    "total": 0,
+    "status": "NO_TEXT"
   },
   "https://ungeracademy.com/it/blog/backtest-strategia-trading": {
     "name": "Unger Academy - Backtest Strategia",
-    "updated_at": "2026-09-15T19:52:08.807063+00:00",
+    "updated_at": "2026-09-16T20:26:27.062367+00:00",
     "counts": {
-      "trend": 16,
-      "reversal": 3,
-      "support_resistance": 4,
-      "breakout": 3,
+      "trend": 0,
+      "reversal": 0,
+      "support_resistance": 0,
+      "breakout": 0,
       "pullback": 0,
-      "momentum": 18,
-      "volatility": 3,
-      "risk": 5,
+      "momentum": 0,
+      "volatility": 0,
+      "risk": 0,
       "fundamental": 0,
       "candlestick": 0,
-      "levels": 3,
-      "entry_exit": 2,
+      "levels": 0,
+      "entry_exit": 0,
       "retracement": 0,
-      "seasonality": 2,
-      "spread_trading": 6,
+      "seasonality": 0,
+      "spread_trading": 0,
       "contango_backwardation": 0,
-      "volume_orderflow": 1,
+      "volume_orderflow": 0,
       "wyckoff": 0,
       "chart_patterns": 0,
-      "backtesting": 11,
+      "backtesting": 0,
       "mechanical_rules": 0,
-      "position_sizing": 3
+      "position_sizing": 0
     },
-    "total": 80,
-    "status": "OK"
+    "total": 0,
+    "status": "NO_TEXT"
   },
   "https://ungeracademy.com/it/blog/come-impostare-lo-stop-loss-nei-trading-system": {
     "name": "Unger Academy - Stop Loss",
-    "updated_at": "2026-09-15T19:52:08.807063+00:00",
+    "updated_at": "2026-09-16T20:26:27.062367+00:00",
     "counts": {
-      "trend": 10,
-      "reversal": 3,
-      "support_resistance": 3,
+      "trend": 0,
+      "reversal": 0,
+      "support_resistance": 0,
       "breakout": 0,
       "pullback": 0,
-      "momentum": 14,
-      "volatility": 8,
-      "risk": 31,
+      "momentum": 0,
+      "volatility": 0,
+      "risk": 0,
       "fundamental": 0,
       "candlestick": 0,
-      "levels": 3,
+      "levels": 0,
       "entry_exit": 0,
       "retracement": 0,
-      "seasonality": 2,
-      "spread_trading": 6,
+      "seasonality": 0,
+      "spread_trading": 0,
       "contango_backwardation": 0,
       "volume_orderflow": 0,
       "wyckoff": 0,
       "chart_patterns": 0,
-      "backtesting": 2,
+      "backtesting": 0,
       "mechanical_rules": 0,
-      "position_sizing": 3
+      "position_sizing": 0
     },
-    "total": 85,
-    "status": "OK"
+    "total": 0,
+    "status": "NO_TEXT"
   },
   "https://ungeracademy.com/it/blog/trailing-stop-loss-e-trading-systems-come-si-usa-e-funziona-davvero": {
     "name": "Unger Academy - Trailing Stop",
-    "updated_at": "2026-09-15T19:52:08.807063+00:00",
+    "updated_at": "2026-09-16T20:26:27.062367+00:00",
     "counts": {
-      "trend": 10,
-      "reversal": 3,
-      "support_resistance": 3,
-      "breakout": 2,
-      "pullback": 3,
-      "momentum": 18,
-      "volatility": 5,
-      "risk": 10,
+      "trend": 0,
+      "reversal": 0,
+      "support_resistance": 0,
+      "breakout": 0,
+      "pullback": 0,
+      "momentum": 0,
+      "volatility": 0,
+      "risk": 0,
       "fundamental": 0,
       "candlestick": 0,
-      "levels": 3,
-      "entry_exit": 5,
-      "retracement": 3,
-      "seasonality": 2,
-      "spread_trading": 6,
+      "levels": 0,
+      "entry_exit": 0,
+      "retracement": 0,
+      "seasonality": 0,
+      "spread_trading": 0,
       "contango_backwardation": 0,
       "volume_orderflow": 0,
       "wyckoff": 0,
       "chart_patterns": 0,
-      "backtesting": 5,
+      "backtesting": 0,
       "mechanical_rules": 0,
-      "position_sizing": 3
+      "position_sizing": 0
     },
-    "total": 81,
-    "status": "OK"
+    "total": 0,
+    "status": "NO_TEXT"
   },
   "https://goatmoney.it/workshop-3giorni": {
     "name": "GOAT Money - Orso Giordi Locatelli",
-    "updated_at": "2026-09-15T19:52:08.807063+00:00",
+    "updated_at": "2026-09-16T20:26:27.062367+00:00",
     "counts": {
       "trend": 0,
       "reversal": 0,
@@ -601,15 +601,15 @@
   },
   "https://www.linkedin.com/pulse/come-preparo-un-trade-dalla-lavagna-al-mercato-goat-money-xcbpf": {
     "name": "GOAT Money - Preparazione del Trade",
-    "updated_at": "2026-09-15T19:52:08.807063+00:00",
+    "updated_at": "2026-09-16T20:26:27.062367+00:00",
     "counts": {
       "trend": 4,
       "reversal": 0,
       "support_resistance": 5,
       "breakout": 1,
       "pullback": 0,
-      "momentum": 1,
-      "volatility": 1,
+      "momentum": 2,
+      "volatility": 3,
       "risk": 0,
       "fundamental": 1,
       "candlestick": 1,
@@ -626,12 +626,12 @@
       "mechanical_rules": 1,
       "position_sizing": 0
     },
-    "total": 23,
+    "total": 26,
     "status": "OK"
   },
   "https://www.alfiobardolla.com/corsi-premium/corso-online-in-commodity-spread-trading/": {
     "name": "Alfio Bardolla - Commodity Spread Trading",
-    "updated_at": "2026-09-15T19:52:08.807063+00:00",
+    "updated_at": "2026-09-16T20:26:27.062367+00:00",
     "counts": {
       "trend": 13,
       "reversal": 8,
@@ -661,7 +661,7 @@
   },
   "https://capital.com/it-it/markets/commodities": {
     "name": "Capital.com Commodities",
-    "updated_at": "2026-09-15T19:52:08.807063+00:00",
+    "updated_at": "2026-09-16T20:26:27.062367+00:00",
     "counts": {
       "trend": 0,
       "reversal": 0,
@@ -691,7 +691,7 @@
   },
   "https://capital.com/it-it/learn": {
     "name": "Capital.com Trading Academy",
-    "updated_at": "2026-09-15T19:52:08.807063+00:00",
+    "updated_at": "2026-09-16T20:26:27.062367+00:00",
     "counts": {
       "trend": 0,
       "reversal": 0,
@@ -721,7 +721,7 @@
   },
   "https://www.ig.com/it/scuola-di-trading/ig-academy/basi-analisi-tecnica": {
     "name": "IG Academy Technical Analysis",
-    "updated_at": "2026-09-15T19:52:08.807063+00:00",
+    "updated_at": "2026-09-16T20:26:27.062367+00:00",
     "counts": {
       "trend": 1,
       "reversal": 0,
@@ -751,7 +751,7 @@
   },
   "https://www.ig.com/it/ig-academy/basi-analisi-tecnica/support-and-resistance": {
     "name": "IG Support Resistance",
-    "updated_at": "2026-09-15T19:52:08.807063+00:00",
+    "updated_at": "2026-09-16T20:26:27.062367+00:00",
     "counts": {
       "trend": 1,
       "reversal": 2,
@@ -781,7 +781,7 @@
   },
   "https://www.ig.com/it/ig-academy/basi-analisi-tecnica/breakouts-and-fakeouts": {
     "name": "IG Breakout Fakeout",
-    "updated_at": "2026-09-15T19:52:08.807063+00:00",
+    "updated_at": "2026-09-16T20:26:27.062367+00:00",
     "counts": {
       "trend": 2,
       "reversal": 0,
@@ -811,7 +811,7 @@
   },
   "https://www.borsaitaliana.it/notizie/sotto-la-lente/commodity.htm": {
     "name": "Borsa Italiana Commodity",
-    "updated_at": "2026-09-15T19:52:08.807063+00:00",
+    "updated_at": "2026-09-16T20:26:27.062367+00:00",
     "counts": {
       "trend": 0,
       "reversal": 0,
