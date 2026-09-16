@@ -62,7 +62,7 @@ KNOWLEDGE_DELTA_CAP = float(os.getenv("KNOWLEDGE_DELTA_CAP", "4.0"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "5.3.5-GAGARIN-PREDICTION-COMPLETE-RANKING"
+BOT_VERSION = "5.3.6-GAGARIN-PREDICTION-COMPLETE-RANKING-FIX"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -9733,9 +9733,15 @@ def main():
         quality = safe_float(policy.get("quality"), safe_float(x.get("quality"), 0)) or 0
         confidence = safe_float(policy.get("confidence"), safe_float(x.get("confidence"), 0)) or 0
         pred = x.get("prediction_v53") or {}
-        g = x.get("gagarin_state") or x.get("gagarin") or {}
+        g_raw = x.get("gagarin_state") or x.get("gagarin") or {}
+        # Gagarin state is historically stored both as a dict and as a label string.
+        # Normalize it here so the complete ranking can never crash on .get().
+        if isinstance(g_raw, dict):
+            g = g_raw
+        else:
+            g = {"state": str(g_raw)}
 
-        g_state = str(g.get("state") or "").upper()
+        g_state = str(g.get("state") or x.get("gagarin_state_label") or "").upper()
         setup = str(pred.get("setup") or g.get("setup") or "NONE").upper()
         trigger_ok = bool(pred.get("trigger_confirmed"))
         rr3 = safe_float(
