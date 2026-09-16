@@ -62,7 +62,7 @@ KNOWLEDGE_DELTA_CAP = float(os.getenv("KNOWLEDGE_DELTA_CAP", "4.0"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "5.3.10-GAGARIN-LIVE-DATA-SETUP-CANDIDATE"
+BOT_VERSION = "5.3.11-GAGARIN-SETUP-LIVE-EVENT"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -896,12 +896,45 @@ def apply_sifting_live_price(analysis, name):
         return analysis
 
     except Exception as exc:
-        analysis["live_price_status"] = "ERROR"
-        analysis["live_price_error"] = str(exc)
+        err = str(exc)
+        upper = err.upper()
+        if "429" in upper or "TOO MANY REQUESTS" in upper:
+            status = "RATE_LIMIT"
+        elif "404" in upper or "NOT FOUND" in upper:
+            status = "NOT_AVAILABLE"
+        elif "STALE" in upper or "AGE" in upper:
+            status = "STALE"
+        else:
+            status = "ERROR"
+        analysis["live_price_status"] = status
+        analysis["live_price_error"] = err
         if SIFTING_LIVE_REQUIRED:
             raise
-        print(f"   ⚠️ SiftingIO LIVE {name}: {exc}")
+        print(f"   ⚠️ SiftingIO LIVE {name}: {status}: {exc}")
         return analysis
+
+
+def event_risk_snapshot(analysis):
+    """Normalize known high-impact event risk without forcing a direction.
+
+    Event risk is a trading-risk modifier, not a LONG/SHORT vote. An upstream
+    calendar/event layer may provide event_risk/event_name/event_minutes.
+    """
+    raw = analysis.get("event_risk") or analysis.get("macro_event_risk") or {}
+    if isinstance(raw, str):
+        return {"level": raw.upper(), "active": raw.upper() in {"HIGH", "CRITICAL"}, "source": "upstream"}
+    if not isinstance(raw, dict):
+        raw = {}
+    level = str(raw.get("level") or raw.get("risk") or "NONE").upper()
+    active = bool(raw.get("active")) or level in {"HIGH", "CRITICAL"}
+    return {
+        "level": level,
+        "active": active,
+        "event": raw.get("event") or raw.get("name") or "",
+        "minutes": raw.get("minutes"),
+        "source": raw.get("source") or "upstream",
+        "direction": "NEUTRAL",
+    }
 
 
 NEWS_TERMS = {
@@ -8615,7 +8648,17 @@ def gagarin_location_engine(analysis):
 
 def gagarin_strategy_router(regime, structure):
     """Select compatible strategy families before looking for a trigger."""
-    state = regime.get("state", "UNKNOWN")
+    state = str(regime.get("state", "UNKNOWN") or "UNKNOWN").upper()
+    # Accept descriptive regime labels such as TREND UP / TREND DOWN produced
+    # by legacy/context layers, while keeping Gagarin's canonical family state.
+    if state.startswith("TREND"):
+        state = "TREND"
+    elif state.startswith("RANGE"):
+        state = "RANGE"
+    elif state.startswith("TRANSITION"):
+        state = "TRANSITION"
+    elif state.startswith("SHOCK") or state.startswith("HIGH VOL"):
+        state = "SHOCK"
     behaviour = structure.get("behaviour")
     strategies = []
     if state == "TREND":
@@ -8656,7 +8699,13 @@ def gagarin_setup_engine(analysis, router):
     else:
         stype = "TRANSITION"
     quality = safe_float(l2l.get("score"), 0.0) or 0.0
-    return {"state": "ACTIVE" if quality >= 50 else "FORMING", "direction": d, "type": stype, "quality": round(quality, 1)}
+    # Candidate means the directional scenario is structurally plausible but
+    # confirmation (breakout/retest/trigger) is not complete. It must never
+    # authorize an entry. ACTIVE is reserved for a genuinely formed setup.
+    formed_behaviour = behaviour in {"BREAKOUT_RETEST", "BREAKOUT", "FAKEOUT"}
+    state = "ACTIVE" if formed_behaviour and quality >= 50 else "CANDIDATE"
+    return {"state": state, "direction": d, "type": stype, "quality": round(quality, 1),
+            "confirmation": "CONFIRMED" if state == "ACTIVE" else "IN_FORMATION"}
 
 
 def gagarin_trigger_engine(analysis):
@@ -8699,6 +8748,8 @@ def gagarin_safety_engine(analysis, data_quality, regime, setup, trigger, risk):
     if data_quality.get("state") == "DEGRADED": blockers += data_quality.get("issues", [])
     if regime.get("state") in ("SHOCK", "UNKNOWN"): blockers.append("REGIME_" + regime.get("state"))
     if setup.get("state") == "NONE": blockers.append("NO_SETUP")
+    elif setup.get("state") == "CANDIDATE": blockers.append("SETUP_CANDIDATE_NOT_CONFIRMED")
+    elif setup.get("state") == "FORMING": blockers.append("SETUP_FORMING_NOT_CONFIRMED")
     if not risk.get("valid_stop"): blockers.append("INVALID_STOP")
     if risk.get("stop_atr", 999) > MAX_ENTRY_STOP_ATR: blockers.append("STOP_GT_MAX_ATR")
     if risk.get("rr_tp1", 0) + 0.005 < MIN_ENTRY_RR_TP1: blockers.append("RR_TP1_FAIL")
@@ -8706,6 +8757,9 @@ def gagarin_safety_engine(analysis, data_quality, regime, setup, trigger, risk):
     if risk.get("rr_main", 0) + 1e-9 < MIN_ENTRY_RR: blockers.append("RR_MAIN_FAIL")
     legacy_risk = analysis.get("risk") or {}
     if legacy_risk.get("mode") in ("SHOCK", "ERROR"): blockers.append("LEGACY_RISK_" + str(legacy_risk.get("mode")))
+    event = analysis.get("event_risk_snapshot") or event_risk_snapshot(analysis)
+    if event.get("active") and event.get("level") in {"HIGH", "CRITICAL"}:
+        blockers.append("HIGH_IMPACT_EVENT_RISK")
     if (analysis.get("reversal") or {}).get("stage") == "CONFIRMED": blockers.append("REVERSAL_CONFIRMED")
     pred = analysis.get("prediction_v53") or {}
     if pred and not pred.get("operational", False):
@@ -8725,6 +8779,7 @@ def gagarin_entry_policy(analysis, setup, trigger, risk, safety):
                 "blockers": safety["blockers"]}
     missing = []
     if d not in ("LONG", "SHORT"): missing.append("DIRECTION")
+    if setup.get("state") != "ACTIVE": missing.append("SETUP")
     if not trigger.get("confirmed"): missing.append("TRIGGER")
     if prob < MIN_ENTRY_PROBABILITY: missing.append("PROBABILITY")
     if quality < MIN_ENTRY_QUALITY: missing.append("QUALITY")
@@ -9018,6 +9073,8 @@ def soyuz_gagarin_pipeline(name, symbol, usd, global_intel, trading_knowledge):
     apply_commodity_knowledge_engine_v5(analysis, name, news, usd, global_intel)
     apply_pre_usa_timing_v5(analysis, name)
     analysis["v3_context"] = v3_context_summary(analysis)
+    # Event risk can reduce authorization but never manufactures LONG/SHORT.
+    analysis["event_risk_snapshot"] = event_risk_snapshot(analysis)
 
     # Explicit architecture objects.
     dq = gagarin_data_quality(name, candles, timeframes, intraday_candles)
