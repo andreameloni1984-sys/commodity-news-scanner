@@ -62,7 +62,7 @@ KNOWLEDGE_DELTA_CAP = float(os.getenv("KNOWLEDGE_DELTA_CAP", "4.0"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "5.2-GAGARIN-EXPANDED-SLTP4"
+BOT_VERSION = "5.3-GAGARIN-PREDICTION"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -4640,6 +4640,161 @@ def price_action_context_engine(analysis):
             "level_score": round(location,1)}
 
 
+
+def _prediction_pivots(rows, field, lookback=80):
+    """Small deterministic pivot extractor used only by the v5.3 prediction layer."""
+    data = rows if isinstance(rows, list) else []
+    data = data[-lookback:]
+    if len(data) < 7:
+        return []
+    out = []
+    for i in range(2, len(data)-2):
+        r = data[i] if isinstance(data[i], dict) else {}
+        v = safe_float(r.get(field))
+        if v is None:
+            continue
+        neigh=[]
+        for j in (i-2,i-1,i+1,i+2):
+            rr=data[j] if isinstance(data[j],dict) else {}
+            x=safe_float(rr.get(field))
+            if x is not None: neigh.append(x)
+        if len(neigh)==4 and (all(v <= x for x in neigh) if field=='low' else all(v >= x for x in neigh)):
+            out.append((i,v))
+    return out
+
+
+def _prediction_trendline(rows, direction):
+    """Estimate whether the recent swing-line geometry agrees with direction."""
+    if direction not in ('LONG','SHORT'):
+        return {'state':'N/D','score':50.0,'touches':0,'reason':'NESSUNA DIREZIONE'}
+    lows=_prediction_pivots(rows,'low')
+    highs=_prediction_pivots(rows,'high')
+    pts=lows if direction=='LONG' else highs
+    if len(pts)<2:
+        return {'state':'NON_CONFERMATA','score':50.0,'touches':len(pts),'reason':'PUNTI INSUFFICIENTI'}
+    (i1,v1),(i2,v2)=pts[-2],pts[-1]
+    slope=v2-v1
+    ok=slope>0 if direction=='LONG' else slope<0
+    score=72.0 if ok else 35.0
+    return {'state':'CONFERMATA' if ok else 'CONTRARIA','score':score,'touches':len(pts),'slope':round(slope,8),
+            'reason':'SWING LINE COERENTE' if ok else 'SWING LINE CONTRARIA'}
+
+
+def _prediction_structure(rows, direction):
+    """Classify recent HH/HL or LH/LL structure without forecasting from labels alone."""
+    if direction not in ('LONG','SHORT'):
+        return {'state':'N/D','score':50.0,'detail':'NONE'}
+    highs=_prediction_pivots(rows,'high')[-4:]
+    lows=_prediction_pivots(rows,'low')[-4:]
+    if len(highs)<2 or len(lows)<2:
+        return {'state':'INCOMPLETA','score':45.0,'detail':'PIVOT INSUFFICIENTI'}
+    h_ok=highs[-1][1] > highs[-2][1]
+    l_ok=lows[-1][1] > lows[-2][1]
+    if direction=='LONG':
+        ok=h_ok and l_ok
+        detail='HH+HL' if ok else ('HH senza HL' if h_ok else 'STRUTTURA MISTA')
+    else:
+        h_ok=highs[-1][1] < highs[-2][1]
+        l_ok=lows[-1][1] < lows[-2][1]
+        ok=h_ok and l_ok
+        detail='LH+LL' if ok else ('LL senza LH' if l_ok else 'STRUTTURA MISTA')
+    return {'state':'COERENTE' if ok else 'MISTA','score':78.0 if ok else 42.0,'detail':detail}
+
+
+def _prediction_123(rows, direction):
+    """Conservative 1-2-3 detector following the source-derived pivot/confirmation logic."""
+    if direction not in ('LONG','SHORT'):
+        return {'state':'N/D','confirmed':False,'score':50.0}
+    highs=_prediction_pivots(rows,'high')
+    lows=_prediction_pivots(rows,'low')
+    if direction=='LONG' and len(lows)>=2 and len(highs)>=1:
+        p1=lows[-2][1]; p3=lows[-1][1]; p2=highs[-1][1]
+        valid=p3 >= p1
+        # Confirmation requires a break above pivot 2.
+        last=safe_float((rows or [])[-1].get('close')) if rows else None
+        confirmed=bool(valid and last is not None and last > p2)
+        return {'state':'CONFERMATO' if confirmed else ('FORMATO' if valid else 'INVALIDO'),
+                'confirmed':confirmed,'score':88.0 if confirmed else (62.0 if valid else 25.0),
+                'p1':p1,'p2':p2,'p3':p3,'confirmation':p2}
+    if direction=='SHORT' and len(highs)>=2 and len(lows)>=1:
+        p1=highs[-2][1]; p3=highs[-1][1]; p2=lows[-1][1]
+        valid=p3 <= p1
+        last=safe_float((rows or [])[-1].get('close')) if rows else None
+        confirmed=bool(valid and last is not None and last < p2)
+        return {'state':'CONFERMATO' if confirmed else ('FORMATO' if valid else 'INVALIDO'),
+                'confirmed':confirmed,'score':88.0 if confirmed else (62.0 if valid else 25.0),
+                'p1':p1,'p2':p2,'p3':p3,'confirmation':p2}
+    return {'state':'NON RILEVATO','confirmed':False,'score':50.0}
+
+
+def prediction_engine_v53(analysis):
+    """Prediction chain v5.3: regime → structure → zone → pattern → confirmation → space.
+
+    It produces a scenario state, not a guaranteed price forecast. A pattern alone
+    never authorizes an entry. The 1-2-3 confirmation logic follows the referenced
+    FBS structure: pivots 1/2/3 and confirmation at pivot 2.
+    """
+    a=analysis if isinstance(analysis,dict) else {}
+    direction=a.get('setup_direction') or a.get('model_signal') or 'NONE'
+    if direction not in ('LONG','SHORT'):
+        return {'state':'SCENARIO_NEUTRO','direction':'NONE','score':50.0,'operational':False,'reasons':['NESSUNA DIREZIONE']}
+    pts=a.get('pattern_timeframes') or {}
+    rows15=pts.get('15m') or pts.get('1H') or []
+    rows5=pts.get('5m') or rows15
+    regime=market_regime_engine(a)
+    regime_state=str(regime.get('state','UNKNOWN')).upper()
+    structure=_prediction_structure(rows15,direction)
+    trendline=_prediction_trendline(rows15,direction)
+    pa=a.get('price_action') or price_action_context_engine(a)
+    l2l=a.get('level_to_level') or {}
+    location_score=safe_float(l2l.get('score'),50) or 50
+    breakout=bool(l2l.get('breakout'))
+    retest=bool(l2l.get('retest')) and not bool(l2l.get('fakeout'))
+    trigger=a.get('entry_trigger') or {}
+    trigger_confirmed=bool(trigger.get('confirmed')) or retest
+    patterns=pa.get('patterns',[]) if isinstance(pa,dict) else []
+    pattern_score=safe_float(pa.get('score'),50) if isinstance(pa,dict) else 50
+    pattern_score=clamp(50+pattern_score*12,0,100)
+    chart=_prediction_123(rows5,direction)
+    mtf=a.get('timeframes') or {}
+    mtf_dirs=[(mtf.get(tf) or {}).get('direction') for tf in ('4H','1H','15m')]
+    mtf_alignment=sum(x==direction for x in mtf_dirs)
+    mtf_score=35+21*mtf_alignment
+    # Real space comes from the already-calculated structural SL/TP plan.
+    ar=a.get('adaptive_risk') or {}
+    rr1=safe_float(ar.get('rr_tp1'),0) or 0
+    rr2=safe_float(ar.get('rr_tp2'),0) or 0
+    rr3=safe_float(ar.get('rr_tp3'),0) or 0
+    space_score=clamp((min(rr1/1.5,1)*25)+(min(rr2/2.0,1)*25)+(min(rr3/2.5,1)*30),0,80)
+    if ar.get('theoretical_only'): space_score=min(space_score,30)
+    score=clamp(
+        safe_float(regime.get('score'),50)*0.12 + structure['score']*0.16 + trendline['score']*0.08 +
+        location_score*0.12 + pattern_score*0.10 + mtf_score*0.12 +
+        (88 if trigger_confirmed else 35)*0.10 + space_score*0.20,
+        0,100)
+    reasons=[]
+    if regime_state in ('SHOCK','UNKNOWN'): reasons.append('REGIME NON CONFERMATO')
+    if structure['state']!='COERENTE': reasons.append('STRUTTURA DA CONFERMARE')
+    if trendline['state']!='CONFERMATA': reasons.append('TRENDLINE DA CONFERMARE')
+    if not breakout and not retest: reasons.append('BREAKOUT/RETEST NON CONFERMATO')
+    if not trigger_confirmed: reasons.append('TRIGGER NON CONFERMATO')
+    if rr1 < MIN_ENTRY_RR_TP1: reasons.append('SPAZIO TP1 INSUFFICIENTE')
+    if rr2 < MIN_ENTRY_RR_TP2: reasons.append('SPAZIO TP2 INSUFFICIENTE')
+    if rr3 < MIN_ENTRY_RR: reasons.append('SPAZIO TP3 INSUFFICIENTE')
+    hard_ok=(regime_state not in ('SHOCK','UNKNOWN') and structure['state']=='COERENTE' and
+             trigger_confirmed and rr1>=MIN_ENTRY_RR_TP1 and rr2>=MIN_ENTRY_RR_TP2 and rr3>=MIN_ENTRY_RR)
+    state='PREVISIONE_OPERATIVA' if hard_ok else ('PREVISIONE_IN_FORMAZIONE' if direction in ('LONG','SHORT') else 'SCENARIO_NEUTRO')
+    if regime_state=='SHOCK': state='SCENARIO_INVALIDATO'
+    return {
+        'version':'5.3','state':state,'direction':direction,'score':round(score,1),'operational':bool(hard_ok),
+        'regime':regime,'structure':structure,'trendline':trendline,'location_score':round(location_score,1),
+        'patterns':patterns[:10],'pattern_score':round(pattern_score,1),'chart_123':chart,
+        'breakout':breakout,'retest':retest,'trigger_confirmed':trigger_confirmed,
+        'mtf_alignment':mtf_alignment,'mtf_score':round(mtf_score,1),
+        'rr_tp1':round(rr1,3),'rr_tp2':round(rr2,3),'rr_tp3':round(rr3,3),'space_score':round(space_score,1),
+        'reasons':reasons[:10]
+    }
+
 def adaptive_risk_levels(analysis, candles, direction):
     """SL/TP Engine 3.0 — structural invalidation, volatility/robustness validation and CFD execution.
 
@@ -8053,7 +8208,7 @@ def intelligence_v41_summary(analysis):
 # adapters; they no longer define the architecture by themselves.
 # PAPER ONLY: this layer never places broker orders.
 
-GAGARIN_ARCHITECTURE_VERSION = "5.2-GAGARIN-ARCH-6-SLTP2.1-CFD"
+GAGARIN_ARCHITECTURE_VERSION = "5.3-GAGARIN-PREDICTION-1"
 GAGARIN_FINAL_AUTHORITY = True
 GAGARIN_REQUIRE_LIVE_FOR_ENTRY = os.getenv("GAGARIN_REQUIRE_LIVE_FOR_ENTRY", "1") == "1"
 SIFTING_CACHE_TTL_SECONDS = float(os.getenv("SIFTING_CACHE_TTL_SECONDS", "20"))
@@ -8246,6 +8401,9 @@ def gagarin_safety_engine(analysis, data_quality, regime, setup, trigger, risk):
     legacy_risk = analysis.get("risk") or {}
     if legacy_risk.get("mode") in ("SHOCK", "ERROR"): blockers.append("LEGACY_RISK_" + str(legacy_risk.get("mode")))
     if (analysis.get("reversal") or {}).get("stage") == "CONFIRMED": blockers.append("REVERSAL_CONFIRMED")
+    pred = analysis.get("prediction_v53") or {}
+    if pred and not pred.get("operational", False):
+        blockers.append("PREDICTION_NOT_CONFIRMED")
     return {"safe": not blockers, "blockers": list(dict.fromkeys(blockers))}
 
 
@@ -8506,6 +8664,8 @@ def soyuz_gagarin_pipeline(name, symbol, usd, global_intel, trading_knowledge):
     apply_weather_and_disaster_layers(analysis, weather, disasters)
     level_to_level_engine(analysis, commodity_name=name, candles=candles, pattern_timeframes=pattern_timeframes)
     analysis["price_action"] = price_action_context_engine(analysis)
+    # v5.3 prediction chain: scenario/confirmation layer before final Gagarin authority.
+    analysis["prediction_v53"] = prediction_engine_v53(analysis)
     try:
         adaptive_levels = adaptive_risk_levels(analysis, candles, analysis.get("setup_direction") or analysis.get("model_signal"))
     except Exception as _sltp_exc:
@@ -8536,6 +8696,8 @@ def soyuz_gagarin_pipeline(name, symbol, usd, global_intel, trading_knowledge):
     # produce a valid structural stop/target plan. Never index missing keys and
     # never fall back to the legacy synthetic levels in that case.
     analysis["adaptive_risk"] = adaptive_levels
+    # Recompute once after SL/TP so prediction uses the actual structural space.
+    analysis["prediction_v53"] = prediction_engine_v53(analysis)
     analysis["data_available"] = True
     analysis["sl_tp_available"] = bool(adaptive_levels.get("available"))
     analysis["sl_tp_theoretical_only"] = bool(adaptive_levels.get("theoretical_only"))
@@ -8724,7 +8886,7 @@ def main():
     print("=" * 70)
     print(f"🌍 COMMODITIES BOT v{BOT_VERSION}")
     print("MORNING + USA + EVENT-DRIVEN + DAILY STATS | PAPER ONLY")
-    print("SOYUZ GAGARIN ARCHITECTURE | DATA → REGIME → STRUCTURE → SETUP → TRIGGER → SL/TP 3.0 → RISK → SAFETY")
+    print("SOYUZ GAGARIN ARCHITECTURE | DATA → REGIME → STRUCTURE → ZONE → PATTERN → CONFIRM → SL/TP → PREDICTION → RISK → SAFETY")
     print("COMMUNICATION: MORNING + USA + MATERIAL EVENTS | INTERNAL ANALYSIS SILENT")
     print("=" * 70)
     print()
@@ -9009,9 +9171,21 @@ def main():
             base_rb = safe_float(rb.get("score"), a.get("score", 0)) or 0
             q = safe_float(a.get("quality"), 0) or 0
             conf = safe_float(a.get("confidence"), 0) or 0
+            pred = a.get("prediction_v53") or {}
+            rr3 = safe_float(pred.get("rr_tp3"), 0) or 0
+            pred_score = safe_float(pred.get("score"), 50) or 50
+            space = safe_float(pred.get("space_score"), 0) or 0
             item["market_ranking_score"] = clamp(base_rb * 0.60 + q * 0.25 + conf * 0.15 + safe_float(a.get("early_alignment_bonus"), 0), 0, 100)
-            # OPERATIONAL RANKING = only setups that Gagarin explicitly permits.
-            item["ranking_score"] = item["market_ranking_score"] if a.get("operational_entry_allowed") else -1
+            # Operational ranking is deliberately separate: only a fully authorized
+            # setup with structural prediction + real SL/TP space can enter this list.
+            if a.get("operational_entry_allowed"):
+                item["opportunity_score_v53"] = clamp(
+                    item["market_ranking_score"]*0.35 + pred_score*0.25 + q*0.15 + conf*0.10 +
+                    min(rr3/2.5, 1.0)*10 + min(space/80.0,1.0)*5, 0, 100)
+                item["ranking_score"] = item["opportunity_score_v53"]
+            else:
+                item["opportunity_score_v53"] = -1
+                item["ranking_score"] = -1
         else:
             item["market_ranking_score"] = -1
             item["ranking_score"] = -1
@@ -9181,11 +9355,18 @@ def main():
     print(f"Probabilità direzione finale: {final_prob:.1f}%")
     print(f"Confidenza: {a['confidence']:.1f}/100")
     print(f"Qualità: {a['quality']:.1f}/100")
-    _g = a.get("gagarin", {}) or {}
-    _rg = _g.get("regime") if isinstance(_g.get("regime"), dict) else {}
-    _su = _g.get("setup") if isinstance(_g.get("setup"), dict) else {}
-    _tr = _g.get("trigger") if isinstance(_g.get("trigger"), dict) else {}
-    print(f"GAGARIN: {_rg.get('state','N/D')} | SETUP {_su.get('type','N/D')} | TRIGGER {_tr.get('confirmed',False)} | STATE {a.get('gagarin_state','N/D')}")
+    _snap = gagarin_display_snapshot(a)
+    _rg = _snap.get("regime")
+    _su = _snap.get("setup")
+    _tr = _snap.get("trigger")
+    _rg_state = _rg.get("state") if isinstance(_rg,dict) else _rg
+    _su_type = _su.get("type") if isinstance(_su,dict) else _su
+    _tr_ok = _tr.get("confirmed",False) if isinstance(_tr,dict) else bool(_tr)
+    print(f"GAGARIN: {_rg_state or 'N/D'} | SETUP {_su_type or 'N/D'} | TRIGGER {_tr_ok} | STATE {_snap.get('state','N/D')}")
+    _pred = a.get("prediction_v53") or {}
+    print(f"PREVISIONE v5.3: {_pred.get('state','N/D')} | {_pred.get('direction','N/D')} | score {_pred.get('score',0):.1f} | struttura {_pred.get('structure',{}).get('detail','N/D')} | 1-2-3 {_pred.get('chart_123',{}).get('state','N/D')} | spazio {_pred.get('space_score',0):.1f}")
+    if _pred.get('reasons'):
+        print("PREVISIONE CONDIZIONI: " + "; ".join(_pred.get('reasons',[])[:6]))
     if a.get("gagarin_blockers"):
         print("GAGARIN BLOCKERS: " + ", ".join(a.get("gagarin_blockers", [])[:8]))
     if a.get("live_price_status") == "LIVE":
@@ -9215,7 +9396,25 @@ def main():
 
     print()
     print("=" * 70)
-    print("📊 RANKING")
+    print("📊 CLASSIFICA MERCATO")
+    print("=" * 70)
+    for i, item in enumerate(market_ranked[:10], 1):
+        if not item.get("available"): continue
+        x=item["analysis"]
+        print(f"{i}. {item['name']} | {x.get('setup_direction') or x.get('model_signal') or 'WAIT'} | MKT {item.get('market_ranking_score',-1):.1f}")
+
+    print()
+    print("🎯 CLASSIFICA OPPORTUNITÀ OPERATIVE")
+    print("=" * 70)
+    if available_ranked:
+        for i,item in enumerate(available_ranked[:5],1):
+            x=item["analysis"]; pred=x.get("prediction_v53") or {}
+            print(f"{i}. {item['name']} | {x.get('signal')} | OPP {item.get('ranking_score',-1):.1f} | RR3 {pred.get('rr_tp3',0):.2f} | {pred.get('state','N/D')}")
+    else:
+        print("⚪ NESSUNA OPPORTUNITÀ OPERATIVA — la classifica mercato resta informativa.")
+
+    print()
+    print("📊 RANKING DETTAGLIATO")
     print("=" * 70)
 
     for i, item in enumerate(ranked, 1):
