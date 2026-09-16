@@ -62,7 +62,7 @@ KNOWLEDGE_DELTA_CAP = float(os.getenv("KNOWLEDGE_DELTA_CAP", "4.0"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "5.3-GAGARIN-PREDICTION"
+BOT_VERSION = "5.3.1-GAGARIN-PREDICTION-AUTHORITY"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -4795,6 +4795,78 @@ def prediction_engine_v53(analysis):
         'reasons':reasons[:10]
     }
 
+def prediction_authority_v531(analysis):
+    """Canonical v5.3.1 prediction authority for display and entry gating.
+
+    One label is used everywhere: regime/setup/trigger/prediction. The legacy
+    trigger is never allowed to override the prediction confirmation layer.
+    This is a scenario/confirmation gate, not a claim of guaranteed outcome.
+    """
+    a = analysis if isinstance(analysis, dict) else {}
+    pred = a.get("prediction_v53") if isinstance(a.get("prediction_v53"), dict) else {}
+    g = a.get("gagarin") if isinstance(a.get("gagarin"), dict) else {}
+    regime_obj = g.get("regime") if isinstance(g.get("regime"), dict) else {}
+    setup_obj = g.get("setup") if isinstance(g.get("setup"), dict) else {}
+    trigger_obj = g.get("trigger") if isinstance(g.get("trigger"), dict) else {}
+
+    direction = pred.get("direction") or a.get("setup_direction") or a.get("model_signal") or "NONE"
+    regime = str(regime_obj.get("state") or pred.get("regime", {}).get("state") or "UNKNOWN").upper()
+    setup = str(setup_obj.get("type") or "NONE").upper()
+    prediction_trigger = bool(pred.get("trigger_confirmed"))
+    gagarin_trigger = bool(trigger_obj.get("confirmed"))
+    # Both layers must agree. This eliminates the previous "TRIGGER True" vs
+    # "TRIGGER NON CONFERMATO" contradiction.
+    trigger_confirmed = prediction_trigger and gagarin_trigger
+    breakout = bool(pred.get("breakout"))
+    retest = bool(pred.get("retest"))
+    pstate = str(pred.get("state") or "SCENARIO_NEUTRO").upper()
+
+    reasons = list(pred.get("reasons") or [])
+    if not prediction_trigger:
+        reasons.append("TRIGGER PREDICTION NON CONFERMATO")
+    if prediction_trigger and not gagarin_trigger:
+        reasons.append("TRIGGER GAGARIN NON CONFERMATO")
+    if regime in {"SHOCK", "UNKNOWN"}:
+        reasons.append(f"REGIME {regime}")
+
+    # Operational authorization is intentionally stricter than the scenario
+    # state: the existing Gagarin policy, SL/TP and thresholds must also pass.
+    g_allowed = bool(a.get("operational_entry_allowed"))
+    operational = bool(pred.get("operational")) and g_allowed and trigger_confirmed
+    if operational:
+        state = "PREVISIONE_OPERATIVA"
+    elif pstate == "SCENARIO_INVALIDATO" or regime == "SHOCK":
+        state = "SCENARIO_INVALIDATO"
+    elif direction in ("LONG", "SHORT"):
+        state = "PREVISIONE_IN_FORMAZIONE"
+    else:
+        state = "SCENARIO_NEUTRO"
+
+    # Keep ordering and values visible for diagnostics without manufacturing
+    # targets or changing any existing entry thresholds.
+    return {
+        "version": "5.3.1",
+        "direction": direction,
+        "regime": regime,
+        "setup": setup,
+        "breakout": breakout,
+        "retest": retest,
+        "trigger_confirmed": trigger_confirmed,
+        "prediction_trigger_confirmed": prediction_trigger,
+        "gagarin_trigger_confirmed": gagarin_trigger,
+        "state": state,
+        "operational": operational,
+        "score": safe_float(pred.get("score"), 0.0) or 0.0,
+        "structure": (pred.get("structure") or {}).get("detail", "N/D"),
+        "chart_123": (pred.get("chart_123") or {}).get("state", "N/D"),
+        "space_score": safe_float(pred.get("space_score"), 0.0) or 0.0,
+        "rr_tp1": safe_float(pred.get("rr_tp1"), 0.0) or 0.0,
+        "rr_tp2": safe_float(pred.get("rr_tp2"), 0.0) or 0.0,
+        "rr_tp3": safe_float(pred.get("rr_tp3"), 0.0) or 0.0,
+        "reasons": list(dict.fromkeys(str(x) for x in reasons if x))[:12],
+    }
+
+
 def adaptive_risk_levels(analysis, candles, direction):
     """SL/TP Engine 3.0 — structural invalidation, volatility/robustness validation and CFD execution.
 
@@ -8208,7 +8280,7 @@ def intelligence_v41_summary(analysis):
 # adapters; they no longer define the architecture by themselves.
 # PAPER ONLY: this layer never places broker orders.
 
-GAGARIN_ARCHITECTURE_VERSION = "5.3-GAGARIN-PREDICTION-1"
+GAGARIN_ARCHITECTURE_VERSION = "5.3.1-GAGARIN-PREDICTION-AUTHORITY-1"
 GAGARIN_FINAL_AUTHORITY = True
 GAGARIN_REQUIRE_LIVE_FOR_ENTRY = os.getenv("GAGARIN_REQUIRE_LIVE_FOR_ENTRY", "1") == "1"
 SIFTING_CACHE_TTL_SECONDS = float(os.getenv("SIFTING_CACHE_TTL_SECONDS", "20"))
@@ -8932,6 +9004,8 @@ def main():
             )
             candles = pipeline["candles"]
             analysis = pipeline["analysis"]
+            # v5.3.1: canonical prediction authority after final Gagarin state.
+            analysis["prediction_authority_v531"] = prediction_authority_v531(analysis)
             bt = pipeline["backtest"]
             source_check = pipeline["source_check"]
             gdisp = gagarin_display_snapshot(analysis)
@@ -8944,6 +9018,11 @@ def main():
             gtrigger = gdisp.get("trigger")
             if isinstance(gtrigger, dict):
                 gtrigger = gtrigger.get("confirmed")
+            _pa = analysis.get("prediction_authority_v531") or {}
+            if _pa:
+                greg = _pa.get("regime", greg)
+                gsetup = _pa.get("setup", gsetup)
+                gtrigger = _pa.get("trigger_confirmed", False)
             print(
                 f"   🧭 GAGARIN: {gdisp.get('state')} | REGIME {greg} | "
                 f"SETUP {gsetup} | TRIGGER {gtrigger}"
@@ -9363,10 +9442,11 @@ def main():
     _su_type = _su.get("type") if isinstance(_su,dict) else _su
     _tr_ok = _tr.get("confirmed",False) if isinstance(_tr,dict) else bool(_tr)
     print(f"GAGARIN: {_rg_state or 'N/D'} | SETUP {_su_type or 'N/D'} | TRIGGER {_tr_ok} | STATE {_snap.get('state','N/D')}")
-    _pred = a.get("prediction_v53") or {}
-    print(f"PREVISIONE v5.3: {_pred.get('state','N/D')} | {_pred.get('direction','N/D')} | score {_pred.get('score',0):.1f} | struttura {_pred.get('structure',{}).get('detail','N/D')} | 1-2-3 {_pred.get('chart_123',{}).get('state','N/D')} | spazio {_pred.get('space_score',0):.1f}")
+    _pred = a.get("prediction_authority_v531") or prediction_authority_v531(a)
+    print(f"PREVISIONE v5.3.1: {_pred.get('state','N/D')} | {_pred.get('direction','N/D')} | REGIME {_pred.get('regime','N/D')} | SETUP {_pred.get('setup','N/D')} | BREAKOUT {'SI' if _pred.get('breakout') else 'NO'} | RETEST {'SI' if _pred.get('retest') else 'NO'} | TRIGGER {'SI' if _pred.get('trigger_confirmed') else 'NO'}")
+    print(f"PREVISIONE DETTAGLI: struttura {_pred.get('structure','N/D')} | 1-2-3 {_pred.get('chart_123','N/D')} | spazio {_pred.get('space_score',0):.1f} | RR1 {_pred.get('rr_tp1',0):.2f} | RR2 {_pred.get('rr_tp2',0):.2f} | RR3 {_pred.get('rr_tp3',0):.2f}")
     if _pred.get('reasons'):
-        print("PREVISIONE CONDIZIONI: " + "; ".join(_pred.get('reasons',[])[:6]))
+        print("PREVISIONE CONDIZIONI: " + "; ".join(_pred.get('reasons',[])[:8]))
     if a.get("gagarin_blockers"):
         print("GAGARIN BLOCKERS: " + ", ".join(a.get("gagarin_blockers", [])[:8]))
     if a.get("live_price_status") == "LIVE":
