@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-09-16T08:14:13.849191+00:00",
+  "timestamp": "2026-09-16T09:06:27.552457+00:00",
   "best": "Heating Oil",
   "direction": "LONG",
   "action": "ATTENDERE",
   "entry_state": "BLOCKED",
-  "trigger": "BREAKOUT",
-  "trigger_tf": "1m",
+  "trigger": "PULLBACK + RIPARTENZA",
+  "trigger_tf": "5m",
   "position": null,
   "position_direction": null
 }

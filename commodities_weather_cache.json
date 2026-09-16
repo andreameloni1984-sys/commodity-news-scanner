@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-09-16T07:21:39.372453+00:00",
+  "timestamp": "2026-09-16T09:04:32.232723+00:00",
   "data": {
     "Oro": {
       "enabled": true,
@@ -303,6 +303,83 @@
         }
       ],
       "temperature_change_mean": 1.03,
+      "historical_context": "recent 30-day observations + 10-day forecast"
+    },
+    "Petrolio WTI": {
+      "enabled": true,
+      "score": -1.9,
+      "label": "NEUTRALE",
+      "confidence": 52,
+      "regions": [
+        {
+          "region": "US Gulf",
+          "lat": 29.0,
+          "lon": -95.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 29.99,
+          "forecast_min_mean": 28.55,
+          "forecast_rain_total": 20.6,
+          "forecast_wind_max": 47.8,
+          "recent_temp_mean": 29.41935483870968,
+          "recent_rain_total": 108.39999999999998,
+          "recent_wind_max": 30.7,
+          "raw_forecast_dates": [
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20",
+            "2026-09-21",
+            "2026-09-22",
+            "2026-09-23",
+            "2026-09-24",
+            "2026-09-25"
+          ]
+        }
+      ],
+      "temperature_change_mean": 0.57,
+      "historical_context": "recent 30-day observations + 10-day forecast"
+    },
+    "Petrolio Brent": {
+      "enabled": true,
+      "score": -0.6,
+      "label": "NEUTRALE",
+      "confidence": 52,
+      "regions": [
+        {
+          "region": "North Sea",
+          "lat": 57.0,
+          "lon": 2.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 14.940000000000001,
+          "forecast_min_mean": 13.709999999999999,
+          "forecast_rain_total": 13.38,
+          "forecast_wind_max": 56.1,
+          "recent_temp_mean": 15.038709677419355,
+          "recent_rain_total": 71.10000000000002,
+          "recent_wind_max": 51.8,
+          "raw_forecast_dates": [
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20",
+            "2026-09-21",
+            "2026-09-22",
+            "2026-09-23",
+            "2026-09-24",
+            "2026-09-25"
+          ]
+        },
+        {
+          "region": "US Gulf",
+          "error": "HTTPSConnectionPool(host='archive-api.open-meteo.com', port=443): Read timed out. (read timeout=12)",
+          "source": "Open-Meteo"
+        }
+      ],
+      "temperature_change_mean": -0.1,
       "historical_context": "recent 30-day observations + 10-day forecast"
     }
   }
