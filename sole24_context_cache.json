@@ -1,6 +1,6 @@
 {
   "Oro": {
-    "timestamp": "2026-09-15T18:28:42.490843+00:00",
+    "timestamp": "2026-09-16T03:57:58.354476+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -26,7 +26,7 @@
     }
   },
   "Argento": {
-    "timestamp": "2026-09-15T18:28:53.475027+00:00",
+    "timestamp": "2026-09-16T03:58:09.360631+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -51,7 +51,7 @@
     }
   },
   "Platino": {
-    "timestamp": "2026-09-15T18:29:12.878638+00:00",
+    "timestamp": "2026-09-16T03:58:29.423741+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -72,7 +72,7 @@
     }
   },
   "Palladio": {
-    "timestamp": "2026-09-15T18:29:22.694413+00:00",
+    "timestamp": "2026-09-16T03:58:37.531818+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -93,7 +93,7 @@
     }
   },
   "Petrolio WTI": {
-    "timestamp": "2026-09-15T18:29:33.327809+00:00",
+    "timestamp": "2026-09-16T03:59:00.334475+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -118,7 +118,7 @@
     }
   },
   "Petrolio Brent": {
-    "timestamp": "2026-09-15T18:29:43.365265+00:00",
+    "timestamp": "2026-09-16T03:59:12.655206+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -143,7 +143,7 @@
     }
   },
   "Gas Naturale": {
-    "timestamp": "2026-09-15T18:30:14.169410+00:00",
+    "timestamp": "2026-09-16T03:59:53.689385+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -169,7 +169,7 @@
     }
   },
   "Benzina RBOB": {
-    "timestamp": "2026-09-15T18:29:52.575897+00:00",
+    "timestamp": "2026-09-16T03:59:21.110923+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -195,7 +195,7 @@
     }
   },
   "Heating Oil": {
-    "timestamp": "2026-09-15T18:30:01.678884+00:00",
+    "timestamp": "2026-09-16T03:59:30.118653+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -221,7 +221,7 @@
     }
   },
   "Rame": {
-    "timestamp": "2026-09-15T18:29:04.495419+00:00",
+    "timestamp": "2026-09-16T03:58:21.309293+00:00",
     "value": {
       "enabled": true,
       "available": true,
