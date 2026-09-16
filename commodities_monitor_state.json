@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-09-16T12:46:34.430414+00:00",
-  "best": "Heating Oil",
+  "timestamp": "2026-09-16T13:10:22.304618+00:00",
+  "best": "Petrolio Brent",
   "direction": "LONG",
   "action": "ATTENDERE",
   "entry_state": "BLOCKED",
   "trigger": "PULLBACK + RIPARTENZA",
-  "trigger_tf": "5m",
+  "trigger_tf": "1m",
   "position": null,
   "position_direction": null
 }
