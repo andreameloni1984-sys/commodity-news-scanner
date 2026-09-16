@@ -62,7 +62,7 @@ KNOWLEDGE_DELTA_CAP = float(os.getenv("KNOWLEDGE_DELTA_CAP", "4.0"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "5.3.6-GAGARIN-PREDICTION-COMPLETE-RANKING-FIX"
+BOT_VERSION = "5.3.7-GAGARIN-PREDICTION-COMPLETE-RANKING-FIX"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -5773,7 +5773,11 @@ def _telegram_command_ranking(ranked):
     for i, item in enumerate(available, 1):
         a = item.get("analysis", {}) or {}
         pred = a.get("prediction_v53") or {}
-        g = a.get("gagarin_state") or a.get("gagarin") or {}
+        g_raw = a.get("gagarin_state") or a.get("gagarin") or {}
+        if isinstance(g_raw, dict):
+            g = g_raw
+        else:
+            g = {"state": str(g_raw)}
 
         direction = (
             a.get("final_direction")
