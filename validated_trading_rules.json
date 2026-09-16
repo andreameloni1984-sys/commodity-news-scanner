@@ -1221,7 +1221,7 @@
     "score": 0.0,
     "samples": 42,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T09:30:31.691857+00:00"
+    "updated_at": "2026-09-16T10:15:11.399813+00:00"
   },
   "Cotone:SHORT": {
     "commodity": "Cotone",
