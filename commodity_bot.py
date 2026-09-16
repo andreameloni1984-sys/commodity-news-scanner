@@ -62,7 +62,7 @@ KNOWLEDGE_DELTA_CAP = float(os.getenv("KNOWLEDGE_DELTA_CAP", "4.0"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "5.3.1-GAGARIN-PREDICTION-AUTHORITY"
+BOT_VERSION = "5.3.4-GAGARIN-PREDICTION-RANKING"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -5947,7 +5947,16 @@ def _telegram_commodity_detail(item):
     rr2 = safe_float(ar.get("rr_tp2"), 0) or 0
     rr3 = safe_float(ar.get("rr_tp3"), safe_float(se.get("rr_tp3"), safe_float((a.get("intraday_core", {}) or {}).get("rr_tp3"), 0))) or 0
     trigger = a.get("entry_trigger", {}) or {}
-    icon = "🟢" if direction == "LONG" else "🔴" if direction == "SHORT" else "🟡"
+    # v5.3.1 Authority: never present a legacy trigger as confirmed when the
+    # canonical prediction authority has not confirmed it.
+    pred_auth = a.get("prediction_authority_v531") or prediction_authority_v531(a)
+    auth_trigger_ok = bool(pred_auth.get("trigger_confirmed", False))
+    auth_trigger_kind = str(trigger.get("kind") or "TRIGGER")
+    auth_trigger_tf = str(trigger.get("timeframe") or "")
+    if auth_trigger_ok:
+        telegram_trigger_line = f"🔥 Trigger: {auth_trigger_kind} {auth_trigger_tf}".strip()
+    else:
+        telegram_trigger_line = "🔥 Trigger: ❌ NON CONFERMATO"
     if action == "ENTRARE":
         status = "🟢 ENTRATA CONFERMATA"
     elif action == "ENTRATA POSSIBILE":
@@ -5956,6 +5965,7 @@ def _telegram_commodity_detail(item):
         status = "🔴 NON ENTRARE"
     else:
         status = "🟡 ATTENDERE"
+    icon = "🟢" if direction == "LONG" else "🔴" if direction == "SHORT" else "🟡"
     lines = [
         f"🌍 COMMODITIES BOT v{BOT_VERSION}", "", f"📌 {name}",
         f"{icon} {direction} — {status}",
@@ -5970,8 +5980,7 @@ def _telegram_commodity_detail(item):
         if tp3 > 0: lines.append(f"🎯 TP3: {_fmt_price(tp3)}" + (f" | R/R {rr3:.2f}" if rr3 > 0 else ""))
         if ar.get("theoretical_only"):
             lines.append("🧪 SL/TP: TEORICI — nessuna autorizzazione all'ingresso")
-    if trigger.get("kind"):
-        lines.append(f"🔥 Trigger: {trigger.get('kind')} {trigger.get('timeframe','')}")
+    lines.append(telegram_trigger_line)
     policy_blockers = [str(x) for x in (policy.get("blockers") or []) if x]
     risk_mode = str((a.get("risk", {}) or {}).get("mode", "")).upper()
     if risk_mode in ("SHOCK", "ALERT"):
@@ -7783,8 +7792,64 @@ def _communication_state():
 def _save_communication_state(state):
     _json_save("commodities_communication_state.json", state)
 
+def _scheduled_operational_best(ranked):
+    """Return only a fully authorized operational candidate for scheduled plans.
+
+    The market ranking may identify a strong directional scenario even when
+    Gagarin/Prediction/SLTP/Safety block an entry. Scheduled plans must never
+    promote that analytical leader into an operational plan.
+    """
+    operational = [
+        item for item in (ranked or [])
+        if item.get("available")
+        and (item.get("analysis", {}) or {}).get("operational_entry_allowed")
+    ]
+    operational.sort(
+        key=lambda item: safe_float(
+            item.get("opportunity_score_v53"),
+            item.get("ranking_score", -1),
+        ) or -1,
+        reverse=True,
+    )
+    return operational[0] if operational else None
+
+
 def _session_message(label, ranked, best, position_message=None):
-    """Compact scheduled Telegram message; detailed intelligence stays internal."""
+    """Compact scheduled Telegram message; never turns market rank into a trade."""
+    operational_best = _scheduled_operational_best(ranked)
+    if operational_best is None:
+        market_best = next(
+            (
+                item for item in (ranked or [])
+                if item.get("available")
+            ),
+            None,
+        )
+        lines = [
+            label,
+            "",
+            "🟡 NESSUNA OPPORTUNITÀ OPERATIVA",
+            "━━━━━━━━━━━━━━━━━━━━",
+            "Nessun setup ha superato tutti i gate operativi.",
+        ]
+        if market_best:
+            ma = market_best.get("analysis", {}) or {}
+            md = ma.get("final_direction") or ma.get("setup_direction") or ma.get("model_signal") or "NONE"
+            ms = safe_float(market_best.get("market_ranking_score"), ma.get("score", 0)) or 0
+            mp = safe_float(ma.get("entry_probability"), 0) or 0
+            lines += [
+                "",
+                "📊 SCENARIO DI MERCATO",
+                f"🥇 {market_best.get('name','N/D')}",
+                f"{'🟢' if md == 'LONG' else '🔴' if md == 'SHORT' else '🟡'} {md} | MKT {ms:.0f} | Prob {mp:.0f}%",
+                "⚠️ Solo informativo: NON è un segnale d'ingresso.",
+            ]
+        if position_message:
+            lines += ["", "📌 POSIZIONE", position_message]
+        lines += ["", "🧪 PAPER ONLY"]
+        return "\n".join(lines)
+
+    best = operational_best
     a = best.get("analysis", {}) or {}
     direction = a.get("final_direction") or a.get("setup_direction") or a.get("model_signal") or "NONE"
     action = str(a.get("action_label", "ATTENDERE"))
@@ -8941,6 +9006,13 @@ def gagarin_display_snapshot(analysis):
     allowed = a.get("operational_entry_allowed")
     if allowed is None:
         allowed = policy.get("operational_entry_allowed", False)
+    pa = a.get("prediction_authority_v531") if isinstance(a.get("prediction_authority_v531"), dict) else None
+    if pa:
+        regime = pa.get("regime", regime)
+        setup = pa.get("setup", setup)
+        trigger = dict(trigger) if isinstance(trigger, dict) else {}
+        trigger["confirmed"] = bool(pa.get("trigger_confirmed", False))
+        state = pa.get("state", state)
     return {
         "regime": regime,
         "setup": setup,
@@ -9441,6 +9513,10 @@ def main():
     _rg_state = _rg.get("state") if isinstance(_rg,dict) else _rg
     _su_type = _su.get("type") if isinstance(_su,dict) else _su
     _tr_ok = _tr.get("confirmed",False) if isinstance(_tr,dict) else bool(_tr)
+    _pa_display = a.get("prediction_authority_v531") or prediction_authority_v531(a)
+    _rg_state = _pa_display.get("regime", _rg_state)
+    _su_type = _pa_display.get("setup", _su_type)
+    _tr_ok = bool(_pa_display.get("trigger_confirmed", False))
     print(f"GAGARIN: {_rg_state or 'N/D'} | SETUP {_su_type or 'N/D'} | TRIGGER {_tr_ok} | STATE {_snap.get('state','N/D')}")
     _pred = a.get("prediction_authority_v531") or prediction_authority_v531(a)
     print(f"PREVISIONE v5.3.1: {_pred.get('state','N/D')} | {_pred.get('direction','N/D')} | REGIME {_pred.get('regime','N/D')} | SETUP {_pred.get('setup','N/D')} | BREAKOUT {'SI' if _pred.get('breakout') else 'NO'} | RETEST {'SI' if _pred.get('retest') else 'NO'} | TRIGGER {'SI' if _pred.get('trigger_confirmed') else 'NO'}")
@@ -9704,3 +9780,4 @@ def gagarin_entry_now_alert(item):
 
 if __name__ == "__main__":
     main()
+ 
