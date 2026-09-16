@@ -8933,9 +8933,18 @@ def gagarin_position_management(position, analysis, current_price):
     g = analysis.get("gagarin", {}) or {}
     regime = (g.get("regime") or {}).get("state", "UNKNOWN")
     structure = g.get("structure") or {}
-    setup = g.get("setup") or {}
-    trigger = g.get("trigger") or {}
-    dq = g.get("data_quality") or {}
+    trigger_raw = g.get("trigger")
+    # Backward/type-safe normalization: some legacy paths store trigger as a bool.
+    if isinstance(trigger_raw, dict):
+        trigger = trigger_raw
+    elif isinstance(trigger_raw, bool):
+        trigger = {"confirmed": trigger_raw}
+    else:
+        trigger = {}
+    setup_raw = g.get("setup")
+    setup = setup_raw if isinstance(setup_raw, dict) else {}
+    dq_raw = g.get("data_quality")
+    dq = dq_raw if isinstance(dq_raw, dict) else {}
 
     blockers = []
     if dq.get("state") == "DEGRADED":
