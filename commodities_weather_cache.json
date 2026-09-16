@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-09-16T18:13:30.265036+00:00",
+  "timestamp": "2026-09-16T19:08:05.123441+00:00",
   "data": {
     "Oro": {
       "enabled": true,
@@ -35,6 +35,93 @@
         }
       ],
       "temperature_change_mean": 0.25,
+      "historical_context": "recent 30-day observations + 10-day forecast"
+    },
+    "Grano": {
+      "enabled": true,
+      "score": 0.5,
+      "label": "NEUTRALE",
+      "confidence": 52,
+      "regions": [
+        {
+          "region": "US Plains",
+          "error": "HTTPSConnectionPool(host='archive-api.open-meteo.com', port=443): Read timed out. (read timeout=12)",
+          "source": "Open-Meteo"
+        },
+        {
+          "region": "Black Sea",
+          "lat": 47.0,
+          "lon": 35.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 22.999999999999996,
+          "forecast_min_mean": 11.649999999999999,
+          "forecast_rain_total": 7.199999999999999,
+          "forecast_wind_max": 20.1,
+          "recent_temp_mean": 22.261290322580646,
+          "recent_rain_total": 15.0,
+          "recent_wind_max": 27.5,
+          "raw_forecast_dates": [
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20",
+            "2026-09-21",
+            "2026-09-22",
+            "2026-09-23",
+            "2026-09-24",
+            "2026-09-25"
+          ]
+        },
+        {
+          "region": "EU",
+          "error": "HTTPSConnectionPool(host='api.open-meteo.com', port=443): Read timed out. (read timeout=12)",
+          "source": "Open-Meteo"
+        }
+      ],
+      "temperature_change_mean": 0.74,
+      "historical_context": "recent 30-day observations + 10-day forecast"
+    },
+    "Caffè": {
+      "enabled": true,
+      "score": -30.5,
+      "label": "BEARISH",
+      "confidence": 52,
+      "regions": [
+        {
+          "region": "Brazil",
+          "error": "HTTPSConnectionPool(host='api.open-meteo.com', port=443): Read timed out. (read timeout=12)",
+          "source": "Open-Meteo"
+        },
+        {
+          "region": "Vietnam",
+          "lat": 12.0,
+          "lon": 108.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 27.459999999999997,
+          "forecast_min_mean": 20.590000000000003,
+          "forecast_rain_total": 94.3,
+          "forecast_wind_max": 12.7,
+          "recent_temp_mean": 23.05483870967742,
+          "recent_rain_total": 370.40000000000003,
+          "recent_wind_max": 23.5,
+          "raw_forecast_dates": [
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20",
+            "2026-09-21",
+            "2026-09-22",
+            "2026-09-23",
+            "2026-09-24",
+            "2026-09-25"
+          ]
+        }
+      ],
+      "temperature_change_mean": 4.41,
       "historical_context": "recent 30-day observations + 10-day forecast"
     }
   }

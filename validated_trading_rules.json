@@ -38,10 +38,10 @@
       "VOLATILITY_FILTER": {
         "train_samples": 72,
         "train_win_rate": 0.0972,
-        "test_samples": 79,
-        "test_win_rate": 0.1266,
+        "test_samples": 80,
+        "test_win_rate": 0.1375,
         "validated": false,
-        "expectancy_proxy": -0.62
+        "expectancy_proxy": -0.588
       },
       "TREND_MOMENTUM": {
         "train_samples": 9,
@@ -63,9 +63,9 @@
     "active": [],
     "current_hits": [],
     "score": 0.0,
-    "samples": 102,
+    "samples": 103,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T14:45:29.276514+00:00"
+    "updated_at": "2026-09-16T19:03:21.126533+00:00"
   },
   "Argento:SHORT": {
     "commodity": "Argento",
@@ -133,7 +133,7 @@
     "score": 0.0,
     "samples": 50,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T15:43:23.932559+00:00"
+    "updated_at": "2026-09-16T19:03:28.245907+00:00"
   },
   "Platino:SHORT": {
     "commodity": "Platino",
@@ -201,7 +201,7 @@
     "score": 0.0,
     "samples": 70,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T09:29:12.691811+00:00"
+    "updated_at": "2026-09-16T19:04:23.024324+00:00"
   },
   "Palladio:SHORT": {
     "commodity": "Palladio",
@@ -269,7 +269,7 @@
     "score": 0.0,
     "samples": 42,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T16:01:46.975245+00:00"
+    "updated_at": "2026-09-16T19:04:30.090752+00:00"
   },
   "Petrolio WTI:LONG": {
     "commodity": "Petrolio WTI",
@@ -337,7 +337,7 @@
     "score": 0.0,
     "samples": 67,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T14:58:57.002203+00:00"
+    "updated_at": "2026-09-16T19:04:36.735193+00:00"
   },
   "Petrolio Brent:LONG": {
     "commodity": "Petrolio Brent",
@@ -405,7 +405,7 @@
     "score": 0.0,
     "samples": 44,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T13:42:28.423395+00:00"
+    "updated_at": "2026-09-16T19:04:56.261245+00:00"
   },
   "Gas Naturale:SHORT": {
     "commodity": "Gas Naturale",
@@ -473,7 +473,7 @@
     "score": 0.0,
     "samples": 39,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-15T09:40:12.742137+00:00"
+    "updated_at": "2026-09-16T19:05:44.715036+00:00"
   },
   "Benzina RBOB:LONG": {
     "commodity": "Benzina RBOB",
@@ -541,7 +541,7 @@
     "score": 0.0,
     "samples": 61,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T16:02:36.625560+00:00"
+    "updated_at": "2026-09-16T19:05:30.576786+00:00"
   },
   "Heating Oil:LONG": {
     "commodity": "Heating Oil",
@@ -609,7 +609,7 @@
     "score": 0.0,
     "samples": 62,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T16:02:43.199791+00:00"
+    "updated_at": "2026-09-16T19:05:37.791039+00:00"
   },
   "Rame:SHORT": {
     "commodity": "Rame",
@@ -677,7 +677,7 @@
     "score": 0.0,
     "samples": 54,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T09:29:05.063922+00:00"
+    "updated_at": "2026-09-16T19:03:49.568700+00:00"
   },
   "Grano:SHORT": {
     "commodity": "Grano",
@@ -813,7 +813,7 @@
     "score": 0.0,
     "samples": 91,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T13:43:06.992460+00:00"
+    "updated_at": "2026-09-16T19:06:51.023138+00:00"
   },
   "Soia:LONG": {
     "commodity": "Soia",
@@ -881,7 +881,7 @@
     "score": 0.0,
     "samples": 86,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T16:03:09.079162+00:00"
+    "updated_at": "2026-09-16T19:07:24.500028+00:00"
   },
   "Farina di soia:LONG": {
     "commodity": "Farina di soia",
@@ -1153,7 +1153,7 @@
     "score": 0.0,
     "samples": 46,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T16:03:22.312367+00:00"
+    "updated_at": "2026-09-16T19:07:45.044278+00:00"
   },
   "Zucchero:SHORT": {
     "commodity": "Zucchero",
@@ -1289,7 +1289,7 @@
     "score": 0.0,
     "samples": 65,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T16:03:32.564196+00:00"
+    "updated_at": "2026-09-16T19:08:12.840520+00:00"
   },
   "Succo d'arancia:LONG": {
     "commodity": "Succo d'arancia",
@@ -1493,7 +1493,7 @@
     "score": 0.0,
     "samples": 90,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T16:03:44.718567+00:00"
+    "updated_at": "2026-09-16T19:08:31.152429+00:00"
   },
   "Feeder Cattle:LONG": {
     "commodity": "Feeder Cattle",
@@ -1972,7 +1972,7 @@
     "score": 0.0,
     "samples": 69,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T14:59:41.399003+00:00"
+    "updated_at": "2026-09-16T19:06:17.053670+00:00"
   },
   "Olio di soia:LONG": {
     "commodity": "Olio di soia",
@@ -2178,7 +2178,7 @@
     "score": 0.0,
     "samples": 59,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T16:03:26.858656+00:00"
+    "updated_at": "2026-09-16T19:07:52.146366+00:00"
   },
   "Zucchero:LONG": {
     "commodity": "Zucchero",
@@ -2246,7 +2246,7 @@
     "score": 0.0,
     "samples": 56,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T15:00:18.550377+00:00"
+    "updated_at": "2026-09-16T19:07:38.318470+00:00"
   },
   "Argento:LONG": {
     "commodity": "Argento",
@@ -2586,7 +2586,7 @@
     "score": 0.0,
     "samples": 88,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T16:03:41.041914+00:00"
+    "updated_at": "2026-09-16T19:08:25.452847+00:00"
   },
   "Rame:LONG": {
     "commodity": "Rame",
