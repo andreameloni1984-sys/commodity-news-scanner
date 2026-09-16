@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-09-16T07:16:43.655087+00:00",
-  "best": "Soia",
+  "timestamp": "2026-09-16T07:23:06.314443+00:00",
+  "best": "Heating Oil",
   "direction": "LONG",
   "action": "ATTENDERE",
   "entry_state": "BLOCKED",
   "trigger": "PULLBACK + RIPARTENZA",
-  "trigger_tf": "5m",
+  "trigger_tf": "1m",
   "position": null,
   "position_direction": null
 }

@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-09-16T07:15:55.014628+00:00",
+  "timestamp": "2026-09-16T07:21:39.372453+00:00",
   "data": {
     "Oro": {
       "enabled": true,
@@ -179,6 +179,130 @@
         }
       ],
       "temperature_change_mean": 4.06,
+      "historical_context": "recent 30-day observations + 10-day forecast"
+    },
+    "Argento": {
+      "enabled": true,
+      "score": 0.0,
+      "label": "NEUTRALE",
+      "confidence": 52,
+      "regions": [
+        {
+          "region": "Mexico/US",
+          "lat": 25.0,
+          "lon": -105.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 25.5,
+          "forecast_min_mean": 14.09,
+          "forecast_rain_total": 53.2,
+          "forecast_wind_max": 34.4,
+          "recent_temp_mean": 20.454838709677418,
+          "recent_rain_total": 82.7,
+          "recent_wind_max": 18.5,
+          "raw_forecast_dates": [
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20",
+            "2026-09-21",
+            "2026-09-22",
+            "2026-09-23",
+            "2026-09-24",
+            "2026-09-25"
+          ]
+        }
+      ],
+      "temperature_change_mean": 5.05,
+      "historical_context": "recent 30-day observations + 10-day forecast"
+    },
+    "Grano": {
+      "enabled": true,
+      "score": 10.1,
+      "label": "NEUTRALE",
+      "confidence": 76,
+      "regions": [
+        {
+          "region": "US Plains",
+          "lat": 39.0,
+          "lon": -98.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 30.119999999999997,
+          "forecast_min_mean": 18.419999999999995,
+          "forecast_rain_total": 15.8,
+          "forecast_wind_max": 33.2,
+          "recent_temp_mean": 27.338709677419352,
+          "recent_rain_total": 36.6,
+          "recent_wind_max": 36.7,
+          "raw_forecast_dates": [
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20",
+            "2026-09-21",
+            "2026-09-22",
+            "2026-09-23",
+            "2026-09-24",
+            "2026-09-25"
+          ]
+        },
+        {
+          "region": "Black Sea",
+          "lat": 47.0,
+          "lon": 35.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 22.77,
+          "forecast_min_mean": 11.95,
+          "forecast_rain_total": 26.1,
+          "forecast_wind_max": 19.1,
+          "recent_temp_mean": 22.261290322580646,
+          "recent_rain_total": 15.0,
+          "recent_wind_max": 27.5,
+          "raw_forecast_dates": [
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20",
+            "2026-09-21",
+            "2026-09-22",
+            "2026-09-23",
+            "2026-09-24",
+            "2026-09-25"
+          ]
+        },
+        {
+          "region": "EU",
+          "lat": 50.0,
+          "lon": 10.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 18.28,
+          "forecast_min_mean": 7.630000000000001,
+          "forecast_rain_total": 2.3,
+          "forecast_wind_max": 20.5,
+          "recent_temp_mean": 18.470967741935482,
+          "recent_rain_total": 77.2,
+          "recent_wind_max": 31.1,
+          "raw_forecast_dates": [
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20",
+            "2026-09-21",
+            "2026-09-22",
+            "2026-09-23",
+            "2026-09-24",
+            "2026-09-25"
+          ]
+        }
+      ],
+      "temperature_change_mean": 1.03,
       "historical_context": "recent 30-day observations + 10-day forecast"
     }
   }
