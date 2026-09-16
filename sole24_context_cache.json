@@ -1,6 +1,6 @@
 {
   "Oro": {
-    "timestamp": "2026-09-16T07:10:52.167013+00:00",
+    "timestamp": "2026-09-16T10:13:07.583212+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -26,7 +26,7 @@
     }
   },
   "Argento": {
-    "timestamp": "2026-09-16T07:11:16.641180+00:00",
+    "timestamp": "2026-09-16T10:13:18.288346+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -51,7 +51,7 @@
     }
   },
   "Platino": {
-    "timestamp": "2026-09-16T07:11:50.725894+00:00",
+    "timestamp": "2026-09-16T10:13:37.336366+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -72,7 +72,7 @@
     }
   },
   "Palladio": {
-    "timestamp": "2026-09-16T07:11:59.978720+00:00",
+    "timestamp": "2026-09-16T10:13:47.132291+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -93,7 +93,7 @@
     }
   },
   "Petrolio WTI": {
-    "timestamp": "2026-09-16T07:12:22.764345+00:00",
+    "timestamp": "2026-09-16T10:13:58.740090+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -118,7 +118,7 @@
     }
   },
   "Petrolio Brent": {
-    "timestamp": "2026-09-16T07:12:58.261961+00:00",
+    "timestamp": "2026-09-16T10:14:07.364061+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -143,7 +143,7 @@
     }
   },
   "Gas Naturale": {
-    "timestamp": "2026-09-16T07:13:34.274086+00:00",
+    "timestamp": "2026-09-16T10:14:36.634085+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -169,7 +169,7 @@
     }
   },
   "Benzina RBOB": {
-    "timestamp": "2026-09-16T07:13:08.102705+00:00",
+    "timestamp": "2026-09-16T10:14:16.220510+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -195,7 +195,7 @@
     }
   },
   "Heating Oil": {
-    "timestamp": "2026-09-16T07:13:18.987512+00:00",
+    "timestamp": "2026-09-16T10:14:26.429503+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -221,7 +221,7 @@
     }
   },
   "Rame": {
-    "timestamp": "2026-09-16T07:11:41.225267+00:00",
+    "timestamp": "2026-09-16T10:13:28.672288+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -244,7 +244,7 @@
     }
   },
   "Grano": {
-    "timestamp": "2026-09-16T07:14:22.843701+00:00",
+    "timestamp": "2026-09-16T10:14:46.088232+00:00",
     "value": {
       "enabled": true,
       "available": true,
