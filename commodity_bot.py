@@ -62,7 +62,7 @@ KNOWLEDGE_DELTA_CAP = float(os.getenv("KNOWLEDGE_DELTA_CAP", "4.0"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "5.3.1-GAGARIN-PREDICTION-AUTHORITY"
+BOT_VERSION = "5.3.3-GAGARIN-PREDICTION-AUTHORITY"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -5965,6 +5965,7 @@ def _telegram_commodity_detail(item):
         status = "🔴 NON ENTRARE"
     else:
         status = "🟡 ATTENDERE"
+    icon = "🟢" if direction == "LONG" else "🔴" if direction == "SHORT" else "🟡"
     lines = [
         f"🌍 COMMODITIES BOT v{BOT_VERSION}", "", f"📌 {name}",
         f"{icon} {direction} — {status}",
