@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-09-16T19:08:05.123441+00:00",
+  "timestamp": "2026-09-16T19:18:08.446192+00:00",
   "data": {
     "Oro": {
       "enabled": true,
@@ -122,6 +122,145 @@
         }
       ],
       "temperature_change_mean": 4.41,
+      "historical_context": "recent 30-day observations + 10-day forecast"
+    },
+    "Argento": {
+      "enabled": true,
+      "score": 0.0,
+      "label": "NEUTRALE",
+      "confidence": 52,
+      "regions": [
+        {
+          "region": "Mexico/US",
+          "lat": 25.0,
+          "lon": -105.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 25.8,
+          "forecast_min_mean": 14.4,
+          "forecast_rain_total": 50.0,
+          "forecast_wind_max": 35.4,
+          "recent_temp_mean": 20.454838709677418,
+          "recent_rain_total": 82.7,
+          "recent_wind_max": 18.5,
+          "raw_forecast_dates": [
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20",
+            "2026-09-21",
+            "2026-09-22",
+            "2026-09-23",
+            "2026-09-24",
+            "2026-09-25"
+          ]
+        }
+      ],
+      "temperature_change_mean": 5.35,
+      "historical_context": "recent 30-day observations + 10-day forecast"
+    },
+    "Petrolio Brent": {
+      "enabled": true,
+      "score": -2.6,
+      "label": "NEUTRALE",
+      "confidence": 64,
+      "regions": [
+        {
+          "region": "North Sea",
+          "lat": 57.0,
+          "lon": 2.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 14.919999999999998,
+          "forecast_min_mean": 14.070000000000002,
+          "forecast_rain_total": 7.0,
+          "forecast_wind_max": 58.1,
+          "recent_temp_mean": 15.038709677419355,
+          "recent_rain_total": 71.10000000000002,
+          "recent_wind_max": 51.8,
+          "raw_forecast_dates": [
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20",
+            "2026-09-21",
+            "2026-09-22",
+            "2026-09-23",
+            "2026-09-24",
+            "2026-09-25"
+          ]
+        },
+        {
+          "region": "US Gulf",
+          "lat": 29.0,
+          "lon": -95.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 30.25,
+          "forecast_min_mean": 28.839999999999996,
+          "forecast_rain_total": 103.4,
+          "forecast_wind_max": 48.0,
+          "recent_temp_mean": 29.41935483870968,
+          "recent_rain_total": 108.39999999999998,
+          "recent_wind_max": 30.7,
+          "raw_forecast_dates": [
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20",
+            "2026-09-21",
+            "2026-09-22",
+            "2026-09-23",
+            "2026-09-24",
+            "2026-09-25"
+          ]
+        }
+      ],
+      "temperature_change_mean": 0.36,
+      "historical_context": "recent 30-day observations + 10-day forecast"
+    },
+    "Mais": {
+      "enabled": true,
+      "score": -34.2,
+      "label": "BEARISH",
+      "confidence": 52,
+      "regions": [
+        {
+          "region": "US Corn Belt",
+          "error": "HTTPSConnectionPool(host='archive-api.open-meteo.com', port=443): Read timed out. (read timeout=12)",
+          "source": "Open-Meteo"
+        },
+        {
+          "region": "Brazil",
+          "lat": -15.0,
+          "lon": -52.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 38.54,
+          "forecast_min_mean": 25.860000000000003,
+          "forecast_rain_total": 1.8000000000000003,
+          "forecast_wind_max": 17.9,
+          "recent_temp_mean": 29.151612903225807,
+          "recent_rain_total": 20.3,
+          "recent_wind_max": 20.3,
+          "raw_forecast_dates": [
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20",
+            "2026-09-21",
+            "2026-09-22",
+            "2026-09-23",
+            "2026-09-24",
+            "2026-09-25"
+          ]
+        }
+      ],
+      "temperature_change_mean": 9.39,
       "historical_context": "recent 30-day observations + 10-day forecast"
     }
   }

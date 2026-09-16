@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-09-16T19:08:42.269701+00:00",
+  "timestamp": "2026-09-16T19:19:12.298850+00:00",
   "best": "Benzina RBOB",
   "direction": "LONG",
   "action": "ATTENDERE",
   "entry_state": "BLOCKED",
-  "trigger": "PULLBACK + RIPARTENZA",
+  "trigger": "BREAKOUT",
   "trigger_tf": "5m",
   "position": null,
   "position_direction": null
