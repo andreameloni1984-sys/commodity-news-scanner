@@ -62,7 +62,7 @@ KNOWLEDGE_DELTA_CAP = float(os.getenv("KNOWLEDGE_DELTA_CAP", "4.0"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "5.3.11-GAGARIN-SETUP-LIVE-EVENT"
+BOT_VERSION = "5.3.12-GAGARIN-CANONICAL-TELEGRAM"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -5803,124 +5803,141 @@ TELEGRAM_COMMAND_OFFSET_FILE = "telegram_update_offset.json"
 TELEGRAM_COMMAND_MAX_AGE_SECONDS = int(os.getenv("TELEGRAM_COMMAND_MAX_AGE_SECONDS", "900"))
 
 
-def _telegram_command_ranking(ranked):
-    """Complete user-facing ranking for manual decision making.
+def _canonical_gagarin_display(analysis):
+    """Return one type-safe, final Gagarin display snapshot.
 
-    The list is sorted by MARKET ranking, not by executable opportunity score.
-    Every commodity remains visible and carries the operational state so the
-    user can distinguish market strength from an actually authorized entry.
+    Display code must never read stale legacy top-level fields.  The nested
+    gagarin object is the authority; fallback values are used only when the
+    nested field is genuinely absent.
     """
+    a = analysis or {}
+    g = a.get("gagarin") if isinstance(a.get("gagarin"), dict) else {}
+
+    def value(*vals, default=None):
+        for v in vals:
+            if isinstance(v, dict):
+                v = v.get("state") or v.get("type") or v.get("name")
+            if v is None:
+                continue
+            text = str(v).strip()
+            if text and text.upper() not in {"UNKNOWN", "NONE", "N/A", "NULL"}:
+                return text
+        return default
+
+    regime = value(g.get("regime"), a.get("gagarin_regime"),
+                   (a.get("market_regime") or {}).get("state"), default="UNKNOWN")
+    setup = value(g.get("setup"), a.get("gagarin_setup"), default="NONE")
+    trigger_obj = g.get("trigger")
+    if isinstance(trigger_obj, dict):
+        trigger = bool(trigger_obj.get("confirmed", trigger_obj.get("triggered", False)))
+    elif trigger_obj is not None:
+        trigger = bool(trigger_obj)
+    else:
+        trigger = bool(a.get("gagarin_trigger", False))
+    state = value(g.get("state"), a.get("gagarin_state"), default="WAIT")
+    blockers = g.get("blockers") if isinstance(g.get("blockers"), list) else list(a.get("gagarin_blockers") or [])
+    blockers = [str(x) for x in blockers if x]
+    if regime.upper() != "UNKNOWN":
+        blockers = [x for x in blockers if x != "REGIME_UNKNOWN"]
+    if setup.upper() != "NONE":
+        blockers = [x for x in blockers if x != "NO_SETUP"]
+    if a.get("operational_entry_allowed"):
+        blockers = []
+        state = "READY"
+    return {"regime": regime, "setup": setup, "trigger": trigger,
+            "state": state, "blockers": blockers}
+
+
+def _telegram_category(name):
+    """Stable user-facing commodity grouping for Telegram."""
+    n = str(name or "").lower()
+    if any(k in n for k in ("oro", "argento", "rame", "platino", "palladio")):
+        return "METALLI"
+    if any(k in n for k in ("wti", "brent", "benzina", "heating", "gas naturale")):
+        return "ENERGIA"
+    if any(k in n for k in ("bovini", "feeder", "maiali")):
+        return "BESTIAME"
+    return "AGRICOLTURA"
+
+
+def _telegram_command_ranking(ranked):
+    """Clean TOP 10 Telegram ranking, grouped by commodity family."""
     available = [x for x in (ranked or []) if x.get("available")]
-
-    def market_key(item):
-        return safe_float(
-            item.get("market_ranking_score"),
-            safe_float((item.get("analysis", {}) or {}).get("score"), 0),
-        ) or 0
-
-    available.sort(key=market_key, reverse=True)
+    available.sort(key=lambda item: safe_float(
+        item.get("market_ranking_score"),
+        safe_float((item.get("analysis", {}) or {}).get("score"), 0),
+    ) or 0, reverse=True)
+    top10 = available[:10]
 
     lines = [
         f"🌍 COMMODITIES BOT v{BOT_VERSION}",
         "",
-        "🏆 CLASSIFICA COMPLETA — DECISIONALE",
+        "🏆 TOP 10 — CLASSIFICA MERCATO",
         "━━━━━━━━━━━━━━━━━━━━",
-        "MKT = forza scenario | OPP = operatività",
+        "MKT = forza dello scenario | non è un ingresso",
         "",
     ]
+    if not top10:
+        return "\n".join(lines + ["⚪ Nessuna commodity disponibile.", "", "🧪 PAPER ONLY"])
 
-    if not available:
-        lines += ["⚪ Nessuna commodity disponibile.", "", "🧪 PAPER ONLY"]
-        return "\n".join(lines)
-
-    for i, item in enumerate(available, 1):
+    groups = {"ENERGIA": [], "METALLI": [], "AGRICOLTURA": [], "BESTIAME": []}
+    for rank, item in enumerate(top10, 1):
         a = item.get("analysis", {}) or {}
-        pred = a.get("prediction_v53") or {}
-        g_raw = a.get("gagarin_state") or a.get("gagarin") or {}
-        if isinstance(g_raw, dict):
-            g = g_raw
-        else:
-            g = {"state": str(g_raw)}
-
-        direction = (
-            a.get("final_direction")
-            or a.get("setup_direction")
-            or a.get("model_signal")
-            or "NONE"
-        )
-        score = safe_float(a.get("score"), 0) or 0
-        market_score = market_key(item)
-
-        prob_raw = safe_float(
-            a.get("entry_probability", a.get("probability", 0)), 0
-        ) or 0
+        g = _canonical_gagarin_display(a)
+        direction = a.get("final_direction") or a.get("setup_direction") or a.get("model_signal") or "NONE"
+        market_score = safe_float(item.get("market_ranking_score"), a.get("score", 0)) or 0
+        prob_raw = safe_float(a.get("entry_probability", a.get("probability", 0)), 0) or 0
         prob = prob_raw * 100 if prob_raw <= 1.5 else prob_raw
-
         policy = a.get("entry_policy", {}) or {}
-        quality = safe_float(
-            policy.get("quality"),
-            safe_float(a.get("quality"), 0),
-        ) or 0
-        confidence = safe_float(
-            policy.get("confidence"),
-            safe_float(a.get("confidence"), 0),
-        ) or 0
-
-        g_state = str(
-            g.get("state")
-            or a.get("gagarin_state_label")
-            or ""
-        ).upper()
-
-        # Canonical operational state.
+        q = safe_float(policy.get("quality"), a.get("quality", 0)) or 0
+        c = safe_float(policy.get("confidence"), a.get("confidence", 0)) or 0
         operational = bool(a.get("operational_entry_allowed"))
-        prediction_state = str(pred.get("state") or "").upper()
-        setup = str(pred.get("setup") or g.get("setup") or "NONE").upper()
-        trigger_ok = bool(pred.get("trigger_confirmed"))
-        rr3 = safe_float(pred.get("rr_tp3"), safe_float(
-            (a.get("adaptive_risk", {}) or {}).get("rr_tp3"), 0
-        )) or 0
-
         if operational:
-            decision = "🟢 READY"
-        elif not item.get("available"):
-            decision = "⚪ DATA"
-        elif prediction_state in (
-            "PREVISIONE_IN_FORMAZIONE",
-            "PREVISIONE IN FORMAZIONE",
-        ):
-            decision = "🟡 FORMAZIONE"
-        elif g_state in ("BLOCKED", "SAFETY_BLOCK") or not trigger_ok:
-            decision = "🔴 BLOCCATO"
+            status = "🟢 READY"
+        elif g["state"] in {"BLOCKED", "SAFETY_BLOCK"}:
+            status = "🔴 BLOCCATO"
         else:
-            decision = "🟡 ATTENDI"
+            status = "🟡 FORMAZIONE"
+        icon = "🟢" if direction == "LONG" else "🔴" if direction == "SHORT" else "⚪"
+        setup_label = g["setup"] if g["setup"] != "NONE" else "IN FORMAZIONE"
+        groups[_telegram_category(item.get("name"))].append(
+            (rank, item.get("name", "N/D"), icon, direction, market_score, prob, q, c, status, setup_label, g["trigger"])
+        )
 
-        direction_icon = (
-            "🟢" if direction == "LONG"
-            else "🔴" if direction == "SHORT"
-            else "🟡"
-        )
-        trigger_label = "OK" if trigger_ok else "NO"
-
-        lines.append(
-            f"{i:02d}. {item['name']} | "
-            f"{direction_icon}{direction} | "
-            f"MKT {market_score:.0f} | "
-            f"Prob {prob:.0f}% | "
-            f"Q {quality:.0f} C {confidence:.0f}"
-        )
-        lines.append(
-            f"    {decision} | G:{g_state or 'N/D'} | "
-            f"Setup:{setup} | Trig:{trigger_label} | RR3:{rr3:.2f}"
-        )
+    medals = {1:"🥇", 2:"🥈", 3:"🥉"}
+    for category in ("ENERGIA", "METALLI", "AGRICOLTURA", "BESTIAME"):
+        rows = groups[category]
+        if not rows:
+            continue
+        lines += [f"🔹 {category}", "━━━━━━━━━━━━━━━━━━━━"]
+        for row in rows:
+            rank, name, icon, direction, mkt, prob, q, c, status, setup_label, trig = row
+            prefix = medals.get(rank, f"{rank:02d}.")
+            trig_label = "OK" if trig else "NO"
+            lines += [
+                f"{prefix} {name}",
+                f"   {icon} {direction} | MKT {mkt:.0f} | Prob {prob:.0f}%",
+                f"   {status} | Setup {setup_label} | Trig {trig_label}",
+                f"   Q {q:.0f} | C {c:.0f}",
+                "",
+            ]
 
     lines += [
+        "👀 DA MONITORARE",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "Solo scenari in formazione; nessuna autorizzazione implicita.",
+    ]
+    monitor = top10[:3]
+    for i, item in enumerate(monitor, 1):
+        a = item.get("analysis", {}) or {}
+        d = a.get("final_direction") or a.get("setup_direction") or a.get("model_signal") or "NONE"
+        icon = "🟢" if d == "LONG" else "🔴" if d == "SHORT" else "⚪"
+        lines.append(f"{i}. {item.get('name','N/D')} {icon} {d}")
+    lines += [
         "",
-        "📌 COME LEGGERLA",
-        "🟢 READY = tutti i gate operativi superati",
-        "🟡 FORMAZIONE/ATTENDI = scenario da monitorare",
-        "🔴 BLOCCATO = almeno un gate impedisce l'ingresso",
-        "⚪ DATA = dati insufficienti/non disponibili",
+        "⚠️ READY = tutti i gate superati.",
+        "🟡 FORMAZIONE = scenario da monitorare.",
+        "🔴 BLOCCATO = ingresso non autorizzato.",
         "⚠️ MKT e Prob non autorizzano da soli un ingresso.",
         "",
         "🧪 PAPER ONLY",
@@ -8547,7 +8564,7 @@ def intelligence_v41_summary(analysis):
 # adapters; they no longer define the architecture by themselves.
 # PAPER ONLY: this layer never places broker orders.
 
-GAGARIN_ARCHITECTURE_VERSION = "5.3.1-GAGARIN-PREDICTION-AUTHORITY-1"
+GAGARIN_ARCHITECTURE_VERSION = "5.3.12-GAGARIN-CANONICAL-TELEGRAM-1"
 GAGARIN_FINAL_AUTHORITY = True
 GAGARIN_REQUIRE_LIVE_FOR_ENTRY = os.getenv("GAGARIN_REQUIRE_LIVE_FOR_ENTRY", "1") == "1"
 SIFTING_CACHE_TTL_SECONDS = float(os.getenv("SIFTING_CACHE_TTL_SECONDS", "20"))
@@ -8895,6 +8912,8 @@ def gagarin_apply_final_authority(item):
     a["gagarin_blockers"] = policy.get("blockers", [])
     a["gagarin_authority"] = True
     a["operational_entry_allowed"] = policy["state"] in ("READY_LONG", "READY_SHORT")
+    # Canonicalize once so console, ranking and Telegram share the same final state.
+    gagarin_normalize_final_state(a)
 
 
 
