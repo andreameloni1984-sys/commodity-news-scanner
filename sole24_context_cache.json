@@ -244,7 +244,7 @@
     }
   },
   "Grano": {
-    "timestamp": "2026-09-15T18:30:23.762836+00:00",
+    "timestamp": "2026-09-16T03:53:34.674478+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -269,7 +269,7 @@
     }
   },
   "Mais": {
-    "timestamp": "2026-09-15T18:30:59.307127+00:00",
+    "timestamp": "2026-09-16T03:54:09.678780+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -292,7 +292,7 @@
     }
   },
   "Soia": {
-    "timestamp": "2026-09-15T18:31:07.439793+00:00",
+    "timestamp": "2026-09-16T03:54:19.110776+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -384,7 +384,7 @@
     }
   },
   "Riso": {
-    "timestamp": "2026-09-15T18:31:15.346169+00:00",
+    "timestamp": "2026-09-16T03:54:27.693188+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -407,7 +407,7 @@
     }
   },
   "Caffè": {
-    "timestamp": "2026-09-15T18:31:42.701462+00:00",
+    "timestamp": "2026-09-16T03:55:09.526309+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -428,7 +428,7 @@
     }
   },
   "Cacao": {
-    "timestamp": "2026-09-15T18:31:30.699835+00:00",
+    "timestamp": "2026-09-16T03:54:46.110729+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -451,7 +451,7 @@
     }
   },
   "Zucchero": {
-    "timestamp": "2026-09-15T18:31:22.823091+00:00",
+    "timestamp": "2026-09-16T03:54:37.362118+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -474,7 +474,7 @@
     }
   },
   "Cotone": {
-    "timestamp": "2026-09-15T18:31:50.648134+00:00",
+    "timestamp": "2026-09-16T03:55:17.315157+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -516,7 +516,7 @@
     }
   },
   "Bovini vivi": {
-    "timestamp": "2026-09-15T18:31:58.585175+00:00",
+    "timestamp": "2026-09-16T03:55:24.833899+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -539,7 +539,7 @@
     }
   },
   "Maiali magri": {
-    "timestamp": "2026-09-15T18:32:15.788137+00:00",
+    "timestamp": "2026-09-16T03:55:39.852247+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -562,7 +562,7 @@
     }
   },
   "Feeder Cattle": {
-    "timestamp": "2026-09-15T18:32:08.144754+00:00",
+    "timestamp": "2026-09-16T03:55:32.374088+00:00",
     "value": {
       "enabled": true,
       "available": true,
