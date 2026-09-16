@@ -62,7 +62,7 @@ KNOWLEDGE_DELTA_CAP = float(os.getenv("KNOWLEDGE_DELTA_CAP", "4.0"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "5.3.7-GAGARIN-PREDICTION-COMPLETE-RANKING-FIX"
+BOT_VERSION = "5.3.8-GAGARIN-PREDICTION-DIAGNOSTIC"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -4785,8 +4785,38 @@ def prediction_engine_v53(analysis):
              trigger_confirmed and rr1>=MIN_ENTRY_RR_TP1 and rr2>=MIN_ENTRY_RR_TP2 and rr3>=MIN_ENTRY_RR)
     state='PREVISIONE_OPERATIVA' if hard_ok else ('PREVISIONE_IN_FORMAZIONE' if direction in ('LONG','SHORT') else 'SCENARIO_NEUTRO')
     if regime_state=='SHOCK': state='SCENARIO_INVALIDATO'
+
+    # Diagnostic decomposition: this is DISPLAY/ANALYSIS ONLY. It does not
+    # relax or modify any entry gate. It tells us exactly which prediction
+    # component is preventing a setup from becoming operational.
+    components = {
+        'regime': regime_state not in ('SHOCK','UNKNOWN'),
+        'structure': structure.get('state') == 'COERENTE',
+        'trendline': trendline.get('state') == 'CONFERMATA',
+        'zone': location_score >= 60.0,
+        'pattern': pattern_score >= 60.0,
+        'breakout_or_retest': bool(breakout or retest),
+        'trigger': bool(trigger_confirmed),
+        'space_tp1': rr1 >= MIN_ENTRY_RR_TP1,
+        'space_tp2': rr2 >= MIN_ENTRY_RR_TP2,
+        'space_tp3': rr3 >= MIN_ENTRY_RR,
+    }
+    missing_components = [k for k,v in components.items() if not v]
+    component_labels = {
+        'regime':'REGIME','structure':'STRUTTURA','trendline':'TRENDLINE',
+        'zone':'ZONA','pattern':'PATTERN','breakout_or_retest':'BREAKOUT/RETEST',
+        'trigger':'TRIGGER','space_tp1':'SPAZIO TP1','space_tp2':'SPAZIO TP2',
+        'space_tp3':'SPAZIO TP3'
+    }
+    component_summary = ' | '.join(
+        f"{component_labels[k]} {'OK' if components[k] else 'NO'}"
+        for k in components
+    )
     return {
         'version':'5.3','state':state,'direction':direction,'score':round(score,1),'operational':bool(hard_ok),
+        'components': components,
+        'missing_components': missing_components,
+        'component_summary': component_summary,
         'regime':regime,'structure':structure,'trendline':trendline,'location_score':round(location_score,1),
         'patterns':patterns[:10],'pattern_score':round(pattern_score,1),'chart_123':chart,
         'breakout':breakout,'retest':retest,'trigger_confirmed':trigger_confirmed,
@@ -9752,6 +9782,13 @@ def main():
             pred.get("rr_tp3"),
             safe_float((x.get("adaptive_risk", {}) or {}).get("rr_tp3"), 0),
         ) or 0
+        comps = pred.get("components") if isinstance(pred.get("components"), dict) else {}
+        def _ck(key): return '✓' if comps.get(key) else '✗'
+        comp_line = (
+            f"STR {_ck('structure')} | TL {_ck('trendline')} | Z {_ck('zone')} | "
+            f"PAT {_ck('pattern')} | BO/RT {_ck('breakout_or_retest')} | "
+            f"TR {_ck('trigger')} | SP {_ck('space_tp1')}/{_ck('space_tp2')}/{_ck('space_tp3')}"
+        )
 
         if x.get("operational_entry_allowed"):
             decision = "READY"
@@ -9769,6 +9806,7 @@ def main():
             f"G:{g_state or 'N/D'} | Setup:{setup} | Trigger:{'OK' if trigger_ok else 'NO'} | "
             f"RR3:{rr3:.2f} | {decision}"
         )
+        print(f"    🔎 {comp_line}")
 
 
     if ON_DEMAND_ONLY:
