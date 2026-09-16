@@ -62,7 +62,7 @@ KNOWLEDGE_DELTA_CAP = float(os.getenv("KNOWLEDGE_DELTA_CAP", "4.0"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "5.3.9-GAGARIN-PREDICTION-TELEGRAM-TOP10"
+BOT_VERSION = "5.3.10-GAGARIN-LIVE-DATA-SETUP-CANDIDATE"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -5771,10 +5771,11 @@ TELEGRAM_COMMAND_MAX_AGE_SECONDS = int(os.getenv("TELEGRAM_COMMAND_MAX_AGE_SECON
 
 
 def _telegram_command_ranking(ranked):
-    """Compact, intuitive Telegram ranking.
+    """Complete user-facing ranking for manual decision making.
 
-    Internal analysis/ranking remains complete; Telegram deliberately shows
-    only the top 10 market scenarios to keep the message readable.
+    The list is sorted by MARKET ranking, not by executable opportunity score.
+    Every commodity remains visible and carries the operational state so the
+    user can distinguish market strength from an actually authorized entry.
     """
     available = [x for x in (ranked or []) if x.get("available")]
 
@@ -5785,91 +5786,109 @@ def _telegram_command_ranking(ranked):
         ) or 0
 
     available.sort(key=market_key, reverse=True)
-    top10 = available[:10]
 
     lines = [
         f"🌍 COMMODITIES BOT v{BOT_VERSION}",
         "",
-        "🏆 TOP 10 — CLASSIFICA",
+        "🏆 CLASSIFICA COMPLETA — DECISIONALE",
         "━━━━━━━━━━━━━━━━━━━━",
+        "MKT = forza scenario | OPP = operatività",
         "",
     ]
 
-    if not top10:
+    if not available:
         lines += ["⚪ Nessuna commodity disponibile.", "", "🧪 PAPER ONLY"]
         return "\n".join(lines)
 
-    direction_counts = {"LONG": 0, "SHORT": 0, "NONE": 0}
-    watchlist = []
-
-    for i, item in enumerate(top10, 1):
+    for i, item in enumerate(available, 1):
         a = item.get("analysis", {}) or {}
         pred = a.get("prediction_v53") or {}
         g_raw = a.get("gagarin_state") or a.get("gagarin") or {}
-        g = g_raw if isinstance(g_raw, dict) else {"state": str(g_raw)}
+        if isinstance(g_raw, dict):
+            g = g_raw
+        else:
+            g = {"state": str(g_raw)}
 
-        direction = str(
+        direction = (
             a.get("final_direction")
             or a.get("setup_direction")
             or a.get("model_signal")
             or "NONE"
-        ).upper()
-        if direction not in direction_counts:
-            direction = "NONE"
-        direction_counts[direction] += 1
-
+        )
+        score = safe_float(a.get("score"), 0) or 0
         market_score = market_key(item)
+
         prob_raw = safe_float(
             a.get("entry_probability", a.get("probability", 0)), 0
         ) or 0
         prob = prob_raw * 100 if prob_raw <= 1.5 else prob_raw
 
-        operational = bool(a.get("operational_entry_allowed"))
-        prediction_state = str(pred.get("state") or "").upper()
-        trigger_ok = bool(pred.get("trigger_confirmed"))
+        policy = a.get("entry_policy", {}) or {}
+        quality = safe_float(
+            policy.get("quality"),
+            safe_float(a.get("quality"), 0),
+        ) or 0
+        confidence = safe_float(
+            policy.get("confidence"),
+            safe_float(a.get("confidence"), 0),
+        ) or 0
+
         g_state = str(
-            g.get("state") or a.get("gagarin_state_label") or ""
+            g.get("state")
+            or a.get("gagarin_state_label")
+            or ""
         ).upper()
 
+        # Canonical operational state.
+        operational = bool(a.get("operational_entry_allowed"))
+        prediction_state = str(pred.get("state") or "").upper()
+        setup = str(pred.get("setup") or g.get("setup") or "NONE").upper()
+        trigger_ok = bool(pred.get("trigger_confirmed"))
+        rr3 = safe_float(pred.get("rr_tp3"), safe_float(
+            (a.get("adaptive_risk", {}) or {}).get("rr_tp3"), 0
+        )) or 0
+
         if operational:
-            status = "🟢 READY"
-        elif prediction_state in ("PREVISIONE_IN_FORMAZIONE", "PREVISIONE IN FORMAZIONE"):
-            status = "🟡 FORMAZIONE"
+            decision = "🟢 READY"
+        elif not item.get("available"):
+            decision = "⚪ DATA"
+        elif prediction_state in (
+            "PREVISIONE_IN_FORMAZIONE",
+            "PREVISIONE IN FORMAZIONE",
+        ):
+            decision = "🟡 FORMAZIONE"
         elif g_state in ("BLOCKED", "SAFETY_BLOCK") or not trigger_ok:
-            status = "🔴 BLOCCATO"
+            decision = "🔴 BLOCCATO"
         else:
-            status = "🟡 ATTENDI"
+            decision = "🟡 ATTENDI"
 
-        if status in ("🟢 READY", "🟡 FORMAZIONE") and direction != "NONE":
-            watchlist.append(item["name"])
+        direction_icon = (
+            "🟢" if direction == "LONG"
+            else "🔴" if direction == "SHORT"
+            else "🟡"
+        )
+        trigger_label = "OK" if trigger_ok else "NO"
 
-        arrow = "🟢 LONG" if direction == "LONG" else "🔴 SHORT" if direction == "SHORT" else "🟡 NONE"
-        rank_icon = ("🥇", "🥈", "🥉")[i-1] if i <= 3 else f"{i}."
-        lines.append(f"{rank_icon} {item['name']}")
-        lines.append(f"   {arrow}   Prob {prob:.0f}%   MKT {market_score:.0f}")
-        lines.append(f"   {status}")
-        if i != len(top10):
-            lines.append("")
-
-    lines += [
-        "",
-        "━━━━━━━━━━━━━━━━━━━━",
-        "🎯 LETTURA RAPIDA",
-        f"🟢 LONG {direction_counts['LONG']}   🔴 SHORT {direction_counts['SHORT']}   🟡 NONE {direction_counts['NONE']}",
-    ]
-
-    if watchlist:
-        lines.append("")
-        lines.append("👀 DA MONITORARE")
-        for idx, name in enumerate(watchlist[:3], 1):
-            lines.append(f"{idx}. {name}")
+        lines.append(
+            f"{i:02d}. {item['name']} | "
+            f"{direction_icon}{direction} | "
+            f"MKT {market_score:.0f} | "
+            f"Prob {prob:.0f}% | "
+            f"Q {quality:.0f} C {confidence:.0f}"
+        )
+        lines.append(
+            f"    {decision} | G:{g_state or 'N/D'} | "
+            f"Setup:{setup} | Trig:{trigger_label} | RR3:{rr3:.2f}"
+        )
 
     lines += [
         "",
-        "⚠️ MKT e Prob NON autorizzano da soli un ingresso.",
+        "📌 COME LEGGERLA",
         "🟢 READY = tutti i gate operativi superati",
-        "🟡 FORMAZIONE = scenario da monitorare",
-        "🔴 BLOCCATO = ingresso non autorizzato",
+        "🟡 FORMAZIONE/ATTENDI = scenario da monitorare",
+        "🔴 BLOCCATO = almeno un gate impedisce l'ingresso",
+        "⚪ DATA = dati insufficienti/non disponibili",
+        "⚠️ MKT e Prob non autorizzano da soli un ingresso.",
         "",
         "🧪 PAPER ONLY",
     ]
