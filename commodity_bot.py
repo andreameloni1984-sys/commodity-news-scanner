@@ -62,7 +62,7 @@ KNOWLEDGE_DELTA_CAP = float(os.getenv("KNOWLEDGE_DELTA_CAP", "4.0"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "5.3.12-GAGARIN-CANONICAL-TELEGRAM"
+BOT_VERSION = "5.4.0-THREE-ENGINES-SCALPING"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -4760,6 +4760,138 @@ def _prediction_123(rows, direction):
     return {'state':'NON RILEVATO','confirmed':False,'score':50.0}
 
 
+# ============================================================
+# v5.4 — THREE ENGINES + SCALPING ON-DEMAND
+# ============================================================
+# Historical/Long-Term is descriptive and ranking-only.
+# Intraday decides the live scenario from price structure and MTF.
+# Risk/Gagarin authorizes entries and builds the operational SL/TP.
+# Scalping is calculated ONLY when explicitly requested.
+
+SCALPING_ENABLED = os.getenv("SCALPING_ENABLED", "1") == "1"
+SCALPING_MIN_SCORE = float(os.getenv("SCALPING_MIN_SCORE", "68"))
+SCALPING_MIN_CONFIDENCE = float(os.getenv("SCALPING_MIN_CONFIDENCE", "60"))
+SCALPING_MIN_RR = float(os.getenv("SCALPING_MIN_RR", "1.5"))
+SCALPING_MAX_BARS = int(os.getenv("SCALPING_MAX_BARS", "180"))
+
+
+def is_scalping_request(text):
+    q = _telegram_normalize_command(text)
+    return any(k in q for k in ("scalping", "scalper", "scalp"))
+
+
+def _scalp_candle_range(c):
+    h = safe_float(c.get("high")); l = safe_float(c.get("low"))
+    return abs(h-l) if h is not None and l is not None else 0.0
+
+
+def scalping_engine(analysis):
+    """Independent 1m/5m execution scanner.
+
+    It never changes the intraday/long-term direction and never authorizes a
+    trade by itself. Gagarin remains the final safety authority.
+    """
+    a = analysis if isinstance(analysis, dict) else {}
+    pts = a.get("pattern_timeframes") or {}
+    c1 = list(pts.get("1m") or [])[-SCALPING_MAX_BARS:]
+    c5 = list(pts.get("5m") or [])[-SCALPING_MAX_BARS:]
+    out = {
+        "enabled": SCALPING_ENABLED,
+        "state": "SCALPING_NO_SETUP",
+        "direction": "NONE", "score": 0.0, "confidence": 0.0,
+        "entry": None, "stop": None, "tp1": None, "tp2": None,
+        "rr": 0.0, "reasons": [], "blockers": ["NOT_REQUESTED"],
+    }
+    if not SCALPING_ENABLED:
+        out["blockers"] = ["SCALPING_DISABLED"]
+        return out
+    if len(c1) < 40 or len(c5) < 40:
+        out["blockers"] = ["1M_5M_DATA_INSUFFICIENT"]
+        return out
+
+    def direction(rows):
+        closes = [safe_float(x.get("close")) for x in rows]
+        closes = [x for x in closes if x is not None]
+        if len(closes) < 20:
+            return "NONE", 0.0
+        fast = sum(closes[-8:]) / 8
+        slow = sum(closes[-20:]) / 20
+        slope = closes[-1] - closes[-8]
+        if fast > slow and slope > 0: return "LONG", 1.0
+        if fast < slow and slope < 0: return "SHORT", 1.0
+        return "NONE", 0.0
+
+    d1, _ = direction(c1); d5, _ = direction(c5)
+    if d1 not in ("LONG", "SHORT") or d5 != d1:
+        out["blockers"] = ["1M_5M_MISMATCH"]
+        return out
+
+    last = safe_float(c1[-1].get("close"))
+    ranges = [_scalp_candle_range(x) for x in c1[-20:]]
+    atr = sum(ranges) / len(ranges) if ranges else 0.0
+    if not last or atr <= 0:
+        out["blockers"] = ["VOLATILITY_UNAVAILABLE"]
+        return out
+
+    # Micro-structure confirmation: last close must extend the recent 1m range.
+    highs = [safe_float(x.get("high")) for x in c1[-12:] if safe_float(x.get("high")) is not None]
+    lows = [safe_float(x.get("low")) for x in c1[-12:] if safe_float(x.get("low")) is not None]
+    breakout = (d1 == "LONG" and last >= max(highs[:-1] or [last])) or (d1 == "SHORT" and last <= min(lows[:-1] or [last]))
+    momentum = min(100.0, 50.0 + abs((last - (sum([safe_float(x.get("close")) for x in c1[-8:]]) / 8)) / max(atr, 1e-9)) * 25.0)
+    score = 45.0 + 15.0 + (15.0 if breakout else 0.0) + min(20.0, max(0.0, momentum-50.0))
+    confidence = min(100.0, score - 5.0)
+
+    entry = last
+    stop_dist = max(atr * 1.2, last * 0.0004)
+    stop = entry - stop_dist if d1 == "LONG" else entry + stop_dist
+    tp1 = entry + stop_dist * 1.5 if d1 == "LONG" else entry - stop_dist * 1.5
+    tp2 = entry + stop_dist * 2.0 if d1 == "LONG" else entry - stop_dist * 2.0
+    rr = abs(tp2-entry) / max(abs(entry-stop), 1e-9)
+
+    blockers = []
+    if not breakout: blockers.append("MICRO_BREAKOUT_NOT_CONFIRMED")
+    if score < SCALPING_MIN_SCORE: blockers.append("SCORE")
+    if confidence < SCALPING_MIN_CONFIDENCE: blockers.append("CONFIDENCE")
+    if rr < SCALPING_MIN_RR: blockers.append("RR")
+    state = "SCALPING_READY" if not blockers else "SCALPING_WAIT"
+    reasons = ["1m e 5m allineati", "momentum micro-strutturale"]
+    if breakout: reasons.append("breakout micro confermato")
+    out.update({"state": state, "direction": d1, "score": round(score,1),
+                "confidence": round(confidence,1), "entry": entry, "stop": stop,
+                "tp1": tp1, "tp2": tp2, "rr": round(rr,2), "reasons": reasons,
+                "blockers": blockers})
+    return out
+
+
+def apply_structure_precedence(analysis):
+    """Prevent a raw LONG/SHORT probability from contradicting price structure.
+
+    This is a veto/declassification, not an automatic direction flip.
+    """
+    a = analysis if isinstance(analysis, dict) else {}
+    pred = a.get("prediction_v53") or {}
+    direction = a.get("setup_direction") or a.get("model_signal") or "NONE"
+    detail = str((pred.get("structure") or {}).get("detail") or "").upper()
+    confirmed = bool(pred.get("operational")) or bool((pred.get("trigger") or {}).get("confirmed"))
+    contradictory = ((direction == "LONG" and "LH+LL" in detail) or
+                     (direction == "SHORT" and "HH+HL" in detail))
+    if contradictory and not confirmed:
+        a["structure_precedence"] = {
+            "state": "CONTRADDIZIONE_STRUTTURALE",
+            "raw_direction": direction,
+            "action": "WAIT",
+            "reason": detail,
+        }
+        a["operational_entry_allowed"] = False
+        a["signal"] = "WAIT"
+        a["action_label"] = "ATTENDERE"
+        a["strong_confirmation"] = False
+        a.setdefault("entry_blockers", []).append("STRUCTURE_CONTRADICTION")
+    else:
+        a["structure_precedence"] = {"state": "COERENTE_O_NON_CONCLUSIVA", "raw_direction": direction, "action": "UNCHANGED"}
+    return a
+
+
 def prediction_engine_v53(analysis):
     """Prediction chain v5.3: regime → structure → zone → pattern → confirmation → space.
 
@@ -6452,6 +6584,29 @@ def _telegram_signals(ranked):
     return "\n".join(lines)
 
 
+def _telegram_scalping(item):
+    if not item:
+        return "❓ Indicami la commodity. Esempio: SCALPING ORO"
+    a = item.get("analysis", {}) or {}
+    sc = a.get("scalping") or scalping_engine(a)
+    name = item.get("name", "Commodity")
+    d = sc.get("direction", "NONE")
+    state = sc.get("state", "SCALPING_WAIT")
+    lines = [f"⚡ SCALPING — {name}", "━━━━━━━━━━━━━━━━━━━━"]
+    if state == "SCALPING_READY":
+        lines += [f"{'🟢 LONG' if d=='LONG' else '🔴 SHORT'}", f"🎯 Entry: {safe_float(sc.get('entry'),0):.4f}",
+                  f"🛑 SL: {safe_float(sc.get('stop'),0):.4f}", f"🎯 TP1: {safe_float(sc.get('tp1'),0):.4f}",
+                  f"🎯 TP2: {safe_float(sc.get('tp2'),0):.4f}", f"📐 R/R: {safe_float(sc.get('rr'),0):.2f}",
+                  f"📊 Score {safe_float(sc.get('score'),0):.0f} | Conf {safe_float(sc.get('confidence'),0):.0f}",
+                  "🟢 SCALPING SETUP — da sottoporre a Gagarin"]
+    else:
+        direction = 'LONG' if d=='LONG' else 'SHORT' if d=='SHORT' else 'NONE'
+        lines += [f"🟡 {direction} — ATTENDERE", f"📊 Score {safe_float(sc.get('score'),0):.0f} | Conf {safe_float(sc.get('confidence'),0):.0f}",
+                  "🛑 Nessun ingresso autorizzato", "⚠️ " + ", ".join(sc.get('blockers') or ["SETUP NON CONFERMATO"])]
+    lines += ["", "⚡ Timeframe: 1m + 5m", "🛡️ GAGARIN resta l'autorità finale", "🧪 PAPER ONLY"]
+    return "\n".join(lines)
+
+
 def _telegram_help():
     return (
         f"🌍 COMMODITIES BOT v{BOT_VERSION}\n\n"
@@ -6514,6 +6669,9 @@ def process_telegram_on_demand(ranked):
             reply = _telegram_monthly(ranked)
         elif command in {"segnali", "signals", "signal"}:
             reply = _telegram_signals(ranked)
+        elif is_scalping_request(normalized):
+            item = _telegram_find_commodity(ranked, normalized)
+            reply = _telegram_scalping(item)
         else:
             item = _telegram_find_commodity(ranked, normalized)
             if item:
@@ -6609,6 +6767,9 @@ def process_telegram_commands(ranked):
             elif command in {"segnali", "signals", "setup"}:
                 print("📨 Telegram: comando SEGNALI ricevuto")
                 send_telegram(_telegram_signals(ranked))
+            elif is_scalping_request(normalized):
+                print("📨 Telegram: comando SCALPING ricevuto")
+                send_telegram(_telegram_scalping(_telegram_find_commodity(ranked, normalized)))
             elif command in {"help", "aiuto", "comandi", "menu", "start"}:
                 print("📨 Telegram: comando HELP ricevuto")
                 send_telegram(_telegram_help())
@@ -8564,7 +8725,7 @@ def intelligence_v41_summary(analysis):
 # adapters; they no longer define the architecture by themselves.
 # PAPER ONLY: this layer never places broker orders.
 
-GAGARIN_ARCHITECTURE_VERSION = "5.3.12-GAGARIN-CANONICAL-TELEGRAM-1"
+GAGARIN_ARCHITECTURE_VERSION = "5.4.0-THREE-ENGINES-1"
 GAGARIN_FINAL_AUTHORITY = True
 GAGARIN_REQUIRE_LIVE_FOR_ENTRY = os.getenv("GAGARIN_REQUIRE_LIVE_FOR_ENTRY", "1") == "1"
 SIFTING_CACHE_TTL_SECONDS = float(os.getenv("SIFTING_CACHE_TTL_SECONDS", "20"))
@@ -9055,6 +9216,11 @@ def soyuz_gagarin_pipeline(name, symbol, usd, global_intel, trading_knowledge):
     analysis["price_action"] = price_action_context_engine(analysis)
     # v5.3 prediction chain: scenario/confirmation layer before final Gagarin authority.
     analysis["prediction_v53"] = prediction_engine_v53(analysis)
+    apply_structure_precedence(analysis)
+    if is_scalping_request(ON_DEMAND_TELEGRAM_REQUEST):
+        analysis["scalping"] = scalping_engine(analysis)
+    else:
+        analysis["scalping"] = {"state": "NOT_REQUESTED", "direction": "NONE", "operational": False}
     try:
         adaptive_levels = adaptive_risk_levels(analysis, candles, analysis.get("setup_direction") or analysis.get("model_signal"))
     except Exception as _sltp_exc:
@@ -9283,8 +9449,8 @@ def main():
     print()
     print("=" * 70)
     print(f"🌍 COMMODITIES BOT v{BOT_VERSION}")
-    print("MORNING + USA + EVENT-DRIVEN + DAILY STATS | PAPER ONLY")
-    print("SOYUZ GAGARIN ARCHITECTURE | DATA → REGIME → STRUCTURE → ZONE → PATTERN → CONFIRM → SL/TP → PREDICTION → RISK → SAFETY")
+    print("HISTORICAL + INTRADAY + SCALPING ON-DEMAND + RISK/GAGARIN | PAPER ONLY")
+    print("SOYUZ 3 ENGINES | HISTORICAL → INTRADAY → SCALPING(ON-DEMAND) → SL/TP → GAGARIN")
     print("COMMUNICATION: MORNING + USA + MATERIAL EVENTS | INTERNAL ANALYSIS SILENT")
     print("=" * 70)
     print()
