@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-09-16T13:09:46.213014+00:00",
+  "timestamp": "2026-09-16T13:23:35.656687+00:00",
   "data": {
     "Oro": {
       "enabled": true,
@@ -338,6 +338,68 @@
         }
       ],
       "temperature_change_mean": 5.6,
+      "historical_context": "recent 30-day observations + 10-day forecast"
+    },
+    "Gas Naturale": {
+      "enabled": true,
+      "score": 43.6,
+      "label": "BULLISH",
+      "confidence": 64,
+      "regions": [
+        {
+          "region": "US South/Central",
+          "lat": 31.0,
+          "lon": -97.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 37.279999999999994,
+          "forecast_min_mean": 24.07,
+          "forecast_rain_total": 2.7,
+          "forecast_wind_max": 27.9,
+          "recent_temp_mean": 31.13225806451613,
+          "recent_rain_total": 45.50000000000001,
+          "recent_wind_max": 24.3,
+          "raw_forecast_dates": [
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20",
+            "2026-09-21",
+            "2026-09-22",
+            "2026-09-23",
+            "2026-09-24",
+            "2026-09-25"
+          ]
+        },
+        {
+          "region": "US Northeast",
+          "lat": 41.0,
+          "lon": -74.0,
+          "source": "Open-Meteo",
+          "forecast_days": 10,
+          "forecast_max_mean": 24.160000000000004,
+          "forecast_min_mean": 15.969999999999999,
+          "forecast_rain_total": 14.030000000000001,
+          "forecast_wind_max": 21.4,
+          "recent_temp_mean": 22.01612903225806,
+          "recent_rain_total": 130.6,
+          "recent_wind_max": 19.4,
+          "raw_forecast_dates": [
+            "2026-09-16",
+            "2026-09-17",
+            "2026-09-18",
+            "2026-09-19",
+            "2026-09-20",
+            "2026-09-21",
+            "2026-09-22",
+            "2026-09-23",
+            "2026-09-24",
+            "2026-09-25"
+          ]
+        }
+      ],
+      "temperature_change_mean": 4.15,
       "historical_context": "recent 30-day observations + 10-day forecast"
     }
   }
