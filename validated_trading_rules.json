@@ -405,7 +405,7 @@
     "score": 0.0,
     "samples": 44,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T09:29:32.749694+00:00"
+    "updated_at": "2026-09-16T10:46:28.683775+00:00"
   },
   "Gas Naturale:SHORT": {
     "commodity": "Gas Naturale",
@@ -541,7 +541,7 @@
     "score": 0.0,
     "samples": 61,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T09:29:41.659032+00:00"
+    "updated_at": "2026-09-16T10:46:36.521439+00:00"
   },
   "Heating Oil:LONG": {
     "commodity": "Heating Oil",
@@ -609,7 +609,7 @@
     "score": 0.0,
     "samples": 62,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T09:29:49.057865+00:00"
+    "updated_at": "2026-09-16T10:46:44.337051+00:00"
   },
   "Rame:SHORT": {
     "commodity": "Rame",
@@ -813,7 +813,7 @@
     "score": 0.0,
     "samples": 91,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T09:30:11.599536+00:00"
+    "updated_at": "2026-09-16T10:47:07.585158+00:00"
   },
   "Soia:LONG": {
     "commodity": "Soia",
@@ -881,7 +881,7 @@
     "score": 0.0,
     "samples": 86,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T09:30:19.726898+00:00"
+    "updated_at": "2026-09-16T10:47:14.874581+00:00"
   },
   "Farina di soia:LONG": {
     "commodity": "Farina di soia",
@@ -1153,7 +1153,7 @@
     "score": 0.0,
     "samples": 46,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T09:30:38.758772+00:00"
+    "updated_at": "2026-09-16T10:47:34.531550+00:00"
   },
   "Zucchero:SHORT": {
     "commodity": "Zucchero",
@@ -1289,7 +1289,7 @@
     "score": 0.0,
     "samples": 65,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T09:30:52.305200+00:00"
+    "updated_at": "2026-09-16T10:47:50.885164+00:00"
   },
   "Succo d'arancia:LONG": {
     "commodity": "Succo d'arancia",
@@ -1425,7 +1425,7 @@
     "score": 0.0,
     "samples": 159,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T09:30:58.268492+00:00"
+    "updated_at": "2026-09-16T10:47:57.526515+00:00"
   },
   "Maiali magri:LONG": {
     "commodity": "Maiali magri",
@@ -1493,7 +1493,7 @@
     "score": 0.0,
     "samples": 90,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T09:31:09.750956+00:00"
+    "updated_at": "2026-09-16T10:48:09.629730+00:00"
   },
   "Feeder Cattle:LONG": {
     "commodity": "Feeder Cattle",
@@ -1632,7 +1632,7 @@
     "score": 0,
     "samples": 202,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T09:28:48.973161+00:00"
+    "updated_at": "2026-09-16T10:45:41.301334+00:00"
   },
   "Soia:SHORT": {
     "commodity": "Soia",
@@ -1836,7 +1836,7 @@
     "score": 0.0,
     "samples": 81,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T07:20:19.206368+00:00"
+    "updated_at": "2026-09-16T10:46:05.921072+00:00"
   },
   "Gas Naturale:LONG": {
     "commodity": "Gas Naturale",
@@ -1904,7 +1904,7 @@
     "score": 0.0,
     "samples": 101,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T09:29:55.838182+00:00"
+    "updated_at": "2026-09-16T10:46:51.340860+00:00"
   },
   "Grano:LONG": {
     "commodity": "Grano",
@@ -1972,7 +1972,7 @@
     "score": 0.0,
     "samples": 69,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T09:30:03.558251+00:00"
+    "updated_at": "2026-09-16T10:47:00.055788+00:00"
   },
   "Olio di soia:LONG": {
     "commodity": "Olio di soia",
@@ -2178,7 +2178,7 @@
     "score": 0.0,
     "samples": 59,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T09:30:44.795021+00:00"
+    "updated_at": "2026-09-16T10:47:41.352845+00:00"
   },
   "Zucchero:LONG": {
     "commodity": "Zucchero",
@@ -2246,7 +2246,7 @@
     "score": 0.0,
     "samples": 56,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T09:05:46.475278+00:00"
+    "updated_at": "2026-09-16T10:47:28.338747+00:00"
   },
   "Argento:LONG": {
     "commodity": "Argento",
@@ -2314,7 +2314,7 @@
     "score": 0.0,
     "samples": 121,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T09:28:57.187192+00:00"
+    "updated_at": "2026-09-16T10:45:49.199868+00:00"
   },
   "Mais:SHORT": {
     "commodity": "Mais",
@@ -2450,7 +2450,7 @@
     "score": 0.0,
     "samples": 56,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T09:30:25.516643+00:00"
+    "updated_at": "2026-09-16T10:47:21.518910+00:00"
   },
   "Palladio:LONG": {
     "commodity": "Palladio",
@@ -2518,7 +2518,7 @@
     "score": 0.0,
     "samples": 111,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T07:20:24.130444+00:00"
+    "updated_at": "2026-09-16T10:46:13.280584+00:00"
   },
   "Feeder Cattle:SHORT": {
     "commodity": "Feeder Cattle",
@@ -2586,7 +2586,7 @@
     "score": 0.0,
     "samples": 88,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T09:31:04.261452+00:00"
+    "updated_at": "2026-09-16T10:48:03.045076+00:00"
   },
   "Rame:LONG": {
     "commodity": "Rame",
@@ -2654,6 +2654,6 @@
     "score": 0.0,
     "samples": 131,
     "validation_method": "60/40 walk-forward, 1R stop / 2R target, first-touch conservative",
-    "updated_at": "2026-09-16T09:09:39.766829+00:00"
+    "updated_at": "2026-09-16T10:45:56.962609+00:00"
   }
 }
