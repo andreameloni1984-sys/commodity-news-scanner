@@ -1,6 +1,6 @@
 {
   "Oro": {
-    "timestamp": "2026-09-16T03:57:58.354476+00:00",
+    "timestamp": "2026-09-16T07:10:52.167013+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -26,7 +26,7 @@
     }
   },
   "Argento": {
-    "timestamp": "2026-09-16T03:58:09.360631+00:00",
+    "timestamp": "2026-09-16T07:11:16.641180+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -51,7 +51,7 @@
     }
   },
   "Platino": {
-    "timestamp": "2026-09-16T03:58:29.423741+00:00",
+    "timestamp": "2026-09-16T07:11:50.725894+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -72,7 +72,7 @@
     }
   },
   "Palladio": {
-    "timestamp": "2026-09-16T03:58:37.531818+00:00",
+    "timestamp": "2026-09-16T07:11:59.978720+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -93,7 +93,7 @@
     }
   },
   "Petrolio WTI": {
-    "timestamp": "2026-09-16T03:59:00.334475+00:00",
+    "timestamp": "2026-09-16T07:12:22.764345+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -118,7 +118,7 @@
     }
   },
   "Petrolio Brent": {
-    "timestamp": "2026-09-16T03:59:12.655206+00:00",
+    "timestamp": "2026-09-16T07:12:58.261961+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -143,7 +143,7 @@
     }
   },
   "Gas Naturale": {
-    "timestamp": "2026-09-16T03:59:53.689385+00:00",
+    "timestamp": "2026-09-16T07:13:34.274086+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -169,7 +169,7 @@
     }
   },
   "Benzina RBOB": {
-    "timestamp": "2026-09-16T03:59:21.110923+00:00",
+    "timestamp": "2026-09-16T07:13:08.102705+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -195,7 +195,7 @@
     }
   },
   "Heating Oil": {
-    "timestamp": "2026-09-16T03:59:30.118653+00:00",
+    "timestamp": "2026-09-16T07:13:18.987512+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -221,7 +221,7 @@
     }
   },
   "Rame": {
-    "timestamp": "2026-09-16T03:58:21.309293+00:00",
+    "timestamp": "2026-09-16T07:11:41.225267+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -244,7 +244,7 @@
     }
   },
   "Grano": {
-    "timestamp": "2026-09-16T03:53:34.674478+00:00",
+    "timestamp": "2026-09-16T07:14:22.843701+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -269,7 +269,7 @@
     }
   },
   "Mais": {
-    "timestamp": "2026-09-16T03:54:09.678780+00:00",
+    "timestamp": "2026-09-16T07:14:58.260407+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -292,7 +292,7 @@
     }
   },
   "Soia": {
-    "timestamp": "2026-09-16T03:54:19.110776+00:00",
+    "timestamp": "2026-09-16T07:15:08.043352+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -384,7 +384,7 @@
     }
   },
   "Riso": {
-    "timestamp": "2026-09-16T03:54:27.693188+00:00",
+    "timestamp": "2026-09-16T07:15:16.214781+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -407,7 +407,7 @@
     }
   },
   "Caffè": {
-    "timestamp": "2026-09-16T03:55:09.526309+00:00",
+    "timestamp": "2026-09-16T07:15:56.484310+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -428,7 +428,7 @@
     }
   },
   "Cacao": {
-    "timestamp": "2026-09-16T03:54:46.110729+00:00",
+    "timestamp": "2026-09-16T07:15:32.753082+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -451,7 +451,7 @@
     }
   },
   "Zucchero": {
-    "timestamp": "2026-09-16T03:54:37.362118+00:00",
+    "timestamp": "2026-09-16T07:15:24.111875+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -474,7 +474,7 @@
     }
   },
   "Cotone": {
-    "timestamp": "2026-09-16T03:55:17.315157+00:00",
+    "timestamp": "2026-09-16T07:16:04.588611+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -516,7 +516,7 @@
     }
   },
   "Bovini vivi": {
-    "timestamp": "2026-09-16T03:55:24.833899+00:00",
+    "timestamp": "2026-09-16T07:16:12.304845+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -539,7 +539,7 @@
     }
   },
   "Maiali magri": {
-    "timestamp": "2026-09-16T03:55:39.852247+00:00",
+    "timestamp": "2026-09-16T07:16:27.525666+00:00",
     "value": {
       "enabled": true,
       "available": true,
@@ -562,7 +562,7 @@
     }
   },
   "Feeder Cattle": {
-    "timestamp": "2026-09-16T03:55:32.374088+00:00",
+    "timestamp": "2026-09-16T07:16:19.888696+00:00",
     "value": {
       "enabled": true,
       "available": true,
