@@ -6099,7 +6099,8 @@ def telegram_requested_scope(request):
     broad = (
         "classifica", "ranking", "rank", "migliore", "miglior setup",
         "settimanale", "weekly", "settimana", "mensile", "monthly", "mese",
-        "segnali", "signals", "signal", "help", "aiuto", "comandi", "start"
+        "segnali", "signals", "signal", "help", "aiuto", "comandi", "start",
+        "asia", "oceania", "europa", "europe", "america", "usa", "pre usa"
     )
     if any(x in q for x in broad):
         return None
@@ -6617,10 +6618,36 @@ def _telegram_help():
         "🏆 classifica — top commodity\n"
         "🥇 migliore — miglior setup\n"
         "🎯 segnali — soli segnali\n"
+        "🌏 asia / oceania — ripeti briefing Asia 06:00\n"
+        "🇪🇺 europa — ripeti report Europa 08:00\n"
+        "🇺🇸 america / usa — ripeti report America\n"
         "📌 oro / brent / wti / rame / grano / cacao — analisi + TP/SL\n"
         "💬 Puoi scrivere: \"dammi oro con tp e sl\"\n\n"
         "🧪 PAPER ONLY"
     )
+
+
+def _telegram_region_report(region, ranked):
+    """Generate a compact regional session report on request."""
+    region = str(region or "").upper()
+    if region == "ASIA":
+        label = "🌏 ASIA & OCEANIA — 06:00 (RICHIESTO)"
+    elif region == "EUROPA":
+        label = "🇪🇺 EUROPA — 08:00 (RICHIESTO)"
+    else:
+        label = "🇺🇸 AMERICA — USA SESSION (RICHIESTO)"
+    return _session_message(label, ranked, None, None)
+
+
+def _telegram_region_command(normalized):
+    q = _telegram_normalize_command(normalized)
+    if any(x in q for x in ("asia", "oceania", "report asia", "messaggio asia", "ripeti asia", "ripetimi asia", "ripeti il messaggio asia", "ripeti il messaggio dell asia")):
+        return "asia"
+    if any(x in q for x in ("europa", "europe", "report europa", "messaggio europa", "ripeti europa", "ripetimi europa", "ripeti il messaggio europa", "ripeti il messaggio dell europa")):
+        return "europa"
+    if any(x in q for x in ("america", "usa", "report america", "messaggio america", "ripeti america", "ripetimi america", "ripeti il messaggio america", "ripeti il messaggio dell america", "pre usa", "pre-usa")):
+        return "america"
+    return None
 
 
 def process_telegram_on_demand(ranked):
@@ -6643,7 +6670,10 @@ def process_telegram_on_demand(ranked):
         telegram_set_commands()
         normalized = _telegram_normalize_command(raw_text)
         command = normalized
-        if any(x in normalized for x in (
+        region_command = _telegram_region_command(normalized)
+        if region_command:
+            command = region_command
+        elif any(x in normalized for x in (
             "mandami la classifica", "dammi la classifica", "inviami la classifica"
         )):
             command = "classifica"
@@ -6662,6 +6692,12 @@ def process_telegram_on_demand(ranked):
 
         if command in {"start", "help", "aiuto", "comandi"}:
             reply = _telegram_help()
+        elif command == "asia":
+            reply = _telegram_region_report("ASIA", ranked)
+        elif command == "europa":
+            reply = _telegram_region_report("EUROPA", ranked)
+        elif command == "america":
+            reply = _telegram_region_report("AMERICA", ranked)
         elif command in {"classifica", "ranking", "rank"}:
             reply = _telegram_command_ranking(ranked)
         elif command in {"migliore", "best", "miglior setup", "migliore setup"}:
@@ -6748,14 +6784,26 @@ def process_telegram_commands(ranked):
 
             normalized = _telegram_normalize_command(raw_text)
             command = normalized
-            if "mandami la classifica" in normalized or "dammi la classifica" in normalized or "inviami la classifica" in normalized:
+            region_command = _telegram_region_command(normalized)
+            if region_command:
+                command = region_command
+            elif "mandami la classifica" in normalized or "dammi la classifica" in normalized or "inviami la classifica" in normalized:
                 command = "classifica"
             elif any(x in normalized for x in ("migliore della settimana", "miglior della settimana", "migliore settimanale", "miglior settimanale", "top della settimana", "top settimana", "previsione settimanale", "previsione della settimana")):
                 command = "settimanale"
             elif any(x in normalized for x in ("migliore del mese", "miglior del mese", "migliore mensile", "miglior mensile", "top del mese", "top mensile", "previsione mensile", "previsione del mese")):
                 command = "mensile"
 
-            if command in {"classifica", "ranking", "rank"}:
+            if command == "asia":
+                print("📨 Telegram: report ASIA richiesto")
+                send_telegram(_telegram_region_report("ASIA", ranked))
+            elif command == "europa":
+                print("📨 Telegram: report EUROPA richiesto")
+                send_telegram(_telegram_region_report("EUROPA", ranked))
+            elif command == "america":
+                print("📨 Telegram: report AMERICA richiesto")
+                send_telegram(_telegram_region_report("AMERICA", ranked))
+            elif command in {"classifica", "ranking", "rank"}:
                 print("📨 Telegram: comando CLASSIFICA ricevuto")
                 send_telegram(_telegram_command_ranking(ranked))
             elif command in {"migliore", "best", "miglior setup", "migliore setup"}:
@@ -9511,12 +9559,7 @@ def main():
     print("🌍 Avvio Global Market Intelligence...")
     global_intel = global_market_intelligence()
     print(f"   📰 Global news: {global_intel['count']} | fonti {global_intel.get('source_count', 0)} | mode {global_intel['mode']} | shock {global_intel['shock_intensity']:.2f}")
-    try:
-        if should_send_asia_report():
-            send_telegram(send_asia_morning_report(global_intel, results))
-            print("📨 Telegram: briefing Asia & Oceania 06:00 inviato")
-    except Exception as exc:
-        print(f"⚠️ Asia 06:00 report non inviato: {exc}")
+    asia_report_due = should_send_asia_report()
 
     results = []
     resolved_symbols = resolve_commodity_symbols()
@@ -9817,6 +9860,13 @@ def main():
 
     market_ranked = sorted(results, key=lambda x: x.get("market_ranking_score", -1), reverse=True)
     ranked = sorted(results, key=lambda x: x.get("ranking_score", -1), reverse=True)
+
+    if asia_report_due:
+        try:
+            send_telegram(send_asia_morning_report(global_intel, results))
+            print("📨 Telegram: briefing Asia & Oceania 06:00 inviato")
+        except Exception as exc:
+            print(f"⚠️ Asia 06:00 report non inviato: {exc}")
     available_ranked = [x for x in ranked if x.get("available") and x.get("analysis",{}).get("operational_entry_allowed")]
     market_available_ranked = [x for x in market_ranked if x.get("available") and x.get("analysis",{}).get("score", -1) >= 0]
     # If there is no executable setup, still report the best MARKET opportunity,
