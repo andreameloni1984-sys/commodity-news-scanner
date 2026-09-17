@@ -1,326 +1,94 @@
-name: Commodities Bot v4.6 Telegram SiftingIO Live On-Demand
+name: Commodities Bot v5.4 - Asia 06:00
 
 on:
+  schedule:
+    # GitHub Actions usa UTC.
+    # Il codice Python controlla l'ora Europe/Rome,
+    # quindi il report viene inviato alle 06:00 italiane.
+    - cron: '0 4 * * 1-5'
+    - cron: '0 5 * * 1-5'
+
+    # USA
+    - cron: '30 12 * * 1-5'
+
+    # Report serale
+    - cron: '0 19 * * 1-5'
+
   workflow_dispatch:
-    inputs:
-      telegram_request:
-        description: "Richiesta Telegram"
-        required: true
-        type: string
-
-      telegram_chat_id:
-        description: "Chat ID Telegram"
-        required: true
-        type: string
-
-      on_demand_scope:
-        description: "Scope analisi: auto, all oppure nome commodity"
-        required: false
-        default: "auto"
-        type: string
-
-permissions:
-  contents: write
 
 concurrency:
-  group: commodities-bot-on-demand
+  group: commodities-bot-v5-4
   cancel-in-progress: false
 
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
 
     steps:
+      - uses: actions/checkout@v4
 
-      # ============================================================
-      # CHECKOUT
-      # ============================================================
-
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          fetch-depth: 0
-
-      # ============================================================
-      # PYTHON
-      # ============================================================
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      # ============================================================
-      # DEPENDENCIES
-      # ============================================================
+          python-version: '3.11'
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install requests
+        run: pip install requests
 
-      # ============================================================
-      # VERIFY PYTHON
-      # ============================================================
-
-      - name: Verify Python syntax
-        run: |
-          python -m py_compile commodity_bot.py
-
-      # ============================================================
-      # VERIFY SIFTINGIO
-      # ============================================================
-
-      - name: Verify SiftingIO live quote engine
+      - name: Run Commodities Bot v5.4
         env:
-          SIFTING_API_KEY: ${{ secrets.SIFTING_API_KEY }}
-          SIFTING_BASE_URL: "https://api.sifting.io"
-          SIFTING_LIVE_ENABLED: "1"
-          SIFTING_LIVE_REQUIRED: "0"
-          SIFTING_LIVE_MAX_AGE_SECONDS: "30"
-          SIFTING_TIMEOUT_SECONDS: "8"
-
-        run: |
-          python - <<'PY'
-          import os
-          import sys
-          import requests
-
-          key = os.getenv("SIFTING_API_KEY", "").strip()
-
-          if not key:
-              print("❌ SIFTING_API_KEY mancante")
-              print("Aggiungere il Repository Secret: SIFTING_API_KEY")
-              sys.exit(1)
-
-          url = "https://api.sifting.io/v1/last/quote/commodities/XAUUSD"
-
-          try:
-              r = requests.get(
-                  url,
-                  headers={
-                      "X-API-Key": key,
-                      "Accept": "application/json",
-                      "User-Agent": "CommoditiesBot/4.6",
-                  },
-                  timeout=8,
-              )
-
-              r.raise_for_status()
-
-              q = r.json()
-
-              bid = q.get("b")
-              ask = q.get("a")
-              ts = q.get("t")
-
-              if bid is None and ask is None:
-                  print(
-                      "❌ SiftingIO non ha restituito "
-                      "BID/ASK per XAUUSD"
-                  )
-                  sys.exit(1)
-
-              print(
-                  "✅ SIFTINGIO LIVE OK | "
-                  f"XAUUSD | BID={bid} | "
-                  f"ASK={ask} | timestamp={ts}"
-              )
-
-          except Exception as e:
-              print(f"❌ ERRORE SIFTINGIO: {e}")
-              sys.exit(1)
-
-          PY
-
-      # ============================================================
-      # RUN BOT
-      # ============================================================
-
-      - name: Run Commodities Bot v4.6
-        env:
-
-          # ========================================================
-          # MARKET DATA
-          # ========================================================
-
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
 
           SIFTING_API_KEY: ${{ secrets.SIFTING_API_KEY }}
-          SIFTING_BASE_URL: "https://api.sifting.io"
-          SIFTING_LIVE_ENABLED: "1"
-          SIFTING_LIVE_REQUIRED: "0"
-          SIFTING_LIVE_MAX_AGE_SECONDS: "30"
-          SIFTING_TIMEOUT_SECONDS: "8"
-
-          # ========================================================
-          # NEWS / TELEGRAM / MACRO
-          # ========================================================
+          SIFTING_BASE_URL: https://api.sifting.io
+          SIFTING_LIVE_ENABLED: '1'
+          SIFTING_LIVE_REQUIRED: '0'
+          SIFTING_LIVE_MAX_AGE_SECONDS: '30'
+          SIFTING_TIMEOUT_SECONDS: '8'
 
           NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
 
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ inputs.telegram_chat_id }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
-          EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
+          PAPER_TRADING_ONLY: '1'
+          DEMO_TRADING_ENABLED: '0'
 
-          TRADING_ECONOMICS_API_KEY: ${{ secrets.TRADING_ECONOMICS_API_KEY }}
-          TRADING_ECONOMICS_CLIENT: ${{ secrets.TRADING_ECONOMICS_CLIENT }}
+          # Automatic reports + Telegram commands
+          ON_DEMAND_ONLY: '0'
+          COMMUNICATION_MODE: 'MORNING_USA_EVENT'
 
-          # ========================================================
-          # TELEGRAM ON-DEMAND
-          # ========================================================
+          # 🌏 Asia & Oceania — 06:00 Italia
+          ASIA_REPORT_HOUR: '6'
+          ASIA_REPORT_MINUTE: '0'
 
-          ON_DEMAND_ONLY: "1"
-          ON_DEMAND_TELEGRAM_REQUEST: ${{ inputs.telegram_request }}
-          ON_DEMAND_TELEGRAM_CHAT_ID: ${{ inputs.telegram_chat_id }}
-          ON_DEMAND_SCOPE: ${{ inputs.on_demand_scope }}
+          # 🇪🇺 Europa
+          MORNING_REPORT_HOUR: '8'
+          MORNING_REPORT_MINUTE: '0'
 
-          COMMUNICATION_MODE: "ON_DEMAND"
+          # 🇺🇸 USA
+          USA_REPORT_HOUR: '14'
+          USA_REPORT_MINUTE: '30'
 
-          # ========================================================
-          # SICUREZZA
-          # ========================================================
+          # 🌙 Sera
+          EOD_REPORT_HOUR: '21'
 
-          PAPER_TRADING_ONLY: "1"
-          DEMO_TRADING_ENABLED: "0"
+          MONITOR_INTERVAL_MINUTES: '15'
+          MONITOR_SEND_FULL: '0'
+          SILENT_INTERNAL_ANALYSIS: '1'
+          EVENT_ALERTS_ENABLED: '0'
 
-          # ========================================================
-          # MONITOR
-          # ========================================================
+          # Entry policy
+          MIN_ENTRY_PROBABILITY: '62'
+          MIN_ENTRY_QUALITY: '55'
+          MIN_ENTRY_CONFIDENCE: '60'
 
-          MONITOR_INTERVAL_MINUTES: "15"
-          MONITOR_SEND_FULL: "0"
-          SILENT_INTERNAL_ANALYSIS: "1"
-          EVENT_ALERTS_ENABLED: "0"
+          MIN_ENTRY_RR: '2.5'
+          MIN_ENTRY_RR_TP1: '1.5'
+          MIN_ENTRY_RR_TP2: '2.0'
+          MIN_ENTRY_RR_TP3: '2.5'
 
-          # ========================================================
-          # CORE ENGINE
-          # ========================================================
+          MAX_ENTRY_STOP_ATR: '2.5'
+          SL_STRUCTURE_BUFFER_ATR: '0.15'
+          SL_MIN_ATR: '0.80'
 
-          DAILY_BIAS_ENABLED: "1"
-          CANDLE_ENGINE_ENABLED: "1"
-          PRICE_ACTION_ENABLED: "1"
-          ADAPTIVE_RISK_ENABLED: "1"
-          EXIT_ENGINE_ENABLED: "1"
-          REGIME_ENABLED: "1"
-          EARLY_OPPORTUNITY_ENABLED: "1"
-
-          # ========================================================
-          # MARKET INTELLIGENCE
-          # ========================================================
-
-          MARKET_INTELLIGENCE_ENABLED: "1"
-          MARKET_INTELLIGENCE_MODE: "PRICEPEDIA_STYLE"
-
-          EXTERNAL_INTELLIGENCE_ENABLED: "1"
-          EXTERNAL_INTELLIGENCE_SHADOW: "1"
-
-          # ========================================================
-          # POLITICAL / GEOPOLITICAL
-          # ========================================================
-
-          POLITICAL_IMPACT_ENABLED: "1"
-          GEOPOLITICAL_IMPACT_ENABLED: "1"
-
-          # ========================================================
-          # FUTURES / MACRO
-          # ========================================================
-
-          FUTURES_STRUCTURE_ENABLED: "1"
-          CFTC_ENABLED: "1"
-          EIA_ENABLED: "1"
-
-          # ========================================================
-          # WEATHER / DISASTER
-          # ========================================================
-
-          WEATHER_ENABLED: "1"
-          DISASTER_ENABLED: "1"
-
-          # ========================================================
-          # SOLE 24 ORE
-          # ========================================================
-
-          SOLE24_ENABLED: "1"
-          SOLE24_TIMEOUT: "12"
-          SOLE24_CACHE_HOURS: "3"
-          SOLE24_WEIGHT: "0.15"
-
-          # ========================================================
-          # ENTRY FILTER
-          # ========================================================
-
-          MIN_ENTRY_PROBABILITY: "62"
-          MIN_ENTRY_QUALITY: "55"
-          MIN_ENTRY_CONFIDENCE: "60"
-
-          # ========================================================
-          # RISK / REWARD
-          # ========================================================
-
-          MIN_ENTRY_RR: "2.5"
-          MIN_ENTRY_RR_TP1: "1.5"
-          MIN_ENTRY_RR_TP2: "2.0"
-          MIN_ENTRY_RR_TP3: "2.5"
-
-          MAX_ENTRY_STOP_ATR: "2.5"
-
-          SL_STRUCTURE_BUFFER_ATR: "0.15"
-          SL_MIN_ATR: "0.80"
-
-        run: |
-          python commodity_bot.py
-
-      # ============================================================
-      # PERSIST STATE - CORRETTO
-      # ============================================================
-
-      - name: Persist bot state
-        if: always()
-        run: |
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          echo "🔄 Sincronizzazione con origin/main..."
-
-          git fetch origin main
-
-          echo "📦 Aggiunta stato bot..."
-
-          git add *.json 2>/dev/null || true
-
-          if git diff --cached --quiet; then
-            echo "ℹ️ Nessuna modifica JSON da salvare."
-            exit 0
-          fi
-
-          echo "💾 Commit dello stato bot..."
-
-          git commit -m "feat: commodities bot v4.6 siftingio live price"
-
-          echo "🔄 Aggiornamento branch remoto..."
-
-          if git rebase origin/main; then
-
-            echo "🚀 Push verso origin/main..."
-
-            git push origin HEAD:main
-
-          else
-
-            echo "⚠️ Rebase con conflitto."
-
-            git rebase --abort || true
-
-            echo "🔄 Tentativo di merge mantenendo lo stato locale..."
-
-            git merge origin/main -X ours --no-edit
-
-            echo "🚀 Push dopo merge..."
-
-            git push origin HEAD:main
-
-          fi
+        run: python commodity_bot.py
