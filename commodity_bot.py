@@ -1,4 +1,4 @@
-import time
+limport time
 import os
 import json
 import math
@@ -123,7 +123,7 @@ TELEGRAM_COMPACT_MODE = os.getenv("TELEGRAM_COMPACT_MODE", "1") == "1"
 # but Telegram is intentionally quiet except for scheduled decision points,
 # material scenario changes, and the daily statistical report.
 COMMUNICATION_MODE = os.getenv("COMMUNICATION_MODE", "MORNING_USA_EVENT")
-ASIA_REPORT_HOUR = int(os.getenv("ASIA_REPORT_HOUR", "6"))
+ASIA_REPORT_HOUR = int(os.getenv("ASIA_REPORT_HOUR", "5"))
 ASIA_REPORT_MINUTE = int(os.getenv("ASIA_REPORT_MINUTE", "0"))
 
 ON_DEMAND_ONLY = os.getenv("ON_DEMAND_ONLY", "0") == "1"
@@ -6631,7 +6631,7 @@ def _telegram_region_report(region, ranked):
     """Generate a compact regional session report on request."""
     region = str(region or "").upper()
     if region == "ASIA":
-        label = "🌏 ASIA & OCEANIA — 06:00 (RICHIESTO)"
+        label = "🌏 ASIA & OCEANIA — 05:00"
     elif region == "EUROPA":
         label = "🇪🇺 EUROPA — 08:00 (RICHIESTO)"
     else:
@@ -9502,7 +9502,7 @@ def send_asia_morning_report(global_intel, results=None):
     results = results or []
     gi = global_intel if isinstance(global_intel, dict) else {}
     lines = [
-        "🌏 ASIA & OCEANIA — 06:00",
+        "🌏 ASIA & OCEANIA — 05:00",
         "━━━━━━━━━━━━━━━━━━━━",
         "📰 Briefing mercati asiatici e Oceania",
         f"📰 News globali: {gi.get('count', 0)} | fonti {gi.get('source_count', 0)} | mode {gi.get('mode', 'N/D')}",
@@ -9864,9 +9864,9 @@ def main():
     if asia_report_due:
         try:
             send_telegram(send_asia_morning_report(global_intel, results))
-            print("📨 Telegram: briefing Asia & Oceania 06:00 inviato")
+            print("📨 Telegram: briefing Asia & Oceania 05:00 inviato")
         except Exception as exc:
-            print(f"⚠️ Asia 06:00 report non inviato: {exc}")
+            print(f"⚠️ Asia 05:00 report non inviato: {exc}")
     available_ranked = [x for x in ranked if x.get("available") and x.get("analysis",{}).get("operational_entry_allowed")]
     market_available_ranked = [x for x in market_ranked if x.get("available") and x.get("analysis",{}).get("score", -1) >= 0]
     # If there is no executable setup, still report the best MARKET opportunity,
@@ -10167,7 +10167,8 @@ def main():
     if ON_DEMAND_ONLY:
         # True on-demand mode: no periodic polling, no scheduled reports and
         # no event push. Telegram receives exactly the requested answer.
-        process_telegram_on_demand(ranked)
+        if ON_DEMAND_TELEGRAM_REQUEST.strip():
+            process_telegram_on_demand(ranked)
         save_monitor_state(ranked, best, position)
     else:
         # Standard scheduled/event-driven mode.
