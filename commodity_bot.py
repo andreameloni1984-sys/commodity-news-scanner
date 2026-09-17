@@ -62,7 +62,7 @@ KNOWLEDGE_DELTA_CAP = float(os.getenv("KNOWLEDGE_DELTA_CAP", "4.0"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "6.1.8-SOYUZ-GAGARIN-AUTONOMOUS"
+BOT_VERSION = "6.1.9-SOYUZ-GAGARIN-AUTONOMOUS"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -5826,9 +5826,10 @@ def demo_execution_adapter(results, position):
 # TELEGRAM
 # ============================================================
 
-def send_telegram(message):
+def send_telegram(message, chat_id=None):
     """Send a Telegram message safely, splitting oversized messages."""
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+    target_chat_id = str(chat_id or TELEGRAM_CHAT_ID or "").strip()
+    if not TELEGRAM_BOT_TOKEN or not target_chat_id:
         print("⚠️ Telegram non configurato.")
         return False
 
@@ -5841,7 +5842,7 @@ def send_telegram(message):
     chunks = [text[i:i+3900] for i in range(0, len(text), 3900)]
     ok = True
     for chunk in chunks:
-        payload = {"chat_id": TELEGRAM_CHAT_ID, "text": chunk}
+        payload = {"chat_id": target_chat_id, "text": chunk}
         try:
             response = requests.post(url, json=payload, timeout=20)
             response.raise_for_status()
@@ -8493,7 +8494,7 @@ def intelligence_v41_summary(analysis):
 # adapters; they no longer define the architecture by themselves.
 # PAPER ONLY: this layer never places broker orders.
 
-GAGARIN_ARCHITECTURE_VERSION = "6.1.8-SOYUZ-GAGARIN-AUTONOMOUS-1"
+GAGARIN_ARCHITECTURE_VERSION = "6.1.9-SOYUZ-GAGARIN-AUTONOMOUS-1"
 GAGARIN_FINAL_AUTHORITY = True
 GAGARIN_REQUIRE_LIVE_FOR_ENTRY = os.getenv("GAGARIN_REQUIRE_LIVE_FOR_ENTRY", "1") == "1"
 SIFTING_CACHE_TTL_SECONDS = float(os.getenv("SIFTING_CACHE_TTL_SECONDS", "20"))
@@ -10396,7 +10397,7 @@ def demo_execution_adapter(results, position):
 # TELEGRAM
 # ============================================================
 
-def send_telegram(message):
+def send_telegram(message, chat_id=None):
     """Send a Telegram message safely, splitting oversized messages."""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         print("⚠️ Telegram non configurato.")
@@ -11074,11 +11075,11 @@ def _telegram_signals(ranked):
     return "\n".join(lines)
 
 
+RAW_ON_DEMAND_REQUEST = os.getenv("ON_DEMAND_TELEGRAM_REQUEST", "").strip()
+ON_DEMAND_CHAT_ID = os.getenv("ON_DEMAND_TELEGRAM_CHAT_ID", "").strip()
 REQUEST_TYPE = os.getenv("REQUEST_TYPE", "").strip().upper()
 REQUEST_COMMODITY = os.getenv("REQUEST_COMMODITY", "").strip()
 
-# v6.1.1: one-shot requests are injected by GitHub Actions/bridge.
-# Telegram is never polled by this process; requests are injected externally.
 _REQUEST_ALIASES = {
     "CLASSIFICA": "CLASSIFICA", "RANKING": "CLASSIFICA",
     "SETUP": "SETUP", "MIGLIORE": "SETUP", "BEST": "SETUP",
@@ -11088,6 +11089,29 @@ _REQUEST_ALIASES = {
     "PREZZO": "PREZZO", "PRICE": "PREZZO",
 }
 REQUEST_TYPE = _REQUEST_ALIASES.get(REQUEST_TYPE, REQUEST_TYPE)
+
+if RAW_ON_DEMAND_REQUEST and not REQUEST_TYPE:
+    _raw = _telegram_normalize_command(RAW_ON_DEMAND_REQUEST)
+    if any(x in _raw for x in ("classifica", "ranking", "rank")):
+        REQUEST_TYPE = "CLASSIFICA"
+    elif any(x in _raw for x in ("scalping", "scalp")):
+        REQUEST_TYPE = "SCALPING"
+    elif any(x in _raw for x in ("segnali", "signals", "signal")):
+        REQUEST_TYPE = "SEGNALI"
+    elif any(x in _raw for x in ("setup", "migliore", "best")):
+        REQUEST_TYPE = "SETUP"
+    elif any(x in _raw for x in ("prezzo", "price", "quotazione")):
+        REQUEST_TYPE = "PREZZO"
+    elif any(x in _raw for x in ("analisi", "analysis", "analizza")):
+        REQUEST_TYPE = "COMMODITY"
+    elif _raw in ("start", "help", "aiuto", "comandi"):
+        REQUEST_TYPE = "HELP"
+    else:
+        REQUEST_TYPE = "COMMODITY"
+    if not REQUEST_COMMODITY:
+        _scope = telegram_requested_scope(RAW_ON_DEMAND_REQUEST)
+        if _scope:
+            REQUEST_COMMODITY = _scope
 
 def main():
     print()
@@ -11738,15 +11762,16 @@ def main():
     # ========================================================
     if REQUEST_TYPE:
         req = REQUEST_TYPE
+        request_chat = ON_DEMAND_CHAT_ID or TELEGRAM_CHAT_ID
         target = _telegram_find_commodity(ranked, REQUEST_COMMODITY) if REQUEST_COMMODITY else None
         if req in ("CLASSIFICA", "RANKING"):
-            send_telegram(_telegram_command_ranking(ranked))
+            send_telegram(_telegram_command_ranking(ranked), request_chat)
             print("📨 Telegram/request: CLASSIFICA")
         elif req in ("SETUP", "MIGLIORE", "BEST"):
-            send_telegram(_telegram_best(ranked))
+            send_telegram(_telegram_best(ranked), request_chat)
             print("📨 Telegram/request: SETUP")
         elif req in ("SEGNALI", "SIGNALS"):
-            send_telegram(_telegram_signals(ranked))
+            send_telegram(_telegram_signals(ranked), request_chat)
             print("📨 Telegram/request: SEGNALI")
         elif req in ("SCALPING", "SCALP"):
             if target is None and REQUEST_COMMODITY:
@@ -11755,22 +11780,22 @@ def main():
                 target = ranked[0] if ranked else None
             if target:
                 target["analysis"]["scalping"] = scalping_engine(target.get("analysis", {}) or {})
-            send_telegram(_telegram_scalping(target))
+            send_telegram(_telegram_scalping(target), request_chat)
             print("📨 Telegram/request: SCALPING")
         elif req in ("COMMODITY", "ANALISI", "ANALYSIS"):
             if target:
-                send_telegram(_telegram_commodity_detail(target))
+                send_telegram(_telegram_commodity_detail(target), request_chat)
                 print(f"📨 Telegram/request: ANALISI {target.get('name')}")
             else:
-                send_telegram("❓ Commodity non trovata. Usa REQUEST_COMMODITY con un nome valido.")
+                send_telegram("❓ Commodity non trovata. Usa REQUEST_COMMODITY con un nome valido.", request_chat)
         elif req in ("PREZZO", "PRICE"):
             if target:
                 a = target.get("analysis", {}) or {}
-                send_telegram(f"💰 {target.get('name')}\nPrezzo: {a.get('live_price', a.get('price', 'N/D'))}\nBID: {a.get('live_price_bid', 'N/D')} | ASK: {a.get('live_price_ask', 'N/D')}\n🧪 PAPER ONLY")
+                send_telegram(f"💰 {target.get('name')}\nPrezzo: {a.get('live_price', a.get('price', 'N/D'))}\nBID: {a.get('live_price_bid', 'N/D')} | ASK: {a.get('live_price_ask', 'N/D')}\n🧪 PAPER ONLY", request_chat)
             else:
-                send_telegram("❓ Commodity non trovata.")
+                send_telegram("❓ Commodity non trovata.", request_chat)
         else:
-            send_telegram(_telegram_help())
+            send_telegram(_telegram_help(), request_chat)
     elif REPORT_TYPE in ("ASIA", "EUROPE", "USA", "EOD"):
         if REPORT_TYPE == "ASIA":
             message = send_asia_morning_report(global_intel, results)
