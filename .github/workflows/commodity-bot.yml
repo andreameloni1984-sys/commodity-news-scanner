@@ -1,46 +1,101 @@
-name: Commodities Bot v5.4 - Asia 06:00
+name: Commodities Bot - Scheduled Reports
 
 on:
   schedule:
-    # 06:00 Italia
-    # Vengono eseguiti entrambi per coprire ora legale/solare.
-    # Il Python controlla comunque l'ora Europe/Rome.
-    - cron: '0 4 * * 1-5'
-    - cron: '0 5 * * 1-5'
+    # 05:00 Italia durante l'ora legale
+    - cron: '0 3 * * 1-5'
 
-    # 🇺🇸 USA
+    # 05:00 Italia durante l'ora solare
+    - cron: '0 4 * * 1-5'
+
+    # 08:00 Italia durante l'ora legale
+    - cron: '0 6 * * 1-5'
+
+    # 08:00 Italia durante l'ora solare
+    - cron: '0 7 * * 1-5'
+
+    # 14:30 Italia durante l'ora legale
     - cron: '30 12 * * 1-5'
 
-    # 🌙 Fine giornata
+    # 14:30 Italia durante l'ora solare
+    - cron: '30 13 * * 1-5'
+
+    # 21:00 Italia durante l'ora legale
     - cron: '0 19 * * 1-5'
 
+    # 21:00 Italia durante l'ora solare
+    - cron: '0 20 * * 1-5'
+
   workflow_dispatch:
-    inputs:
-      telegram_request:
-        description: "Richiesta Telegram"
-        required: false
-        default: ""
-
-      telegram_chat_id:
-        description: "Chat ID Telegram"
-        required: false
-        default: ""
-
-      on_demand_scope:
-        description: "Ambito analisi"
-        required: false
-        default: "auto"
-
-concurrency:
-  group: commodities-bot-v5-4
-  cancel-in-progress: false
 
 jobs:
-  run:
+  commodities-bot:
     runs-on: ubuntu-latest
 
+    env:
+      TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+      SIFTING_API_KEY: ${{ secrets.SIFTING_API_KEY }}
+      SIFTING_BASE_URL: https://api.sifting.io
+
+      SIFTING_LIVE_ENABLED: '1'
+      SIFTING_LIVE_REQUIRED: '0'
+      SIFTING_LIVE_MAX_AGE_SECONDS: '30'
+      SIFTING_TIMEOUT_SECONDS: '8'
+
+      NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
+
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+      # Solo report programmati.
+      # Niente comandi Telegram / getUpdates.
+      TELEGRAM_COMMANDS_ENABLED: '0'
+
+      ON_DEMAND_TELEGRAM_REQUEST: ''
+      ON_DEMAND_TELEGRAM_CHAT_ID: ''
+      ON_DEMAND_SCOPE: 'auto'
+
+      ON_DEMAND_ONLY: '0'
+      COMMUNICATION_MODE: 'MORNING_USA_EVENT'
+
+      # REPORT
+      ASIA_REPORT_HOUR: '5'
+      ASIA_REPORT_MINUTE: '0'
+
+      MORNING_REPORT_HOUR: '8'
+      MORNING_REPORT_MINUTE: '0'
+
+      USA_REPORT_HOUR: '14'
+      USA_REPORT_MINUTE: '30'
+
+      EOD_REPORT_HOUR: '21'
+      EOD_REPORT_MINUTE: '0'
+
+      # TRADING
+      PAPER_TRADING_ONLY: '1'
+      DEMO_TRADING_ENABLED: '0'
+
+      MONITOR_INTERVAL_MINUTES: '15'
+      MONITOR_SEND_FULL: '0'
+      SILENT_INTERNAL_ANALYSIS: '1'
+      EVENT_ALERTS_ENABLED: '0'
+
+      # ENTRY POLICY
+      MIN_ENTRY_PROBABILITY: '62'
+      MIN_ENTRY_QUALITY: '55'
+      MIN_ENTRY_CONFIDENCE: '60'
+
+      MIN_ENTRY_RR: '2.5'
+      MIN_ENTRY_RR_TP1: '1.5'
+      MIN_ENTRY_RR_TP2: '2.0'
+      MIN_ENTRY_RR_TP3: '2.5'
+
+      MAX_ENTRY_STOP_ATR: '2.5'
+      SL_STRUCTURE_BUFFER_ATR: '0.15'
+      SL_MIN_ATR: '0.80'
+
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Python
@@ -53,125 +108,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests
 
-      - name: Run Commodities Bot v5.4
-        env:
-
-          # ==============================
-          # MARKET DATA
-          # ==============================
-
-          TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
-
-          SIFTING_API_KEY: ${{ secrets.SIFTING_API_KEY }}
-          SIFTING_BASE_URL: https://api.sifting.io
-          SIFTING_LIVE_ENABLED: '1'
-          SIFTING_LIVE_REQUIRED: '0'
-          SIFTING_LIVE_MAX_AGE_SECONDS: '30'
-          SIFTING_TIMEOUT_SECONDS: '8'
-
-          # ==============================
-          # NEWS
-          # ==============================
-
-          NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
-
-          # ==============================
-          # TELEGRAM
-          # ==============================
-
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-
-          # IMPORTANTISSIMO:
-          # GitHub NON deve usare getUpdates.
-          # Il polling Telegram viene gestito dal bridge.
-          TELEGRAM_COMMANDS_ENABLED: '0'
-
-          # Richiesta ricevuta dal bridge Telegram
-          ON_DEMAND_TELEGRAM_REQUEST: ${{ inputs.telegram_request }}
-          ON_DEMAND_TELEGRAM_CHAT_ID: ${{ inputs.telegram_chat_id }}
-          ON_DEMAND_SCOPE: ${{ inputs.on_demand_scope }}
-
-          # ==============================
-          # TRADING
-          # ==============================
-
-          PAPER_TRADING_ONLY: '1'
-          DEMO_TRADING_ENABLED: '0'
-
-          # ==============================
-          # COMMUNICATION
-          # ==============================
-
-          ON_DEMAND_ONLY: '0'
-          COMMUNICATION_MODE: 'MORNING_USA_EVENT'
-
-          MONITOR_INTERVAL_MINUTES: '15'
-          MONITOR_SEND_FULL: '0'
-          SILENT_INTERNAL_ANALYSIS: '1'
-          EVENT_ALERTS_ENABLED: '0'
-
-          # ==============================
-          # 🌏 ASIA / OCEANIA
-          # ==============================
-
-          ASIA_REPORT_HOUR: '6'
-          ASIA_REPORT_MINUTE: '0'
-
-          # ==============================
-          # 🇪🇺 EUROPA
-          # ==============================
-
-          MORNING_REPORT_HOUR: '8'
-          MORNING_REPORT_MINUTE: '0'
-
-          # ==============================
-          # 🇺🇸 USA
-          # ==============================
-
-          USA_REPORT_HOUR: '14'
-          USA_REPORT_MINUTE: '30'
-
-          # ==============================
-          # 🌙 EOD
-          # ==============================
-
-          EOD_REPORT_HOUR: '21'
-
-          # ==============================
-          # ENTRY POLICY
-          # ==============================
-
-          MIN_ENTRY_PROBABILITY: '62'
-          MIN_ENTRY_QUALITY: '55'
-          MIN_ENTRY_CONFIDENCE: '60'
-
-          MIN_ENTRY_RR: '2.5'
-          MIN_ENTRY_RR_TP1: '1.5'
-          MIN_ENTRY_RR_TP2: '2.0'
-          MIN_ENTRY_RR_TP3: '2.5'
-
-          # ==============================
-          # RISK / STOP LOSS
-          # ==============================
-
-          MAX_ENTRY_STOP_ATR: '2.5'
-          SL_STRUCTURE_BUFFER_ATR: '0.15'
-          SL_MIN_ATR: '0.80'
-
+      - name: Compile and run bot
         run: |
-          echo "=============================================="
-          echo "🌍 COMMODITIES BOT v5.4"
-          echo "=============================================="
-          echo "Telegram polling interno: DISABILITATO"
-          echo "Telegram bridge: ATTIVO"
-          echo "Asia/Oceania: 06:00"
-          echo "Europa: 08:00"
-          echo "USA: 14:30"
-          echo "EOD: 21:00"
-          echo "Paper Trading: ON"
-          echo "=============================================="
-
           python -m py_compile commodity_bot.py
-
           python commodity_bot.py
