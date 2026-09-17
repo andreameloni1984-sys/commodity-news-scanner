@@ -62,7 +62,7 @@ KNOWLEDGE_DELTA_CAP = float(os.getenv("KNOWLEDGE_DELTA_CAP", "4.0"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "6.1.2-SOYUZ-GAGARIN-HYBRID"
+BOT_VERSION = "6.1.4-SOYUZ-GAGARIN-AUTONOMOUS"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -8493,7 +8493,7 @@ def intelligence_v41_summary(analysis):
 # adapters; they no longer define the architecture by themselves.
 # PAPER ONLY: this layer never places broker orders.
 
-GAGARIN_ARCHITECTURE_VERSION = "5.4.0-THREE-ENGINES-1"
+GAGARIN_ARCHITECTURE_VERSION = "6.1.4-SOYUZ-GAGARIN-AUTONOMOUS-1"
 GAGARIN_FINAL_AUTHORITY = True
 GAGARIN_REQUIRE_LIVE_FOR_ENTRY = os.getenv("GAGARIN_REQUIRE_LIVE_FOR_ENTRY", "1") == "1"
 SIFTING_CACHE_TTL_SECONDS = float(os.getenv("SIFTING_CACHE_TTL_SECONDS", "20"))
@@ -11246,17 +11246,43 @@ def main():
         if _item.get("available"):
             finalize_v26_analysis(_item["analysis"])
 
-    # v4.6: SiftingIO LIVE PRICE.
-    # The analytical history remains unchanged. Only the current price/entry
-    # reference is replaced by the live BID/ASK quote, then SL/TP and the final
-    # signal engine are recalculated from that live reference.
+    # v6.1.4: SiftingIO LIVE PRICE — throttled candidate-first policy.
+    # The full universe is still analyzed from historical/intraday data.
+    # Live quotes are requested only for the strongest candidates (plus an
+    # explicitly requested commodity), preventing 21 sequential quote calls
+    # from producing avoidable 429 storms. A 429 stops the live pass for the
+    # cycle; it never invalidates the historical analysis.
     if SIFTING_LIVE_ENABLED:
-        for _item in results:
-            if not _item.get("available"):
-                continue
+        _live_candidates = [
+            x for x in results
+            if x.get("available") and isinstance(x.get("analysis"), dict)
+        ]
+        _live_candidates.sort(
+            key=lambda x: safe_float((x.get("analysis") or {}).get("score"), -1) or -1,
+            reverse=True,
+        )
+        _max_live = max(1, int(os.getenv("SIFTING_MAX_LIVE_QUOTES_PER_RUN", "6")))
+        _requested_name = REQUEST_COMMODITY if REQUEST_TYPE else ""
+        _selected = _live_candidates[:_max_live]
+        if _requested_name:
+            _requested = next(
+                (x for x in _live_candidates
+                 if _telegram_normalize_command(x.get("name")) == _telegram_normalize_command(_requested_name)),
+                None,
+            )
+            if _requested is not None and _requested not in _selected:
+                _selected.append(_requested)
+
+        _live_rate_limited = False
+        for _item in _selected:
             _a = _item["analysis"]
             _name = _item.get("name")
             apply_sifting_live_price(_a, _name)
+
+            if _a.get("live_price_status") == "RATE_LIMIT":
+                _live_rate_limited = True
+                print("   🛑 SiftingIO RATE_LIMIT: arresto del pass live per questo ciclo.")
+                break
 
             if _a.get("live_price_status") == "LIVE":
                 _direction = _a.get("setup_direction") or _a.get("model_signal") or _a.get("signal")
@@ -11772,3 +11798,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+  
