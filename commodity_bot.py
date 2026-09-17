@@ -62,7 +62,7 @@ KNOWLEDGE_DELTA_CAP = float(os.getenv("KNOWLEDGE_DELTA_CAP", "4.0"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "6.1-SOYUZ-GAGARIN-HYBRID"
+BOT_VERSION = "6.1.1-SOYUZ-GAGARIN-HYBRID"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -11077,13 +11077,25 @@ def _telegram_signals(ranked):
 REQUEST_TYPE = os.getenv("REQUEST_TYPE", "").strip().upper()
 REQUEST_COMMODITY = os.getenv("REQUEST_COMMODITY", "").strip()
 
+# v6.1.1: one-shot requests are injected by GitHub Actions/bridge.
+# Telegram is never polled by this process; requests are injected externally.
+_REQUEST_ALIASES = {
+    "CLASSIFICA": "CLASSIFICA", "RANKING": "CLASSIFICA",
+    "SETUP": "SETUP", "MIGLIORE": "SETUP", "BEST": "SETUP",
+    "SEGNALI": "SEGNALI", "SIGNALS": "SEGNALI",
+    "SCALPING": "SCALPING", "SCALP": "SCALPING",
+    "COMMODITY": "COMMODITY", "ANALISI": "COMMODITY", "ANALYSIS": "COMMODITY",
+    "PREZZO": "PREZZO", "PRICE": "PREZZO",
+}
+REQUEST_TYPE = _REQUEST_ALIASES.get(REQUEST_TYPE, REQUEST_TYPE)
+
 def main():
     print()
     print("=" * 70)
     print(f"🌍 COMMODITIES BOT v{BOT_VERSION}")
     print("HISTORICAL + INTRADAY + RISK/GAGARIN + NEWS/INTELLIGENCE | PAPER ONLY")
     print("SOYUZ HYBRID | HISTORICAL → INTRADAY → SCALPING(REQUEST) → SL/TP → GAGARIN")
-    print("COMMUNICATION: MORNING + USA + MATERIAL EVENTS | INTERNAL ANALYSIS SILENT")
+    print("COMMUNICATION: SCHEDULED + ONE-SHOT REQUEST | NO TELEGRAM POLLING | INTERNAL ANALYSIS SILENT")
     print("=" * 70)
     print()
 
@@ -11762,3 +11774,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+  
