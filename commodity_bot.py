@@ -123,6 +123,9 @@ TELEGRAM_COMPACT_MODE = os.getenv("TELEGRAM_COMPACT_MODE", "1") == "1"
 # but Telegram is intentionally quiet except for scheduled decision points,
 # material scenario changes, and the daily statistical report.
 COMMUNICATION_MODE = os.getenv("COMMUNICATION_MODE", "MORNING_USA_EVENT")
+ASIA_REPORT_HOUR = int(os.getenv("ASIA_REPORT_HOUR", "6"))
+ASIA_REPORT_MINUTE = int(os.getenv("ASIA_REPORT_MINUTE", "0"))
+
 ON_DEMAND_ONLY = os.getenv("ON_DEMAND_ONLY", "0") == "1"
 ON_DEMAND_TELEGRAM_REQUEST = os.getenv("ON_DEMAND_TELEGRAM_REQUEST", "").strip()
 ON_DEMAND_TELEGRAM_CHAT_ID = os.getenv("ON_DEMAND_TELEGRAM_CHAT_ID", "").strip()
@@ -9445,6 +9448,51 @@ def gagarin_display_snapshot(analysis):
 # MAIN
 # ============================================================
 
+
+def send_asia_morning_report(global_intel, results=None):
+    """06:00 Europe/Rome Asia & Oceania briefing; informational only."""
+    results = results or []
+    gi = global_intel if isinstance(global_intel, dict) else {}
+    lines = [
+        "🌏 ASIA & OCEANIA — 06:00",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "📰 Briefing mercati asiatici e Oceania",
+        f"📰 News globali: {gi.get('count', 0)} | fonti {gi.get('source_count', 0)} | mode {gi.get('mode', 'N/D')}",
+        "",
+        "🎯 COMMODITY DA MONITORARE",
+    ]
+    ranked = []
+    for item in results:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name") or item.get("commodity")
+        direction = item.get("final_direction") or item.get("direction") or "NONE"
+        score = safe_float(item.get("market_ranking"), 0) or 0
+        if name:
+            ranked.append((score, str(name), str(direction)))
+    ranked.sort(reverse=True)
+    if ranked:
+        for i, (_, name, direction) in enumerate(ranked[:3], 1):
+            icon = "🟢" if direction == "LONG" else "🔴" if direction == "SHORT" else "🟡"
+            lines.append(f"{i}. {name} {icon} {direction}")
+    else:
+        lines.append("• Analisi commodity disponibile nel report principale.")
+    lines += [
+        "",
+        "⚠️ Informativo: nessun ingresso autorizzato.",
+        "🛡️ GAGARIN resta l'autorità finale.",
+        "🧪 PAPER ONLY",
+    ]
+    return "\n".join(lines)
+
+
+def should_send_asia_report():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    now = datetime.now(ZoneInfo("Europe/Rome"))
+    return now.hour == ASIA_REPORT_HOUR and now.minute < 10
+
+
 def main():
     print()
     print("=" * 70)
@@ -9463,6 +9511,12 @@ def main():
     print("🌍 Avvio Global Market Intelligence...")
     global_intel = global_market_intelligence()
     print(f"   📰 Global news: {global_intel['count']} | fonti {global_intel.get('source_count', 0)} | mode {global_intel['mode']} | shock {global_intel['shock_intensity']:.2f}")
+    try:
+        if should_send_asia_report():
+            send_telegram(send_asia_morning_report(global_intel, results))
+            print("📨 Telegram: briefing Asia & Oceania 06:00 inviato")
+    except Exception as exc:
+        print(f"⚠️ Asia 06:00 report non inviato: {exc}")
 
     results = []
     resolved_symbols = resolve_commodity_symbols()
