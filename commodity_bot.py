@@ -11790,7 +11790,13 @@ def main():
             else:
                 print("📊 EOD: nessun dato nuovo da valutare")
     else:
-        print(f"📡 REPORT_TYPE={REPORT_TYPE or 'AUTO'} — nessun invio Telegram in questa esecuzione")
+        # Manual test without an explicit request sends a compact Europe report.
+        # Scheduled runs remain fully deterministic through REPORT_TYPE.
+        if os.getenv("RUN_MODE", "").strip().upper() == "MANUAL_TEST":
+            send_telegram(_session_message("🧪 MANUAL TEST — MARKET REPORT", ranked, best, position_message))
+            print("📨 Telegram: manual test inviato")
+        else:
+            print(f"📡 REPORT_TYPE={REPORT_TYPE or 'AUTO'} — nessun invio Telegram in questa esecuzione")
 
     # No Telegram polling via Telegram API: scheduled reports and explicit one-shot request hooks only.
     save_monitor_state(ranked, best, position)
@@ -11798,4 +11804,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-  
