@@ -736,7 +736,7 @@ SIFTING_COMMODITY_SYMBOLS = {
     "Benzina RBOB": "RBUSD",
     "Gas Naturale": "NATGAS",
     "Heating Oil": "HOILUSD",
-    "Rame": "COPPERUSD",
+    "Rame": "XCUUSD",
     "Alluminio": "XALUSD",
     "Nichel": "XNIUSD",
     "Zinco": "XZNUSD",
