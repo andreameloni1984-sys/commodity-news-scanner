@@ -62,7 +62,7 @@ KNOWLEDGE_DELTA_CAP = float(os.getenv("KNOWLEDGE_DELTA_CAP", "4.0"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "6.1.1-SOYUZ-GAGARIN-HYBRID"
+BOT_VERSION = "6.1.2-SOYUZ-GAGARIN-HYBRID"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -11403,12 +11403,10 @@ def main():
     market_ranked = sorted(results, key=lambda x: x.get("market_ranking_score", -1), reverse=True)
     ranked = sorted(results, key=lambda x: x.get("ranking_score", -1), reverse=True)
 
-    if asia_report_due:
-        try:
-            send_telegram(send_asia_morning_report(global_intel, results))
-            print("📨 Telegram: briefing Asia & Oceania 06:00 inviato")
-        except Exception as exc:
-            print(f"⚠️ Asia 06:00 report non inviato: {exc}")
+    # v6.1.2 FIX: the old v5.4 Asia scheduler flag (asia_report_due)
+    # was removed from the consolidated scheduler. Scheduled communication
+    # is now handled only by REPORT_TYPE below, so no undefined scheduler
+    # variable is referenced here.
     available_ranked = [x for x in ranked if x.get("available") and x.get("analysis",{}).get("operational_entry_allowed")]
     market_available_ranked = [x for x in market_ranked if x.get("available") and x.get("analysis",{}).get("score", -1) >= 0]
     # If there is no executable setup, still report the best MARKET opportunity,
@@ -11774,4 +11772,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-  
