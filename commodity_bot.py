@@ -9279,8 +9279,10 @@ def _scalp_candle_range(c):
 def scalping_engine(analysis):
     """Independent 1m/5m execution scanner.
 
-    It never changes the intraday/long-term direction and never authorizes a
-    trade by itself. Gagarin remains the final safety authority.
+    5m is the directional anchor; 1m is the execution/trigger timeframe.
+    A temporary 1m pullback against the 5m direction is not automatically a
+    hard mismatch: it must first show a micro reversal back toward the 5m bias.
+    Gagarin remains the final safety authority.
     """
     a = analysis if isinstance(analysis, dict) else {}
     pts = a.get("pattern_timeframes") or {}
@@ -9300,59 +9302,114 @@ def scalping_engine(analysis):
         out["blockers"] = ["1M_5M_DATA_INSUFFICIENT"]
         return out
 
-    def direction(rows):
-        closes = [safe_float(x.get("close")) for x in rows]
-        closes = [x for x in closes if x is not None]
-        if len(closes) < 20:
-            return "NONE", 0.0
-        fast = sum(closes[-8:]) / 8
-        slow = sum(closes[-20:]) / 20
-        slope = closes[-1] - closes[-8]
-        if fast > slow and slope > 0: return "LONG", 1.0
-        if fast < slow and slope < 0: return "SHORT", 1.0
-        return "NONE", 0.0
+    def closes(rows):
+        return [safe_float(x.get("close")) for x in rows if safe_float(x.get("close")) is not None]
 
-    d1, _ = direction(c1); d5, _ = direction(c5)
-    if d1 not in ("LONG", "SHORT") or d5 != d1:
-        out["blockers"] = ["1M_5M_MISMATCH"]
+    def direction(rows):
+        vals = closes(rows)
+        if len(vals) < 20:
+            return "NONE"
+        fast = sum(vals[-8:]) / 8.0
+        slow = sum(vals[-20:]) / 20.0
+        slope = vals[-1] - vals[-8]
+        if fast > slow and slope > 0:
+            return "LONG"
+        if fast < slow and slope < 0:
+            return "SHORT"
+        return "NONE"
+
+    d1 = direction(c1)
+    d5 = direction(c5)
+    if d5 not in ("LONG", "SHORT"):
+        out["blockers"] = ["5M_DIRECTION_UNCLEAR"]
         return out
 
-    last = safe_float(c1[-1].get("close"))
+    v1 = closes(c1)
+    v5 = closes(c5)
+    last = v1[-1] if v1 else None
+    if last is None:
+        out["blockers"] = ["1M_PRICE_UNAVAILABLE"]
+        return out
+
     ranges = [_scalp_candle_range(x) for x in c1[-20:]]
     atr = sum(ranges) / len(ranges) if ranges else 0.0
-    if not last or atr <= 0:
+    if atr <= 0:
         out["blockers"] = ["VOLATILITY_UNAVAILABLE"]
         return out
 
-    # Micro-structure confirmation: last close must extend the recent 1m range.
+    # 5m remains the scalp bias.  1m must either align with it or show a
+    # genuine micro reversal toward it; a static opposite trend is blocked.
+    aligned = d1 == d5
+    recent = v1[-5:] if len(v1) >= 5 else v1
+    if d5 == "LONG":
+        micro_turn = len(recent) >= 4 and recent[-1] > recent[-2] and recent[-2] >= recent[-3]
+    else:
+        micro_turn = len(recent) >= 4 and recent[-1] < recent[-2] and recent[-2] <= recent[-3]
+
+    if d1 not in ("LONG", "SHORT"):
+        trigger_bias_ok = micro_turn
+    elif aligned:
+        trigger_bias_ok = True
+    else:
+        trigger_bias_ok = micro_turn
+
     highs = [safe_float(x.get("high")) for x in c1[-12:] if safe_float(x.get("high")) is not None]
     lows = [safe_float(x.get("low")) for x in c1[-12:] if safe_float(x.get("low")) is not None]
-    breakout = (d1 == "LONG" and last >= max(highs[:-1] or [last])) or (d1 == "SHORT" and last <= min(lows[:-1] or [last]))
-    momentum = min(100.0, 50.0 + abs((last - (sum([safe_float(x.get("close")) for x in c1[-8:]]) / 8)) / max(atr, 1e-9)) * 25.0)
-    score = 45.0 + 15.0 + (15.0 if breakout else 0.0) + min(20.0, max(0.0, momentum-50.0))
-    confidence = min(100.0, score - 5.0)
+    if d5 == "LONG":
+        breakout = last >= max(highs[:-1] or [last])
+    else:
+        breakout = last <= min(lows[:-1] or [last])
 
+    base = 50.0
+    if aligned:
+        base += 15.0
+    elif micro_turn:
+        base += 10.0
+    if breakout:
+        base += 15.0
+
+    momentum_ref = sum(v1[-8:]) / min(8, len(v1))
+    momentum = min(20.0, max(0.0, abs(last - momentum_ref) / max(atr, 1e-9) * 20.0))
+    score = min(100.0, base + momentum)
+    confidence = min(100.0, max(0.0, score - 3.0))
+
+    direction_final = d5
     entry = last
     stop_dist = max(atr * 1.2, last * 0.0004)
-    stop = entry - stop_dist if d1 == "LONG" else entry + stop_dist
-    tp1 = entry + stop_dist * 1.5 if d1 == "LONG" else entry - stop_dist * 1.5
-    tp2 = entry + stop_dist * 2.0 if d1 == "LONG" else entry - stop_dist * 2.0
-    rr = abs(tp2-entry) / max(abs(entry-stop), 1e-9)
+    stop = entry - stop_dist if direction_final == "LONG" else entry + stop_dist
+    tp1 = entry + stop_dist * 1.5 if direction_final == "LONG" else entry - stop_dist * 1.5
+    tp2 = entry + stop_dist * 2.0 if direction_final == "LONG" else entry - stop_dist * 2.0
+    rr = abs(tp2 - entry) / max(abs(entry - stop), 1e-9)
 
     blockers = []
-    if not breakout: blockers.append("MICRO_BREAKOUT_NOT_CONFIRMED")
-    if score < SCALPING_MIN_SCORE: blockers.append("SCORE")
-    if confidence < SCALPING_MIN_CONFIDENCE: blockers.append("CONFIDENCE")
-    if rr < SCALPING_MIN_RR: blockers.append("RR")
-    state = "SCALPING_READY" if not blockers else "SCALPING_WAIT"
-    reasons = ["1m e 5m allineati", "momentum micro-strutturale"]
-    if breakout: reasons.append("breakout micro confermato")
-    out.update({"state": state, "direction": d1, "score": round(score,1),
-                "confidence": round(confidence,1), "entry": entry, "stop": stop,
-                "tp1": tp1, "tp2": tp2, "rr": round(rr,2), "reasons": reasons,
-                "blockers": blockers})
-    return out
+    if not trigger_bias_ok:
+        blockers.append("1M_TRIGGER_NOT_ALIGNED")
+    if not breakout and not aligned:
+        blockers.append("MICRO_BREAKOUT_NOT_CONFIRMED")
+    if score < SCALPING_MIN_SCORE:
+        blockers.append("SCORE")
+    if confidence < SCALPING_MIN_CONFIDENCE:
+        blockers.append("CONFIDENCE")
+    if rr < SCALPING_MIN_RR:
+        blockers.append("RR")
 
+    state = "SCALPING_READY" if not blockers else "SCALPING_WAIT"
+    reasons = ["5m direzionale", "1m esecutivo"]
+    if aligned:
+        reasons.append("1m e 5m allineati")
+    elif micro_turn:
+        reasons.append("1m in ripartenza verso il bias 5m")
+    if breakout:
+        reasons.append("breakout micro confermato")
+
+    out.update({
+        "state": state, "direction": direction_final,
+        "score": round(score, 1), "confidence": round(confidence, 1),
+        "entry": entry, "stop": stop, "tp1": tp1, "tp2": tp2,
+        "rr": round(rr, 2), "reasons": reasons, "blockers": blockers,
+        "tf_1m_direction": d1, "tf_5m_direction": d5,
+    })
+    return out
 
 def apply_structure_precedence(analysis):
     """Prevent a raw LONG/SHORT probability from contradicting price structure.
