@@ -6735,9 +6735,9 @@ def process_telegram_on_demand(ranked):
 
 
 def process_telegram_commands(ranked):
-    """Poll Telegram and answer on-demand commands from the configured chat."""
-    if os.getenv("TELEGRAM_COMMANDS_ENABLED", "1") != "1":
-        return
+    """Legacy Telegram long-polling disabled. The external bridge owns getUpdates."""
+    print("📡 Telegram legacy getUpdates DISATTIVATO: gestione affidata al bridge esterno.")
+    return
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         return
 
@@ -10177,11 +10177,9 @@ def main():
         else:
             print("📡 Internal monitor: Telegram alert periodico DISATTIVATO.")
         maybe_send_session_reports(ranked, best, position_message)
-        # Legacy long-polling is intentionally disabled in the GitHub
-        # Actions architecture. The Telegram bridge owns getUpdates and
-        # forwards commands through workflow_dispatch inputs.
-        if os.getenv("TELEGRAM_COMMANDS_ENABLED", "0") == "1":
-            process_telegram_commands(ranked)
+        # Telegram getUpdates is owned exclusively by the external bridge.
+        # GitHub Actions only receives workflow_dispatch inputs and sends the reply.
+        print("📡 Telegram bridge esterno: getUpdates interno DISATTIVATO.")
 
         # ENTRY NOW: only after final Gagarin authorization in scheduled mode.
         if ENTRY_NOW_ALERT_ENABLED and not position:
