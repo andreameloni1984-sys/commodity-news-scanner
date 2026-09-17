@@ -2,14 +2,16 @@ name: Commodities Bot v5.4 - Asia 06:00
 
 on:
   schedule:
-    # 06:00 Italia: il bot controlla Europe/Rome
+    # 06:00 Italia
+    # Vengono eseguiti entrambi per coprire ora legale/solare.
+    # Il Python controlla comunque l'ora Europe/Rome.
     - cron: '0 4 * * 1-5'
     - cron: '0 5 * * 1-5'
 
-    # USA
+    # 🇺🇸 USA
     - cron: '30 12 * * 1-5'
 
-    # Sera
+    # 🌙 Fine giornata
     - cron: '0 19 * * 1-5'
 
   workflow_dispatch:
@@ -53,6 +55,11 @@ jobs:
 
       - name: Run Commodities Bot v5.4
         env:
+
+          # ==============================
+          # MARKET DATA
+          # ==============================
+
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
 
           SIFTING_API_KEY: ${{ secrets.SIFTING_API_KEY }}
@@ -62,45 +69,79 @@ jobs:
           SIFTING_LIVE_MAX_AGE_SECONDS: '30'
           SIFTING_TIMEOUT_SECONDS: '8'
 
+          # ==============================
+          # NEWS
+          # ==============================
+
           NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
+
+          # ==============================
+          # TELEGRAM
+          # ==============================
 
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
-          # Telegram → GitHub Actions
+          # IMPORTANTISSIMO:
+          # GitHub NON deve usare getUpdates.
+          # Il polling Telegram viene gestito dal bridge.
+          TELEGRAM_COMMANDS_ENABLED: '0'
+
+          # Richiesta ricevuta dal bridge Telegram
           ON_DEMAND_TELEGRAM_REQUEST: ${{ inputs.telegram_request }}
           ON_DEMAND_TELEGRAM_CHAT_ID: ${{ inputs.telegram_chat_id }}
           ON_DEMAND_SCOPE: ${{ inputs.on_demand_scope }}
 
-          # PAPER ONLY
+          # ==============================
+          # TRADING
+          # ==============================
+
           PAPER_TRADING_ONLY: '1'
           DEMO_TRADING_ENABLED: '0'
 
-          # Automatic reports + on-demand
+          # ==============================
+          # COMMUNICATION
+          # ==============================
+
           ON_DEMAND_ONLY: '0'
           COMMUNICATION_MODE: 'MORNING_USA_EVENT'
-
-          # 🌏 Asia / Oceania
-          ASIA_REPORT_HOUR: '6'
-          ASIA_REPORT_MINUTE: '0'
-
-          # 🇪🇺 Europa
-          MORNING_REPORT_HOUR: '8'
-          MORNING_REPORT_MINUTE: '0'
-
-          # 🇺🇸 USA
-          USA_REPORT_HOUR: '14'
-          USA_REPORT_MINUTE: '30'
-
-          # 🌙 Fine giornata
-          EOD_REPORT_HOUR: '21'
 
           MONITOR_INTERVAL_MINUTES: '15'
           MONITOR_SEND_FULL: '0'
           SILENT_INTERNAL_ANALYSIS: '1'
           EVENT_ALERTS_ENABLED: '0'
 
-          # Entry Policy
+          # ==============================
+          # 🌏 ASIA / OCEANIA
+          # ==============================
+
+          ASIA_REPORT_HOUR: '6'
+          ASIA_REPORT_MINUTE: '0'
+
+          # ==============================
+          # 🇪🇺 EUROPA
+          # ==============================
+
+          MORNING_REPORT_HOUR: '8'
+          MORNING_REPORT_MINUTE: '0'
+
+          # ==============================
+          # 🇺🇸 USA
+          # ==============================
+
+          USA_REPORT_HOUR: '14'
+          USA_REPORT_MINUTE: '30'
+
+          # ==============================
+          # 🌙 EOD
+          # ==============================
+
+          EOD_REPORT_HOUR: '21'
+
+          # ==============================
+          # ENTRY POLICY
+          # ==============================
+
           MIN_ENTRY_PROBABILITY: '62'
           MIN_ENTRY_QUALITY: '55'
           MIN_ENTRY_CONFIDENCE: '60'
@@ -110,11 +151,27 @@ jobs:
           MIN_ENTRY_RR_TP2: '2.0'
           MIN_ENTRY_RR_TP3: '2.5'
 
-          # Risk / SL
+          # ==============================
+          # RISK / STOP LOSS
+          # ==============================
+
           MAX_ENTRY_STOP_ATR: '2.5'
           SL_STRUCTURE_BUFFER_ATR: '0.15'
           SL_MIN_ATR: '0.80'
 
         run: |
+          echo "=============================================="
+          echo "🌍 COMMODITIES BOT v5.4"
+          echo "=============================================="
+          echo "Telegram polling interno: DISABILITATO"
+          echo "Telegram bridge: ATTIVO"
+          echo "Asia/Oceania: 06:00"
+          echo "Europa: 08:00"
+          echo "USA: 14:30"
+          echo "EOD: 21:00"
+          echo "Paper Trading: ON"
+          echo "=============================================="
+
           python -m py_compile commodity_bot.py
+
           python commodity_bot.py
