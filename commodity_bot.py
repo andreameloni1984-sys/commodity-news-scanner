@@ -1,4 +1,4 @@
-limport time
+import time
 import os
 import json
 import math
@@ -62,7 +62,7 @@ KNOWLEDGE_DELTA_CAP = float(os.getenv("KNOWLEDGE_DELTA_CAP", "4.0"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "5.4.0-THREE-ENGINES-SCALPING"
+BOT_VERSION = "6.1-SOYUZ-GAGARIN-HYBRID"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -122,13 +122,9 @@ TELEGRAM_COMPACT_MODE = os.getenv("TELEGRAM_COMPACT_MODE", "1") == "1"
 # v3.6 — Morning / USA / Event Driven communication. Internal analysis can run often,
 # but Telegram is intentionally quiet except for scheduled decision points,
 # material scenario changes, and the daily statistical report.
-COMMUNICATION_MODE = os.getenv("COMMUNICATION_MODE", "MORNING_USA_EVENT")
-ASIA_REPORT_HOUR = int(os.getenv("ASIA_REPORT_HOUR", "5"))
-ASIA_REPORT_MINUTE = int(os.getenv("ASIA_REPORT_MINUTE", "0"))
+COMMUNICATION_MODE = os.getenv("COMMUNICATION_MODE", "SCHEDULED_ONLY")
+REPORT_TYPE = os.getenv("REPORT_TYPE", "AUTO").strip().upper()
 
-ON_DEMAND_ONLY = os.getenv("ON_DEMAND_ONLY", "0") == "1"
-ON_DEMAND_TELEGRAM_REQUEST = os.getenv("ON_DEMAND_TELEGRAM_REQUEST", "").strip()
-ON_DEMAND_TELEGRAM_CHAT_ID = os.getenv("ON_DEMAND_TELEGRAM_CHAT_ID", "").strip()
 MORNING_REPORT_HOUR = int(os.getenv("MORNING_REPORT_HOUR", "8"))
 MORNING_REPORT_MINUTE = int(os.getenv("MORNING_REPORT_MINUTE", "0"))
 USA_REPORT_HOUR = int(os.getenv("USA_REPORT_HOUR", "14"))
@@ -4778,9 +4774,6 @@ SCALPING_MIN_RR = float(os.getenv("SCALPING_MIN_RR", "1.5"))
 SCALPING_MAX_BARS = int(os.getenv("SCALPING_MAX_BARS", "180"))
 
 
-def is_scalping_request(text):
-    q = _telegram_normalize_command(text)
-    return any(k in q for k in ("scalping", "scalper", "scalp"))
 
 
 def _scalp_candle_range(c):
@@ -4788,82 +4781,6 @@ def _scalp_candle_range(c):
     return abs(h-l) if h is not None and l is not None else 0.0
 
 
-def scalping_engine(analysis):
-    """Independent 1m/5m execution scanner.
-
-    It never changes the intraday/long-term direction and never authorizes a
-    trade by itself. Gagarin remains the final safety authority.
-    """
-    a = analysis if isinstance(analysis, dict) else {}
-    pts = a.get("pattern_timeframes") or {}
-    c1 = list(pts.get("1m") or [])[-SCALPING_MAX_BARS:]
-    c5 = list(pts.get("5m") or [])[-SCALPING_MAX_BARS:]
-    out = {
-        "enabled": SCALPING_ENABLED,
-        "state": "SCALPING_NO_SETUP",
-        "direction": "NONE", "score": 0.0, "confidence": 0.0,
-        "entry": None, "stop": None, "tp1": None, "tp2": None,
-        "rr": 0.0, "reasons": [], "blockers": ["NOT_REQUESTED"],
-    }
-    if not SCALPING_ENABLED:
-        out["blockers"] = ["SCALPING_DISABLED"]
-        return out
-    if len(c1) < 40 or len(c5) < 40:
-        out["blockers"] = ["1M_5M_DATA_INSUFFICIENT"]
-        return out
-
-    def direction(rows):
-        closes = [safe_float(x.get("close")) for x in rows]
-        closes = [x for x in closes if x is not None]
-        if len(closes) < 20:
-            return "NONE", 0.0
-        fast = sum(closes[-8:]) / 8
-        slow = sum(closes[-20:]) / 20
-        slope = closes[-1] - closes[-8]
-        if fast > slow and slope > 0: return "LONG", 1.0
-        if fast < slow and slope < 0: return "SHORT", 1.0
-        return "NONE", 0.0
-
-    d1, _ = direction(c1); d5, _ = direction(c5)
-    if d1 not in ("LONG", "SHORT") or d5 != d1:
-        out["blockers"] = ["1M_5M_MISMATCH"]
-        return out
-
-    last = safe_float(c1[-1].get("close"))
-    ranges = [_scalp_candle_range(x) for x in c1[-20:]]
-    atr = sum(ranges) / len(ranges) if ranges else 0.0
-    if not last or atr <= 0:
-        out["blockers"] = ["VOLATILITY_UNAVAILABLE"]
-        return out
-
-    # Micro-structure confirmation: last close must extend the recent 1m range.
-    highs = [safe_float(x.get("high")) for x in c1[-12:] if safe_float(x.get("high")) is not None]
-    lows = [safe_float(x.get("low")) for x in c1[-12:] if safe_float(x.get("low")) is not None]
-    breakout = (d1 == "LONG" and last >= max(highs[:-1] or [last])) or (d1 == "SHORT" and last <= min(lows[:-1] or [last]))
-    momentum = min(100.0, 50.0 + abs((last - (sum([safe_float(x.get("close")) for x in c1[-8:]]) / 8)) / max(atr, 1e-9)) * 25.0)
-    score = 45.0 + 15.0 + (15.0 if breakout else 0.0) + min(20.0, max(0.0, momentum-50.0))
-    confidence = min(100.0, score - 5.0)
-
-    entry = last
-    stop_dist = max(atr * 1.2, last * 0.0004)
-    stop = entry - stop_dist if d1 == "LONG" else entry + stop_dist
-    tp1 = entry + stop_dist * 1.5 if d1 == "LONG" else entry - stop_dist * 1.5
-    tp2 = entry + stop_dist * 2.0 if d1 == "LONG" else entry - stop_dist * 2.0
-    rr = abs(tp2-entry) / max(abs(entry-stop), 1e-9)
-
-    blockers = []
-    if not breakout: blockers.append("MICRO_BREAKOUT_NOT_CONFIRMED")
-    if score < SCALPING_MIN_SCORE: blockers.append("SCORE")
-    if confidence < SCALPING_MIN_CONFIDENCE: blockers.append("CONFIDENCE")
-    if rr < SCALPING_MIN_RR: blockers.append("RR")
-    state = "SCALPING_READY" if not blockers else "SCALPING_WAIT"
-    reasons = ["1m e 5m allineati", "momentum micro-strutturale"]
-    if breakout: reasons.append("breakout micro confermato")
-    out.update({"state": state, "direction": d1, "score": round(score,1),
-                "confidence": round(confidence,1), "entry": entry, "stop": stop,
-                "tp1": tp1, "tp2": tp2, "rr": round(rr,2), "reasons": reasons,
-                "blockers": blockers})
-    return out
 
 
 def apply_structure_precedence(analysis):
@@ -6631,7 +6548,7 @@ def _telegram_region_report(region, ranked):
     """Generate a compact regional session report on request."""
     region = str(region or "").upper()
     if region == "ASIA":
-        label = "🌏 ASIA & OCEANIA — 05:00"
+        label = "🌏 ASIA & OCEANIA — 05:00 (RICHIESTO)"
     elif region == "EUROPA":
         label = "🇪🇺 EUROPA — 08:00 (RICHIESTO)"
     else:
@@ -6650,194 +6567,8 @@ def _telegram_region_command(normalized):
     return None
 
 
-def process_telegram_on_demand(ranked):
-    """Answer exactly one Telegram request passed by the webhook bridge.
-
-    This path never calls getUpdates: Telegram delivery is handled by the
-    external HTTPS webhook bridge, which dispatches this workflow with the
-    request text and chat id as workflow inputs.
-    """
-    global TELEGRAM_CHAT_ID
-    raw_text = ON_DEMAND_TELEGRAM_REQUEST.strip()
-    chat_id = ON_DEMAND_TELEGRAM_CHAT_ID.strip() or str(TELEGRAM_CHAT_ID or "").strip()
-    if not raw_text:
-        return
-    if not TELEGRAM_BOT_TOKEN or not chat_id:
-        print("⚠️ On-demand Telegram: token/chat id mancanti")
-        return
-
-    try:
-        telegram_set_commands()
-        normalized = _telegram_normalize_command(raw_text)
-        command = normalized
-        region_command = _telegram_region_command(normalized)
-        if region_command:
-            command = region_command
-        elif any(x in normalized for x in (
-            "mandami la classifica", "dammi la classifica", "inviami la classifica"
-        )):
-            command = "classifica"
-        elif any(x in normalized for x in (
-            "migliore della settimana", "miglior della settimana", "migliore settimanale",
-            "miglior settimanale", "top della settimana", "top settimana",
-            "previsione settimanale", "previsione della settimana"
-        )):
-            command = "settimanale"
-        elif any(x in normalized for x in (
-            "migliore del mese", "miglior del mese", "migliore mensile",
-            "miglior mensile", "top del mese", "top mensile",
-            "previsione mensile", "previsione del mese"
-        )):
-            command = "mensile"
-
-        if command in {"start", "help", "aiuto", "comandi"}:
-            reply = _telegram_help()
-        elif command == "asia":
-            reply = _telegram_region_report("ASIA", ranked)
-        elif command == "europa":
-            reply = _telegram_region_report("EUROPA", ranked)
-        elif command == "america":
-            reply = _telegram_region_report("AMERICA", ranked)
-        elif command in {"classifica", "ranking", "rank"}:
-            reply = _telegram_command_ranking(ranked)
-        elif command in {"migliore", "best", "miglior setup", "migliore setup"}:
-            reply = _telegram_best(ranked)
-        elif command in {"settimanale", "weekly", "settimana"}:
-            reply = _telegram_weekly(ranked)
-        elif command in {"mensile", "monthly", "mese"}:
-            reply = _telegram_monthly(ranked)
-        elif command in {"segnali", "signals", "signal"}:
-            reply = _telegram_signals(ranked)
-        elif is_scalping_request(normalized):
-            item = _telegram_find_commodity(ranked, normalized)
-            reply = _telegram_scalping(item)
-        else:
-            item = _telegram_find_commodity(ranked, normalized)
-            if item:
-                reply = _telegram_commodity_detail(item)
-            else:
-                reply = (
-                    "❓ Comando non riconosciuto.\n\n"
-                    + _telegram_help()
-                )
-
-        # send_telegram reads TELEGRAM_CHAT_ID at module level, so temporarily
-        # align it with the request chat when the workflow input is present.
-        original_chat_id = TELEGRAM_CHAT_ID
-        TELEGRAM_CHAT_ID = chat_id
-        try:
-            send_telegram(reply)
-        finally:
-            TELEGRAM_CHAT_ID = original_chat_id
-        print(f"📨 Telegram on-demand: {raw_text!r} → {command}")
-    except Exception as exc:
-        print(f"⚠️ Telegram on-demand error: {exc}")
 
 
-def process_telegram_commands(ranked):
-    """Legacy Telegram long-polling disabled. The external bridge owns getUpdates."""
-    print("📡 Telegram legacy getUpdates DISATTIVATO: gestione affidata al bridge esterno.")
-    return
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        return
-
-    try:
-        telegram_set_commands()
-        state = _json_load(TELEGRAM_COMMAND_OFFSET_FILE, {}) or {}
-        offset = int(state.get("offset", 0) or 0)
-        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
-        params = {"timeout": 5, "allowed_updates": json.dumps(["message"])}
-        if offset > 0:
-            params["offset"] = offset
-        response = requests.get(url, params=params, timeout=12)
-        response.raise_for_status()
-        data = response.json()
-        if not data.get("ok"):
-            print(f"⚠️ Telegram getUpdates non OK: {data}")
-            return
-
-        updates = data.get("result", []) or []
-        if not updates:
-            return
-
-        now = datetime.now(timezone.utc)
-        newest_offset = offset
-        for update in updates:
-            update_id = int(update.get("update_id", 0) or 0)
-            newest_offset = max(newest_offset, update_id + 1)
-            message = update.get("message", {}) or {}
-            chat = message.get("chat", {}) or {}
-            chat_id = str(chat.get("id", ""))
-            if chat_id != str(TELEGRAM_CHAT_ID):
-                continue
-            raw_text = str(message.get("text", "") or "").strip()
-            if not raw_text:
-                continue
-            ts = message.get("date")
-            if ts:
-                age = (now - datetime.fromtimestamp(int(ts), tz=timezone.utc)).total_seconds()
-                if age > TELEGRAM_COMMAND_MAX_AGE_SECONDS:
-                    print(f"ℹ️ Telegram comando ignorato: vecchio di {age:.0f}s")
-                    continue
-                if age < -60:
-                    continue
-
-            normalized = _telegram_normalize_command(raw_text)
-            command = normalized
-            region_command = _telegram_region_command(normalized)
-            if region_command:
-                command = region_command
-            elif "mandami la classifica" in normalized or "dammi la classifica" in normalized or "inviami la classifica" in normalized:
-                command = "classifica"
-            elif any(x in normalized for x in ("migliore della settimana", "miglior della settimana", "migliore settimanale", "miglior settimanale", "top della settimana", "top settimana", "previsione settimanale", "previsione della settimana")):
-                command = "settimanale"
-            elif any(x in normalized for x in ("migliore del mese", "miglior del mese", "migliore mensile", "miglior mensile", "top del mese", "top mensile", "previsione mensile", "previsione del mese")):
-                command = "mensile"
-
-            if command == "asia":
-                print("📨 Telegram: report ASIA richiesto")
-                send_telegram(_telegram_region_report("ASIA", ranked))
-            elif command == "europa":
-                print("📨 Telegram: report EUROPA richiesto")
-                send_telegram(_telegram_region_report("EUROPA", ranked))
-            elif command == "america":
-                print("📨 Telegram: report AMERICA richiesto")
-                send_telegram(_telegram_region_report("AMERICA", ranked))
-            elif command in {"classifica", "ranking", "rank"}:
-                print("📨 Telegram: comando CLASSIFICA ricevuto")
-                send_telegram(_telegram_command_ranking(ranked))
-            elif command in {"migliore", "best", "miglior setup", "migliore setup"}:
-                print("📨 Telegram: comando MIGLIORE ricevuto")
-                send_telegram(_telegram_best(ranked))
-            elif command in {"settimanale", "weekly", "settimana"}:
-                print("📨 Telegram: previsione SETTIMANALE richiesta")
-                send_telegram(_telegram_weekly(ranked))
-            elif command in {"mensile", "monthly", "mese"}:
-                print("📨 Telegram: previsione MENSILE richiesta")
-                send_telegram(_telegram_monthly(ranked))
-            elif command in {"segnali", "signals", "setup"}:
-                print("📨 Telegram: comando SEGNALI ricevuto")
-                send_telegram(_telegram_signals(ranked))
-            elif is_scalping_request(normalized):
-                print("📨 Telegram: comando SCALPING ricevuto")
-                send_telegram(_telegram_scalping(_telegram_find_commodity(ranked, normalized)))
-            elif command in {"help", "aiuto", "comandi", "menu", "start"}:
-                print("📨 Telegram: comando HELP ricevuto")
-                send_telegram(_telegram_help())
-            else:
-                item = _telegram_find_commodity(ranked, command)
-                if item:
-                    print(f"📨 Telegram: analisi {item.get('name')} richiesta")
-                    send_telegram(_telegram_commodity_detail(item))
-                else:
-                    send_telegram(
-                        "⚪ Non ho riconosciuto la commodity.\n\n"
-                        "Esempi: `oro`, `dammi oro con tp e sl`, `analizza Brent`, `fammi il piano del caffè`."
-                    )
-
-        _json_save(TELEGRAM_COMMAND_OFFSET_FILE, {"offset": newest_offset, "updated_at": now.isoformat()})
-    except Exception as exc:
-        print(f"⚠️ Telegram command handler: {exc}")
 
 
 def icon_for_signal(signal):
@@ -8309,20 +8040,6 @@ def _session_message(label, ranked, best, position_message=None):
     return "\n".join(lines)
 
 
-def maybe_send_session_reports(ranked, best, position_message=None):
-    if COMMUNICATION_MODE != "MORNING_USA_EVENT": return
-    now=datetime.now(ZoneInfo("Europe/Rome")); today=now.date().isoformat(); state=_communication_state()
-    sent=state.setdefault("sent", {})
-    if now.hour==MORNING_REPORT_HOUR and MORNING_REPORT_MINUTE <= now.minute < MORNING_REPORT_MINUTE+30 and sent.get("morning") != today:
-        send_telegram(_session_message("🌅 MORNING SIGNAL", ranked, best, position_message))
-        sent["morning"]=today
-    if now.hour==PRE_USA_REPORT_HOUR and PRE_USA_REPORT_MINUTE <= now.minute < PRE_USA_REPORT_MINUTE+30 and sent.get("pre_usa") != today:
-        send_telegram(_session_message("🇺🇸 PRE-USA SIGNAL — APERTURA AMERICA", ranked, best, position_message))
-        sent["pre_usa"]=today
-    if now.hour==USA_REPORT_HOUR and USA_REPORT_MINUTE <= now.minute < USA_REPORT_MINUTE+30 and sent.get("usa") != today:
-        send_telegram(_session_message("🇺🇸 USA SESSION UPDATE", ranked, best, position_message))
-        sent["usa"]=today
-    _save_communication_state(state)
 
 
 # ============================================================
@@ -9268,10 +8985,6 @@ def soyuz_gagarin_pipeline(name, symbol, usd, global_intel, trading_knowledge):
     # v5.3 prediction chain: scenario/confirmation layer before final Gagarin authority.
     analysis["prediction_v53"] = prediction_engine_v53(analysis)
     apply_structure_precedence(analysis)
-    if is_scalping_request(ON_DEMAND_TELEGRAM_REQUEST):
-        analysis["scalping"] = scalping_engine(analysis)
-    else:
-        analysis["scalping"] = {"state": "NOT_REQUESTED", "direction": "NONE", "operational": False}
     try:
         adaptive_levels = adaptive_risk_levels(analysis, candles, analysis.get("setup_direction") or analysis.get("model_signal"))
     except Exception as _sltp_exc:
@@ -9534,19 +9247,1842 @@ def send_asia_morning_report(global_intel, results=None):
     return "\n".join(lines)
 
 
-def should_send_asia_report():
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
-    now = datetime.now(ZoneInfo("Europe/Rome"))
-    return now.hour == ASIA_REPORT_HOUR and now.minute < 10
 
+
+
+# ============================================================
+# v6.1 — THREE MODES: SCHEDULED + REQUEST HOOK + SCALPING
+# ============================================================
+# Historical/Long-Term is descriptive/statistical context. It is NOT the
+# primary decision engine for Day Trading/Intraday. Intraday decisions are
+# based on current market data, structure, MTF, setup, trigger, risk and Gagarin.
+# Scalping is isolated to explicit requests and never changes the intraday thesis.
+
+SCALPING_ENABLED = os.getenv("SCALPING_ENABLED", "1") == "1"
+SCALPING_MIN_SCORE = float(os.getenv("SCALPING_MIN_SCORE", "68"))
+SCALPING_MIN_CONFIDENCE = float(os.getenv("SCALPING_MIN_CONFIDENCE", "60"))
+SCALPING_MIN_RR = float(os.getenv("SCALPING_MIN_RR", "1.5"))
+SCALPING_MAX_BARS = int(os.getenv("SCALPING_MAX_BARS", "180"))
+
+
+def is_scalping_request(text):
+    q = _telegram_normalize_command(text)
+    return any(k in q for k in ("scalping", "scalper", "scalp"))
+
+
+def _scalp_candle_range(c):
+    h = safe_float(c.get("high")); l = safe_float(c.get("low"))
+    return abs(h-l) if h is not None and l is not None else 0.0
+
+
+def scalping_engine(analysis):
+    """Independent 1m/5m execution scanner.
+
+    It never changes the intraday/long-term direction and never authorizes a
+    trade by itself. Gagarin remains the final safety authority.
+    """
+    a = analysis if isinstance(analysis, dict) else {}
+    pts = a.get("pattern_timeframes") or {}
+    c1 = list(pts.get("1m") or [])[-SCALPING_MAX_BARS:]
+    c5 = list(pts.get("5m") or [])[-SCALPING_MAX_BARS:]
+    out = {
+        "enabled": SCALPING_ENABLED,
+        "state": "SCALPING_NO_SETUP",
+        "direction": "NONE", "score": 0.0, "confidence": 0.0,
+        "entry": None, "stop": None, "tp1": None, "tp2": None,
+        "rr": 0.0, "reasons": [], "blockers": ["NOT_REQUESTED"],
+    }
+    if not SCALPING_ENABLED:
+        out["blockers"] = ["SCALPING_DISABLED"]
+        return out
+    if len(c1) < 40 or len(c5) < 40:
+        out["blockers"] = ["1M_5M_DATA_INSUFFICIENT"]
+        return out
+
+    def direction(rows):
+        closes = [safe_float(x.get("close")) for x in rows]
+        closes = [x for x in closes if x is not None]
+        if len(closes) < 20:
+            return "NONE", 0.0
+        fast = sum(closes[-8:]) / 8
+        slow = sum(closes[-20:]) / 20
+        slope = closes[-1] - closes[-8]
+        if fast > slow and slope > 0: return "LONG", 1.0
+        if fast < slow and slope < 0: return "SHORT", 1.0
+        return "NONE", 0.0
+
+    d1, _ = direction(c1); d5, _ = direction(c5)
+    if d1 not in ("LONG", "SHORT") or d5 != d1:
+        out["blockers"] = ["1M_5M_MISMATCH"]
+        return out
+
+    last = safe_float(c1[-1].get("close"))
+    ranges = [_scalp_candle_range(x) for x in c1[-20:]]
+    atr = sum(ranges) / len(ranges) if ranges else 0.0
+    if not last or atr <= 0:
+        out["blockers"] = ["VOLATILITY_UNAVAILABLE"]
+        return out
+
+    # Micro-structure confirmation: last close must extend the recent 1m range.
+    highs = [safe_float(x.get("high")) for x in c1[-12:] if safe_float(x.get("high")) is not None]
+    lows = [safe_float(x.get("low")) for x in c1[-12:] if safe_float(x.get("low")) is not None]
+    breakout = (d1 == "LONG" and last >= max(highs[:-1] or [last])) or (d1 == "SHORT" and last <= min(lows[:-1] or [last]))
+    momentum = min(100.0, 50.0 + abs((last - (sum([safe_float(x.get("close")) for x in c1[-8:]]) / 8)) / max(atr, 1e-9)) * 25.0)
+    score = 45.0 + 15.0 + (15.0 if breakout else 0.0) + min(20.0, max(0.0, momentum-50.0))
+    confidence = min(100.0, score - 5.0)
+
+    entry = last
+    stop_dist = max(atr * 1.2, last * 0.0004)
+    stop = entry - stop_dist if d1 == "LONG" else entry + stop_dist
+    tp1 = entry + stop_dist * 1.5 if d1 == "LONG" else entry - stop_dist * 1.5
+    tp2 = entry + stop_dist * 2.0 if d1 == "LONG" else entry - stop_dist * 2.0
+    rr = abs(tp2-entry) / max(abs(entry-stop), 1e-9)
+
+    blockers = []
+    if not breakout: blockers.append("MICRO_BREAKOUT_NOT_CONFIRMED")
+    if score < SCALPING_MIN_SCORE: blockers.append("SCORE")
+    if confidence < SCALPING_MIN_CONFIDENCE: blockers.append("CONFIDENCE")
+    if rr < SCALPING_MIN_RR: blockers.append("RR")
+    state = "SCALPING_READY" if not blockers else "SCALPING_WAIT"
+    reasons = ["1m e 5m allineati", "momentum micro-strutturale"]
+    if breakout: reasons.append("breakout micro confermato")
+    out.update({"state": state, "direction": d1, "score": round(score,1),
+                "confidence": round(confidence,1), "entry": entry, "stop": stop,
+                "tp1": tp1, "tp2": tp2, "rr": round(rr,2), "reasons": reasons,
+                "blockers": blockers})
+    return out
+
+
+def apply_structure_precedence(analysis):
+    """Prevent a raw LONG/SHORT probability from contradicting price structure.
+
+    This is a veto/declassification, not an automatic direction flip.
+    """
+    a = analysis if isinstance(analysis, dict) else {}
+    pred = a.get("prediction_v53") or {}
+    direction = a.get("setup_direction") or a.get("model_signal") or "NONE"
+    detail = str((pred.get("structure") or {}).get("detail") or "").upper()
+    confirmed = bool(pred.get("operational")) or bool((pred.get("trigger") or {}).get("confirmed"))
+    contradictory = ((direction == "LONG" and "LH+LL" in detail) or
+                     (direction == "SHORT" and "HH+HL" in detail))
+    if contradictory and not confirmed:
+        a["structure_precedence"] = {
+            "state": "CONTRADDIZIONE_STRUTTURALE",
+            "raw_direction": direction,
+            "action": "WAIT",
+            "reason": detail,
+        }
+        a["operational_entry_allowed"] = False
+        a["signal"] = "WAIT"
+        a["action_label"] = "ATTENDERE"
+        a["strong_confirmation"] = False
+        a.setdefault("entry_blockers", []).append("STRUCTURE_CONTRADICTION")
+    else:
+        a["structure_precedence"] = {"state": "COERENTE_O_NON_CONCLUSIVA", "raw_direction": direction, "action": "UNCHANGED"}
+    return a
+
+
+def prediction_engine_v53(analysis):
+    """Prediction chain v5.3: regime → structure → zone → pattern → confirmation → space.
+
+    It produces a scenario state, not a guaranteed price forecast. A pattern alone
+    never authorizes an entry. The 1-2-3 confirmation logic follows the referenced
+    FBS structure: pivots 1/2/3 and confirmation at pivot 2.
+    """
+    a=analysis if isinstance(analysis,dict) else {}
+    direction=a.get('setup_direction') or a.get('model_signal') or 'NONE'
+    if direction not in ('LONG','SHORT'):
+        return {'state':'SCENARIO_NEUTRO','direction':'NONE','score':50.0,'operational':False,'reasons':['NESSUNA DIREZIONE']}
+    pts=a.get('pattern_timeframes') or {}
+    rows15=pts.get('15m') or pts.get('1H') or []
+    rows5=pts.get('5m') or rows15
+    regime=market_regime_engine(a)
+    regime_state=str(regime.get('state','UNKNOWN')).upper()
+    structure=_prediction_structure(rows15,direction)
+    trendline=_prediction_trendline(rows15,direction)
+    pa=a.get('price_action') or price_action_context_engine(a)
+    l2l=a.get('level_to_level') or {}
+    location_score=safe_float(l2l.get('score'),50) or 50
+    breakout=bool(l2l.get('breakout'))
+    retest=bool(l2l.get('retest')) and not bool(l2l.get('fakeout'))
+    trigger=a.get('entry_trigger') or {}
+    trigger_confirmed=bool(trigger.get('confirmed')) or retest
+    patterns=pa.get('patterns',[]) if isinstance(pa,dict) else []
+    pattern_score=safe_float(pa.get('score'),50) if isinstance(pa,dict) else 50
+    pattern_score=clamp(50+pattern_score*12,0,100)
+    chart=_prediction_123(rows5,direction)
+    mtf=a.get('timeframes') or {}
+    mtf_dirs=[(mtf.get(tf) or {}).get('direction') for tf in ('4H','1H','15m')]
+    mtf_alignment=sum(x==direction for x in mtf_dirs)
+    mtf_score=35+21*mtf_alignment
+    # Real space comes from the already-calculated structural SL/TP plan.
+    ar=a.get('adaptive_risk') or {}
+    rr1=safe_float(ar.get('rr_tp1'),0) or 0
+    rr2=safe_float(ar.get('rr_tp2'),0) or 0
+    rr3=safe_float(ar.get('rr_tp3'),0) or 0
+    space_score=clamp((min(rr1/1.5,1)*25)+(min(rr2/2.0,1)*25)+(min(rr3/2.5,1)*30),0,80)
+    if ar.get('theoretical_only'): space_score=min(space_score,30)
+    score=clamp(
+        safe_float(regime.get('score'),50)*0.12 + structure['score']*0.16 + trendline['score']*0.08 +
+        location_score*0.12 + pattern_score*0.10 + mtf_score*0.12 +
+        (88 if trigger_confirmed else 35)*0.10 + space_score*0.20,
+        0,100)
+    reasons=[]
+    if regime_state in ('SHOCK','UNKNOWN'): reasons.append('REGIME NON CONFERMATO')
+    if structure['state']!='COERENTE': reasons.append('STRUTTURA DA CONFERMARE')
+    if trendline['state']!='CONFERMATA': reasons.append('TRENDLINE DA CONFERMARE')
+    if not breakout and not retest: reasons.append('BREAKOUT/RETEST NON CONFERMATO')
+    if not trigger_confirmed: reasons.append('TRIGGER NON CONFERMATO')
+    if rr1 < MIN_ENTRY_RR_TP1: reasons.append('SPAZIO TP1 INSUFFICIENTE')
+    if rr2 < MIN_ENTRY_RR_TP2: reasons.append('SPAZIO TP2 INSUFFICIENTE')
+    if rr3 < MIN_ENTRY_RR: reasons.append('SPAZIO TP3 INSUFFICIENTE')
+    hard_ok=(regime_state not in ('SHOCK','UNKNOWN') and structure['state']=='COERENTE' and
+             trigger_confirmed and rr1>=MIN_ENTRY_RR_TP1 and rr2>=MIN_ENTRY_RR_TP2 and rr3>=MIN_ENTRY_RR)
+    state='PREVISIONE_OPERATIVA' if hard_ok else ('PREVISIONE_IN_FORMAZIONE' if direction in ('LONG','SHORT') else 'SCENARIO_NEUTRO')
+    if regime_state=='SHOCK': state='SCENARIO_INVALIDATO'
+
+    # Diagnostic decomposition: this is DISPLAY/ANALYSIS ONLY. It does not
+    # relax or modify any entry gate. It tells us exactly which prediction
+    # component is preventing a setup from becoming operational.
+    components = {
+        'regime': regime_state not in ('SHOCK','UNKNOWN'),
+        'structure': structure.get('state') == 'COERENTE',
+        'trendline': trendline.get('state') == 'CONFERMATA',
+        'zone': location_score >= 60.0,
+        'pattern': pattern_score >= 60.0,
+        'breakout_or_retest': bool(breakout or retest),
+        'trigger': bool(trigger_confirmed),
+        'space_tp1': rr1 >= MIN_ENTRY_RR_TP1,
+        'space_tp2': rr2 >= MIN_ENTRY_RR_TP2,
+        'space_tp3': rr3 >= MIN_ENTRY_RR,
+    }
+    missing_components = [k for k,v in components.items() if not v]
+    component_labels = {
+        'regime':'REGIME','structure':'STRUTTURA','trendline':'TRENDLINE',
+        'zone':'ZONA','pattern':'PATTERN','breakout_or_retest':'BREAKOUT/RETEST',
+        'trigger':'TRIGGER','space_tp1':'SPAZIO TP1','space_tp2':'SPAZIO TP2',
+        'space_tp3':'SPAZIO TP3'
+    }
+    component_summary = ' | '.join(
+        f"{component_labels[k]} {'OK' if components[k] else 'NO'}"
+        for k in components
+    )
+    return {
+        'version':'5.3','state':state,'direction':direction,'score':round(score,1),'operational':bool(hard_ok),
+        'components': components,
+        'missing_components': missing_components,
+        'component_summary': component_summary,
+        'regime':regime,'structure':structure,'trendline':trendline,'location_score':round(location_score,1),
+        'patterns':patterns[:10],'pattern_score':round(pattern_score,1),'chart_123':chart,
+        'breakout':breakout,'retest':retest,'trigger_confirmed':trigger_confirmed,
+        'mtf_alignment':mtf_alignment,'mtf_score':round(mtf_score,1),
+        'rr_tp1':round(rr1,3),'rr_tp2':round(rr2,3),'rr_tp3':round(rr3,3),'space_score':round(space_score,1),
+        'reasons':reasons[:10]
+    }
+
+def prediction_authority_v531(analysis):
+    """Canonical v5.3.1 prediction authority for display and entry gating.
+
+    One label is used everywhere: regime/setup/trigger/prediction. The legacy
+    trigger is never allowed to override the prediction confirmation layer.
+    This is a scenario/confirmation gate, not a claim of guaranteed outcome.
+    """
+    a = analysis if isinstance(analysis, dict) else {}
+    pred = a.get("prediction_v53") if isinstance(a.get("prediction_v53"), dict) else {}
+    g = a.get("gagarin") if isinstance(a.get("gagarin"), dict) else {}
+    regime_obj = g.get("regime") if isinstance(g.get("regime"), dict) else {}
+    setup_obj = g.get("setup") if isinstance(g.get("setup"), dict) else {}
+    trigger_obj = g.get("trigger") if isinstance(g.get("trigger"), dict) else {}
+
+    direction = pred.get("direction") or a.get("setup_direction") or a.get("model_signal") or "NONE"
+    regime = str(regime_obj.get("state") or pred.get("regime", {}).get("state") or "UNKNOWN").upper()
+    setup = str(setup_obj.get("type") or "NONE").upper()
+    prediction_trigger = bool(pred.get("trigger_confirmed"))
+    gagarin_trigger = bool(trigger_obj.get("confirmed"))
+    # Both layers must agree. This eliminates the previous "TRIGGER True" vs
+    # "TRIGGER NON CONFERMATO" contradiction.
+    trigger_confirmed = prediction_trigger and gagarin_trigger
+    breakout = bool(pred.get("breakout"))
+    retest = bool(pred.get("retest"))
+    pstate = str(pred.get("state") or "SCENARIO_NEUTRO").upper()
+
+    reasons = list(pred.get("reasons") or [])
+    if not prediction_trigger:
+        reasons.append("TRIGGER PREDICTION NON CONFERMATO")
+    if prediction_trigger and not gagarin_trigger:
+        reasons.append("TRIGGER GAGARIN NON CONFERMATO")
+    if regime in {"SHOCK", "UNKNOWN"}:
+        reasons.append(f"REGIME {regime}")
+
+    # Operational authorization is intentionally stricter than the scenario
+    # state: the existing Gagarin policy, SL/TP and thresholds must also pass.
+    g_allowed = bool(a.get("operational_entry_allowed"))
+    operational = bool(pred.get("operational")) and g_allowed and trigger_confirmed
+    if operational:
+        state = "PREVISIONE_OPERATIVA"
+    elif pstate == "SCENARIO_INVALIDATO" or regime == "SHOCK":
+        state = "SCENARIO_INVALIDATO"
+    elif direction in ("LONG", "SHORT"):
+        state = "PREVISIONE_IN_FORMAZIONE"
+    else:
+        state = "SCENARIO_NEUTRO"
+
+    # Keep ordering and values visible for diagnostics without manufacturing
+    # targets or changing any existing entry thresholds.
+    return {
+        "version": "5.3.1",
+        "direction": direction,
+        "regime": regime,
+        "setup": setup,
+        "breakout": breakout,
+        "retest": retest,
+        "trigger_confirmed": trigger_confirmed,
+        "prediction_trigger_confirmed": prediction_trigger,
+        "gagarin_trigger_confirmed": gagarin_trigger,
+        "state": state,
+        "operational": operational,
+        "score": safe_float(pred.get("score"), 0.0) or 0.0,
+        "structure": (pred.get("structure") or {}).get("detail", "N/D"),
+        "chart_123": (pred.get("chart_123") or {}).get("state", "N/D"),
+        "space_score": safe_float(pred.get("space_score"), 0.0) or 0.0,
+        "rr_tp1": safe_float(pred.get("rr_tp1"), 0.0) or 0.0,
+        "rr_tp2": safe_float(pred.get("rr_tp2"), 0.0) or 0.0,
+        "rr_tp3": safe_float(pred.get("rr_tp3"), 0.0) or 0.0,
+        "reasons": list(dict.fromkeys(str(x) for x in reasons if x))[:12],
+    }
+
+
+def adaptive_risk_levels(analysis, candles, direction):
+    """SL/TP Engine 3.0 — structural invalidation, volatility/robustness validation and CFD execution.
+
+    Structural levels determine the stop; ATR only validates breathing room and
+    rejects structurally distant stops. R/R is a filter, never a target generator.
+    """
+    if not ADAPTIVE_RISK_ENABLED or direction not in ("LONG", "SHORT") or not candles:
+        return {"available": False, "engine_version": SLTP_ENGINE_VERSION}
+
+    price = safe_float(analysis.get("entry"), safe_float(analysis.get("price"), 0.0)) or 0.0
+    if price <= 0:
+        return {"available": False, "engine_version": SLTP_ENGINE_VERSION, "reason": "NO_ENTRY_PRICE"}
+    atr_value = safe_float(analysis.get("atr"), 0.0) or 0.0
+    if atr_value <= 0:
+        atr_value = atr(candles, 14) or price * 0.01
+    if atr_value <= 0:
+        return {"available": False, "engine_version": SLTP_ENGINE_VERSION, "reason": "NO_ATR"}
+
+    def rows(obj): return obj if isinstance(obj, list) else []
+    def vals(arr, field):
+        return [v for r in rows(arr) if isinstance(r, dict)
+                for v in [safe_float(r.get(field))] if v is not None and v > 0]
+    def pivots(arr, field):
+        data = rows(arr)
+        if len(data) < 5: return []
+        out = []
+        for i in range(2, len(data) - 2):
+            r = data[i] if isinstance(data[i], dict) else {}
+            v = safe_float(r.get(field))
+            if v is None: continue
+            neigh = []
+            for j in (i-2, i-1, i+1, i+2):
+                rr = data[j] if isinstance(data[j], dict) else {}
+                x = safe_float(rr.get(field))
+                if x is not None: neigh.append(x)
+            if len(neigh) == 4 and (all(v <= x for x in neigh) if field == "low" else all(v >= x for x in neigh)):
+                out.append(v)
+        return out
+    def cluster(values, tolerance):
+        values = sorted(set(round(float(x), 8) for x in values if x is not None and x > 0))
+        if not values: return []
+        groups = [[values[0]]]
+        for v in values[1:]:
+            center = sum(groups[-1]) / len(groups[-1])
+            if abs(v - center) <= tolerance: groups[-1].append(v)
+            else: groups.append([v])
+        return [sum(g) / len(g) for g in groups]
+
+    pattern = analysis.get("pattern_timeframes") or {}
+    t5 = rows(pattern.get("5m"))[-120:]
+    t15 = rows(pattern.get("15m"))[-120:]
+    t1h = rows(pattern.get("1H") or analysis.get("intraday_candles"))[-120:]
+    t4h = rows(pattern.get("4H"))[-TP_STRUCTURE_LOOKBACK_4H:]
+    td = rows(candles)[-TP_STRUCTURE_LOOKBACK_DAILY:]
+
+    l2l = analysis.get("level_to_level") or {}
+    support = safe_float(l2l.get("support"))
+    resistance = safe_float(l2l.get("resistance"))
+    vp = analysis.get("volume_profile") or {}
+    avwap = analysis.get("anchored_vwap") or analysis.get("avwap") or {}
+    avwap_value = safe_float(avwap.get("value")) if isinstance(avwap, dict) else safe_float(avwap)
+    poc, vah, val = safe_float(vp.get("poc")), safe_float(vp.get("vah")), safe_float(vp.get("val"))
+    # EMA is a reference/validation layer, never the sole invalidation level.
+    ema_refs = []
+    if SL_EMA_REFERENCE_ENABLED:
+        for tf, arr in (("15m", t15), ("1H", t1h)):
+            closes = vals(arr, "close")
+            if len(closes) >= 50:
+                ema50 = ema(closes, 50) if 'ema' in globals() else None
+                if ema50 is not None:
+                    ema_refs.append((tf, "EMA50", float(ema50)))
+    spread = safe_float(analysis.get("live_price_spread"), 0.0) or 0.0
+    min_stop_distance = max(SL_MIN_ATR * atr_value, 2.0 * spread)
+
+    sl_candidates = []
+    sl_structural_valid = True
+    if direction == "LONG":
+        for tf, arr in (("5m", t5), ("15m", t15), ("1H", t1h)):
+            sl_candidates += [(v, tf, "PIVOT_LOW") for v in pivots(arr, "low") if v < price]
+            sl_candidates += [(v, tf, "RECENT_LOW") for v in vals(arr[-30:], "low") if v < price]
+        if support is not None and support < price: sl_candidates.append((support, "L2L", "SUPPORT"))
+        if val is not None and val < price: sl_candidates.append((val, "VP", "VALUE_LOW"))
+        viable = [x for x in sl_candidates
+                  if price - x[0] >= min_stop_distance
+                  and (price - x[0]) / atr_value <= MAX_ENTRY_STOP_ATR]
+        if not viable:
+            # Theoretical fallback only: keep SL visible for diagnostics/journaling.
+            # It can NEVER authorize an operational entry.
+            fallback_distance = min(max(SL_MIN_ATR * atr_value, 1.0 * atr_value), MAX_ENTRY_STOP_ATR * atr_value)
+            structural_stop, sl_tf, sl_reason = price - fallback_distance, "FALLBACK", "ATR_THEORETICAL_ONLY"
+            technical_stop = structural_stop
+            execution_stop = technical_stop - CFD_SPREAD_BUFFER_MULT * spread
+            sl_structural_valid = False
+        else:
+            # Prefer the nearest valid structural invalidation. A small ATR band around
+            # that level is considered the robust zone; we never optimize to a single
+            # lucky historical value.
+            nearest_distance = min(price - x[0] for x in viable)
+            robust_viable = [x for x in viable if (price - x[0]) <= nearest_distance + SL_ROBUSTNESS_BAND_ATR * atr_value]
+            structural_stop, sl_tf, sl_reason = max(robust_viable, key=lambda x: x[0])
+            technical_stop = min(structural_stop - SL_STRUCTURE_BUFFER_ATR * atr_value, price - min_stop_distance)
+            execution_stop = technical_stop - CFD_SPREAD_BUFFER_MULT * spread
+    else:
+        for tf, arr in (("5m", t5), ("15m", t15), ("1H", t1h)):
+            sl_candidates += [(v, tf, "PIVOT_HIGH") for v in pivots(arr, "high") if v > price]
+            sl_candidates += [(v, tf, "RECENT_HIGH") for v in vals(arr[-30:], "high") if v > price]
+        if resistance is not None and resistance > price: sl_candidates.append((resistance, "L2L", "RESISTANCE"))
+        if vah is not None and vah > price: sl_candidates.append((vah, "VP", "VALUE_HIGH"))
+        viable = [x for x in sl_candidates
+                  if x[0] - price >= min_stop_distance
+                  and (x[0] - price) / atr_value <= MAX_ENTRY_STOP_ATR]
+        if not viable:
+            # Theoretical fallback only: keep SL visible for diagnostics/journaling.
+            # It can NEVER authorize an operational entry.
+            fallback_distance = min(max(SL_MIN_ATR * atr_value, 1.0 * atr_value), MAX_ENTRY_STOP_ATR * atr_value)
+            structural_stop, sl_tf, sl_reason = price + fallback_distance, "FALLBACK", "ATR_THEORETICAL_ONLY"
+            technical_stop = structural_stop
+            execution_stop = technical_stop + CFD_SPREAD_BUFFER_MULT * spread
+            sl_structural_valid = False
+        else:
+            nearest_distance = min(x[0] - price for x in viable)
+            robust_viable = [x for x in viable if (x[0] - price) <= nearest_distance + SL_ROBUSTNESS_BAND_ATR * atr_value]
+            structural_stop, sl_tf, sl_reason = min(robust_viable, key=lambda x: x[0])
+            technical_stop = max(structural_stop + SL_STRUCTURE_BUFFER_ATR * atr_value, price + min_stop_distance)
+            execution_stop = technical_stop + CFD_SPREAD_BUFFER_MULT * spread
+
+    stop = _price_round(execution_stop)
+    risk_distance = abs(price - stop)
+    stop_atr = risk_distance / atr_value if atr_value else 999.0
+
+    raw = []
+    if direction == "LONG":
+        for tf, arr in (("15m", t15), ("1H", t1h), ("4H", t4h), ("Daily", td)):
+            raw += [(v, tf, "PIVOT_HIGH") for v in pivots(arr, "high") if v > price]
+            raw += [(v, tf, "STRUCTURAL_HIGH") for v in vals(arr, "high") if v > price]
+        for v, tf, reason in ((resistance, "L2L", "RESISTANCE"), (vah, "VP", "VALUE_HIGH"),
+                              (poc, "VP", "POC"), (avwap_value, "AVWAP", "AVWAP")):
+            if v is not None and v > price: raw.append((v, tf, reason))
+        raw = [x for x in raw if x[0] - price >= max(0.35 * atr_value, spread)]
+        reverse = False
+    else:
+        for tf, arr in (("15m", t15), ("1H", t1h), ("4H", t4h), ("Daily", td)):
+            raw += [(v, tf, "PIVOT_LOW") for v in pivots(arr, "low") if v < price]
+            raw += [(v, tf, "STRUCTURAL_LOW") for v in vals(arr, "low") if v < price]
+        for v, tf, reason in ((support, "L2L", "SUPPORT"), (val, "VP", "VALUE_LOW"),
+                              (poc, "VP", "POC"), (avwap_value, "AVWAP", "AVWAP")):
+            if v is not None and v < price: raw.append((v, tf, reason))
+        raw = [x for x in raw if price - x[0] >= max(0.35 * atr_value, spread)]
+        reverse = True
+
+    raw.sort(key=lambda x: x[0], reverse=reverse)
+    grouped, tol = [], max(0.30 * atr_value, 1e-9)
+    for item in raw:
+        if not grouped or abs(item[0] - grouped[-1]["price"]) > tol:
+            grouped.append({"price": item[0], "sources": [(item[1], item[2])]})
+        else:
+            grouped[-1]["sources"].append((item[1], item[2]))
+    for g in grouped:
+        g["timeframes"] = sorted(set(tf for tf, _ in g["sources"]))
+        g["htf"] = any(tf in ("4H", "Daily") for tf in g["timeframes"])
+
+    if not grouped:
+        # No structural TP exists. Expose a theoretical R-multiple ladder for
+        # diagnostics/journaling only; this does NOT make the setup tradable.
+        if direction == "LONG":
+            tp1, tp2, tp3 = price + 1.5 * risk_distance, price + 2.0 * risk_distance, price + 2.5 * risk_distance
+        else:
+            tp1, tp2, tp3 = price - 1.5 * risk_distance, price - 2.0 * risk_distance, price - 2.5 * risk_distance
+        return {
+            "available": True, "valid": False, "engine_version": SLTP_ENGINE_VERSION,
+            "reason": "NO_STRUCTURAL_TP", "theoretical_only": True,
+            "stop": stop, "tp1": _price_round(tp1), "tp2": _price_round(tp2), "tp3": _price_round(tp3),
+            "structural_stop": _price_round(structural_stop), "technical_stop": _price_round(technical_stop),
+            "execution_stop": stop, "risk_distance": round(risk_distance, 6), "stop_atr": round(stop_atr, 3),
+            "sl_structural_valid": bool(sl_structural_valid),
+            "sl_selected": {"price": _price_round(structural_stop), "tf": sl_tf, "reason": sl_reason},
+            "sl_candidates": [{"price": _price_round(x[0]), "tf": x[1], "reason": x[2]} for x in sl_candidates[-50:]],
+            "tp_candidates": [], "tp_method": "THEORETICAL_R_MULTIPLE_FALLBACK",
+            "rr_tp1": 1.5, "rr_tp2": 2.0, "rr_tp3": 2.5
+        }
+
+    tp1_obj = grouped[0]
+    htf = [g for g in grouped[1:] if g["htf"]]
+    tp2_obj = htf[0] if htf else (grouped[1] if len(grouped) > 1 else None)
+    tp3_obj = htf[1] if len(htf) > 1 else (grouped[2] if len(grouped) > 2 else None)
+    targets = [tp1_obj["price"], tp2_obj["price"] if tp2_obj else None, tp3_obj["price"] if tp3_obj else None]
+    targets = [x for x in targets if x is not None]
+    targets = sorted(set(round(x, 8) for x in targets), reverse=reverse)
+    tp1, tp2, tp3 = (targets + [None, None, None])[:3]
+
+    def rr(x): return abs(x - price) / risk_distance if x is not None and risk_distance > 0 else 0.0
+    rr1, rr2, rr3 = rr(tp1), rr(tp2), rr(tp3)
+    ordering_ok = all((a < b) if direction == "LONG" else (a > b) for a, b in zip(targets, targets[1:]))
+    target_quality = []
+    for label, obj, value in (("TP1", tp1_obj, tp1), ("TP2", tp2_obj, tp2), ("TP3", tp3_obj, tp3)):
+        if value is not None:
+            target_quality.append({
+                "target": label, "price": _price_round(value),
+                "distance_atr": round(abs(value - price) / atr_value, 3),
+                "htf": bool(obj and obj.get("htf")),
+                "sources": sorted(set(f"{tf}:{reason}" for tf, reason in (obj or {}).get("sources", [])))[:8]
+            })
+
+    return {
+        "available": True, "engine_version": SLTP_ENGINE_VERSION,
+        "valid": bool(sl_structural_valid and ordering_ok),
+        "theoretical_only": bool(not sl_structural_valid),
+        "method": "STRUCTURAL INVALIDATION + MICRO/SETUP/HTF + ATR BUFFER + CFD EXECUTION",
+        "atr": round(atr_value, 6), "entry": _price_round(price),
+        "stop": stop, "tp1": _price_round(tp1 or 0.0), "tp2": _price_round(tp2 or 0.0), "tp3": _price_round(tp3 or 0.0),
+        "risk_distance": round(risk_distance, 6), "stop_atr": round(stop_atr, 3),
+        "rr_tp1": round(rr1, 3), "rr_tp2": round(rr2, 3), "rr_tp3": round(rr3, 3),
+        "structural_stop": _price_round(structural_stop), "technical_stop": _price_round(technical_stop),
+        "sl_structural_valid": bool(sl_structural_valid),
+        "execution_stop": stop, "spread": round(spread, 8),
+        "robustness_band_atr": round(SL_ROBUSTNESS_BAND_ATR, 3),
+        "ema_references": [{"tf": tf, "kind": kind, "price": _price_round(v)} for tf, kind, v in ema_refs],
+        "sl_selected": {"price": _price_round(structural_stop), "tf": sl_tf, "reason": sl_reason,
+                        "distance_atr": round(abs(price - structural_stop) / atr_value, 3)},
+        "sl_candidates": [{"price": _price_round(x[0]), "tf": x[1], "reason": x[2]} for x in sl_candidates[-50:]],
+        "tp_candidates": [{"price": _price_round(g["price"]), "timeframes": g["timeframes"], "htf": g["htf"],
+                           "sources": sorted(set(f"{tf}:{reason}" for tf, reason in g["sources"]))[:8]} for g in grouped[:20]],
+        "target_quality": target_quality, "ordering_ok": bool(ordering_ok),
+        "stop_filter_pass": bool(stop_atr <= MAX_ENTRY_STOP_ATR + 1e-9),
+        "rr_filter": {
+            "tp1_pass": rr1 + 0.005 >= MIN_ENTRY_RR_TP1,
+            "tp2_pass": rr2 + 0.005 >= MIN_ENTRY_RR_TP2 if tp2 is not None else False,
+            "main_pass": rr3 + 0.005 >= MIN_ENTRY_RR if tp3 is not None else False
+        },
+        "valid": bool(ordering_ok and stop_atr <= MAX_ENTRY_STOP_ATR + 1e-9),
+        "selection_reason": {
+            "sl": "nearest valid structural invalidation outside minimum noise distance",
+            "tp1": "first meaningful structural obstacle",
+            "tp2": "next HTF obstacle when available",
+            "tp3": "second HTF obstacle/extension when available",
+            "rr": "filter only; levels are never moved to manufacture R/R"
+        }
+    }
+
+def exit_engine(position, analysis, current_price):
+    """Early exit logic based on structure/reversal/price action; targets and SL remain primary."""
+    if not EXIT_ENGINE_ENABLED or not position:
+        return {"action":"HOLD","score":0.0,"reason":"DISATTIVATO"}
+    d=position.get("direction")
+    opposite="SHORT" if d=="LONG" else "LONG"
+    rev=analysis.get("reversal",{}) or {}
+    if rev.get("stage")=="CONFIRMED" and (analysis.get("signal")==opposite or analysis.get("setup_direction")==opposite):
+        return {"action":"EXIT","score":100.0,"reason":"INVERSIONE CONFERMATA"}
+    pa=analysis.get("price_action",{}) or {}
+    patterns=[]
+    for p in pa.get("patterns",[]): patterns.append(str(p).upper())
+    adverse_names=("BEARISH ENGULFING","SHOOTING STAR","EVENING STAR","SUPPORT BREAKDOWN") if d=="LONG" else ("BULLISH ENGULFING","HAMMER","MORNING STAR","RESISTANCE BREAKOUT")
+    adverse=sum(1 for p in patterns if any(x in p for x in adverse_names))
+    tfs=analysis.get("timeframes",{}) or {}
+    structural_opposite=sum(1 for tf in ("4H","1H","15m") if tfs.get(tf,{}).get("direction")==opposite)
+    score=adverse*28 + structural_opposite*18
+    if pa.get("breakout_retest",{}).get("state") in ("BREAKOUT", "BREAKOUT + RETEST") and d==opposite:
+        score+=20
+    score=clamp(score,0,100)
+    if score>=70:
+        return {"action":"EXIT","score":round(score,1),"reason":"PRICE ACTION CONTRARIA + STRUTTURA"}
+    return {"action":"HOLD","score":round(score,1),"reason":"NESSUN SEGNALE DI USCITA FORTE"}
+
+
+def smart_entry_engine(analysis):
+    """v3.3: permissive intraday decision engine.
+
+    Core signal = trend + momentum + price/structure. Secondary filters add
+    or subtract points instead of becoming hard blockers. Only confirmed
+    reversal and material shock remain safety blocks. This prevents a valid
+    LONG/SHORT from disappearing simply because one fast timeframe disagrees.
+    """
+    d = analysis.get("setup_direction") or analysis.get("model_signal")
+    if d not in ("LONG", "SHORT"):
+        analysis.update({"entry_state":"NO_SETUP", "action_label":"NON ENTRARE",
+                         "signal":"WAIT", "strong_confirmation":False,
+                         "intraday_score":0.0})
+        return analysis
+
+    tfs = analysis.get("timeframes", {}) or {}
+    structural = [tfs.get(tf, {}).get("direction", "NONE") for tf in ("4H", "1H", "15m")]
+    fast = [tfs.get(tf, {}).get("direction", "NONE") for tf in ("5m", "1m")]
+    structural_same = sum(x == d for x in structural)
+    fast_same = sum(x == d for x in fast)
+    fast_opp = sum(x == ("SHORT" if d == "LONG" else "LONG") for x in fast)
+    rev = analysis.get("reversal", {}) or {}
+    risk = analysis.get("risk", {}) or {}
+    score = safe_float(analysis.get("score"), 0) or 0
+    quality = safe_float(analysis.get("quality"), 0) or 0
+    conf = safe_float(analysis.get("confidence"), 0) or 0
+    entry_q = safe_float(analysis.get("entry_quality"), 0) or 0
+    rb = safe_float(analysis.get("risk_benefit", {}).get("score"), 0) or 0
+    prob = safe_float(analysis.get("long_probability" if d == "LONG" else "short_probability"), 0) or 0
+    prob *= 100 if prob <= 1 else 1
+    market_q = safe_float(risk.get("market_quality"), 50) or 50
+    trigger = entry_trigger_engine(analysis)
+    l2l = analysis.get("level_to_level", {}) or {}
+    l2l_score = safe_float(l2l.get("score"), 50) or 50
+    price_action = price_action_context_engine(analysis)
+    pa_score = safe_float(price_action.get("score"), 50) or 50
+    ensemble_ok = bool(analysis.get("ensemble_gate", True))
+    source_status = str(analysis.get("source_check", {}).get("status", ""))
+    source_discrepancy = "DISCREPANZA" in source_status.upper()
+
+    # Secondary filters are scoring components, not hard gates.
+    intraday = score
+    intraday += clamp((quality - 50) * 0.12, -6, 6)
+    intraday += clamp((conf - 55) * 0.10, -5, 5)
+    intraday += clamp((prob - 55) * 0.16, -7, 7)
+    intraday += 4 if structural_same >= 2 else 2 if structural_same == 1 else -2
+    intraday += 4 if fast_same >= 2 else 2 if fast_same == 1 else 0
+    intraday -= min(6, fast_opp * 3)
+    intraday += clamp((l2l_score - 50) * 0.10, -5, 5)
+    intraday += clamp((pa_score - 50) * 0.16, -8, 8)
+    intraday += 4 if trigger.get("confirmed") else 2 if trigger.get("kind") not in (None, "NONE") else 0
+    intraday += 2 if ensemble_ok else -2
+    intraday += clamp((market_q - 55) * 0.08, -4, 4)
+    if source_discrepancy:
+        intraday -= 4
+    if risk.get("mode") == "ALERT":
+        intraday -= 3
+    intraday = clamp(intraday, 0, 100)
+
+    blockers=[]
+    warnings=[]
+    if risk.get("mode") == "SHOCK": blockers.append("SHOCK")
+    if rev.get("stage") == "CONFIRMED": blockers.append("INVERSIONE CONFERMATA")
+    if fast_opp > 0: blockers.append("CONFLITTO RAPIDO")
+    if structural_same < 2: blockers.append("MTF PARZIALE")
+    if source_discrepancy: blockers.append("DISCREPANZA FONTI")
+    if not l2l.get("gate", True): warnings.append("L2L CONTRARIO")
+
+    # v3.8: strict confluence gate. Telegram may say COMPRA/VENDI ORA
+    # only when ALL critical conditions are satisfied.
+    entry_price = safe_float(analysis.get("entry"), safe_float(analysis.get("price"), 0)) or 0
+    stop_price = safe_float(analysis.get("stop"), 0) or 0
+    tp1_price = safe_float(analysis.get("tp1"), 0) or 0
+    tp2_price = safe_float(analysis.get("tp2"), 0) or 0
+    tp3_price = safe_float(analysis.get("tp3"), 0) or 0
+    risk_distance = abs(entry_price-stop_price) if entry_price and stop_price else 0
+    rr1 = abs(tp1_price-entry_price) / risk_distance if risk_distance else 0
+    rr2 = abs(tp2_price-entry_price) / risk_distance if risk_distance else 0
+    rr3 = abs(tp3_price-entry_price) / risk_distance if risk_distance else 0
+    atr_value = safe_float(analysis.get("atr"), 0) or 0
+    stop_atr = risk_distance / atr_value if atr_value > 0 else 999.0
+    rr1_ok = rr1 + 0.005 >= MIN_ENTRY_RR_TP1
+    rr2_ok = rr2 + 0.005 >= MIN_ENTRY_RR_TP2
+    rr3_ok = rr3 + 1e-9 >= MIN_ENTRY_RR
+    stop_ok = stop_atr <= MAX_ENTRY_STOP_ATR
+    l2l_ok = bool(l2l.get("gate", False))
+    structural_ok = structural_same >= 2
+    fast_ok = fast_opp == 0
+    prob_ok = prob >= MIN_ENTRY_PROBABILITY
+    quality_ok = quality >= MIN_ENTRY_QUALITY
+    confidence_ok = conf >= MIN_ENTRY_CONFIDENCE
+    trigger_ok = bool(trigger.get("confirmed"))
+    safety_block = (risk.get("mode") in ("SHOCK", "ALERT") or
+                    rev.get("stage") == "CONFIRMED")
+    confluence_ok = (structural_ok and fast_ok and l2l_ok and trigger_ok and
+                     rr1_ok and rr2_ok and rr3_ok and stop_ok and
+                     prob_ok and quality_ok and confidence_ok and not safety_block)
+
+    # v4.1: tiered entry gate. The strict gate remains the preferred path,
+    # but an exceptionally strong setup may enter when only soft confirmations
+    # (L2L and/or later TP RR) are missing. Safety blockers can never be bypassed.
+    soft_missing = sum([not l2l_ok, not rr2_ok, not rr3_ok])
+    relaxed_core_ok = (structural_ok and fast_ok and trigger_ok and rr1_ok and
+                       stop_ok and prob >= 65 and quality >= 52 and
+                       conf >= 55 and not safety_block)
+    relaxed_entry_ok = relaxed_core_ok and soft_missing <= 2 and intraday >= 78
+
+    # v4.8 — the Entry Policy is now the final authority for entry permission.
+    # It separates directional BIAS from actual ENTRY authorization and prevents
+    # a merely strong trend/trigger from being treated as an immediate entry.
+    policy_mtf_score = clamp(structural_same / 3 * 75 + fast_same / 2 * 25, 0, 100)
+    entry_policy = evaluate_entry_policy(
+        direction=d,
+        probability=prob,
+        quality=quality,
+        confidence=conf,
+        mtf_score=policy_mtf_score,
+        trigger_score=safe_float(trigger.get("score"), 0) or 0,
+        l2l_score=l2l_score,
+        rr_tp1=rr1,
+        rr_tp2=rr2,
+        regime=analysis.get("regime"),
+    )
+
+    if entry_policy["entry_status"] == "ENTRY_CONFIRMED":
+        state, action, signal = "ENTRY_CONFIRMED", ("COMPRA ORA" if d == "LONG" else "VENDI ORA"), d
+    elif entry_policy["entry_status"] == "WAIT_CONFIRMATION":
+        state, action, signal = "ACTIVE_SETUP", ("LONG — ASPETTARE CONFERMA" if d == "LONG" else "SHORT — ASPETTARE CONFERMA"), "WAIT"
+    else:
+        state, action, signal = "BLOCKED", "NON ENTRARE", "WAIT"
+
+    if safety_block:
+        state, action, signal = "SAFETY_BLOCK", "NON ENTRARE", "WAIT"
+    elif entry_policy["entry_status"] == "ENTRY_CONFIRMED":
+        state, action, signal = "ENTRY_CONFIRMED", ("COMPRA ORA" if d == "LONG" else "VENDI ORA"), d
+    elif entry_policy["entry_status"] == "WAIT_CONFIRMATION":
+        state, action, signal = "ACTIVE_SETUP", ("LONG — ASPETTARE CONFERMA" if d == "LONG" else "SHORT — ASPETTARE CONFERMA"), "WAIT"
+    else:
+        state, action, signal = "BLOCKED", "NON ENTRARE", "WAIT"
+    if not confluence_ok:
+        missing=[]
+        if not structural_ok: missing.append("MTF")
+        if not fast_ok: missing.append("5m/1m")
+        if not l2l_ok: missing.append("L2L")
+        if not trigger_ok: missing.append("TRIGGER")
+        if not rr1_ok: missing.append("RR TP1")
+        if not rr2_ok: missing.append("RR TP2")
+        if not rr3_ok: missing.append("RR TP3")
+        if not stop_ok: missing.append("STOP/ATR")
+        if not prob_ok: missing.append("PROB")
+        if not quality_ok: missing.append("QUALITÀ")
+        if not confidence_ok: missing.append("CONFIDENZA")
+        if missing: blockers.append("CONFLUENZA INCOMPLETA: " + ",".join(missing))
+
+    analysis["price_action"] = price_action
+    analysis["entry_trigger"] = trigger
+    analysis["entry_state"] = state
+    analysis["entry_blockers"] = blockers[:6]
+    analysis["entry_warnings"] = warnings[:6]
+    analysis["action_label"] = action
+    analysis["signal"] = signal
+    analysis["strong_confirmation"] = bool(state == "ENTRY_CONFIRMED")
+    analysis["entry_probability"] = round(prob, 2)
+    analysis["entry_policy"] = entry_policy
+    # v4.12: explicit separation between directional BIAS/SETUP and entry permission.
+    _risk_mode = str((analysis.get("risk", {}) or {}).get("mode", "")).upper()
+    _safety = (
+        _risk_mode in ("SHOCK", "ALERT")
+        or (analysis.get("reversal", {}) or {}).get("stage") == "CONFIRMED"
+    )
+    if d in ("LONG", "SHORT"):
+        if _safety:
+            analysis["setup_status"] = "SETUP_ACTIVE_ENTRY_BLOCKED"
+        elif entry_policy.get("entry_status") == "ENTRY_CONFIRMED":
+            analysis["setup_status"] = "ENTRY_CONFIRMED"
+        elif entry_policy.get("entry_status") == "WAIT_CONFIRMATION":
+            analysis["setup_status"] = "SETUP_ACTIVE_WAIT_CONFIRMATION"
+        else:
+            analysis["setup_status"] = "SETUP_BLOCKED"
+    else:
+        analysis["setup_status"] = "NO_SETUP"
+    analysis["intraday_score"] = round(intraday, 1)
+    analysis["intraday_core"] = {
+        "trend": d,
+        "structural_same": structural_same,
+        "fast_same": fast_same,
+        "fast_opposite": fast_opp,
+        "trigger": trigger.get("kind", "NONE"),
+        "l2l_score": round(l2l_score, 1),
+        "price_action_score": round(pa_score, 1),
+        "rr_tp1": round(rr1, 2),
+        "rr_tp2": round(rr2, 2),
+        "rr_tp3": round(rr3, 2),
+        "stop_atr": round(stop_atr, 2),
+        "confluence_ok": confluence_ok,
+    }
+    return analysis
+
+# ============================================================
+# v2.3 PREDICTION JOURNAL + END-OF-DAY TEST
+# ============================================================
+
+def _json_load(path, default):
+    try:
+        if not os.path.exists(path):
+            return default
+        with open(path, "r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception as exc:
+        print(f"⚠️ Impossibile leggere {path}: {exc}")
+        return default
+
+
+def _json_save(path, data):
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2, ensure_ascii=False)
+    os.replace(tmp, path)
+
+
+def _prediction_direction(item):
+    a = item.get("analysis", {})
+    direction = a.get("setup_direction") or a.get("model_signal") or a.get("signal")
+    return direction if direction in ("LONG", "SHORT") else "WAIT"
+
+
+def record_predictions(results):
+    """Record actionable intraday alerts for later objective evaluation.
+
+    We only journal actionable LONG/SHORT alerts (ENTRARE or ENTRATA POSSIBILE),
+    because a WAIT is not a trade prediction. Each record contains the regime,
+    trigger and score so the EOD report can identify which setups work.
+    """
+    log = _json_load(PREDICTION_LOG_FILE, [])
+    if not isinstance(log, list): log=[]
+    now=datetime.now(timezone.utc)
+    cutoff=now-timedelta(days=PERFORMANCE_RETENTION_DAYS)
+    new_items=0
+    for item in results:
+        if not item.get("available"): continue
+        a=item.get("analysis",{}) or {}
+        action=str(a.get("action_label",""))
+        direction=a.get("setup_direction") or a.get("model_signal")
+        if direction not in ("LONG","SHORT") or action not in ("COMPRA ORA","VENDI ORA","ENTRATA POSSIBILE"):
+            continue
+        price=safe_float(a.get("price"))
+        if price is None: continue
+        trig=a.get("entry_trigger",{}) or {}
+        score=safe_float(a.get("intraday_score"),0) or 0
+        bucket="80-100" if score>=80 else "70-79"
+        # One alert per commodity/direction/trigger/15-minute cycle.
+        cycle=now.replace(minute=(now.minute//15)*15,second=0,microsecond=0).isoformat()
+        rec={
+            "id":f"{item['name']}|{cycle}|{direction}|{trig.get('kind','SETUP')}",
+            "created_at":now.isoformat(),"name":item["name"],"symbol":item["symbol"],
+            "direction":direction,"action":action,"price":price,
+            "entry":safe_float(a.get("entry")),"stop":safe_float(a.get("stop")),
+            "tp1":safe_float(a.get("tp1")),"tp2":safe_float(a.get("tp2")),
+            "tp3":safe_float(a.get("tp3")),"atr":safe_float(a.get("atr")) or 0.0,
+            "score":score,"score_bucket":bucket,"probability":safe_float(a.get("entry_probability"),0) or 0,
+            "confidence":safe_float(a.get("confidence"),0) or 0,"quality":safe_float(a.get("quality"),0) or 0,
+            "setup":trig.get("kind") or a.get("entry_method","N/D"),"trigger_tf":trig.get("timeframe","N/D"),
+            "regime":(a.get("market_regime",{}) or {}).get("state","N/D"),
+            "status":"PENDING"
+        }
+        if not any(x.get("id")==rec["id"] for x in log):
+            log.append(rec); new_items+=1
+    log=[x for x in log if x.get("created_at","")>=cutoff.isoformat()]
+    _json_save(PREDICTION_LOG_FILE,log)
+    return new_items,log
+
+def _future_candles_for_prediction(prediction):
+    created=datetime.fromisoformat(prediction["created_at"].replace("Z","+00:00"))
+    if datetime.now(timezone.utc) < created+timedelta(hours=PREDICTION_HORIZON_HOURS): return []
+    try: rows=get_data(prediction["symbol"],"1h",1200)
+    except Exception: return []
+    end=created+timedelta(hours=PREDICTION_HORIZON_HOURS)
+    out=[]
+    for row in rows:
+        try: dt=datetime.fromisoformat(str(row["datetime"]).replace("Z","+00:00"))
+        except Exception: continue
+        if created < dt <= end: out.append(row)
+    return out
+
+def evaluate_prediction(prediction,future):
+    if not future: return None
+    p=safe_float(prediction.get("price")); direction=prediction.get("direction","WAIT")
+    if p is None or direction not in ("LONG","SHORT"): return None
+    sl=safe_float(prediction.get("stop")); tp1=safe_float(prediction.get("tp1")); close_end=safe_float(future[-1].get("close"))
+    if close_end is None: return None
+    first_hit="NONE"
+    for c in future:
+        hi,lo=safe_float(c.get("high")),safe_float(c.get("low"))
+        if hi is None or lo is None: continue
+        hit_tp=tp1 is not None and (hi>=tp1 if direction=="LONG" else lo<=tp1)
+        hit_sl=sl is not None and (lo<=sl if direction=="LONG" else hi>=sl)
+        if hit_tp and hit_sl: first_hit="AMBIGUO"; break
+        if hit_tp: first_hit="TP1"; break
+        if hit_sl: first_hit="SL"; break
+    close_correct=close_end>p if direction=="LONG" else close_end<p
+    verdict="CORRETTA" if first_hit=="TP1" or (first_hit=="NONE" and close_correct) else "ERRATA"
+    if first_hit=="AMBIGUO": verdict="AMBIGUA"
+    return {"verdict":verdict,"first_hit":first_hit,"close_end":close_end,
+            "move_pct":(close_end/p-1)*100,"evaluated_at":datetime.now(timezone.utc).isoformat()}
+
+def run_end_of_day_test(force=False):
+    log=_json_load(PREDICTION_LOG_FILE,[])
+    if not isinstance(log,list) or not log: return None
+    local_now=datetime.now(ZoneInfo("Europe/Rome"))
+    if not force and local_now.hour<EOD_REPORT_HOUR: return None
+    changed=False
+    for pred in log:
+        if pred.get("status")!="PENDING": continue
+        result=evaluate_prediction(pred,_future_candles_for_prediction(pred))
+        if result:
+            pred.update(result); pred["status"]="EVALUATED"; changed=True
+    if changed: _json_save(PREDICTION_LOG_FILE,log)
+    today=local_now.date().isoformat()
+    evaluated=[]; pending=[]
+    for pred in log:
+        try: d=datetime.fromisoformat(pred.get("created_at","").replace("Z","+00:00")).astimezone(ZoneInfo("Europe/Rome")).date().isoformat()
+        except Exception: continue
+        if d==today:
+            (evaluated if pred.get("status")=="EVALUATED" else pending).append(pred)
+    if not evaluated and not pending: return None
+    correct=sum(p.get("verdict")=="CORRETTA" for p in evaluated); wrong=sum(p.get("verdict")=="ERRATA" for p in evaluated); ambiguous=sum(p.get("verdict")=="AMBIGUA" for p in evaluated)
+    accuracy=correct/(correct+wrong)*100 if correct+wrong else 0.0
+    lines=[f"📊 COMMODITIES BOT v{BOT_VERSION} — PERFORMANCE INTRADAY", "", f"📅 {local_now.strftime('%d/%m/%Y')}","━━━━━━━━━━━━━━━━━━━━",
+           f"🎯 Segnali valutati: {len(evaluated)}",f"✅ Azzeccati: {correct}",f"❌ Sbagliati: {wrong}",f"⚪ Ambigui: {ambiguous}",f"🟡 Ancora in valutazione: {len(pending)}",f"📈 Accuratezza: {accuracy:.1f}%"]
+    lines += ["", "🔒 PAPER ONLY"]
+    state=_json_load(DAILY_REPORT_FILE,{})
+    if state.get("last_report_date")==today and not force: return None
+    state.update({"last_report_date":today,"accuracy":accuracy,"evaluated":len(evaluated),"pending":len(pending)})
+    _json_save(DAILY_REPORT_FILE,state)
+    return "\n".join(lines)
+
+# ============================================================
+# POSITION MANAGEMENT
+# ============================================================
+
+def manage_position(position, current_analysis, current_price):
+    """Gestione posizione allineata al GOLD BOT v15.1."""
+    direction = position["direction"]
+    entry = position["entry"]
+    stop = position["stop"]
+    tp1 = position["tp1"]
+    tp2 = position["tp2"]
+    tp3 = position["tp3"]
+    break_even = position.get("break_even", False)
+    tp2_reached = position.get("tp2_reached", False)
+
+    strong_opposite = (
+        current_analysis.get("reversal", {}).get("stage") == "CONFIRMED"
+        and current_analysis.get("signal") == ("SHORT" if direction == "LONG" else "LONG")
+    )
+
+    exit_signal = exit_engine(position, current_analysis, current_price)
+    if exit_signal.get("action") == "EXIT":
+        return {"action": "EXIT", "reason": exit_signal.get("reason", "EXIT ENGINE"), "new_stop": stop}
+
+    if direction == "LONG":
+        if current_price <= stop:
+            return {"action": "EXIT", "reason": "STOP LOSS", "new_stop": stop}
+        if current_price >= tp3:
+            return {"action": "EXIT", "reason": "TP3 RAGGIUNTO — INCASSARE", "new_stop": stop}
+        if current_price >= tp2 and not tp2_reached:
+            return {"action": "MOVE_STOP", "reason": "TP2 RAGGIUNTO — STOP A TP1", "new_stop": max(stop, tp1), "tp2_reached": True}
+        if current_price >= tp1 and not break_even:
+            return {"action": "MOVE_STOP", "reason": "TP1 RAGGIUNTO — STOP A BREAK-EVEN", "new_stop": max(stop, entry), "break_even": True}
+        if strong_opposite:
+            return {"action": "EXIT", "reason": "SEGNALE OPPOSTO CONFERMATO", "new_stop": stop}
+        return {"action": "HOLD", "reason": "LONG — TENERE", "new_stop": stop}
+
+    if direction == "SHORT":
+        if current_price >= stop:
+            return {"action": "EXIT", "reason": "STOP LOSS", "new_stop": stop}
+        if current_price <= tp3:
+            return {"action": "EXIT", "reason": "TP3 RAGGIUNTO — INCASSARE", "new_stop": stop}
+        if current_price <= tp2 and not tp2_reached:
+            return {"action": "MOVE_STOP", "reason": "TP2 RAGGIUNTO — STOP A TP1", "new_stop": min(stop, tp1), "tp2_reached": True}
+        if current_price <= tp1 and not break_even:
+            return {"action": "MOVE_STOP", "reason": "TP1 RAGGIUNTO — STOP A BREAK-EVEN", "new_stop": min(stop, entry), "break_even": True}
+        if strong_opposite:
+            return {"action": "EXIT", "reason": "SEGNALE OPPOSTO CONFERMATO", "new_stop": stop}
+        return {"action": "HOLD", "reason": "SHORT — TENERE", "new_stop": stop}
+
+    return {"action": "EXIT", "reason": "DIREZIONE NON RICONOSCIUTA", "new_stop": stop}
+
+
+# ============================================================
+# v2.5 WEATHER + NATURAL DISASTER INTELLIGENCE
+# ============================================================
+
+def _cache_get(path, max_age_hours):
+    try:
+        obj = _json_load(path, {})
+        ts = datetime.fromisoformat(obj.get("timestamp", "").replace("Z", "+00:00"))
+        if datetime.now(timezone.utc) - ts <= timedelta(hours=max_age_hours):
+            return obj.get("data")
+    except Exception:
+        pass
+    return None
+
+
+def _cache_put(path, data):
+    try:
+        _json_save(path, {"timestamp": datetime.now(timezone.utc).isoformat(), "data": data})
+    except Exception:
+        pass
+
+
+def _weather_json(url, params):
+    r = requests.get(url, params=params, timeout=WEATHER_TIMEOUT)
+    r.raise_for_status()
+    return r.json()
+
+
+def _weather_region_snapshot(name, lat, lon):
+    """Free forecast + recent observations from Open-Meteo.
+
+    This is an intelligence layer, not a direct trading signal. We keep source,
+    timestamps and raw metrics so later backtests can audit the decision.
+    """
+    forecast = _weather_json(
+        "https://api.open-meteo.com/v1/forecast",
+        {"latitude": lat, "longitude": lon,
+         "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max",
+         "forecast_days": 10, "timezone": "UTC"}
+    )
+    # Recent history is used for anomaly context. Open-Meteo archive is a
+    # climate-history source; the model treats it as context, not as a future leak.
+    end = (datetime.now(timezone.utc) - timedelta(days=2)).date().isoformat()
+    start = (datetime.now(timezone.utc) - timedelta(days=32)).date().isoformat()
+    history = _weather_json(
+        "https://archive-api.open-meteo.com/v1/archive",
+        {"latitude": lat, "longitude": lon, "start_date": start, "end_date": end,
+         "daily": "temperature_2m_mean,precipitation_sum,wind_speed_10m_max",
+         "timezone": "UTC"}
+    )
+    fd=forecast.get("daily", {})
+    hd=history.get("daily", {})
+    temps=[x for x in (fd.get("temperature_2m_max") or []) if isinstance(x,(int,float))]
+    mins=[x for x in (fd.get("temperature_2m_min") or []) if isinstance(x,(int,float))]
+    rain=[x for x in (fd.get("precipitation_sum") or []) if isinstance(x,(int,float))]
+    winds=[x for x in (fd.get("wind_speed_10m_max") or []) if isinstance(x,(int,float))]
+    htemps=[x for x in (hd.get("temperature_2m_mean") or []) if isinstance(x,(int,float))]
+    hrain=[x for x in (hd.get("precipitation_sum") or []) if isinstance(x,(int,float))]
+    hwinds=[x for x in (hd.get("wind_speed_10m_max") or []) if isinstance(x,(int,float))]
+    return {
+        "region": name, "lat": lat, "lon": lon, "source": "Open-Meteo",
+        "forecast_days": len(temps),
+        "forecast_max_mean": sum(temps)/len(temps) if temps else None,
+        "forecast_min_mean": sum(mins)/len(mins) if mins else None,
+        "forecast_rain_total": sum(rain),
+        "forecast_wind_max": max(winds) if winds else None,
+        "recent_temp_mean": sum(htemps)/len(htemps) if htemps else None,
+        "recent_rain_total": sum(hrain),
+        "recent_wind_max": max(hwinds) if hwinds else None,
+        "raw_forecast_dates": fd.get("time", []),
+    }
+
+
+def weather_intelligence(commodity):
+    if not WEATHER_ENABLED or commodity not in WEATHER_REGIONS:
+        return {"enabled": False, "score": 0.0, "label": "N/D", "confidence": 0.0, "regions": []}
+    cached = _cache_get(WEATHER_CACHE_FILE, WEATHER_CACHE_HOURS)
+    if isinstance(cached, dict) and commodity in cached:
+        return cached[commodity]
+    regions=[]
+    for label,lat,lon in WEATHER_REGIONS.get(commodity, []):
+        try:
+            regions.append(_weather_region_snapshot(label,lat,lon))
+        except Exception as e:
+            regions.append({"region":label,"error":str(e),"source":"Open-Meteo"})
+    valid=[r for r in regions if not r.get("error")]
+    if not valid:
+        return {"enabled": True, "score": 0.0, "label": "DATI METEO NON DISPONIBILI", "confidence": 0.0, "regions": regions}
+    p=WEATHER_PRIORS.get(commodity,{})
+    raw=0.0
+    anomaly=[]
+    for r in valid:
+        # Recent-vs-forecast change is a "surprise" proxy. It is not a climate
+        # normal; this deliberately avoids pretending 30 days of history is a 30-year climatology.
+        if r.get("forecast_max_mean") is not None and r.get("recent_temp_mean") is not None:
+            dt=r["forecast_max_mean"]-r["recent_temp_mean"]
+            raw += max(-3,min(3,dt/5.0))*p.get("hot",0)
+            anomaly.append(dt)
+        if r.get("forecast_rain_total") is not None:
+            raw += max(-2,min(2,(r["forecast_rain_total"]-r.get("recent_rain_total",0))/100.0))*p.get("wet",0)
+        if r.get("forecast_wind_max") is not None:
+            raw += max(-1.5,min(1.5,(r["forecast_wind_max"]-r.get("recent_wind_max",0))/20.0))*p.get("wind",0)
+    score=max(-100,min(100,raw*25))
+    if score >= 15: label="BULLISH"
+    elif score <= -15: label="BEARISH"
+    else: label="NEUTRALE"
+    confidence=min(95,40+len(valid)*12)
+    out={"enabled":True,"score":round(score,1),"label":label,"confidence":round(confidence,1),"regions":regions,
+         "temperature_change_mean":round(sum(anomaly)/len(anomaly),2) if anomaly else None,
+         "historical_context":"recent 30-day observations + 10-day forecast"}
+    cache = _cache_get(WEATHER_CACHE_FILE, WEATHER_CACHE_HOURS) or {}
+    cache[commodity]=out
+    _cache_put(WEATHER_CACHE_FILE,cache)
+    return out
+
+
+def natural_disaster_intelligence(commodity):
+    if not DISASTER_ENABLED:
+        return {"enabled":False,"score":0.0,"count":0,"events":[]}
+    events=[]
+    # Global news engine is already configured for disasters. We use RSS search
+    # only as an extra event layer, not as a replacement for official feeds.
+    for q in DISASTER_QUERIES.get(commodity,[]):
+        try:
+            url="https://news.google.com/rss/search"
+            r=requests.get(url,params={"q":q,"hl":"en-US","gl":"US","ceid":"US:en"},timeout=8)
+            r.raise_for_status()
+            parser=RSSParser()
+            parser.feed(r.text)
+            for item in parser.items[:3]:
+                events.append({"query":q,"title":item.get("title",""),"source":item.get("source","Google News RSS")})
+        except Exception:
+            continue
+    # Keep only a bounded event score; relevance is further checked by the model.
+    count=len(events)
+    score=max(-20.0,min(20.0,count*1.5)) if count else 0.0
+    return {"enabled":True,"score":score,"count":count,"events":events[:12]}
+
+
+def apply_weather_and_disaster_layers(analysis, weather, disasters):
+    """Bounded fundamental nudge. No weather/disaster layer can override risk gates."""
+    analysis["weather"] = weather
+    analysis["natural_disasters"] = disasters
+    w=float(weather.get("score",0) or 0)
+    # Disaster events are risk/context first. They only become directional if
+    # weather/fundamental direction agrees with the current setup.
+    dscore=float(disasters.get("score",0) or 0)
+    direction=analysis.get("setup_direction")
+    if direction == "LONG":
+        nudge=(w+dscore)*0.08
+    elif direction == "SHORT":
+        nudge=(-w+dscore)*0.08
+    else:
+        nudge=0.0
+    nudge=max(-WEATHER_IMPACT_CAP,min(WEATHER_IMPACT_CAP,nudge))
+    analysis["weather_disaster_nudge"] = round(nudge,2)
+    analysis["score"] = clamp(analysis.get("score",0)+nudge,0,100)
+    if abs(w) >= 20 and analysis.get("confidence",0) < 70 and direction in ("LONG","SHORT"):
+        analysis["weather_confirmation"]="DEBOLE — conferma meteo insufficiente"
+    else:
+        analysis["weather_confirmation"]="OK"
+
+
+def demo_execution_adapter(results, position):
+    """Paper/demo execution adapter. No real broker API is called here.
+
+    It writes a proposed order only when DEMO_TRADING_ENABLED=1 and the normal
+    trade gates say the best setup is executable. A future Pepperstone/MT5
+    adapter can consume this exact order schema without changing the model.
+    """
+    if not DEMO_TRADING_ENABLED:
+        return {"enabled":False,"executed":False,"reason":"DEMO_TRADING_ENABLED=0"}
+    candidates=[x for x in results if x.get("available") and x.get("analysis",{}).get("signal") in ("LONG","SHORT")]
+    if not candidates:
+        return {"enabled":True,"executed":False,"reason":"NESSUN SEGNALE ESEGUIBILE"}
+    best=max(candidates,key=lambda x:x.get("ranking_score",-1))
+    a=best["analysis"]
+    if not a.get("ensemble_gate",False):
+        return {"enabled":True,"executed":False,"reason":"ENSEMBLE GATE BLOCCATO"}
+    order={"timestamp":datetime.now(timezone.utc).isoformat(),"commodity":best["name"],"symbol":best["symbol"],
+           "side":a["signal"],"price":a.get("price"),"entry":a.get("entry"),"stop":a.get("stop"),
+           "tp1":a.get("tp1"),"tp2":a.get("tp2"),"tp3":a.get("tp3"),"mode":"DEMO/PAPER"}
+    orders=_json_load(DEMO_ORDERS_FILE,[])
+    orders.append(order); _json_save(DEMO_ORDERS_FILE,orders[-500:])
+    return {"enabled":True,"executed":True,"order":order}
+
+
+# ============================================================
+# TELEGRAM
+# ============================================================
+
+def send_telegram(message):
+    """Send a Telegram message safely, splitting oversized messages."""
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("⚠️ Telegram non configurato.")
+        return False
+
+    text = str(message or "").strip()
+    if not text:
+        return False
+
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    # Telegram's practical text limit is 4096 characters. Keep a small margin.
+    chunks = [text[i:i+3900] for i in range(0, len(text), 3900)]
+    ok = True
+    for chunk in chunks:
+        payload = {"chat_id": TELEGRAM_CHAT_ID, "text": chunk}
+        try:
+            response = requests.post(url, json=payload, timeout=20)
+            response.raise_for_status()
+        except Exception as error:
+            ok = False
+            print(f"⚠️ Errore Telegram: {error}")
+    return ok
+
+
+TELEGRAM_COMMAND_OFFSET_FILE = "telegram_update_offset.json"
+TELEGRAM_COMMAND_MAX_AGE_SECONDS = int(os.getenv("TELEGRAM_COMMAND_MAX_AGE_SECONDS", "900"))
+
+
+def _canonical_gagarin_display(analysis):
+    """Return one type-safe, final Gagarin display snapshot.
+
+    Display code must never read stale legacy top-level fields.  The nested
+    gagarin object is the authority; fallback values are used only when the
+    nested field is genuinely absent.
+    """
+    a = analysis or {}
+    g = a.get("gagarin") if isinstance(a.get("gagarin"), dict) else {}
+
+    def value(*vals, default=None):
+        for v in vals:
+            if isinstance(v, dict):
+                v = v.get("state") or v.get("type") or v.get("name")
+            if v is None:
+                continue
+            text = str(v).strip()
+            if text and text.upper() not in {"UNKNOWN", "NONE", "N/A", "NULL"}:
+                return text
+        return default
+
+    regime = value(g.get("regime"), a.get("gagarin_regime"),
+                   (a.get("market_regime") or {}).get("state"), default="UNKNOWN")
+    setup = value(g.get("setup"), a.get("gagarin_setup"), default="NONE")
+    trigger_obj = g.get("trigger")
+    if isinstance(trigger_obj, dict):
+        trigger = bool(trigger_obj.get("confirmed", trigger_obj.get("triggered", False)))
+    elif trigger_obj is not None:
+        trigger = bool(trigger_obj)
+    else:
+        trigger = bool(a.get("gagarin_trigger", False))
+    state = value(g.get("state"), a.get("gagarin_state"), default="WAIT")
+    blockers = g.get("blockers") if isinstance(g.get("blockers"), list) else list(a.get("gagarin_blockers") or [])
+    blockers = [str(x) for x in blockers if x]
+    if regime.upper() != "UNKNOWN":
+        blockers = [x for x in blockers if x != "REGIME_UNKNOWN"]
+    if setup.upper() != "NONE":
+        blockers = [x for x in blockers if x != "NO_SETUP"]
+    if a.get("operational_entry_allowed"):
+        blockers = []
+        state = "READY"
+    return {"regime": regime, "setup": setup, "trigger": trigger,
+            "state": state, "blockers": blockers}
+
+
+def _telegram_category(name):
+    """Stable user-facing commodity grouping for Telegram."""
+    n = str(name or "").lower()
+    if any(k in n for k in ("oro", "argento", "rame", "platino", "palladio")):
+        return "METALLI"
+    if any(k in n for k in ("wti", "brent", "benzina", "heating", "gas naturale")):
+        return "ENERGIA"
+    if any(k in n for k in ("bovini", "feeder", "maiali")):
+        return "BESTIAME"
+    return "AGRICOLTURA"
+
+
+def _telegram_command_ranking(ranked):
+    """Clean TOP 10 Telegram ranking, grouped by commodity family."""
+    available = [x for x in (ranked or []) if x.get("available")]
+    available.sort(key=lambda item: safe_float(
+        item.get("market_ranking_score"),
+        safe_float((item.get("analysis", {}) or {}).get("score"), 0),
+    ) or 0, reverse=True)
+    top10 = available[:10]
+
+    lines = [
+        f"🌍 COMMODITIES BOT v{BOT_VERSION}",
+        "",
+        "🏆 TOP 10 — CLASSIFICA MERCATO",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "MKT = forza dello scenario | non è un ingresso",
+        "",
+    ]
+    if not top10:
+        return "\n".join(lines + ["⚪ Nessuna commodity disponibile.", "", "🧪 PAPER ONLY"])
+
+    groups = {"ENERGIA": [], "METALLI": [], "AGRICOLTURA": [], "BESTIAME": []}
+    for rank, item in enumerate(top10, 1):
+        a = item.get("analysis", {}) or {}
+        g = _canonical_gagarin_display(a)
+        direction = a.get("final_direction") or a.get("setup_direction") or a.get("model_signal") or "NONE"
+        market_score = safe_float(item.get("market_ranking_score"), a.get("score", 0)) or 0
+        prob_raw = safe_float(a.get("entry_probability", a.get("probability", 0)), 0) or 0
+        prob = prob_raw * 100 if prob_raw <= 1.5 else prob_raw
+        policy = a.get("entry_policy", {}) or {}
+        q = safe_float(policy.get("quality"), a.get("quality", 0)) or 0
+        c = safe_float(policy.get("confidence"), a.get("confidence", 0)) or 0
+        operational = bool(a.get("operational_entry_allowed"))
+        if operational:
+            status = "🟢 READY"
+        elif g["state"] in {"BLOCKED", "SAFETY_BLOCK"}:
+            status = "🔴 BLOCCATO"
+        else:
+            status = "🟡 FORMAZIONE"
+        icon = "🟢" if direction == "LONG" else "🔴" if direction == "SHORT" else "⚪"
+        setup_label = g["setup"] if g["setup"] != "NONE" else "IN FORMAZIONE"
+        groups[_telegram_category(item.get("name"))].append(
+            (rank, item.get("name", "N/D"), icon, direction, market_score, prob, q, c, status, setup_label, g["trigger"])
+        )
+
+    medals = {1:"🥇", 2:"🥈", 3:"🥉"}
+    for category in ("ENERGIA", "METALLI", "AGRICOLTURA", "BESTIAME"):
+        rows = groups[category]
+        if not rows:
+            continue
+        lines += [f"🔹 {category}", "━━━━━━━━━━━━━━━━━━━━"]
+        for row in rows:
+            rank, name, icon, direction, mkt, prob, q, c, status, setup_label, trig = row
+            prefix = medals.get(rank, f"{rank:02d}.")
+            trig_label = "OK" if trig else "NO"
+            lines += [
+                f"{prefix} {name}",
+                f"   {icon} {direction} | MKT {mkt:.0f} | Prob {prob:.0f}%",
+                f"   {status} | Setup {setup_label} | Trig {trig_label}",
+                f"   Q {q:.0f} | C {c:.0f}",
+                "",
+            ]
+
+    lines += [
+        "👀 DA MONITORARE",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "Solo scenari in formazione; nessuna autorizzazione implicita.",
+    ]
+    monitor = top10[:3]
+    for i, item in enumerate(monitor, 1):
+        a = item.get("analysis", {}) or {}
+        d = a.get("final_direction") or a.get("setup_direction") or a.get("model_signal") or "NONE"
+        icon = "🟢" if d == "LONG" else "🔴" if d == "SHORT" else "⚪"
+        lines.append(f"{i}. {item.get('name','N/D')} {icon} {d}")
+    lines += [
+        "",
+        "⚠️ READY = tutti i gate superati.",
+        "🟡 FORMAZIONE = scenario da monitorare.",
+        "🔴 BLOCCATO = ingresso non autorizzato.",
+        "⚠️ MKT e Prob non autorizzano da soli un ingresso.",
+        "",
+        "🧪 PAPER ONLY",
+    ]
+    return "\n".join(lines)
+
+def _telegram_normalize_command(text):
+    """Normalize a Telegram command/message for simple natural-language matching."""
+    normalized = re.sub(r"\s+", " ", str(text or "").strip().lower())
+    normalized = normalized.replace("/", "")
+    return normalized
+
+
+
+def telegram_requested_scope(request):
+    """Return the configured commodity name for a single-commodity Telegram request.
+
+    Ranking/weekly/monthly/signals/help requests return None because they need the
+    full cross-commodity universe.
+    """
+    q = _telegram_normalize_command(request)
+    if not q:
+        return None
+    broad = (
+        "classifica", "ranking", "rank", "migliore", "miglior setup",
+        "settimanale", "weekly", "settimana", "mensile", "monthly", "mese",
+        "segnali", "signals", "signal", "help", "aiuto", "comandi", "start"
+    )
+    if any(x in q for x in broad):
+        return None
+    aliases = {
+        "oro": "Oro", "gold": "Oro",
+        "argento": "Argento", "silver": "Argento",
+        "platino": "Platino", "platinum": "Platino",
+        "palladio": "Palladio", "palladium": "Palladio",
+        "wti": "Petrolio WTI", "petrolio": "Petrolio WTI", "crude": "Petrolio WTI", "crude oil": "Petrolio WTI",
+        "brent": "Petrolio Brent", "petrolio brent": "Petrolio Brent",
+        "gas": "Gas Naturale", "gas naturale": "Gas Naturale", "natural gas": "Gas Naturale",
+        "benzina": "Benzina RBOB", "rbob": "Benzina RBOB", "gasoline": "Benzina RBOB",
+        "heating oil": "Heating Oil", "gasolio": "Heating Oil",
+        "gas naturale": "Gas Naturale", "natural gas": "Gas Naturale",
+        "caffè": "Caffè", "caffe": "Caffè", "coffee": "Caffè",
+        "cotone": "Cotone", "cotton": "Cotone",
+        "live cattle": "Bovini vivi", "bovini vivi": "Bovini vivi", "cattle": "Bovini vivi",
+        "feeder cattle": "Feeder Cattle",
+        "lean hogs": "Maiali magri", "lean hog": "Maiali magri", "hogs": "Maiali magri", "maiali magri": "Maiali magri",
+        "rame": "Rame", "copper": "Rame",
+        "alluminio": "Alluminio", "aluminum": "Alluminio", "aluminium": "Alluminio",
+        "nichel": "Nichel", "nickel": "Nichel",
+        "zinco": "Zinco", "zinc": "Zinco",
+        "piombo": "Piombo", "lead": "Piombo",
+        "grano": "Grano", "wheat": "Grano", "grain": "Grano",
+        "mais": "Mais", "corn": "Mais", "maize": "Mais",
+        "soia": "Soia", "soybean": "Soia", "soybeans": "Soia",
+        "farina di soia": "Farina di soia", "soybean meal": "Farina di soia",
+        "olio di soia": "Olio di soia", "soybean oil": "Olio di soia",
+        "avena": "Avena", "oats": "Avena",
+        "riso": "Riso", "rice": "Riso",
+        "caffè": "Caffè", "caffe": "Caffè", "coffee": "Caffè",
+        "cacao": "Cacao", "cocoa": "Cacao",
+        "zucchero": "Zucchero", "sugar": "Zucchero",
+        "cotone": "Cotone", "cotton": "Cotone",
+        "succo d'arancia": "Succo d'arancia", "orange juice": "Succo d'arancia",
+        "bovini vivi": "Bovini vivi", "live cattle": "Bovini vivi",
+        "maiali magri": "Maiali magri", "lean hogs": "Maiali magri", "hogs": "Maiali magri",
+        "feeder cattle": "Feeder Cattle",
+    }
+    for alias, name in sorted(aliases.items(), key=lambda kv: len(kv[0]), reverse=True):
+        if alias in q and name in COMMODITIES:
+            return name
+    # Exact configured commodity name match.
+    for name in COMMODITIES:
+        if _telegram_normalize_command(name) in q:
+            return name
+    return None
+
+def _telegram_find_commodity(ranked, query):
+    """Find a commodity from a Telegram command, including natural-language requests."""
+    q = _telegram_normalize_command(query)
+    aliases = {
+        "oro": "oro", "gold": "oro",
+        "argento": "argento", "silver": "argento",
+        "platino": "platino", "platinum": "platino",
+        "palladio": "palladio", "palladium": "palladio",
+        "wti": "petrolio wti", "petrolio": "petrolio wti", "crude oil": "petrolio wti", "crude": "petrolio wti",
+        "brent": "petrolio brent", "oil brent": "petrolio brent", "petrolio brent": "petrolio brent",
+        "gas": "gas naturale", "gas naturale": "gas naturale", "natural gas": "gas naturale",
+        "benzina": "benzina rbob", "rbob": "benzina rbob", "gasoline": "benzina rbob",
+        "heating oil": "heating oil", "gasolio": "heating oil",
+        "rame": "rame", "copper": "rame",
+        "alluminio": "alluminio", "aluminum": "alluminio", "aluminium": "alluminio",
+        "nichel": "nichel", "nickel": "nichel", "zinco": "zinco", "zinc": "zinco", "piombo": "piombo", "lead": "piombo",
+        "grano": "grano", "wheat": "grano", "chicago srw wheat": "grano",
+        "mais": "mais", "corn": "mais",
+        "soia": "soia", "soybean": "soia",
+        "farina di soia": "farina di soia", "soybean meal": "farina di soia",
+        "olio di soia": "olio di soia", "soybean oil": "olio di soia",
+        "avena": "avena", "oats": "avena",
+        "riso": "riso", "rice": "riso", "rough rice": "riso",
+        "caffe": "caffè", "caffè": "caffè", "coffee": "caffè",
+        "cacao": "cacao", "cocoa": "cacao",
+        "zucchero": "zucchero", "sugar": "zucchero",
+        "cotone": "cotone", "cotton": "cotone",
+        "succo d'arancia": "succo d'arancia", "orange juice": "succo d'arancia", "arancia": "succo d'arancia",
+        "bovini": "bovini vivi", "bovini vivi": "bovini vivi", "live cattle": "bovini vivi",
+        "maiali": "maiali magri", "maiali magri": "maiali magri", "lean hogs": "maiali magri", "lean hog": "maiali magri",
+        "feeder": "feeder cattle", "feeder cattle": "feeder cattle",
+    }
+    candidates = [x for x in ranked if x.get("available")]
+
+    # Exact command first.
+    target = aliases.get(q, q)
+    exact = [x for x in candidates if _telegram_normalize_command(x.get("name")) == target]
+    if exact:
+        return exact[0]
+
+    # Natural-language command: "dammi oro con tp e sl", "analizza gold", etc.
+    # Prefer the longest alias so "petrolio brent" wins over "petrolio".
+    for alias in sorted(aliases, key=len, reverse=True):
+        if alias in q:
+            target = aliases[alias]
+            exact = [x for x in candidates if _telegram_normalize_command(x.get("name")) == target]
+            if exact:
+                return exact[0]
+            partial = [x for x in candidates if target in _telegram_normalize_command(x.get("name"))]
+            if partial:
+                return partial[0]
+
+    partial = [x for x in candidates if target in _telegram_normalize_command(x.get("name")) or _telegram_normalize_command(x.get("name")) in target]
+    return partial[0] if partial else None
+
+
+def _telegram_entry_status(a):
+    """v4.12: separate directional setup from actual entry authorization."""
+    direction = a.get("final_direction") or a.get("setup_direction") or a.get("model_signal") or "N/D"
+    policy = a.get("entry_policy", {}) or {}
+    status = str(policy.get("entry_status", "")).upper()
+    risk = a.get("risk", {}) or {}
+    reversal = a.get("reversal", {}) or {}
+    se = a.get("signal_engine_v42", {}) or {}
+
+    safety = (
+        risk.get("mode") in ("SHOCK", "ALERT")
+        or reversal.get("stage") == "CONFIRMED"
+        or "SAFETY BLOCK" in [str(x).upper() for x in (a.get("entry_blockers") or [])]
+        or "SAFETY BLOCK" in [str(x).upper() for x in (se.get("blockers") or [])]
+    )
+
+    if direction not in ("LONG", "SHORT"):
+        return "⚪ NO SETUP", "NEUTRAL", "NO_SETUP"
+
+    if status == "ENTRY_CONFIRMED" and not safety:
+        return f"🟢 {direction} — 🟢 ENTRATA CONFERMATA", "ENTRY", status
+
+    if safety:
+        # The direction remains visible, but the safety layer has absolute authority.
+        return f"🟠 {direction} — 🛑 SETUP ATTIVO, ENTRATA BLOCCATA", "BLOCKED", "SAFETY_BLOCK"
+
+    if status == "WAIT_CONFIRMATION":
+        return f"🟡 {direction} — ⏳ SETUP ATTIVO, ASPETTARE CONFERMA", "WAIT", status
+
+    return f"⚪ {direction} — 🔴 NON ENTRARE", "BLOCKED", status or "NO_ENTRY"
+
+
+def _telegram_commodity_detail(item):
+    """Compact single-commodity Telegram report. Analysis stays internal."""
+    if not item:
+        return "⚪ Commodity non trovata. Scrivi HELP."
+    a = item.get("analysis", {}) or {}
+    plan_label = gagarin_plan_label(a)
+    name = item.get("name", "N/D")
+    direction = a.get("final_direction") or a.get("setup_direction") or a.get("model_signal") or "N/D"
+    action = str(a.get("action_label", "ATTENDERE"))
+    score = safe_float(a.get("score"), 0) or 0
+    prob_raw = safe_float(a.get("entry_probability", a.get("probability", 0)), 0) or 0
+    prob = prob_raw * 100 if prob_raw <= 1.5 else prob_raw
+    policy = a.get("entry_policy", {}) or {}
+    quality = safe_float(policy.get("quality"), safe_float(a.get("entry_quality", a.get("quality", 0)), 0)) or 0
+    conf = safe_float(policy.get("confidence"), safe_float(a.get("confidence", 0), 0)) or 0
+    se = a.get("signal_engine_v42", {}) or {}
+    ar = a.get("adaptive_risk", {}) or {}
+    entry = safe_float(ar.get("entry"), safe_float(a.get("entry"), safe_float(se.get("entry"), safe_float(a.get("price"), 0)))) or 0
+    stop = safe_float(ar.get("stop"), safe_float(a.get("stop"), safe_float(se.get("stop"), 0))) or 0
+    tp1 = safe_float(ar.get("tp1"), safe_float(a.get("tp1"), safe_float(se.get("tp1"), 0))) or 0
+    tp2 = safe_float(ar.get("tp2"), safe_float(a.get("tp2"), safe_float(se.get("tp2"), 0))) or 0
+    tp3 = safe_float(ar.get("tp3"), safe_float(a.get("tp3"), safe_float(se.get("tp3"), 0))) or 0
+    rr1 = safe_float(ar.get("rr_tp1"), 0) or 0
+    rr2 = safe_float(ar.get("rr_tp2"), 0) or 0
+    rr3 = safe_float(ar.get("rr_tp3"), safe_float(se.get("rr_tp3"), safe_float((a.get("intraday_core", {}) or {}).get("rr_tp3"), 0))) or 0
+    trigger = a.get("entry_trigger", {}) or {}
+    # v5.3.1 Authority: never present a legacy trigger as confirmed when the
+    # canonical prediction authority has not confirmed it.
+    pred_auth = a.get("prediction_authority_v531") or prediction_authority_v531(a)
+    auth_trigger_ok = bool(pred_auth.get("trigger_confirmed", False))
+    auth_trigger_kind = str(trigger.get("kind") or "TRIGGER")
+    auth_trigger_tf = str(trigger.get("timeframe") or "")
+    if auth_trigger_ok:
+        telegram_trigger_line = f"🔥 Trigger: {auth_trigger_kind} {auth_trigger_tf}".strip()
+    else:
+        telegram_trigger_line = "🔥 Trigger: ❌ NON CONFERMATO"
+    if action == "ENTRARE":
+        status = "🟢 ENTRATA CONFERMATA"
+    elif action == "ENTRATA POSSIBILE":
+        status = "🟡 ENTRATA POSSIBILE"
+    elif action == "NON ENTRARE":
+        status = "🔴 NON ENTRARE"
+    else:
+        status = "🟡 ATTENDERE"
+    icon = "🟢" if direction == "LONG" else "🔴" if direction == "SHORT" else "🟡"
+    lines = [
+        f"🌍 COMMODITIES BOT v{BOT_VERSION}", "", f"📌 {name}",
+        f"{icon} {direction} — {status}",
+        f"💰 Prezzo: {_fmt_price(a.get('price'))}",
+        f"📊 Score {score:.0f} | Prob {prob:.0f}% | Qualità {quality:.0f} | Conf {conf:.0f}",
+    ]
+    if entry > 0:
+        lines += ["", f"📐 {plan_label}", f"📍 Entry: {_fmt_price(entry)}"]
+        if stop > 0: lines.append(f"🛑 SL: {_fmt_price(stop)}")
+        if tp1 > 0: lines.append(f"🎯 TP1: {_fmt_price(tp1)}" + (f" | R/R {rr1:.2f}" if rr1 > 0 else ""))
+        if tp2 > 0: lines.append(f"🎯 TP2: {_fmt_price(tp2)}" + (f" | R/R {rr2:.2f}" if rr2 > 0 else ""))
+        if tp3 > 0: lines.append(f"🎯 TP3: {_fmt_price(tp3)}" + (f" | R/R {rr3:.2f}" if rr3 > 0 else ""))
+        if ar.get("theoretical_only"):
+            lines.append("🧪 SL/TP: TEORICI — nessuna autorizzazione all'ingresso")
+    lines.append(telegram_trigger_line)
+    policy_blockers = [str(x) for x in (policy.get("blockers") or []) if x]
+    risk_mode = str((a.get("risk", {}) or {}).get("mode", "")).upper()
+    if risk_mode in ("SHOCK", "ALERT"):
+        lines.append(f"🛑 BLOCCO SICUREZZA: RISCHIO {risk_mode}")
+    elif policy_blockers:
+        lines.append("⏳ " + " | ".join(policy_blockers[:2]))
+    # Show only a material event, never a headline dump.
+    global_impact = a.get("global_impact", {}) or {}
+    if global_impact.get("mode") in ("SHOCK", "ALERT"):
+        lines.append(f"⚠️ EVENTO MERCATO: {global_impact.get('mode')}")
+    lines += ["", "🧪 PAPER ONLY"]
+    return "\n".join(lines)
+
+
+def _telegram_weekly_plan(item):
+    """Build a WEEKLY scenario from the existing daily candles only.
+    This is a scenario/forecast, not a real order. Historical 5-session
+    outcomes are calculated strictly from candles that precede the latest bar.
+    """
+    if not item or not item.get("available"):
+        return None
+    a = item.get("analysis", {}) or {}
+    candles = item.get("candles", []) or []
+    if len(candles) < 40:
+        return None
+
+    direction = a.get("setup_direction") or a.get("model_signal") or "NONE"
+    if direction not in ("LONG", "SHORT"):
+        return None
+
+    price = safe_float(a.get("price"), 0) or 0
+    if price <= 0:
+        try:
+            price = safe_float(candles[-1].get("close"), 0) or 0
+        except Exception:
+            price = 0
+    if price <= 0:
+        return None
+
+    # Historical next-5-session direction probability.  No future bars after
+    # the latest candle are used for the current forecast.
+    hist = []
+    for i in range(0, len(candles) - 5):
+        c = safe_float(candles[i].get("close"))
+        f = safe_float(candles[i + 5].get("close"))
+        if c and f:
+            r = f / c - 1.0
+            hist.append(r if direction == "LONG" else -r)
+    hist = hist[-1000:]
+    hist_win = sum(1 for r in hist if r > 0) / len(hist) if hist else 0.50
+    hist_avg = mean(hist) if hist else 0.0
+
+    # Current trend from daily closes.
+    closes = [safe_float(x.get("close")) for x in candles if safe_float(x.get("close")) is not None]
+    ret20 = closes[-1] / closes[-21] - 1.0 if len(closes) >= 21 else 0.0
+    trend_aligned = ret20 >= 0 if direction == "LONG" else ret20 <= 0
+
+    cyc = a.get("cyclical", {}) or {}
+    weekly_cycle = cyc.get("weekly", {}) or {}
+    cyc_quality = safe_float(weekly_cycle.get("quality"), 50) or 50
+
+    score = safe_float(a.get("score"), 0) or 0
+    confidence = safe_float(a.get("confidence"), 0) or 0
+    quality = safe_float(a.get("quality", a.get("entry_quality", 0)), 0) or 0
+    # Conservative weekly score: current engine + historical 5-day edge +
+    # daily trend + the existing cyclical weekly component.
+    trend_component = 100 if trend_aligned else 35
+    weekly_score = clamp(
+        score * 0.40 + hist_win * 100 * 0.25 + quality * 0.15
+        + trend_component * 0.10 + cyc_quality * 0.10,
+        0, 100,
+    )
+    probability = clamp(
+        0.45 * hist_win + 0.30 * ((score / 100.0) if score else 0.5)
+        + 0.15 * ((confidence / 100.0) if confidence else 0.5)
+        + 0.10 * ((cyc_quality / 100.0) if cyc_quality else 0.5),
+        0.05, 0.95,
+    )
+
+    # Weekly risk plan from daily ATR and recent structure. These levels are
+    # explicitly labelled as weekly scenario levels, not intraday triggers.
+    try:
+        av = atr(candles[-100:], 14)
+    except Exception:
+        av = 0.0
+    av = safe_float(av, 0) or 0
+    if av <= 0:
+        av = price * 0.01
+    recent = candles[-20:]
+    lows = [safe_float(x.get("low")) for x in recent if safe_float(x.get("low")) is not None]
+    highs = [safe_float(x.get("high")) for x in recent if safe_float(x.get("high")) is not None]
+    buffer = av * 0.15
+    if direction == "LONG":
+        structure_sl = min(lows) - buffer if lows else price - av
+        stop = min(price - av * 0.80, structure_sl)
+        if stop >= price:
+            stop = price - av
+        risk = price - stop
+        tp1, tp2, tp3 = price + risk * 1.5, price + risk * 2.0, price + risk * 2.5
+    else:
+        structure_sl = max(highs) + buffer if highs else price + av
+        stop = max(price + av * 0.80, structure_sl)
+        if stop <= price:
+            stop = price + av
+        risk = stop - price
+        tp1, tp2, tp3 = price - risk * 1.5, price - risk * 2.0, price - risk * 2.5
+
+    return {
+        "name": item.get("name", "N/D"), "direction": direction,
+        "score": weekly_score, "probability": probability * 100,
+        "history_win": hist_win * 100, "history_avg": hist_avg * 100,
+        "trend20": ret20 * 100, "cyc_quality": cyc_quality,
+        "price": price, "entry": price, "stop": stop,
+        "tp1": tp1, "tp2": tp2, "tp3": tp3,
+        "rr1": 1.5, "rr2": 2.0, "rr3": 2.5,
+    }
+
+
+def _telegram_weekly(ranked):
+    plans = []
+    for item in ranked:
+        plan = _telegram_weekly_plan(item)
+        if plan:
+            plans.append(plan)
+    if not plans:
+        return "⚪ Nessun dato sufficiente per una previsione settimanale."
+    plans.sort(key=lambda x: x["score"], reverse=True)
+    best = plans[0]
+    lines = [
+        f"🌍 COMMODITIES BOT v{BOT_VERSION}", "", "🏆 MIGLIORE DELLA SETTIMANA",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"🥇 {best['name']}",
+        f"{'🟢' if best['direction']=='LONG' else '🔴'} BIAS: {best['direction']}",
+        f"📊 Score settimanale: {best['score']:.1f}/100",
+        f"🎯 Probabilità stimata: {best['probability']:.1f}%",
+        f"📚 Storico 5 sessioni: {best['history_win']:.1f}% favorevole",
+        f"📈 Rendimento medio storico 5 sessioni: {best['history_avg']:+.2f}%",
+        f"📉 Trend 20 sessioni: {best['trend20']:+.2f}%",
+        f"🔄 Ciclo settimanale: {best['cyc_quality']:.0f}/100",
+        "",
+        "📐 {plan_label} SETTIMANALE — SCENARIO",
+        f"💰 Prezzo/Entry scenario: {_fmt_price(best['entry'])}",
+        f"🛑 SL: {_fmt_price(best['stop'])}",
+        f"🎯 TP1: {_fmt_price(best['tp1'])} | R/R 1:1.5",
+        f"🎯 TP2: {_fmt_price(best['tp2'])} | R/R 1:2.0",
+        f"🎯 TP3: {_fmt_price(best['tp3'])} | R/R 1:2.5",
+        "",
+        "📆 Orizzonte: prossime 5 sessioni",
+        "⚠️ Invalidazione: chiusura giornaliera oltre lo SL/scenario",
+        "🧪 PAPER ONLY — nessun ordine reale.",
+    ]
+    if len(plans) > 1:
+        lines += ["", "🏆 TOP 5 SETTIMANA"]
+        for i, p in enumerate(plans[:5], 1):
+            icon = "🟢" if p["direction"] == "LONG" else "🔴"
+            lines.append(f"{i}. {p['name']} | {icon} {p['direction']} | {p['score']:.0f} | {p['probability']:.0f}%")
+    return "\n".join(lines)
+
+
+def _telegram_monthly_plan(item):
+    """Build a longer-horizon monthly scenario from the daily history."""
+    if not item or not item.get("available"):
+        return None
+    a = item.get("analysis", {}) or {}
+    candles = item.get("candles", []) or []
+    if len(candles) < 90:
+        return None
+    direction = a.get("setup_direction") or a.get("model_signal") or "NONE"
+    if direction not in ("LONG", "SHORT"):
+        return None
+    closes = [safe_float(x.get("close")) for x in candles if safe_float(x.get("close")) is not None]
+    if len(closes) < 31:
+        return None
+    rows = []
+    for i in range(len(closes) - 20):
+        r = closes[i + 20] / closes[i] - 1.0
+        rows.append(r if direction == "LONG" else -r)
+    rows = rows[-1000:]
+    win = sum(1 for r in rows if r > 0) / len(rows) if rows else 0.5
+    avg = mean(rows) if rows else 0.0
+    score = safe_float(a.get("score"), 0) or 0
+    cyc = a.get("cyclical", {}) or {}
+    monthly_q = safe_float((cyc.get("monthly", {}) or {}).get("quality"), 50) or 50
+    monthly_score = clamp(score * .45 + win * 100 * .30 + monthly_q * .15 + safe_float(a.get("confidence"),50) * .10, 0, 100)
+    prob = clamp(0.55 * win + 0.30 * (score / 100.0) + 0.15 * (monthly_q / 100.0), .05, .95)
+    return {"name":item.get("name","N/D"),"direction":direction,"score":monthly_score,"probability":prob*100,"history_win":win*100,"history_avg":avg*100,"monthly_q":monthly_q}
+
+
+def _telegram_monthly(ranked):
+    plans = [p for p in (_telegram_monthly_plan(x) for x in ranked) if p]
+    if not plans:
+        return "⚪ Nessun dato sufficiente per una previsione mensile."
+    plans.sort(key=lambda x:x["score"], reverse=True)
+    lines=[f"🌍 COMMODITIES BOT v{BOT_VERSION}","","🏆 MIGLIORE DEL MESE","━━━━━━━━━━━━━━━━━━━━"]
+    for i,p in enumerate(plans[:5],1):
+        icon="🟢" if p["direction"]=="LONG" else "🔴"
+        lines.append(f"{i}. {p['name']} | {icon} {p['direction']} | Score {p['score']:.0f} | Prob {p['probability']:.0f}%")
+    b=plans[0]
+    lines += ["",f"🥇 SCELTA: {b['name']}",f"📚 Storico 20 sessioni: {b['history_win']:.1f}% favorevole",f"📈 Rendimento medio: {b['history_avg']:+.2f}%",f"🔄 Ciclo mensile: {b['monthly_q']:.0f}/100","","🧪 PAPER ONLY — nessun ordine reale."]
+    return "\n".join(lines)
+
+
+def telegram_set_commands():
+    """Expose the main commands in Telegram's / menu."""
+    if not TELEGRAM_BOT_TOKEN:
+        return
+    commands = [
+        {"command":"start","description":"Menu Commodities Bot"},
+        {"command":"classifica","description":"Classifica attuale"},
+        {"command":"migliore","description":"Migliore setup adesso"},
+        {"command":"settimanale","description":"Migliore commodity della settimana"},
+        {"command":"mensile","description":"Migliore commodity del mese"},
+        {"command":"segnali","description":"Segnali operativi"},
+        {"command":"help","description":"Guida ai comandi"},
+    ]
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setMyCommands",
+            json={"commands": commands}, timeout=10
+        ).raise_for_status()
+    except Exception as exc:
+        print(f"⚠️ Telegram setMyCommands: {exc}")
+
+def _telegram_best(ranked):
+    available = [x for x in (ranked or []) if x.get("available")]
+    operational = [
+        x for x in available
+        if (x.get("analysis", {}) or {}).get("operational_entry_allowed")
+    ]
+    operational.sort(
+        key=lambda x: safe_float(
+            x.get("opportunity_score_v53"),
+            x.get("ranking_score", -1),
+        ) or -1,
+        reverse=True,
+    )
+    if operational:
+        return "🎯 MIGLIORE OPPORTUNITÀ OPERATIVA\n\n" + _telegram_commodity_detail(operational[0])
+
+    if not available:
+        return "⚪ Nessuna commodity disponibile."
+
+    market = sorted(
+        available,
+        key=lambda x: safe_float(
+            x.get("market_ranking_score"),
+            (x.get("analysis", {}) or {}).get("score", 0),
+        ) or 0,
+        reverse=True,
+    )[0]
+    a = market.get("analysis", {}) or {}
+    direction = (
+        a.get("final_direction")
+        or a.get("setup_direction")
+        or a.get("model_signal")
+        or "NONE"
+    )
+    prob = safe_float(a.get("entry_probability"), 0) or 0
+    prob = prob * 100 if prob <= 1.5 else prob
+    return (
+        "🟡 NESSUNA OPPORTUNITÀ OPERATIVA\n\n"
+        "📊 SCENARIO DI MERCATO PIÙ FORTE\n"
+        f"{market.get('name','N/D')} | {direction} | "
+        f"MKT {safe_float(market.get('market_ranking_score'),0) or 0:.0f} | "
+        f"Prob {prob:.0f}%\n"
+        "⚠️ Solo informativo: NON è un segnale d'ingresso."
+    )
+
+
+def _telegram_signals(ranked):
+    candidates = []
+    for item in ranked:
+        if not item.get("available"):
+            continue
+        a = item.get("analysis", {}) or {}
+        if str(a.get("action_label", "")).upper() in ("ENTRARE", "ENTRATA POSSIBILE"):
+            candidates.append(item)
+    candidates.sort(key=lambda x: safe_float(x.get("ranking_score", x.get("analysis", {}).get("score", 0)), 0) or 0, reverse=True)
+    lines = [f"🌍 COMMODITIES BOT v{BOT_VERSION}", "", "🎯 SEGNALI", "━━━━━━━━━━━━━━━━━━━━"]
+    if not candidates:
+        lines.append("🟡 Nessun segnale operativo confermato.")
+    else:
+        for i, item in enumerate(candidates[:5], 1):
+            a = item.get("analysis", {}) or {}
+            d = a.get("setup_direction") or a.get("model_signal") or "N/D"
+            lines.append(f"{i}. {item['name']} | {'🟢' if d=='LONG' else '🔴'} {d} | {safe_float(a.get('score'),0) or 0:.0f}")
+    lines += ["", "🧪 PAPER ONLY"]
+    return "\n".join(lines)
+
+
+REQUEST_TYPE = os.getenv("REQUEST_TYPE", "").strip().upper()
+REQUEST_COMMODITY = os.getenv("REQUEST_COMMODITY", "").strip()
 
 def main():
     print()
     print("=" * 70)
     print(f"🌍 COMMODITIES BOT v{BOT_VERSION}")
-    print("HISTORICAL + INTRADAY + SCALPING ON-DEMAND + RISK/GAGARIN | PAPER ONLY")
-    print("SOYUZ 3 ENGINES | HISTORICAL → INTRADAY → SCALPING(ON-DEMAND) → SL/TP → GAGARIN")
+    print("HISTORICAL + INTRADAY + RISK/GAGARIN + NEWS/INTELLIGENCE | PAPER ONLY")
+    print("SOYUZ HYBRID | HISTORICAL → INTRADAY → SCALPING(REQUEST) → SL/TP → GAGARIN")
     print("COMMUNICATION: MORNING + USA + MATERIAL EVENTS | INTERNAL ANALYSIS SILENT")
     print("=" * 70)
     print()
@@ -9559,18 +11095,12 @@ def main():
     print("🌍 Avvio Global Market Intelligence...")
     global_intel = global_market_intelligence()
     print(f"   📰 Global news: {global_intel['count']} | fonti {global_intel.get('source_count', 0)} | mode {global_intel['mode']} | shock {global_intel['shock_intensity']:.2f}")
-    asia_report_due = should_send_asia_report()
 
     results = []
     resolved_symbols = resolve_commodity_symbols()
 
-    # In on-demand mode, a request for a single commodity analyzes only that
-    # commodity. Cross-sectional commands (classifica, migliore, weekly,
-    # monthly, segnali) keep the full universe because they need all rankings.
-    requested_scope = telegram_requested_scope(ON_DEMAND_TELEGRAM_REQUEST) if ON_DEMAND_ONLY else None
-    analysis_names = [requested_scope] if requested_scope else list(COMMODITIES)
-    if requested_scope:
-        print(f"🎯 ON-DEMAND SCOPE: {requested_scope} — analisi singola commodity")
+    # v6.0: every scheduled edition analyzes the full universe.
+    analysis_names = list(COMMODITIES)
 
     for name in analysis_names:
         symbol = resolved_symbols.get(name, COMMODITIES[name])
@@ -9864,9 +11394,9 @@ def main():
     if asia_report_due:
         try:
             send_telegram(send_asia_morning_report(global_intel, results))
-            print("📨 Telegram: briefing Asia & Oceania 05:00 inviato")
+            print("📨 Telegram: briefing Asia & Oceania 06:00 inviato")
         except Exception as exc:
-            print(f"⚠️ Asia 05:00 report non inviato: {exc}")
+            print(f"⚠️ Asia 06:00 report non inviato: {exc}")
     available_ranked = [x for x in ranked if x.get("available") and x.get("analysis",{}).get("operational_entry_allowed")]
     market_available_ranked = [x for x in market_ranked if x.get("available") and x.get("analysis",{}).get("score", -1) >= 0]
     # If there is no executable setup, still report the best MARKET opportunity,
@@ -10164,191 +11694,70 @@ def main():
         print(f"    🔎 {comp_line}")
 
 
-    if ON_DEMAND_ONLY:
-        # True on-demand mode: no periodic polling, no scheduled reports and
-        # no event push. Telegram receives exactly the requested answer.
-        if ON_DEMAND_TELEGRAM_REQUEST.strip():
-            process_telegram_on_demand(ranked)
-        save_monitor_state(ranked, best, position)
-    else:
-        # Standard scheduled/event-driven mode.
-        monitor_message = build_telegram_5m(ranked, best, position_message, position)
-        if MONITOR_SEND_FULL:
-            send_telegram(monitor_message)
+    # ========================================================
+    # v6.1 COMMUNICATION
+    # Scheduled reports remain automatic. One-shot requests are supported
+    # through REQUEST_TYPE/REQUEST_COMMODITY, without Telegram polling.
+    # A webhook/bridge can populate these variables later if desired.
+    # ========================================================
+    if REQUEST_TYPE:
+        req = REQUEST_TYPE
+        target = _telegram_find_commodity(ranked, REQUEST_COMMODITY) if REQUEST_COMMODITY else None
+        if req in ("CLASSIFICA", "RANKING"):
+            send_telegram(_telegram_command_ranking(ranked))
+            print("📨 Telegram/request: CLASSIFICA")
+        elif req in ("SETUP", "MIGLIORE", "BEST"):
+            send_telegram(_telegram_best(ranked))
+            print("📨 Telegram/request: SETUP")
+        elif req in ("SEGNALI", "SIGNALS"):
+            send_telegram(_telegram_signals(ranked))
+            print("📨 Telegram/request: SEGNALI")
+        elif req in ("SCALPING", "SCALP"):
+            if target is None and REQUEST_COMMODITY:
+                target = next((x for x in ranked if _telegram_normalize_command(x.get("name")) == _telegram_normalize_command(REQUEST_COMMODITY)), None)
+            if target is None:
+                target = ranked[0] if ranked else None
+            if target:
+                target["analysis"]["scalping"] = scalping_engine(target.get("analysis", {}) or {})
+            send_telegram(_telegram_scalping(target))
+            print("📨 Telegram/request: SCALPING")
+        elif req in ("COMMODITY", "ANALISI", "ANALYSIS"):
+            if target:
+                send_telegram(_telegram_commodity_detail(target))
+                print(f"📨 Telegram/request: ANALISI {target.get('name')}")
+            else:
+                send_telegram("❓ Commodity non trovata. Usa REQUEST_COMMODITY con un nome valido.")
+        elif req in ("PREZZO", "PRICE"):
+            if target:
+                a = target.get("analysis", {}) or {}
+                send_telegram(f"💰 {target.get('name')}\nPrezzo: {a.get('live_price', a.get('price', 'N/D'))}\nBID: {a.get('live_price_bid', 'N/D')} | ASK: {a.get('live_price_ask', 'N/D')}\n🧪 PAPER ONLY")
+            else:
+                send_telegram("❓ Commodity non trovata.")
         else:
-            print("📡 Internal monitor: Telegram alert periodico DISATTIVATO.")
-        maybe_send_session_reports(ranked, best, position_message)
-        # Telegram getUpdates is owned exclusively by the external bridge.
-        # GitHub Actions only receives workflow_dispatch inputs and sends the reply.
-        print("📡 Telegram bridge esterno: getUpdates interno DISATTIVATO.")
+            send_telegram(_telegram_help())
+    elif REPORT_TYPE in ("ASIA", "EUROPE", "USA", "EOD"):
+        if REPORT_TYPE == "ASIA":
+            message = send_asia_morning_report(global_intel, results)
+            send_telegram(message)
+            print("📨 Telegram: report ASIA & OCEANIA inviato")
+        elif REPORT_TYPE == "EUROPE":
+            send_telegram(_session_message("🌅 EUROPE — MARKET REPORT", ranked, best, position_message))
+            print("📨 Telegram: report EUROPA inviato")
+        elif REPORT_TYPE == "USA":
+            send_telegram(_session_message("🇺🇸 USA — MARKET REPORT", ranked, best, position_message))
+            print("📨 Telegram: report USA inviato")
+        elif REPORT_TYPE == "EOD":
+            eod_report = run_end_of_day_test(force=True)
+            if eod_report:
+                send_telegram(eod_report)
+                print("📨 Telegram: report EOD inviato")
+            else:
+                print("📊 EOD: nessun dato nuovo da valutare")
+    else:
+        print(f"📡 REPORT_TYPE={REPORT_TYPE or 'AUTO'} — nessun invio Telegram in questa esecuzione")
 
-        # ENTRY NOW: only after final Gagarin authorization in scheduled mode.
-        if ENTRY_NOW_ALERT_ENABLED and not position:
-            for _entry_item in ranked:
-                _entry_alert = gagarin_entry_now_alert(_entry_item)
-                if _entry_alert:
-                    send_telegram(_entry_alert)
-                    print(_entry_alert)
-                    break
-
-        save_monitor_state(ranked, best, position)
-
-        # Fine giornata: valuta le previsioni maturate e invia il report una sola volta.
-        eod_report = run_end_of_day_test()
-        if eod_report:
-            send_telegram(eod_report)
-            print(eod_report)
-
-        # Separate alert: only for the commodity currently held.
-        if position:
-            held = next((x for x in results if x.get("name") == position.get("name") and x.get("available")), None)
-            if held:
-                alert = build_reversal_alert(position, held.get("analysis", {}))
-                if alert and EVENT_ALERTS_ENABLED:
-                    _st = _communication_state()
-                    _key = f"reversal:{position.get('name')}:{position.get('direction')}"
-                    _sig = alert.replace("\n", "|")
-                    if _st.get("last_event_signature", {}).get(_key) != _sig:
-                        send_telegram(alert)
-                        ev = _st.setdefault("last_event_signature", {}); ev[_key] = _sig
-                        _save_communication_state(_st)
-
-    print()
-    print("=" * 70)
-    print(f"⚠️ v{BOT_VERSION}: analisi quantitativa, non garanzia di profitto. PAPER ONLY.")
-    print("=" * 70)
-
-
-
-# ========================= ENTRY NOW ALERT ENGINE =========================
-ENTRY_NOW_ALERT_ENABLED = os.getenv("ENTRY_NOW_ALERT_ENABLED", "1") == "1"
-ENTRY_NOW_COOLDOWN_SECONDS = int(os.getenv("ENTRY_NOW_COOLDOWN_SECONDS", "1800"))
-ENTRY_NOW_MIN_SCORE = float(os.getenv("ENTRY_NOW_MIN_SCORE", "62"))
-ENTRY_NOW_MIN_QUALITY = float(os.getenv("MIN_ENTRY_QUALITY", "55"))
-ENTRY_NOW_MIN_CONFIDENCE = float(os.getenv("MIN_ENTRY_CONFIDENCE", "60"))
-ENTRY_NOW_MIN_PROBABILITY = float(os.getenv("MIN_ENTRY_PROBABILITY", "62"))
-ENTRY_NOW_MIN_RR = float(os.getenv("MIN_ENTRY_RR", "2.5"))
-_ENTRY_NOW_LAST_ALERT = {}
-
-def _entry_now_float(d, *keys, default=0.0):
-    if not isinstance(d, dict):
-        return default
-    for k in keys:
-        try:
-            v = d.get(k)
-            if v is not None:
-                return float(v)
-        except (TypeError, ValueError):
-            pass
-    return default
-
-def gagarin_entry_now_check(item):
-    if not isinstance(item, dict):
-        return {"state": "WAIT", "authorized": False, "blockers": ["NO_ITEM"]}
-    a = item.get("analysis", {}) or {}
-    if not isinstance(a, dict):
-        a = {}
-    g = a.get("gagarin", {}) or {}
-    if not isinstance(g, dict):
-        g = {}
-    policy = g.get("entry_policy", {}) or {}
-    if not isinstance(policy, dict):
-        policy = {}
-
-    direction = str(a.get("direction_final") or a.get("signal") or policy.get("direction") or "").upper()
-    if direction not in {"LONG", "SHORT"}:
-        return {"state": "WAIT", "authorized": False, "blockers": ["NO_DIRECTION"]}
-
-    state = str(a.get("gagarin_state") or policy.get("state") or "").upper()
-    quality = _entry_now_float(a, "quality", "entry_quality")
-    confidence = _entry_now_float(a, "confidence", "entry_confidence")
-    probability = _entry_now_float(a, "probability_final", "probability", "entry_probability")
-    score = _entry_now_float(a, "score", "final_score")
-    rr = _entry_now_float(a, "rr", "risk_reward", "rr_tp3")
-
-    if not rr:
-        entry = _entry_now_float(a, "entry", "entry_price")
-        sl = _entry_now_float(a, "sl", "stop_loss")
-        tp3 = _entry_now_float(a, "tp3")
-        risk = abs(entry - sl) if entry and sl else 0.0
-        if risk and tp3:
-            rr = abs(tp3 - entry) / risk
-
-    blockers = []
-    authorized = bool(policy.get("authorized") or policy.get("entry_authorized") or a.get("operational_entry_allowed"))
-    if state not in {"READY", "ENTRY", "ENTRY_NOW", "AUTHORIZED"} and not authorized:
-        blockers.append("GAGARIN_NOT_READY")
-    if probability < ENTRY_NOW_MIN_PROBABILITY: blockers.append("PROBABILITY")
-    if quality < ENTRY_NOW_MIN_QUALITY: blockers.append("QUALITY")
-    if confidence < ENTRY_NOW_MIN_CONFIDENCE: blockers.append("CONFIDENCE")
-    if score and score < ENTRY_NOW_MIN_SCORE: blockers.append("SCORE")
-    if rr < ENTRY_NOW_MIN_RR: blockers.append("RR")
-
-    risk = g.get("risk", {})
-    risk_state = ""
-    if isinstance(risk, dict):
-        risk_state = str(risk.get("state") or "").upper()
-    risk_state = risk_state or str(a.get("risk_state") or "").upper()
-    if any(x in risk_state for x in ("ALERT", "BLOCK", "DANGER", "HIGH_RISK")):
-        blockers.append("RISK")
-
-    safety = g.get("safety", {})
-    if isinstance(safety, dict) and safety.get("ok") is False:
-        blockers.append("SAFETY")
-
-    trigger = g.get("trigger", {})
-    if isinstance(trigger, dict):
-        if not bool(trigger.get("confirmed")):
-            blockers.append("TRIGGER")
-    elif not bool(trigger):
-        blockers.append("TRIGGER")
-
-    blockers = list(dict.fromkeys(blockers))
-    if blockers:
-        return {"state": "WAIT", "authorized": False, "direction": direction,
-                "quality": quality, "confidence": confidence, "probability": probability,
-                "score": score, "rr": rr, "blockers": blockers}
-    return {"state": "ENTRY_NOW", "authorized": True, "direction": direction,
-            "quality": quality, "confidence": confidence, "probability": probability,
-            "score": score, "rr": rr, "blockers": []}
-
-def gagarin_entry_now_alert(item):
-    if not ENTRY_NOW_ALERT_ENABLED:
-        return None
-    d = gagarin_entry_now_check(item)
-    if d.get("state") != "ENTRY_NOW":
-        return None
-
-    import time as _entry_now_time
-    name = item.get("name") or item.get("commodity") or item.get("label") or "Commodity"
-    key = f"{name}:{d.get('direction')}"
-    now = _entry_now_time.time()
-    if now - _ENTRY_NOW_LAST_ALERT.get(key, 0.0) < ENTRY_NOW_COOLDOWN_SECONDS:
-        return None
-    _ENTRY_NOW_LAST_ALERT[key] = now
-
-    a = item.get("analysis", {}) or {}
-    entry = _entry_now_float(a, "entry", "entry_price")
-    sl = _entry_now_float(a, "sl", "stop_loss")
-    tp1 = _entry_now_float(a, "tp1")
-    tp2 = _entry_now_float(a, "tp2")
-    tp3 = _entry_now_float(a, "tp3")
-    return "\n".join([
-        "🚨 ENTRA ORA — GAGARIN",
-        "",
-        f"📌 {name}",
-        "🟢 LONG" if d["direction"] == "LONG" else "🔴 SHORT",
-        f"💰 Entry: {entry:.4f}" if entry else "💰 Entry: N/D",
-        f"🛑 SL: {sl:.4f}" if sl else "🛑 SL: N/D",
-        f"🎯 TP1: {tp1:.4f}" if tp1 else "🎯 TP1: N/D",
-        f"🎯 TP2: {tp2:.4f}" if tp2 else "🎯 TP2: N/D",
-        f"🎯 TP3: {tp3:.4f}" if tp3 else "🎯 TP3: N/D",
-        f"📐 R/R: {d['rr']:.2f}",
-        "",
-        "✅ GAGARIN: ENTRY AUTHORIZED",
-        "🔥 Trigger confermato",
-        "🧪 PAPER ONLY",
-    ])
+    # No Telegram polling via Telegram API: scheduled reports and explicit one-shot request hooks only.
+    save_monitor_state(ranked, best, position)
 
 
 if __name__ == "__main__":
