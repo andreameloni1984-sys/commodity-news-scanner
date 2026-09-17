@@ -1,4 +1,4 @@
-name: Commodities Bot v6.1.3 - Soyuz Gagarin Hybrid
+name: Commodities Bot v6.1.4 - Soyuz Gagarin Autonomous
 
 on:
   workflow_dispatch:
@@ -34,7 +34,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: commodities-bot-v6-1-hybrid
+  group: commodities-bot-v6-1-4
   cancel-in-progress: false
 
 jobs:
@@ -54,60 +54,55 @@ jobs:
         run: |
           pip install requests
 
-      - name: Determine report type and request
+      - name: Determine execution mode
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
           REQUEST_TYPE_INPUT: ${{ github.event.inputs.request_type }}
           REQUEST_COMMODITY_INPUT: ${{ github.event.inputs.request_commodity }}
-
+          SCHEDULE: ${{ github.event.schedule }}
         run: |
           echo "REPORT_TYPE=NONE" >> "$GITHUB_ENV"
           echo "REQUEST_TYPE=$REQUEST_TYPE_INPUT" >> "$GITHUB_ENV"
           echo "REQUEST_COMMODITY=$REQUEST_COMMODITY_INPUT" >> "$GITHUB_ENV"
 
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-
             if [ -n "$REQUEST_TYPE_INPUT" ]; then
               echo "RUN_MODE=ON_DEMAND" >> "$GITHUB_ENV"
-              echo "Manual request: $REQUEST_TYPE_INPUT | commodity: $REQUEST_COMMODITY_INPUT"
             else
               echo "RUN_MODE=MANUAL_TEST" >> "$GITHUB_ENV"
-              echo "Manual test: no report requested."
             fi
-
             exit 0
           fi
 
           echo "RUN_MODE=SCHEDULED" >> "$GITHUB_ENV"
 
-          LOCAL_TIME="$(TZ=Europe/Rome date '+%H:%M')"
-
-          case "$LOCAL_TIME" in
-            "05:00")
+          # Il cron determina il report.
+          # NON viene usato l'orologio corrente di GitHub.
+          case "$SCHEDULE" in
+            "0 3 * * 1-5"|"0 4 * * 1-5")
               echo "REPORT_TYPE=ASIA" >> "$GITHUB_ENV"
               ;;
 
-            "08:00")
+            "0 6 * * 1-5"|"0 7 * * 1-5")
               echo "REPORT_TYPE=EUROPE" >> "$GITHUB_ENV"
               ;;
 
-            "14:30")
+            "30 12 * * 1-5"|"30 13 * * 1-5")
               echo "REPORT_TYPE=USA" >> "$GITHUB_ENV"
               ;;
 
-            "21:00")
+            "0 19 * * 1-5"|"0 20 * * 1-5")
               echo "REPORT_TYPE=EOD" >> "$GITHUB_ENV"
               ;;
 
             *)
               echo "REPORT_TYPE=NONE" >> "$GITHUB_ENV"
+              echo "WARNING: unknown schedule: $SCHEDULE"
               ;;
           esac
 
-          echo "Rome local time: $LOCAL_TIME"
-
-      - name: Run Commodities Bot v6.1.3
+      - name: Run Commodities Bot v6.1.4
         env:
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
 
@@ -119,12 +114,15 @@ jobs:
           SIFTING_LIVE_MAX_AGE_SECONDS: "30"
           SIFTING_TIMEOUT_SECONDS: "8"
 
+          # Limita le richieste live per evitare i 429
+          SIFTING_MAX_LIVE_QUOTES_PER_RUN: "6"
+
           NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
 
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
-          COMMUNICATION_MODE: "SCHEDULED_ONLY"
+          COMMUNICATION_MODE: "HYBRID"
 
           RUN_MODE: ${{ env.RUN_MODE }}
           REPORT_TYPE: ${{ env.REPORT_TYPE }}
@@ -153,30 +151,34 @@ jobs:
           SL_STRUCTURE_BUFFER_ATR: "0.15"
           SL_MIN_ATR: "0.80"
 
+          # STORICO / KNOWLEDGE
           KNOWLEDGE_ENGINE_V5_ENABLED: "1"
           PRE_USA_ENGINE_ENABLED: "1"
           LONG_TERM_ENABLED: "1"
           INTRADAY_JOURNAL_ALL: "1"
 
+          # NEWS / INTELLIGENCE
           MARKET_INTELLIGENCE_ENABLED: "1"
           EXTERNAL_INTELLIGENCE_ENABLED: "1"
           POLITICAL_IMPACT_ENABLED: "1"
           GEOPOLITICAL_IMPACT_ENABLED: "1"
 
+          # FONDAMENTALI / MERCATO
           COMMODITY_FUNDAMENTALS_ENABLED: "1"
           MARKET_REGIME_ENABLED: "1"
           CROSS_COMMODITY_ANALYSIS_ENABLED: "1"
           VOLATILITY_CONTEXT_ENABLED: "1"
           FUTURES_STRUCTURE_ENABLED: "1"
 
+          # FONTI SPECIALISTICHE
           CFTC_ENABLED: "1"
           EIA_ENABLED: "1"
           WEATHER_ENABLED: "1"
           DISASTER_ENABLED: "1"
           SOLE24_ENABLED: "1"
 
+          # OPPORTUNITÀ / SCALPING
           EARLY_OPPORTUNITY_ENABLED: "1"
           SCALPING_ENABLED: "1"
 
-        run: |
-          python commodity_bot.py
+        run: python commodity_bot.py
