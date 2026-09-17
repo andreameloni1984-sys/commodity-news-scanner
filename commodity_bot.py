@@ -62,7 +62,7 @@ KNOWLEDGE_DELTA_CAP = float(os.getenv("KNOWLEDGE_DELTA_CAP", "4.0"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "6.1.4-SOYUZ-GAGARIN-AUTONOMOUS"
+BOT_VERSION = "6.1.8-SOYUZ-GAGARIN-AUTONOMOUS"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -8493,7 +8493,7 @@ def intelligence_v41_summary(analysis):
 # adapters; they no longer define the architecture by themselves.
 # PAPER ONLY: this layer never places broker orders.
 
-GAGARIN_ARCHITECTURE_VERSION = "6.1.4-SOYUZ-GAGARIN-AUTONOMOUS-1"
+GAGARIN_ARCHITECTURE_VERSION = "6.1.8-SOYUZ-GAGARIN-AUTONOMOUS-1"
 GAGARIN_FINAL_AUTHORITY = True
 GAGARIN_REQUIRE_LIVE_FOR_ENTRY = os.getenv("GAGARIN_REQUIRE_LIVE_FOR_ENTRY", "1") == "1"
 SIFTING_CACHE_TTL_SECONDS = float(os.getenv("SIFTING_CACHE_TTL_SECONDS", "20"))
@@ -11246,7 +11246,7 @@ def main():
         if _item.get("available"):
             finalize_v26_analysis(_item["analysis"])
 
-    # v6.1.4: SiftingIO LIVE PRICE — throttled candidate-first policy.
+    # v6.1.8: SiftingIO LIVE PRICE — throttled candidate-first policy.
     # The full universe is still analyzed from historical/intraday data.
     # Live quotes are requested only for the strongest candidates (plus an
     # explicitly requested commodity), preventing 21 sequential quote calls
