@@ -1,38 +1,103 @@
-name: Commodities Bot v6.1.5 - Soyuz Gagarin Autonomous
+name: Commodities Bot v6.1.6
 
 on:
   workflow_dispatch:
     inputs:
       request_type:
-        description: "CLASSIFICA / SETUP / SEGNALI / COMMODITY / PREZZO / SCALPING"
+        description: "CLASSIFICA / SETUP / SEGNALI / COMMODITY / ANALISI / PREZZO / SCALPING"
         required: false
         default: ""
-
       request_commodity:
-        description: "Commodity, es. Oro / Brent / Benzina"
+        description: "Commodity richiesta"
         required: false
         default: ""
 
   schedule:
-    - cron: "0 3 * * 1-5"
-    - cron: "0 4 * * 1-5"
-    - cron: "0 6 * * 1-5"
-    - cron: "0 7 * * 1-5"
-    - cron: "30 12 * * 1-5"
-    - cron: "30 13 * * 1-5"
-    - cron: "0 19 * * 1-5"
-    - cron: "0 20 * * 1-5"
+    # 05:00 Europe/Rome
+    - cron: "0 3 * * *"
+    - cron: "0 4 * * *"
 
-permissions:
-  contents: read
+    # 08:00 Europe/Rome
+    - cron: "0 6 * * *"
+    - cron: "0 7 * * *"
 
-concurrency:
-  group: commodities-bot-v6-1-5
-  cancel-in-progress: false
+    # 14:30 Europe/Rome
+    - cron: "30 12 * * *"
+    - cron: "30 13 * * *"
+
+    # 21:00 Europe/Rome
+    - cron: "0 19 * * *"
+    - cron: "0 20 * * *"
 
 jobs:
-  run:
+  commodities:
     runs-on: ubuntu-latest
+
+    env:
+      REPORT_TYPE: ${{ github.event.schedule == '0 3 * * *' && 'ASIA' || github.event.schedule == '0 4 * * *' && 'ASIA' || github.event.schedule == '0 6 * * *' && 'EUROPE' || github.event.schedule == '0 7 * * *' && 'EUROPE' || github.event.schedule == '30 12 * * *' && 'USA' || github.event.schedule == '30 13 * * *' && 'USA' || github.event.schedule == '0 19 * * *' && 'EOD' || github.event.schedule == '0 20 * * *' && 'EOD' || 'NONE' }}
+
+      REQUEST_TYPE: ${{ github.event.inputs.request_type || '' }}
+      REQUEST_COMMODITY: ${{ github.event.inputs.request_commodity || '' }}
+
+      RUN_MODE: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.request_type != '' && 'ON_DEMAND' || 'MANUAL_TEST') || 'SCHEDULED' }}
+
+      TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+      SIFTING_API_KEY: ${{ secrets.SIFTING_API_KEY }}
+      SIFTING_BASE_URL: https://api.sifting.io
+      SIFTING_LIVE_ENABLED: 1
+      SIFTING_LIVE_REQUIRED: 0
+      SIFTING_LIVE_MAX_AGE_SECONDS: 30
+      SIFTING_TIMEOUT_SECONDS: 8
+      SIFTING_MAX_LIVE_QUOTES_PER_RUN: 6
+
+      NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
+
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+      COMMUNICATION_MODE: HYBRID
+      PAPER_TRADING_ONLY: 1
+      DEMO_TRADING_ENABLED: 0
+
+      MONITOR_INTERVAL_MINUTES: 15
+      MONITOR_SEND_FULL: 0
+      SILENT_INTERNAL_ANALYSIS: 1
+      EVENT_ALERTS_ENABLED: 0
+
+      MIN_ENTRY_PROBABILITY: 62
+      MIN_ENTRY_QUALITY: 55
+      MIN_ENTRY_CONFIDENCE: 60
+
+      MIN_ENTRY_RR: 2.5
+      MIN_ENTRY_RR_TP1: 1.5
+      MIN_ENTRY_RR_TP2: 2.0
+      MIN_ENTRY_RR_TP3: 2.5
+
+      MAX_ENTRY_STOP_ATR: 2.5
+      SL_STRUCTURE_BUFFER_ATR: 0.15
+      SL_MIN_ATR: 0.80
+
+      KNOWLEDGE_ENGINE_V5_ENABLED: 1
+      PRE_USA_ENGINE_ENABLED: 1
+      LONG_TERM_ENABLED: 1
+      INTRADAY_JOURNAL_ALL: 1
+
+      MARKET_INTELLIGENCE_ENABLED: 1
+      EXTERNAL_INTELLIGENCE_ENABLED: 1
+      POLITICAL_IMPACT_ENABLED: 1
+      GEOPOLITICAL_IMPACT_ENABLED: 1
+      COMMODITY_FUNDAMENTALS_ENABLED: 1
+      MARKET_REGIME_ENABLED: 1
+      CROSS_COMMODITY_ANALYSIS_ENABLED: 1
+      VOLATILITY_CONTEXT_ENABLED: 1
+      FUTURES_STRUCTURE_ENABLED: 1
+      CFTC_ENABLED: 1
+      EIA_ENABLED: 1
+      WEATHER_ENABLED: 1
+      DISASTER_ENABLED: 1
+      SOLE24_ENABLED: 1
+      EARLY_OPPORTUNITY_ENABLED: 1
+      SCALPING_ENABLED: 1
 
     steps:
       - name: Checkout
@@ -44,113 +109,14 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install requests
-
-      - name: Determine execution
-        shell: bash
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          REQUEST_TYPE_INPUT: ${{ github.event.inputs.request_type }}
-          REQUEST_COMMODITY_INPUT: ${{ github.event.inputs.request_commodity }}
-          SCHEDULE: ${{ github.event.schedule }}
         run: |
-          echo "REPORT_TYPE=NONE" >> "$GITHUB_ENV"
-          echo "REQUEST_TYPE=$REQUEST_TYPE_INPUT" >> "$GITHUB_ENV"
-          echo "REQUEST_COMMODITY=$REQUEST_COMMODITY_INPUT" >> "$GITHUB_ENV"
+          python -m pip install --upgrade pip
+          pip install requests pandas numpy feedparser
 
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            if [ -n "$REQUEST_TYPE_INPUT" ]; then
-              echo "RUN_MODE=ON_DEMAND" >> "$GITHUB_ENV"
-            else
-              echo "RUN_MODE=MANUAL_TEST" >> "$GITHUB_ENV"
-            fi
-          else
-            echo "RUN_MODE=SCHEDULED" >> "$GITHUB_ENV"
-
-            case "$SCHEDULE" in
-              "0 3 * * 1-5"|"0 4 * * 1-5")
-                echo "REPORT_TYPE=ASIA" >> "$GITHUB_ENV"
-                ;;
-              "0 6 * * 1-5"|"0 7 * * 1-5")
-                echo "REPORT_TYPE=EUROPE" >> "$GITHUB_ENV"
-                ;;
-              "30 12 * * 1-5"|"30 13 * * 1-5")
-                echo "REPORT_TYPE=USA" >> "$GITHUB_ENV"
-                ;;
-              "0 19 * * 1-5"|"0 20 * * 1-5")
-                echo "REPORT_TYPE=EOD" >> "$GITHUB_ENV"
-                ;;
-            esac
-          fi
+      - name: Install bot
+        run: |
+          cp commodity_bot_v6.1.6_SOYUZ_GAGARIN_AUTONOMOUS.py commodity_bot.py
 
       - name: Run Commodities Bot
-        env:
-          TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
-          SIFTING_API_KEY: ${{ secrets.SIFTING_API_KEY }}
-          SIFTING_BASE_URL: https://api.sifting.io
-
-          SIFTING_LIVE_ENABLED: "1"
-          SIFTING_LIVE_REQUIRED: "0"
-          SIFTING_LIVE_MAX_AGE_SECONDS: "30"
-          SIFTING_TIMEOUT_SECONDS: "8"
-          SIFTING_MAX_LIVE_QUOTES_PER_RUN: "6"
-
-          NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
-
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-
-          COMMUNICATION_MODE: "HYBRID"
-
-          RUN_MODE: ${{ env.RUN_MODE }}
-          REPORT_TYPE: ${{ env.REPORT_TYPE }}
-          REQUEST_TYPE: ${{ env.REQUEST_TYPE }}
-          REQUEST_COMMODITY: ${{ env.REQUEST_COMMODITY }}
-
-          PAPER_TRADING_ONLY: "1"
-          DEMO_TRADING_ENABLED: "0"
-
-          MONITOR_INTERVAL_MINUTES: "15"
-          MONITOR_SEND_FULL: "0"
-          SILENT_INTERNAL_ANALYSIS: "1"
-          EVENT_ALERTS_ENABLED: "0"
-
-          MIN_ENTRY_PROBABILITY: "62"
-          MIN_ENTRY_QUALITY: "55"
-          MIN_ENTRY_CONFIDENCE: "60"
-
-          MIN_ENTRY_RR: "2.5"
-          MIN_ENTRY_RR_TP1: "1.5"
-          MIN_ENTRY_RR_TP2: "2.0"
-          MIN_ENTRY_RR_TP3: "2.5"
-
-          MAX_ENTRY_STOP_ATR: "2.5"
-          SL_STRUCTURE_BUFFER_ATR: "0.15"
-          SL_MIN_ATR: "0.80"
-
-          KNOWLEDGE_ENGINE_V5_ENABLED: "1"
-          PRE_USA_ENGINE_ENABLED: "1"
-          LONG_TERM_ENABLED: "1"
-          INTRADAY_JOURNAL_ALL: "1"
-
-          MARKET_INTELLIGENCE_ENABLED: "1"
-          EXTERNAL_INTELLIGENCE_ENABLED: "1"
-          POLITICAL_IMPACT_ENABLED: "1"
-          GEOPOLITICAL_IMPACT_ENABLED: "1"
-
-          COMMODITY_FUNDAMENTALS_ENABLED: "1"
-          MARKET_REGIME_ENABLED: "1"
-          CROSS_COMMODITY_ANALYSIS_ENABLED: "1"
-          VOLATILITY_CONTEXT_ENABLED: "1"
-          FUTURES_STRUCTURE_ENABLED: "1"
-
-          CFTC_ENABLED: "1"
-          EIA_ENABLED: "1"
-          WEATHER_ENABLED: "1"
-          DISASTER_ENABLED: "1"
-          SOLE24_ENABLED: "1"
-
-          EARLY_OPPORTUNITY_ENABLED: "1"
-          SCALPING_ENABLED: "1"
-
-        run: python commodity_bot.py
+        run: |
+          python commodity_bot.py
