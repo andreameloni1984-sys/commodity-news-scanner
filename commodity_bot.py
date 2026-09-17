@@ -10177,7 +10177,11 @@ def main():
         else:
             print("📡 Internal monitor: Telegram alert periodico DISATTIVATO.")
         maybe_send_session_reports(ranked, best, position_message)
-        process_telegram_commands(ranked)
+        # Legacy long-polling is intentionally disabled in the GitHub
+        # Actions architecture. The Telegram bridge owns getUpdates and
+        # forwards commands through workflow_dispatch inputs.
+        if os.getenv("TELEGRAM_COMMANDS_ENABLED", "0") == "1":
+            process_telegram_commands(ranked)
 
         # ENTRY NOW: only after final Gagarin authorization in scheduled mode.
         if ENTRY_NOW_ALERT_ENABLED and not position:
@@ -10350,3 +10354,4 @@ def gagarin_entry_now_alert(item):
 
 if __name__ == "__main__":
     main()
+ 
