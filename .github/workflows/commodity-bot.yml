@@ -1,4 +1,4 @@
-name: Commodities Bot v6.1.7 - SOYUZ GAGARIN
+name: Commodities Bot v6.1.8 - SOYUZ GAGARIN
 
 on:
   workflow_dispatch:
@@ -14,19 +14,19 @@ on:
         default: ""
 
   schedule:
-    # ASIA — 05:00 Europe/Rome
+    # ASIA 05:00 Europe/Rome
     - cron: "0 3 * * *"
     - cron: "0 4 * * *"
 
-    # EUROPE — 08:00 Europe/Rome
+    # EUROPE 08:00 Europe/Rome
     - cron: "0 6 * * *"
     - cron: "0 7 * * *"
 
-    # USA — 14:30 Europe/Rome
+    # USA 14:30 Europe/Rome
     - cron: "30 12 * * *"
     - cron: "30 13 * * *"
 
-    # EOD — 21:00 Europe/Rome
+    # EOD 21:00 Europe/Rome
     - cron: "0 19 * * *"
     - cron: "0 20 * * *"
 
@@ -106,7 +106,6 @@ jobs:
       SCALPING_ENABLED: 1
 
     steps:
-
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -123,8 +122,10 @@ jobs:
 
       - name: Verify bot
         run: |
+          echo "Repository:"
           pwd
-          ls -lah
+          echo "Bot:"
+          ls -lh commodity_bot.py
           test -f commodity_bot.py
 
       - name: Python compile check
