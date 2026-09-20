@@ -68,9 +68,7 @@ def _first(
     *keys: str,
     default: Any = None,
 ) -> Any:
-
     for key in keys:
-
         if key in data and data[key] is not None:
             return data[key]
 
@@ -91,11 +89,10 @@ class SoyuzAdapter:
         self,
         fusion: Optional[SoyuzFusion] = None,
     ) -> None:
-
         self.fusion = fusion or SoyuzFusion()
 
     # ========================================================
-    # MOTOR 1
+    # MOTOR 1 — MACRO / FUNDAMENTAL
     # ========================================================
 
     def build_macro_data(
@@ -183,7 +180,7 @@ class SoyuzAdapter:
         }
 
     # ========================================================
-    # MOTOR 2
+    # MOTOR 2 — MARKET INTELLIGENCE
     # ========================================================
 
     def build_intelligence_data(
@@ -265,8 +262,6 @@ class SoyuzAdapter:
         analysis: Dict[str, Any],
     ) -> Dict[str, Any]:
         """
-        IMPORTANTISSIMO:
-
         Non inventiamo un gate TRUE.
 
         Se il bot non fornisce esplicitamente l'informazione,
@@ -384,13 +379,6 @@ def evaluate_with_soyuz(
     """
     Funzione semplice da usare successivamente dentro
     commodity_bot.py.
-
-    Esempio:
-
-        decision = evaluate_with_soyuz(
-            "Gold",
-            analysis
-        )
     """
 
     adapter = SoyuzAdapter()
