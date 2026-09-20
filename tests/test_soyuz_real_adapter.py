@@ -160,4 +160,4 @@ def test_real_adapter_builders_do_not_invent_missing_macro_data():
 
     assert gagarin["regime_ok"] is True
     assert gagarin["structure_ok"] is False
-    assert gagarin["trigger_ok"] is False
+    assert gagarin["trigger_ok"]  is False
