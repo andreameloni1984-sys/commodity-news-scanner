@@ -21,11 +21,6 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from soyuz_adapter import SoyuzAdapter, decision_summary
 
-try:
-    from soyuz_social_intelligence import collect_social_intelligence
-except Exception:
-    collect_social_intelligence = None
-
 
 # ============================================================
 # GENERIC HELPERS
@@ -528,10 +523,49 @@ def extract_setup_ok(
 # TRIGGER GATE
 # ============================================================
 
+def extract_technical_trigger_ok(analysis: Dict[str, Any]) -> bool:
+    """Read only the lower-level technical trigger, excluding prediction authority."""
+    trigger_value = analysis.get("entry_trigger")
+    if isinstance(trigger_value, dict):
+        value = _first(
+            trigger_value,
+            "confirmed",
+            "ok",
+            "valid",
+            "authorized",
+            "trigger_confirmed",
+            default=None,
+        )
+        if value is not None:
+            return _bool(value)
+        state = _upper(_first(trigger_value, "state", "status", "label", default=""))
+        return state in {"CONFIRMED", "READY", "VALID", "ACTIVE", "TRIGGERED"}
+    if trigger_value is not None:
+        return _bool(trigger_value)
+    return False
+
+
+def extract_prediction_trigger_ok(analysis: Dict[str, Any]) -> Optional[bool]:
+    prediction = analysis.get("prediction_authority_v531")
+    if not isinstance(prediction, dict):
+        return None
+    value = _first(prediction, "trigger_confirmed", "confirmed", default=None)
+    if value is None:
+        return None
+    return _bool(value)
+
+
 def extract_trigger_ok(
     analysis: Dict[str, Any],
     gagarin: Dict[str, Any],
 ) -> bool:
+    # Prediction Authority v5.3.1 is the final trigger authority.
+    # A lower-level technical trigger (entry_trigger) must not override a
+    # prediction-level FALSE. This is diagnostic only; it never authorizes an entry.
+    prediction_value = extract_prediction_trigger_ok(analysis)
+    if prediction_value is not None:
+        return prediction_value
+
     explicit = _first(
         analysis,
         "gagarin_trigger_ok",
@@ -915,27 +949,6 @@ def build_intelligence_data(
         direction,
     )
 
-    social = _dict(analysis.get("social_intelligence"))
-    social_signal = _dict(social.get("signal"))
-    social_score = _num(social_signal.get("score"), 0.0)
-    social_confidence = _bounded(social_signal.get("confidence"), 0.0, 100.0)
-    # Social is evidence, never an entry trigger. Blend it only into SOYUZ's
-    # intelligence/news context and keep its influence bounded.
-    social_news_score = 50.0 + (social_score * 0.5)
-    base_news_score = _extract_score_from_nested(
-        analysis,
-        (
-            "news_score",
-            "news_confirmation_score",
-            "intelligence_score",
-        ),
-    )
-    if social_confidence > 0.0:
-        blend = min(0.30, social_confidence / 333.0)
-        news_score = (base_news_score * (1.0 - blend)) + (social_news_score * blend)
-    else:
-        news_score = base_news_score
-
     return {
         "direction": direction,
         "mtf_score": mtf_score,
@@ -947,7 +960,14 @@ def build_intelligence_data(
                 "cross_market_score",
             ),
         ),
-        "news_score": _bounded(news_score),
+        "news_score": _extract_score_from_nested(
+            analysis,
+            (
+                "news_score",
+                "news_confirmation_score",
+                "intelligence_score",
+            ),
+        ),
         "futures_score": _extract_score_from_nested(
             analysis,
             (
@@ -1133,8 +1153,13 @@ def build_bot_snapshot(
         "safety_ok": extract_safety_ok(analysis, gagarin),
     }
 
+    technical_trigger = extract_technical_trigger_ok(analysis)
+    prediction_trigger = extract_prediction_trigger_ok(analysis)
+
     return {
         "direction": extract_direction(analysis),
+        "technical_trigger_ok": technical_trigger,
+        "prediction_trigger_ok": prediction_trigger if prediction_trigger is not None else technical_trigger,
         "operational_entry_allowed": _bool(
             analysis.get("operational_entry_allowed"),
             default=False,
@@ -1246,16 +1271,22 @@ def diagnostic_line(result: Dict[str, Any]) -> str:
             "DIVERGE": "DIFF",
         }.get(_upper(layers.get(name), "UNKNOWN"), "?")
 
+    blockers = _list(soyuz.get("gagarin_blockers"))
+    first_blocker = blockers[0] if blockers else "NONE"
+    technical_trigger = _bool(bot.get("technical_trigger_ok"), False)
+    prediction_trigger = _bool(bot.get("prediction_trigger_ok"), False)
+    trigger_disagreement = technical_trigger != prediction_trigger
+
     return (
         f"SOYUZ DIAG | {commodity} | "
         f"BOT={_text(bot.get('direction'), 'WAIT')} | "
         f"SOYUZ={_text(soyuz.get('direction'), 'WAIT')} | "
-        f"REG={mark('REGIME')} "
-        f"STR={mark('STRUCTURE')} "
-        f"SET={mark('SETUP')} "
-        f"TRG={mark('TRIGGER')} "
-        f"RISK={mark('RISK')} "
-        f"SAFE={mark('SAFETY')} | "
+        f"REG={mark('REGIME')} STR={mark('STRUCTURE')} SET={mark('SETUP')} "
+        f"TRG={mark('TRIGGER')} RISK={mark('RISK')} SAFE={mark('SAFETY')} | "
+        f"TECH_TRG={'OK' if technical_trigger else 'NO'} "
+        f"PRED_TRG={'OK' if prediction_trigger else 'NO'} "
+        f"TRG_DIFF={'YES' if trigger_disagreement else 'NO'} | "
+        f"FIRST_BLOCKER={first_blocker} | "
         f"AUTH={'DIFF' if cmp.get('entry_authority_divergence') else 'OK'} | "
         f"{_text(cmp.get('primary_status'), 'UNKNOWN')}"
     )
@@ -1434,14 +1465,6 @@ def run_shadow_for_results(
 
     output: List[Dict[str, Any]] = []
 
-    social_context: Dict[str, Any] = {}
-    if collect_social_intelligence is not None:
-        try:
-            social_context = collect_social_intelligence() or {}
-        except Exception as exc:
-            print(f"⚠️ SOYUZ SOCIAL ERROR | {type(exc).__name__}: {exc}")
-            social_context = {}
-
     for item in results or []:
 
         if not isinstance(
@@ -1470,17 +1493,9 @@ def run_shadow_for_results(
         ):
             continue
 
-        # Work on a copy so the legacy bot remains untouched.
-        local_analysis = deepcopy(analysis)
-        social_signals = _dict(social_context.get("signals"))
-        if commodity in social_signals:
-            local_analysis["social_intelligence"] = {
-                "signal": social_signals.get(commodity) or {}
-            }
-
         result = run_shadow_safe(
             commodity=commodity,
-            analysis=local_analysis,
+            analysis=analysis,
         )
 
         output.append(result)
