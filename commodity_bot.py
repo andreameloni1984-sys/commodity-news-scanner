@@ -67,6 +67,7 @@ PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
 EARLY_OPPORTUNITY_ENABLED = os.getenv("EARLY_OPPORTUNITY_ENABLED", "1") == "1"
+SOYUZ_SHADOW_ENABLED = os.getenv("SOYUZ_SHADOW_ENABLED", "1") == "1"
 
 # v3.0 — Early Opportunity Engine configuration.
 # These defaults restore the v2.8/v2.9 research horizon settings.
@@ -938,9 +939,19 @@ def apply_sifting_live_price(analysis, name):
         return analysis
 
     try:
-        quote = get_sifting_live_quote(name, analysis.get("symbol"))
-        if quote:
-            quote = normalize_sifting_quote_units(name, quote)
+        # IMPORTANT: get_sifting_live_quote() can raise on 404/429/stale.
+        # The old implementation let that exception jump directly to the
+        # outer handler, so Twelve Data was never reached. Keep the providers
+        # isolated: any SiftingIO failure must flow into the fallback.
+        quote = None
+        sifting_error = None
+        try:
+            quote = get_sifting_live_quote(name, analysis.get("symbol"))
+            if quote:
+                quote = normalize_sifting_quote_units(name, quote)
+        except Exception as sifting_exc:
+            sifting_error = sifting_exc
+            analysis["sifting_live_error"] = str(sifting_exc)
 
         # SiftingIO is the preferred live source. If it returns 404/429/stale
         # or is temporarily unavailable, try a genuine Twelve Data quote.
@@ -11280,6 +11291,34 @@ if RAW_ON_DEMAND_REQUEST and not REQUEST_TYPE:
         if _scope:
             REQUEST_COMMODITY = _scope
 
+def run_soyuz_shadow_for_results(results):
+    """Run the independent SOYUZ comparison after final Gagarin state.
+
+    This is diagnostic only. It never changes signals, gates, SL/TP or orders.
+    """
+    if not SOYUZ_SHADOW_ENABLED:
+        return
+
+    try:
+        from soyuz_shadow_integration import run_shadow_for_results
+    except Exception as exc:
+        print(f"⚠️ SOYUZ shadow non disponibile: {exc}")
+        return
+
+    try:
+        shadow_results = run_shadow_for_results(results)
+        if not isinstance(shadow_results, list):
+            print("⚠️ SOYUZ shadow: risultato non valido")
+            return
+        print(f"\n🛰️ SOYUZ SHADOW DIAGNOSTICS | {len(shadow_results)} commodity")
+        for row in shadow_results:
+            diagnostic = row.get("diagnostic") if isinstance(row, dict) else None
+            if diagnostic:
+                print(f"   {diagnostic}")
+    except Exception as exc:
+        print(f"⚠️ SOYUZ shadow evaluation failed: {exc}")
+
+
 def main():
     print()
     print("=" * 70)
@@ -11589,6 +11628,15 @@ def main():
     # Gagarin simultaneously reported SHOCK/NO_SETUP/BLOCKED.
     for item in results:
         gagarin_apply_final_authority(item)
+        if item.get("available"):
+            _a = item["analysis"]
+            # Rebuild the canonical prediction authority from the FINAL Gagarin
+            # state so diagnostics cannot read a stale pre-live snapshot.
+            _a["prediction_authority_v531"] = prediction_authority_v531(_a)
+
+    # Independent SOYUZ diagnostic pass. It runs only after live price, SL/TP,
+    # prediction authority and final Gagarin gates are settled.
+    run_soyuz_shadow_for_results(results)
 
     # MARKET RANKING = analytical opportunity, regardless of entry permission.
     for item in results:
