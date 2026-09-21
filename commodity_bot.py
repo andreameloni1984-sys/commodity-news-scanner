@@ -62,85 +62,6 @@ KNOWLEDGE_DELTA_CAP = float(os.getenv("KNOWLEDGE_DELTA_CAP", "4.0"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-
-
-# ============================================================
-# SOYUZ GAGARIN — SHADOW MODE
-# ============================================================
-SOYUZ_SHADOW_ENABLED = os.getenv("SOYUZ_SHADOW_ENABLED", "1") == "1"
-
-
-def run_soyuz_shadow_for_results(results):
-    """
-    Esegue SOYUZ in Shadow Mode sui risultati già finalizzati.
-
-    IMPORTANTE:
-    - non modifica results
-    - non modifica operational_entry_allowed
-    - non modifica signal/action_label
-    - non invia Telegram
-    - non esegue ordini
-    - qualsiasi errore SOYUZ viene isolato
-    """
-    if not SOYUZ_SHADOW_ENABLED:
-        print("SOYUZ SHADOW: DISABLED")
-        return []
-
-    try:
-        from soyuz_shadow_integration import run_shadow_for_results
-    except Exception as exc:
-        print(
-            f"SOYUZ SHADOW: IMPORT ERROR | "
-            f"{type(exc).__name__}: {exc}"
-        )
-        return []
-
-    try:
-        shadow_results = run_shadow_for_results(results)
-    except Exception as exc:
-        print(
-            f"SOYUZ SHADOW: RUNTIME ERROR | "
-            f"{type(exc).__name__}: {exc}"
-        )
-        return []
-
-    print("\n=== SOYUZ GAGARIN SHADOW ===")
-
-    for item in shadow_results:
-        commodity = item.get("commodity", "UNKNOWN")
-        error = item.get("error")
-
-        if error:
-            print(
-                f"SOYUZ SHADOW | {commodity} | ERROR | {error}"
-            )
-            continue
-
-        soyuz = item.get("soyuz") or {}
-        comparison = item.get("comparison") or {}
-
-        direction = soyuz.get("direction", "WAIT")
-        state = soyuz.get("state", "UNKNOWN")
-        authorized = soyuz.get(
-            "gagarin_authorized",
-            False,
-        )
-        compare_status = comparison.get(
-            "status",
-            "UNKNOWN",
-        )
-
-        print(
-            f"SOYUZ SHADOW | {commodity} | "
-            f"{direction} | {state} | "
-            f"GAGARIN={'AUTHORIZED' if authorized else 'BLOCKED'} | "
-            f"COMPARE={compare_status}"
-        )
-
-    print("=== END SOYUZ GAGARIN SHADOW ===\n")
-
-    return shadow_results
-
 BOT_VERSION = "6.1.9-SOYUZ-GAGARIN-AUTONOMOUS"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
@@ -916,6 +837,47 @@ def get_sifting_live_quote(name, symbol=None):
     return quote
 
 
+# ============================================================
+# SIFTINGIO UNIT NORMALIZATION
+# ============================================================
+# SiftingIO XCUUSD may be returned in USD/metric-tonne while the historical
+# COMEX/HG=F copper series used by the bot is expressed in USD/lb. Mixing the
+# two scales corrupts the live entry price and therefore SL/TP, RR and Gagarin.
+SIFTING_COPPER_TONNES_TO_POUNDS = 2204.6226218488
+
+
+def normalize_sifting_quote_units(name, quote):
+    """Normalize SiftingIO copper quotes to the historical USD/lb scale."""
+    if not isinstance(quote, dict):
+        return quote
+    if str(name or '').strip() != 'Rame':
+        return quote
+
+    values = [safe_float(quote.get(k)) for k in ('bid', 'ask', 'mid')]
+    values = [v for v in values if v is not None and v > 0]
+    if not values:
+        return quote
+
+    # COMEX copper in USD/lb is normally far below 100. A value above 100
+    # is treated as USD/metric-tonne and converted to USD/lb.
+    if max(values) <= 100.0:
+        return quote
+
+    factor = 1.0 / SIFTING_COPPER_TONNES_TO_POUNDS
+    normalized = dict(quote)
+    for key in ('bid', 'ask', 'mid', 'spread'):
+        value = safe_float(normalized.get(key))
+        if value is not None:
+            normalized[key] = value * factor
+
+    normalized['unit_normalization'] = 'USD_METRIC_TONNE_TO_USD_LB'
+    normalized['unit_conversion_factor'] = factor
+    normalized['raw_bid'] = quote.get('bid')
+    normalized['raw_ask'] = quote.get('ask')
+    normalized['raw_mid'] = quote.get('mid')
+    return normalized
+
+
 def apply_sifting_live_price(analysis, name):
     """Replace analytical candle price with the current SiftingIO quote.
 
@@ -929,6 +891,8 @@ def apply_sifting_live_price(analysis, name):
 
     try:
         quote = get_sifting_live_quote(name, analysis.get("symbol"))
+        if quote:
+            quote = normalize_sifting_quote_units(name, quote)
         if not quote:
             analysis["live_price_status"] = "UNAVAILABLE"
             if SIFTING_LIVE_REQUIRED:
@@ -969,6 +933,10 @@ def apply_sifting_live_price(analysis, name):
         analysis["live_price_provider"] = quote.get("provider")
         analysis["live_price_symbol"] = quote.get("symbol")
         analysis["live_price_side"] = execution_side
+        analysis["live_price_unit_normalization"] = quote.get("unit_normalization")
+        analysis["live_price_raw_bid"] = quote.get("raw_bid")
+        analysis["live_price_raw_ask"] = quote.get("raw_ask")
+        analysis["live_price_raw_mid"] = quote.get("raw_mid")
         analysis["live_price_status"] = "LIVE"
 
         return analysis
@@ -11511,10 +11479,6 @@ def main():
             _a = _item["analysis"]
             _a["final_direction"] = _a.get("setup_direction") or _a.get("model_signal") or "WAIT"
 
-    # SOYUZ GAGARIN — SHADOW MODE
-    # Confronta il motore SOYUZ con i risultati reali senza modificarli.
-    run_soyuz_shadow_for_results(results)
-
     # v4.2: build one actionable, explainable signal from the finalized layers.
     apply_signal_engine_v42(results)
 
@@ -11969,3 +11933,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+ b
