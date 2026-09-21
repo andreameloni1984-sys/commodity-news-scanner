@@ -1363,6 +1363,9 @@ def evaluate_shadow(
             "gagarin_authorized": (
                 decision.gagarin_authorized
             ),
+            "gagarin_blockers": list(
+                gagarin_data.get("reasons", [])
+            ),
             "reasons": list(
                 decision.reasons
             ),
