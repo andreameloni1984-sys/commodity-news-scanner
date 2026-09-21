@@ -126,7 +126,6 @@ jobs:
       EARLY_OPPORTUNITY_ENABLED: "1"
       SCALPING_ENABLED: "1"
 
-      # SOYUZ SOCIAL / KNOWLEDGE INTELLIGENCE
       SOYUZ_SOCIAL_INTELLIGENCE_ENABLED: "1"
 
     steps:
@@ -196,4 +195,6 @@ jobs:
             2>/dev/null || true
 
           if ! git diff --cached --quiet; then
-           
+            git commit -m "chore: persist commodities bot state"
+            git push
+          fi
