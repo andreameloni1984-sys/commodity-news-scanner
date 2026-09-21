@@ -62,6 +62,85 @@ KNOWLEDGE_DELTA_CAP = float(os.getenv("KNOWLEDGE_DELTA_CAP", "4.0"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
+
+
+# ============================================================
+# SOYUZ GAGARIN — SHADOW MODE
+# ============================================================
+SOYUZ_SHADOW_ENABLED = os.getenv("SOYUZ_SHADOW_ENABLED", "1") == "1"
+
+
+def run_soyuz_shadow_for_results(results):
+    """
+    Esegue SOYUZ in Shadow Mode sui risultati già finalizzati.
+
+    IMPORTANTE:
+    - non modifica results
+    - non modifica operational_entry_allowed
+    - non modifica signal/action_label
+    - non invia Telegram
+    - non esegue ordini
+    - qualsiasi errore SOYUZ viene isolato
+    """
+    if not SOYUZ_SHADOW_ENABLED:
+        print("SOYUZ SHADOW: DISABLED")
+        return []
+
+    try:
+        from soyuz_shadow_integration import run_shadow_for_results
+    except Exception as exc:
+        print(
+            f"SOYUZ SHADOW: IMPORT ERROR | "
+            f"{type(exc).__name__}: {exc}"
+        )
+        return []
+
+    try:
+        shadow_results = run_shadow_for_results(results)
+    except Exception as exc:
+        print(
+            f"SOYUZ SHADOW: RUNTIME ERROR | "
+            f"{type(exc).__name__}: {exc}"
+        )
+        return []
+
+    print("\n=== SOYUZ GAGARIN SHADOW ===")
+
+    for item in shadow_results:
+        commodity = item.get("commodity", "UNKNOWN")
+        error = item.get("error")
+
+        if error:
+            print(
+                f"SOYUZ SHADOW | {commodity} | ERROR | {error}"
+            )
+            continue
+
+        soyuz = item.get("soyuz") or {}
+        comparison = item.get("comparison") or {}
+
+        direction = soyuz.get("direction", "WAIT")
+        state = soyuz.get("state", "UNKNOWN")
+        authorized = soyuz.get(
+            "gagarin_authorized",
+            False,
+        )
+        compare_status = comparison.get(
+            "status",
+            "UNKNOWN",
+        )
+
+        print(
+            f"SOYUZ SHADOW | {commodity} | "
+            f"{direction} | {state} | "
+            f"GAGARIN={'AUTHORIZED' if authorized else 'BLOCKED'} | "
+            f"COMPARE={compare_status}"
+        )
+
+    print("=== END SOYUZ GAGARIN SHADOW ===\n")
+
+    return shadow_results
+
 BOT_VERSION = "6.1.9-SOYUZ-GAGARIN-AUTONOMOUS"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
@@ -11431,6 +11510,10 @@ def main():
         if _item.get("available"):
             _a = _item["analysis"]
             _a["final_direction"] = _a.get("setup_direction") or _a.get("model_signal") or "WAIT"
+
+    # SOYUZ GAGARIN — SHADOW MODE
+    # Confronta il motore SOYUZ con i risultati reali senza modificarli.
+    run_soyuz_shadow_for_results(results)
 
     # v4.2: build one actionable, explainable signal from the finalized layers.
     apply_signal_engine_v42(results)
