@@ -878,6 +878,54 @@ def normalize_sifting_quote_units(name, quote):
     return normalized
 
 
+def get_twelvedata_live_quote(symbol):
+    """Best-effort live quote fallback using Twelve Data /quote.
+
+    A quote is accepted as LIVE only when Twelve Data supplies a usable
+    timestamp and the quote age is within the same freshness threshold used
+    by SiftingIO. Historical candle closes are never promoted to LIVE.
+    """
+    if not API_KEY or not symbol:
+        return None
+
+    url = "https://api.twelvedata.com/quote"
+    params = {"symbol": symbol, "apikey": API_KEY}
+    response = requests.get(url, params=params, timeout=15)
+    response.raise_for_status()
+    data = response.json()
+    if not isinstance(data, dict):
+        raise RuntimeError("Twelve Data quote: risposta non valida")
+    if data.get("status") == "error":
+        raise RuntimeError(data.get("message", "Twelve Data quote non disponibile"))
+
+    price = safe_float(data.get("close") or data.get("price"))
+    if price is None or price <= 0:
+        raise RuntimeError("Twelve Data quote: prezzo mancante/non valido")
+
+    timestamp = safe_float(data.get("timestamp"))
+    if timestamp is None:
+        raise RuntimeError("Twelve Data quote: timestamp mancante")
+    # Twelve Data quote timestamps are epoch seconds.
+    age_seconds = max(0.0, time.time() - timestamp)
+    if age_seconds > SIFTING_LIVE_MAX_AGE_SECONDS:
+        raise RuntimeError(
+            f"Twelve Data quote: dato vecchio {age_seconds:.1f}s > "
+            f"soglia {SIFTING_LIVE_MAX_AGE_SECONDS:.1f}s"
+        )
+
+    return {
+        "provider": "TWELVE_DATA_QUOTE",
+        "symbol": symbol,
+        "bid": price,
+        "ask": price,
+        "mid": price,
+        "spread": 0.0,
+        "timestamp_ms": timestamp * 1000.0,
+        "age_seconds": age_seconds,
+        "fallback": True,
+    }
+
+
 def apply_sifting_live_price(analysis, name):
     """Replace analytical candle price with the current SiftingIO quote.
 
@@ -893,10 +941,25 @@ def apply_sifting_live_price(analysis, name):
         quote = get_sifting_live_quote(name, analysis.get("symbol"))
         if quote:
             quote = normalize_sifting_quote_units(name, quote)
+
+        # SiftingIO is the preferred live source. If it returns 404/429/stale
+        # or is temporarily unavailable, try a genuine Twelve Data quote.
+        # Never promote a historical candle close to LIVE.
+        if not quote:
+            try:
+                fallback_symbol = analysis.get("symbol") or COMMODITIES.get(name)
+                fallback_quote = get_twelvedata_live_quote(fallback_symbol)
+                if fallback_quote:
+                    quote = normalize_sifting_quote_units(name, fallback_quote)
+                    analysis["live_price_fallback"] = "TWELVE_DATA_QUOTE"
+                    print(f"   🔁 LIVE {name}: SiftingIO unavailable → Twelve Data quote OK")
+            except Exception as fallback_exc:
+                analysis["live_price_fallback_error"] = str(fallback_exc)
+
         if not quote:
             analysis["live_price_status"] = "UNAVAILABLE"
             if SIFTING_LIVE_REQUIRED:
-                raise RuntimeError("SiftingIO live price non disponibile")
+                raise RuntimeError("Live price non disponibile: SiftingIO + Twelve Data quote")
             return analysis
 
         direction = str(
@@ -11932,4 +11995,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main() 
