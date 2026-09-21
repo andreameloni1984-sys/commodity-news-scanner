@@ -129,8 +129,9 @@ def _text(value: Any) -> str:
     return str(value).strip()
 
 
-def _upper(value: Any) -> str:
-    return _text(value).upper()
+def _upper(value: Any, default: str = "") -> str:
+    text = _text(value)
+    return text.upper() if text else default
 
 
 def _clean_reasons(
