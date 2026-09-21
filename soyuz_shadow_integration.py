@@ -1287,7 +1287,7 @@ def diagnostic_line(result: Dict[str, Any]) -> str:
         f"PRED_TRG={'OK' if prediction_trigger else 'NO'} "
         f"TRG_DIFF={'YES' if trigger_disagreement else 'NO'} | "
         f"FIRST_BLOCKER={first_blocker} | "
-        f"AUTH={'DIFF' if cmp.get('entry_authority_divergence') else 'OK'} | "
+        f"SHADOW_AUTH={'DIFF' if cmp.get('entry_authority_divergence') else 'OK'} | "
         f"{_text(cmp.get('primary_status'), 'UNKNOWN')}"
     )
 
