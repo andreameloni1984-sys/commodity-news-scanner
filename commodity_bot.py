@@ -969,6 +969,14 @@ def apply_sifting_live_price(analysis, name):
 
         if not quote:
             analysis["live_price_status"] = "UNAVAILABLE"
+            # Keep provider failures visible. Previously both SiftingIO and
+            # Twelve Data exceptions were swallowed, making the log look as if
+            # the live pass had never executed.
+            if sifting_error:
+                print(f"   ⚠️ LIVE {name}: SiftingIO failed: {sifting_error}")
+            if analysis.get("live_price_fallback_error"):
+                print(f"   ⚠️ LIVE {name}: Twelve Data fallback failed: {analysis['live_price_fallback_error']}")
+            print(f"   ⚪ LIVE {name}: UNAVAILABLE — historical price kept; no LIVE promotion")
             if SIFTING_LIVE_REQUIRED:
                 raise RuntimeError("Live price non disponibile: SiftingIO + Twelve Data quote")
             return analysis
@@ -11632,6 +11640,11 @@ def main():
             _a = item["analysis"]
             # Rebuild the canonical prediction authority from the FINAL Gagarin
             # state so diagnostics cannot read a stale pre-live snapshot.
+            # Recompute the underlying prediction AFTER all live-price, SL/TP,
+            # signal-engine and final Gagarin recalculations. Otherwise the
+            # prediction authority can read a stale pre-live trigger snapshot
+            # while the technical trigger already says confirmed=True.
+            _a["prediction_v53"] = prediction_engine_v53(_a)
             _a["prediction_authority_v531"] = prediction_authority_v531(_a)
 
     # Independent SOYUZ diagnostic pass. It runs only after live price, SL/TP,
