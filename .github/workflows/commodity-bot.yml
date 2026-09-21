@@ -8,16 +8,19 @@ on:
         required: false
         default: ""
         type: string
+
       telegram_chat_id:
         description: "Chat ID Telegram"
         required: false
         default: ""
         type: string
+
       request_type:
         description: "CLASSIFICA / SETUP / SEGNALI / COMMODITY / PREZZO / SCALPING"
         required: false
         default: ""
         type: string
+
       request_commodity:
         description: "Commodity richiesta"
         required: false
@@ -58,9 +61,9 @@ jobs:
       REQUEST_COMMODITY: ${{ github.event.inputs.request_commodity || '' }}
 
       TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+
       SIFTING_API_KEY: ${{ secrets.SIFTING_API_KEY }}
       SIFTING_BASE_URL: https://api.sifting.io
-
       SIFTING_LIVE_ENABLED: "1"
       SIFTING_LIVE_REQUIRED: "0"
       SIFTING_LIVE_MAX_AGE_SECONDS: "30"
@@ -123,7 +126,11 @@ jobs:
       EARLY_OPPORTUNITY_ENABLED: "1"
       SCALPING_ENABLED: "1"
 
+      # SOYUZ SOCIAL / KNOWLEDGE INTELLIGENCE
+      SOYUZ_SOCIAL_INTELLIGENCE_ENABLED: "1"
+
     steps:
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -139,11 +146,31 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install requests pandas numpy feedparser
+          pip install youtube-transcript-api==1.2.4
+
+      - name: Verify SOYUZ files
+        run: |
+          test -f commodity_bot.py
+          test -f soyuz_motors.py
+          test -f soyuz_adapter.py
+          test -f soyuz_shadow_integration.py
+
+          if [ -f soyuz_social_intelligence.py ]; then
+            echo "SOYUZ Social Intelligence: PRESENT"
+          else
+            echo "SOYUZ Social Intelligence: NOT PRESENT"
+          fi
 
       - name: Verify bot
         run: |
-          test -f commodity_bot.py
           python -m py_compile commodity_bot.py
+          python -m py_compile soyuz_motors.py
+          python -m py_compile soyuz_adapter.py
+          python -m py_compile soyuz_shadow_integration.py
+
+          if [ -f soyuz_social_intelligence.py ]; then
+            python -m py_compile soyuz_social_intelligence.py
+          fi
 
       - name: Run Commodities Bot
         run: python commodity_bot.py
@@ -169,6 +196,4 @@ jobs:
             2>/dev/null || true
 
           if ! git diff --cached --quiet; then
-            git commit -m "chore: persist commodities bot state"
-            git push
-          fi
+           
