@@ -879,52 +879,55 @@ def normalize_sifting_quote_units(name, quote):
     return normalized
 
 
+LIVE_QUOTE_SYMBOLS = {
+    "Oro":["GC=F","XAU/USD"],"Argento":["SI=F","XAG/USD"],"Platino":["PL=F","XPT/USD"],"Palladio":["PA=F","XPD/USD"],
+    "Petrolio WTI":["CL=F","WTI/USD"],"Petrolio Brent":["BZ=F","BRN/USD"],"Benzina RBOB":["RB=F","RB/USD"],"Heating Oil":["HO=F","HOIL/USD"],"Gas Naturale":["NG=F","NATGAS/USD"],
+    "Rame":["HG=F","COPPER/USD"],"Grano":["ZW=F","WHEAT/USD"],"Mais":["ZC=F","CORN/USD"],"Soia":["ZS=F","SOYBEAN/USD"],"Riso":["ZR=F","RICE/USD"],
+    "Caffè":["KC=F","COFFEE/USD"],"Cacao":["CC=F","COCOA/USD"],"Zucchero":["SB=F","SUGAR/USD"],"Cotone":["CT=F","COTTON/USD"],
+    "Bovini vivi":["LE=F","CATTLE/USD"],"Feeder Cattle":["GF=F","FEEDC/USD"],"Maiali magri":["HE=F","HOGS/USD"],
+}
+
+def _live_quote_symbols(name, analysis):
+    configured=analysis.get("symbol") if isinstance(analysis,dict) else None
+    out=[]
+    for x in LIVE_QUOTE_SYMBOLS.get(name,[]):
+        if x not in out: out.append(x)
+    if configured and configured not in out: out.append(configured)
+    return out
+
+
 def get_twelvedata_live_quote(symbol):
-    """Best-effort live quote fallback using Twelve Data /quote.
+    """Best-effort timestamped quote from Twelve Data."""
+    if not API_KEY or not symbol: return None
+    r=requests.get("https://api.twelvedata.com/quote",params={"symbol":symbol,"apikey":API_KEY},timeout=12)
+    try: d=r.json()
+    except Exception: d={}
+    if r.status_code==429: raise RuntimeError("Twelve Data quote: HTTP 429 rate limit")
+    if r.status_code>=400: raise RuntimeError(f"Twelve Data quote HTTP {r.status_code}: {(d or {}).get('message','errore') if isinstance(d,dict) else 'errore'}")
+    if not isinstance(d,dict) or d.get("status")=="error": raise RuntimeError((d or {}).get("message","Twelve Data quote non disponibile"))
+    price=safe_float(d.get("close") or d.get("price")); ts=safe_float(d.get("timestamp"))
+    if price is None or price<=0 or ts is None: raise RuntimeError("Twelve Data quote: prezzo/timestamp mancanti")
+    age=max(0.0,time.time()-ts)
+    if age>SIFTING_LIVE_MAX_AGE_SECONDS: raise RuntimeError(f"Twelve Data quote: dato vecchio {age:.1f}s > soglia {SIFTING_LIVE_MAX_AGE_SECONDS:.1f}s")
+    return {"provider":"TWELVE_DATA_QUOTE","symbol":symbol,"bid":price,"ask":price,"mid":price,"spread":0.0,"timestamp_ms":ts*1000.0,"age_seconds":age,"fallback":True}
 
-    A quote is accepted as LIVE only when Twelve Data supplies a usable
-    timestamp and the quote age is within the same freshness threshold used
-    by SiftingIO. Historical candle closes are never promoted to LIVE.
-    """
-    if not API_KEY or not symbol:
-        return None
 
-    url = "https://api.twelvedata.com/quote"
-    params = {"symbol": symbol, "apikey": API_KEY}
-    response = requests.get(url, params=params, timeout=15)
-    response.raise_for_status()
-    data = response.json()
-    if not isinstance(data, dict):
-        raise RuntimeError("Twelve Data quote: risposta non valida")
-    if data.get("status") == "error":
-        raise RuntimeError(data.get("message", "Twelve Data quote non disponibile"))
-
-    price = safe_float(data.get("close") or data.get("price"))
-    if price is None or price <= 0:
-        raise RuntimeError("Twelve Data quote: prezzo mancante/non valido")
-
-    timestamp = safe_float(data.get("timestamp"))
-    if timestamp is None:
-        raise RuntimeError("Twelve Data quote: timestamp mancante")
-    # Twelve Data quote timestamps are epoch seconds.
-    age_seconds = max(0.0, time.time() - timestamp)
-    if age_seconds > SIFTING_LIVE_MAX_AGE_SECONDS:
-        raise RuntimeError(
-            f"Twelve Data quote: dato vecchio {age_seconds:.1f}s > "
-            f"soglia {SIFTING_LIVE_MAX_AGE_SECONDS:.1f}s"
-        )
-
-    return {
-        "provider": "TWELVE_DATA_QUOTE",
-        "symbol": symbol,
-        "bid": price,
-        "ask": price,
-        "mid": price,
-        "spread": 0.0,
-        "timestamp_ms": timestamp * 1000.0,
-        "age_seconds": age_seconds,
-        "fallback": True,
-    }
+def get_yahoo_live_quote(name):
+    """Timestamped Yahoo futures quote; stale data is never promoted to LIVE."""
+    ticker=YAHOO_TICKERS.get(name)
+    if not ticker: raise RuntimeError(f"Yahoo live: ticker non configurato per {name}")
+    r=requests.get(f"{YAHOO_BASE_URL}/{ticker}",params={"range":"1d","interval":"1m","includePrePost":"false","events":"div,splits"},headers=YAHOO_HEADERS,timeout=12)
+    if r.status_code>=400: raise RuntimeError(f"Yahoo live HTTP {r.status_code}")
+    d=r.json(); result=(d.get("chart") or {}).get("result")
+    if not result: raise RuntimeError(f"Yahoo live: nessun risultato per {ticker}")
+    result=result[0]; tslist=result.get("timestamp") or []; closes=((result.get("indicators") or {}).get("quote") or [{}])[0].get("close") or []
+    for i in range(len(tslist)-1,-1,-1):
+        price=safe_float(closes[i] if i<len(closes) else None); ts=safe_float(tslist[i])
+        if price and price>0 and ts:
+            age=max(0.0,time.time()-ts)
+            if age>SIFTING_LIVE_MAX_AGE_SECONDS: raise RuntimeError(f"Yahoo live: dato vecchio {age:.1f}s > soglia {SIFTING_LIVE_MAX_AGE_SECONDS:.1f}s")
+            return {"provider":"YAHOO_LIVE","symbol":ticker,"bid":price,"ask":price,"mid":price,"spread":0.0,"timestamp_ms":ts*1000.0,"age_seconds":age,"fallback":True}
+    raise RuntimeError(f"Yahoo live: prezzo non valido per {ticker}")
 
 
 def apply_sifting_live_price(analysis, name):
@@ -958,12 +961,26 @@ def apply_sifting_live_price(analysis, name):
         # Never promote a historical candle close to LIVE.
         if not quote:
             try:
-                fallback_symbol = analysis.get("symbol") or COMMODITIES.get(name)
-                fallback_quote = get_twelvedata_live_quote(fallback_symbol)
-                if fallback_quote:
-                    quote = normalize_sifting_quote_units(name, fallback_quote)
-                    analysis["live_price_fallback"] = "TWELVE_DATA_QUOTE"
-                    print(f"   🔁 LIVE {name}: SiftingIO unavailable → Twelve Data quote OK")
+                fallback_errors=[]
+                for fallback_symbol in _live_quote_symbols(name, analysis):
+                    try:
+                        fallback_quote=get_twelvedata_live_quote(fallback_symbol)
+                        if fallback_quote:
+                            quote=normalize_sifting_quote_units(name,fallback_quote)
+                            analysis["live_price_fallback"]="TWELVE_DATA_QUOTE"
+                            print(f"   🔁 LIVE {name}: SiftingIO unavailable → Twelve Data {fallback_symbol} OK")
+                            break
+                    except Exception as fallback_exc:
+                        fallback_errors.append(f"{fallback_symbol}: {fallback_exc}")
+                if not quote:
+                    try:
+                        quote=get_yahoo_live_quote(name); quote=normalize_sifting_quote_units(name,quote)
+                        analysis["live_price_fallback"]="YAHOO_LIVE"
+                        print(f"   🔁 LIVE {name}: SiftingIO/Twelve Data unavailable → Yahoo {quote.get('symbol')} OK")
+                    except Exception as yahoo_exc:
+                        fallback_errors.append(f"Yahoo: {yahoo_exc}")
+                if fallback_errors:
+                    analysis["live_price_fallback_error"]=" | ".join(fallback_errors[-6:])
             except Exception as fallback_exc:
                 analysis["live_price_fallback_error"] = str(fallback_exc)
 
@@ -5955,36 +5972,6 @@ def demo_execution_adapter(results, position):
 # TELEGRAM
 # ============================================================
 
-def send_telegram(message, chat_id=None):
-    """Send a Telegram message safely, splitting oversized messages."""
-    target_chat_id = str(chat_id or TELEGRAM_CHAT_ID or "").strip()
-    if not TELEGRAM_BOT_TOKEN or not target_chat_id:
-        print("⚠️ Telegram non configurato.")
-        return False
-
-    text = str(message or "").strip()
-    if not text:
-        return False
-
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    # Telegram's practical text limit is 4096 characters. Keep a small margin.
-    chunks = [text[i:i+3900] for i in range(0, len(text), 3900)]
-    ok = True
-    for chunk in chunks:
-        payload = {"chat_id": target_chat_id, "text": chunk}
-        try:
-            response = requests.post(url, json=payload, timeout=20)
-            response.raise_for_status()
-        except Exception as error:
-            ok = False
-            print(f"⚠️ Errore Telegram: {error}")
-    return ok
-
-
-TELEGRAM_COMMAND_OFFSET_FILE = "telegram_update_offset.json"
-TELEGRAM_COMMAND_MAX_AGE_SECONDS = int(os.getenv("TELEGRAM_COMMAND_MAX_AGE_SECONDS", "900"))
-
-
 def _canonical_gagarin_display(analysis):
     """Return one type-safe, final Gagarin display snapshot.
 
@@ -10584,28 +10571,46 @@ def demo_execution_adapter(results, position):
 # ============================================================
 
 def send_telegram(message, chat_id=None):
-    """Send a Telegram message safely, splitting oversized messages."""
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("⚠️ Telegram non configurato.")
+    """Reliable Telegram sender: explicit chat id + retries + full API errors."""
+    target=str(chat_id or TELEGRAM_CHAT_ID or "").strip()
+    if not TELEGRAM_BOT_TOKEN or not target:
+        print("❌ Telegram non configurato: manca token o chat id")
         return False
+    text=str(message or "").strip()
+    if not text: return False
+    url=f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    chunks=[text[i:i+3900] for i in range(0,len(text),3900)]
+    for no,chunk in enumerate(chunks,1):
+        payload={"chat_id":target,"text":chunk,"disable_web_page_preview":True}
+        last=None
+        for attempt in range(1,4):
+            try:
+                r=requests.post(url,json=payload,timeout=20); d=r.json() if r.content else {}
+                if r.status_code==429:
+                    wait=int(((d.get("parameters") or {}).get("retry_after",2)) if isinstance(d,dict) else 2)
+                    print(f"⚠️ Telegram 429: retry {wait}s"); time.sleep(min(wait,10)); continue
+                if r.status_code>=500:
+                    last=f"HTTP {r.status_code}: {d}"; time.sleep(attempt); continue
+                if r.status_code>=400 or not isinstance(d,dict) or not d.get("ok"):
+                    last=f"HTTP {r.status_code}: {d}"; break
+                print(f"📨 Telegram OK | chat={target} | chunk={no}/{len(chunks)}"); last=None; break
+            except Exception as e:
+                last=str(e); time.sleep(attempt)
+        if last is not None:
+            print(f"❌ Telegram INVIO FALLITO | chat={target} | {last}"); return False
+    return True
 
-    text = str(message or "").strip()
-    if not text:
-        return False
 
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    # Telegram's practical text limit is 4096 characters. Keep a small margin.
-    chunks = [text[i:i+3900] for i in range(0, len(text), 3900)]
-    ok = True
-    for chunk in chunks:
-        payload = {"chat_id": TELEGRAM_CHAT_ID, "text": chunk}
-        try:
-            response = requests.post(url, json=payload, timeout=20)
-            response.raise_for_status()
-        except Exception as error:
-            ok = False
-            print(f"⚠️ Errore Telegram: {error}")
-    return ok
+def telegram_api_healthcheck():
+    if not TELEGRAM_BOT_TOKEN:
+        print("⚠️ Telegram healthcheck: token mancante"); return False
+    try:
+        r=requests.get(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getMe",timeout=10); d=r.json() if r.content else {}
+        if not d.get("ok"):
+            print(f"❌ Telegram getMe FAILED | HTTP {r.status_code} | {d}"); return False
+        print(f"🤖 Telegram API OK | @{(d.get('result') or {}).get('username','unknown')} | chat={TELEGRAM_CHAT_ID or 'MISSING'}"); return True
+    except Exception as e:
+        print(f"❌ Telegram getMe ERROR | {e}"); return False
 
 
 TELEGRAM_COMMAND_OFFSET_FILE = "telegram_update_offset.json"
@@ -11327,6 +11332,19 @@ def run_soyuz_shadow_for_results(results):
         print(f"⚠️ SOYUZ shadow evaluation failed: {exc}")
 
 
+def soyuz_gagarin_single_state_pipeline(results):
+    """V3 canonical state pipeline; preserves every existing safety threshold."""
+    for item in results or []:
+        if not item.get("available"): continue
+        gagarin_apply_final_authority(item)
+        a=item.get("analysis") or {}
+        a["prediction_v53"]=prediction_engine_v53(a)
+        a["prediction_authority_v531"]=prediction_authority_v531(a)
+        pred=a["prediction_authority_v531"]; g=a.get("gagarin") or {}
+        a["soyuz_canonical_state"]={"direction":pred.get("direction"),"regime":pred.get("regime"),"setup":pred.get("setup"),"technical_trigger":bool((g.get("trigger") or {}).get("confirmed")),"prediction_trigger":bool(pred.get("prediction_trigger_confirmed")),"trigger":bool(pred.get("trigger_confirmed")),"operational":bool(a.get("operational_entry_allowed")),"live":a.get("live_price_status","UNKNOWN"),"blockers":list(a.get("gagarin_blockers") or [])}
+    return results
+
+
 def main():
     print()
     print("=" * 70)
@@ -11337,6 +11355,7 @@ def main():
     print("=" * 70)
     print()
 
+    telegram_api_healthcheck()
     position = load_position()
     print("🧠 Aggiornamento Trading Knowledge Engine...")
     trading_knowledge = refresh_trading_knowledge()
@@ -11634,18 +11653,7 @@ def main():
     # Re-run the architecture after ALL legacy/finalization/live layers.
     # This closes the previous failure where RBOB could be LONG 99 while
     # Gagarin simultaneously reported SHOCK/NO_SETUP/BLOCKED.
-    for item in results:
-        gagarin_apply_final_authority(item)
-        if item.get("available"):
-            _a = item["analysis"]
-            # Rebuild the canonical prediction authority from the FINAL Gagarin
-            # state so diagnostics cannot read a stale pre-live snapshot.
-            # Recompute the underlying prediction AFTER all live-price, SL/TP,
-            # signal-engine and final Gagarin recalculations. Otherwise the
-            # prediction authority can read a stale pre-live trigger snapshot
-            # while the technical trigger already says confirmed=True.
-            _a["prediction_v53"] = prediction_engine_v53(_a)
-            _a["prediction_authority_v531"] = prediction_authority_v531(_a)
+    soyuz_gagarin_single_state_pipeline(results)
 
     # Independent SOYUZ diagnostic pass. It runs only after live price, SL/TP,
     # prediction authority and final Gagarin gates are settled.
