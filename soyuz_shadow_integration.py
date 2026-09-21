@@ -1,7 +1,7 @@
 """
-SOYUZ GAGARIN — SHADOW INTEGRATION v1.0
+SOYUZ GAGARIN — SHADOW INTEGRATION v1.1
 
-Ponte tra il commodity_bot.py esistente e i tre motori SOYUZ.
+Ponte tra commodity_bot.py e i tre motori SOYUZ.
 
 MODALITÀ SHADOW:
 - NON modifica results
@@ -12,27 +12,6 @@ MODALITÀ SHADOW:
 - NON sostituisce Gagarin
 - NON bypassa i gate esistenti
 - produce esclusivamente un confronto diagnostico
-
-ARCHITETTURA:
-
-    COMMODITY BOT
-          |
-          v
-    REAL ANALYSIS
-          |
-          v
-    SOYUZ SHADOW
-       /       \
-    MACRO     INTEL
-       \       /
-        GAGARIN
-          |
-          v
-      COMPARISON
-
-Il risultato serve per capire se SOYUZ sta leggendo
-il mercato nello stesso modo del motore attuale
-oppure se emergono divergenze.
 """
 
 from __future__ import annotations
@@ -52,9 +31,6 @@ def _first(
     *keys: str,
     default: Any = None,
 ) -> Any:
-    """
-    Restituisce il primo valore realmente presente.
-    """
     if not isinstance(data, dict):
         return default
 
@@ -66,16 +42,10 @@ def _first(
 
 
 def _dict(value: Any) -> Dict[str, Any]:
-    """
-    Converte in dict in modo sicuro.
-    """
     return value if isinstance(value, dict) else {}
 
 
 def _list(value: Any) -> List[Any]:
-    """
-    Converte in lista in modo sicuro.
-    """
     if value is None:
         return []
 
@@ -92,9 +62,6 @@ def _bool(
     value: Any,
     default: bool = False,
 ) -> bool:
-    """
-    Conversione robusta a booleano.
-    """
     if value is None:
         return default
 
@@ -108,37 +75,17 @@ def _bool(
         text = value.strip().lower()
 
         if text in {
-            "1",
-            "true",
-            "yes",
-            "y",
-            "ok",
-            "confirmed",
-            "confirm",
-            "authorized",
-            "authorised",
-            "ready",
-            "pass",
-            "passed",
-            "valid",
-            "safe",
+            "1", "true", "yes", "y", "ok",
+            "confirmed", "confirm", "authorized",
+            "authorised", "ready", "pass", "passed",
+            "valid", "safe",
         }:
             return True
 
         if text in {
-            "0",
-            "false",
-            "no",
-            "n",
-            "blocked",
-            "block",
-            "failed",
-            "fail",
-            "invalid",
-            "unsafe",
-            "wait",
-            "waiting",
-            "none",
+            "0", "false", "no", "n", "blocked",
+            "block", "failed", "fail", "invalid",
+            "unsafe", "wait", "waiting", "none",
         }:
             return False
 
@@ -149,9 +96,6 @@ def _num(
     value: Any,
     default: float = 0.0,
 ) -> float:
-    """
-    Conversione numerica robusta.
-    """
     try:
         number = float(value)
 
@@ -169,9 +113,6 @@ def _bounded(
     low: float = 0.0,
     high: float = 100.0,
 ) -> float:
-    """
-    Numero limitato a un intervallo.
-    """
     return max(
         low,
         min(
@@ -182,9 +123,6 @@ def _bounded(
 
 
 def _text(value: Any) -> str:
-    """
-    Stringa normalizzata.
-    """
     if value is None:
         return ""
 
@@ -192,18 +130,12 @@ def _text(value: Any) -> str:
 
 
 def _upper(value: Any) -> str:
-    """
-    Stringa maiuscola.
-    """
     return _text(value).upper()
 
 
 def _clean_reasons(
     values: Iterable[Any],
 ) -> List[str]:
-    """
-    Pulisce e deduplica le motivazioni.
-    """
     if isinstance(values, str):
         values = [values]
 
@@ -225,17 +157,6 @@ def _clean_reasons(
 def extract_direction(
     analysis: Dict[str, Any],
 ) -> str:
-    """
-    Estrae la direzione dall'analisi reale del bot.
-
-    Priorità:
-        final_direction
-        setup_direction
-        model_signal
-        signal
-        bias
-    """
-
     value = _first(
         analysis,
         "final_direction",
@@ -264,10 +185,6 @@ def extract_direction(
 def _extract_timeframe_direction(
     value: Any,
 ) -> Optional[str]:
-    """
-    Estrae LONG / SHORT / WAIT da una struttura timeframe.
-    """
-
     if isinstance(value, str):
         direction = _upper(value)
 
@@ -302,21 +219,6 @@ def extract_mtf_score(
     analysis: Dict[str, Any],
     direction: str,
 ) -> float:
-    """
-    Calcola un punteggio MTF conservativo.
-
-    Se il bot fornisce già mtf_score / mtf, viene usato quello.
-
-    Altrimenti prova a leggere:
-        4H
-        1H
-        15m
-        5m
-        1m
-
-    Non inventa dati mancanti.
-    """
-
     explicit = _first(
         analysis,
         "mtf_score",
@@ -331,7 +233,6 @@ def extract_mtf_score(
     timeframes = _first(
         analysis,
         "timeframes",
-        "mtf",
         "multi_timeframe",
         "multi_timeframes",
         default=None,
@@ -384,10 +285,6 @@ def extract_mtf_score(
 def extract_gagarin(
     analysis: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """
-    Restituisce la struttura Gagarin presente nell'analysis.
-    """
-
     value = analysis.get("gagarin")
 
     if isinstance(value, dict):
@@ -400,10 +297,6 @@ def _section(
     gagarin: Dict[str, Any],
     name: str,
 ) -> Dict[str, Any]:
-    """
-    Estrae una sezione Gagarin.
-    """
-
     value = gagarin.get(name)
 
     if isinstance(value, dict):
@@ -420,19 +313,6 @@ def extract_regime_ok(
     analysis: Dict[str, Any],
     gagarin: Dict[str, Any],
 ) -> bool:
-    """
-    Regime gate.
-
-    Priorità:
-        gagarin_regime_ok
-        regime_ok
-        gagarin.regime
-        market_regime
-
-    SHOCK viene trattato conservativamente come FALSE,
-    salvo un esplicito regime_ok=True.
-    """
-
     explicit = _first(
         analysis,
         "gagarin_regime_ok",
@@ -509,17 +389,6 @@ def extract_structure_ok(
     gagarin: Dict[str, Any],
     direction: str,
 ) -> bool:
-    """
-    Structure gate.
-
-    Non considera una semplice direzione come struttura valida.
-
-    Cerca prima un gate esplicito.
-
-    In assenza di gate esplicito:
-        usa l'allineamento MTF come fallback conservativo.
-    """
-
     explicit = _first(
         analysis,
         "gagarin_structure_ok",
@@ -572,8 +441,6 @@ def extract_structure_ok(
         direction,
     )
 
-    # Fallback volutamente conservativo:
-    # almeno 80/100 di allineamento MTF.
     return (
         direction in {"LONG", "SHORT"}
         and mtf_score >= 80.0
@@ -589,10 +456,6 @@ def extract_setup_ok(
     gagarin: Dict[str, Any],
     direction: str,
 ) -> bool:
-    """
-    Setup gate.
-    """
-
     explicit = _first(
         analysis,
         "gagarin_setup_ok",
@@ -651,8 +514,6 @@ def extract_setup_ok(
             "SHORT",
         }
 
-    # Se non esiste alcuna prova esplicita,
-    # non autorizziamo il setup.
     return False
 
 
@@ -664,16 +525,6 @@ def extract_trigger_ok(
     analysis: Dict[str, Any],
     gagarin: Dict[str, Any],
 ) -> bool:
-    """
-    Trigger gate.
-
-    Cerca:
-        gagarin_trigger_ok
-        trigger_ok
-        gagarin.trigger
-        entry_trigger
-    """
-
     explicit = _first(
         analysis,
         "gagarin_trigger_ok",
@@ -745,12 +596,6 @@ def extract_risk_ok(
     analysis: Dict[str, Any],
     gagarin: Dict[str, Any],
 ) -> bool:
-    """
-    Risk gate.
-
-    Non inventa un rischio valido se i dati non sono presenti.
-    """
-
     explicit = _first(
         analysis,
         "gagarin_risk_ok",
@@ -807,7 +652,6 @@ def extract_risk_ok(
     }:
         return True
 
-    # Cerca RR esplicito.
     rr = _first(
         analysis,
         "rr",
@@ -830,7 +674,6 @@ def extract_risk_ok(
     if rr_tp1 is not None:
         return _num(rr_tp1) >= 1.5
 
-    # Nessuna evidenza sufficiente.
     return False
 
 
@@ -842,12 +685,6 @@ def extract_safety_ok(
     analysis: Dict[str, Any],
     gagarin: Dict[str, Any],
 ) -> bool:
-    """
-    Safety gate.
-
-    Safety deve essere esplicita.
-    """
-
     explicit = _first(
         analysis,
         "gagarin_safety_ok",
@@ -906,7 +743,6 @@ def extract_safety_ok(
     }:
         return False
 
-    # Controllo conservativo su eventuali blocker.
     blockers = _first(
         safety,
         "blockers",
@@ -918,7 +754,6 @@ def extract_safety_ok(
     if blockers:
         return False
 
-    # Nessuna prova esplicita.
     return False
 
 
@@ -929,12 +764,6 @@ def extract_safety_ok(
 def build_macro_data(
     analysis: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """
-    Costruisce il payload per il Motor 1.
-
-    Non inventa valori mancanti.
-    """
-
     gagarin = extract_gagarin(
         analysis
     )
@@ -958,7 +787,6 @@ def build_macro_data(
                 default="UNKNOWN",
             ),
         ),
-
         "inflation_bias": _num(
             _first(
                 analysis,
@@ -966,7 +794,6 @@ def build_macro_data(
                 default=0,
             )
         ),
-
         "rates_bias": _num(
             _first(
                 analysis,
@@ -975,7 +802,6 @@ def build_macro_data(
                 default=0,
             )
         ),
-
         "dollar_bias": _num(
             _first(
                 analysis,
@@ -984,7 +810,6 @@ def build_macro_data(
                 default=0,
             )
         ),
-
         "energy_bias": _num(
             _first(
                 analysis,
@@ -992,7 +817,6 @@ def build_macro_data(
                 default=0,
             )
         ),
-
         "geopolitical_bias": _num(
             _first(
                 analysis,
@@ -1002,7 +826,6 @@ def build_macro_data(
                 default=0,
             )
         ),
-
         "fundamentals_bias": _num(
             _first(
                 analysis,
@@ -1011,7 +834,6 @@ def build_macro_data(
                 default=0,
             )
         ),
-
         "confidence": _bounded(
             _first(
                 analysis,
@@ -1020,7 +842,6 @@ def build_macro_data(
                 default=0,
             )
         ),
-
         "reasons": _first(
             analysis,
             "macro_reasons",
@@ -1038,14 +859,11 @@ def _extract_score_from_nested(
     analysis: Dict[str, Any],
     names: Iterable[str],
 ) -> float:
-    """
-    Cerca uno score sia al livello principale sia
-    dentro strutture intelligence.
-    """
+    names = list(names)
 
     direct = _first(
         analysis,
-        *list(names),
+        *names,
         default=None,
     )
 
@@ -1066,7 +884,7 @@ def _extract_score_from_nested(
 
     nested = _first(
         intelligence,
-        *list(names),
+        *names,
         default=None,
     )
 
@@ -1081,10 +899,6 @@ def _extract_score_from_nested(
 def build_intelligence_data(
     analysis: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """
-    Costruisce il payload per il Motor 2.
-    """
-
     direction = extract_direction(
         analysis
     )
@@ -1096,9 +910,7 @@ def build_intelligence_data(
 
     return {
         "direction": direction,
-
         "mtf_score": mtf_score,
-
         "correlation_score": _extract_score_from_nested(
             analysis,
             (
@@ -1107,7 +919,6 @@ def build_intelligence_data(
                 "cross_market_score",
             ),
         ),
-
         "news_score": _extract_score_from_nested(
             analysis,
             (
@@ -1116,7 +927,6 @@ def build_intelligence_data(
                 "intelligence_score",
             ),
         ),
-
         "futures_score": _extract_score_from_nested(
             analysis,
             (
@@ -1124,7 +934,6 @@ def build_intelligence_data(
                 "futures_structure_score",
             ),
         ),
-
         "anomaly_score": _extract_score_from_nested(
             analysis,
             (
@@ -1132,7 +941,6 @@ def build_intelligence_data(
                 "anomaly",
             ),
         ),
-
         "reasons": _first(
             analysis,
             "intelligence_reasons",
@@ -1149,12 +957,6 @@ def build_intelligence_data(
 def build_gagarin_data(
     analysis: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """
-    Costruisce il payload del Motor 3.
-
-    Tutti i gate sono indipendenti.
-    """
-
     gagarin = extract_gagarin(
         analysis
     )
@@ -1268,12 +1070,6 @@ def build_gagarin_data(
 def build_bot_snapshot(
     analysis: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """
-    Snapshot del bot esistente.
-
-    Viene restituito solo per confronto.
-    """
-
     gagarin = extract_gagarin(
         analysis
     )
@@ -1309,34 +1105,28 @@ def build_bot_snapshot(
         "direction": extract_direction(
             analysis
         ),
-
         "operational_entry_allowed": _bool(
             analysis.get(
                 "operational_entry_allowed"
             ),
             default=False,
         ),
-
         "gagarin_state": _text(
             gagarin_state
         ),
-
         "gagarin_blockers": _clean_reasons(
             blockers
         ),
-
         "signal": _text(
             analysis.get(
                 "signal"
             )
         ),
-
         "action_label": _text(
             analysis.get(
                 "action_label"
             )
         ),
-
         "entry_policy_state": _text(
             _first(
                 policy,
@@ -1359,7 +1149,12 @@ def compare_bot_and_soyuz(
     """
     Confronta il motore attuale con SOYUZ.
 
-    Nessun giudizio su quale sia corretto.
+    Il confronto è SEMANTICO:
+    READY_LONG / READY_SHORT del bot vengono
+    considerati equivalenti a ENTRY_AUTHORIZED di SOYUZ
+    quando la direzione e l'autorità di ingresso coincidono.
+
+    Nessun giudizio su quale motore sia corretto.
     """
 
     bot_direction = _upper(
@@ -1404,6 +1199,45 @@ def compare_bot_and_soyuz(
         )
     )
 
+    def normalize_state(
+        state: str,
+        direction: str,
+        entry_allowed: bool,
+    ) -> str:
+
+        state = _upper(state)
+        direction = _upper(direction)
+
+        if state in {
+            "READY_LONG",
+            "READY_SHORT",
+        }:
+            return "ENTRY_AUTHORIZED"
+
+        if (
+            state == "ENTRY_AUTHORIZED"
+            and direction in {
+                "LONG",
+                "SHORT",
+            }
+            and entry_allowed
+        ):
+            return "ENTRY_AUTHORIZED"
+
+        return state
+
+    normalized_bot_state = normalize_state(
+        bot_state,
+        bot_direction,
+        bot_entry,
+    )
+
+    normalized_soyuz_state = normalize_state(
+        soyuz_state,
+        soyuz_direction,
+        soyuz_entry,
+    )
+
     direction_divergence = (
         bot_direction != soyuz_direction
     )
@@ -1413,7 +1247,8 @@ def compare_bot_and_soyuz(
     )
 
     state_divergence = (
-        bot_state != soyuz_state
+        normalized_bot_state
+        != normalized_soyuz_state
     )
 
     divergence_count = sum(
@@ -1435,34 +1270,32 @@ def compare_bot_and_soyuz(
 
     return {
         "status": status,
-
-        "direction_divergence": direction_divergence,
-
+        "direction_divergence": (
+            direction_divergence
+        ),
         "entry_authority_divergence": (
             entry_authority_divergence
         ),
-
         "state_divergence": (
             state_divergence
         ),
-
         "divergence_count": divergence_count,
-
         "bot_direction": bot_direction,
-
         "soyuz_direction": soyuz_direction,
-
         "bot_operational_entry_allowed": (
             bot_entry
         ),
-
         "soyuz_authorized": (
             soyuz_entry
         ),
-
         "bot_state": bot_state,
-
         "soyuz_state": soyuz_state,
+        "bot_state_normalized": (
+            normalized_bot_state
+        ),
+        "soyuz_state_normalized": (
+            normalized_soyuz_state
+        ),
     }
 
 
@@ -1477,8 +1310,7 @@ def evaluate_shadow(
     """
     Esegue una valutazione SOYUZ completamente separata.
 
-    IMPORTANTISSIMO:
-    l'analysis originale NON viene modificata.
+    L'analysis originale NON viene modificata.
     """
 
     if not isinstance(
@@ -1489,7 +1321,6 @@ def evaluate_shadow(
             "analysis must be a dict"
         )
 
-    # Copia difensiva.
     local_analysis = deepcopy(
         analysis
     )
@@ -1526,11 +1357,8 @@ def evaluate_shadow(
 
     return {
         "commodity": commodity,
-
         "mode": "SHADOW",
-
         "bot": bot_snapshot,
-
         "soyuz": {
             "direction": decision.direction,
             "state": decision.state,
@@ -1568,9 +1396,7 @@ def evaluate_shadow(
                 ],
             },
         },
-
         "comparison": comparison,
-
         "summary": decision_summary(
             decision
         ),
@@ -1586,8 +1412,6 @@ def run_shadow_safe(
     analysis: Dict[str, Any],
 ) -> Dict[str, Any]:
     """
-    Wrapper SAFE.
-
     Qualsiasi errore SOYUZ viene isolato.
 
     Il bot principale NON deve fermarsi
@@ -1681,7 +1505,7 @@ def run_shadow_for_results(
 
 
 # ============================================================
-# TELEGRAM-SAFE / LOG-SAFE SUMMARY
+# LOG-SAFE SUMMARY
 # ============================================================
 
 def compact_shadow_line(
@@ -1689,8 +1513,6 @@ def compact_shadow_line(
 ) -> str:
     """
     Una singola riga diagnostica.
-
-    Non è pensata per il Telegram operativo.
     """
 
     commodity = _text(
@@ -1757,8 +1579,3 @@ def compact_shadow_line(
         f"{'AUTHORIZED' if authorized else 'BLOCKED'} | "
         f"COMPARE={status}"
     )
-
-
-# ============================================================
-# END OF FILE
-# ============================================================
