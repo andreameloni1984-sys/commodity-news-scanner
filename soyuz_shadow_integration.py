@@ -1101,40 +1101,31 @@ def build_bot_snapshot(
         ),
     )
 
+    # Snapshot dei sei gate reali del motore attuale.
+    # Questi valori sono letti, non modificati.
+    bot_gates = {
+        "regime_ok": extract_regime_ok(analysis, gagarin),
+        "structure_ok": extract_structure_ok(analysis, gagarin),
+        "setup_ok": extract_setup_ok(analysis, gagarin),
+        "trigger_ok": extract_trigger_ok(analysis, gagarin),
+        "risk_ok": extract_risk_ok(analysis, gagarin),
+        "safety_ok": extract_safety_ok(analysis, gagarin),
+    }
+
     return {
-        "direction": extract_direction(
-            analysis
-        ),
+        "direction": extract_direction(analysis),
         "operational_entry_allowed": _bool(
-            analysis.get(
-                "operational_entry_allowed"
-            ),
+            analysis.get("operational_entry_allowed"),
             default=False,
         ),
-        "gagarin_state": _text(
-            gagarin_state
-        ),
-        "gagarin_blockers": _clean_reasons(
-            blockers
-        ),
-        "signal": _text(
-            analysis.get(
-                "signal"
-            )
-        ),
-        "action_label": _text(
-            analysis.get(
-                "action_label"
-            )
-        ),
+        "gagarin_state": _text(gagarin_state),
+        "gagarin_blockers": _clean_reasons(blockers),
+        "signal": _text(analysis.get("signal")),
+        "action_label": _text(analysis.get("action_label")),
         "entry_policy_state": _text(
-            _first(
-                policy,
-                "state",
-                "status",
-                default="",
-            )
+            _first(policy, "state", "status", default="")
         ),
+        "gates": bot_gates,
     }
 
 
@@ -1145,158 +1136,108 @@ def build_bot_snapshot(
 def compare_bot_and_soyuz(
     bot_snapshot: Dict[str, Any],
     soyuz_decision: Any,
+    soyuz_gates: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
+    """Confronto diagnostico per singolo livello.
+
+    Non stabilisce quale motore sia corretto. Dice soltanto dove i due
+    motori sono allineati o divergono.
     """
-    Confronta il motore attuale con SOYUZ.
+    soyuz_gates = soyuz_gates or {}
 
-    Il confronto è SEMANTICO:
-    READY_LONG / READY_SHORT del bot vengono
-    considerati equivalenti a ENTRY_AUTHORIZED di SOYUZ
-    quando la direzione e l'autorità di ingresso coincidono.
-
-    Nessun giudizio su quale motore sia corretto.
-    """
-
-    bot_direction = _upper(
-        bot_snapshot.get(
-            "direction"
-        )
-    )
-
+    bot_direction = _upper(bot_snapshot.get("direction"), "WAIT")
     soyuz_direction = _upper(
-        getattr(
-            soyuz_decision,
-            "direction",
-            "WAIT",
-        )
+        getattr(soyuz_decision, "direction", "WAIT"),
+        "WAIT",
     )
 
-    bot_entry = _bool(
-        bot_snapshot.get(
-            "operational_entry_allowed"
-        )
-    )
+    bot_entry = _bool(bot_snapshot.get("operational_entry_allowed"), False)
+    soyuz_entry = bool(getattr(soyuz_decision, "gagarin_authorized", False))
 
-    soyuz_entry = bool(
-        getattr(
-            soyuz_decision,
-            "gagarin_authorized",
-            False,
-        )
-    )
+    direction_status = "ALIGNED" if bot_direction == soyuz_direction else "DIVERGE"
+    authority_status = "ALIGNED" if bot_entry == soyuz_entry else "DIVERGE"
 
-    bot_state = _upper(
-        bot_snapshot.get(
-            "gagarin_state"
-        )
-    )
+    bg = _dict(bot_snapshot.get("gates"))
 
-    soyuz_state = _upper(
-        getattr(
-            soyuz_decision,
-            "state",
-            "UNKNOWN",
-        )
-    )
+    pairs = {
+        "REGIME": ("regime_ok", "regime_ok"),
+        "STRUCTURE": ("structure_ok", "structure_ok"),
+        "SETUP": ("setup_ok", "setup_ok"),
+        "TRIGGER": ("trigger_ok", "trigger_ok"),
+        "RISK": ("risk_ok", "risk_ok"),
+        "SAFETY": ("safety_ok", "safety_ok"),
+    }
 
-    def normalize_state(
-        state: str,
-        direction: str,
-        entry_allowed: bool,
-    ) -> str:
+    layers: Dict[str, str] = {}
+    layer_values: Dict[str, Dict[str, bool]] = {}
 
-        state = _upper(state)
-        direction = _upper(direction)
+    for label, (bk, sk) in pairs.items():
+        b = _bool(bg.get(bk), False)
+        so = _bool(soyuz_gates.get(sk), False)
+        layer_values[label] = {"bot": b, "soyuz": so}
+        if b == so:
+            layers[label] = "PASS" if b else "FAIL"
+        else:
+            layers[label] = "DIVERGE"
 
-        if state in {
-            "READY_LONG",
-            "READY_SHORT",
-        }:
-            return "ENTRY_AUTHORIZED"
+    divergences = [name for name, status in layers.items() if status == "DIVERGE"]
 
-        if (
-            state == "ENTRY_AUTHORIZED"
-            and direction in {
-                "LONG",
-                "SHORT",
-            }
-            and entry_allowed
-        ):
-            return "ENTRY_AUTHORIZED"
-
-        return state
-
-    normalized_bot_state = normalize_state(
-        bot_state,
-        bot_direction,
-        bot_entry,
-    )
-
-    normalized_soyuz_state = normalize_state(
-        soyuz_state,
-        soyuz_direction,
-        soyuz_entry,
-    )
-
-    direction_divergence = (
-        bot_direction != soyuz_direction
-    )
-
-    entry_authority_divergence = (
-        bot_entry != soyuz_entry
-    )
-
-    state_divergence = (
-        normalized_bot_state
-        != normalized_soyuz_state
-    )
-
-    divergence_count = sum(
-        (
-            direction_divergence,
-            entry_authority_divergence,
-            state_divergence,
-        )
-    )
-
-    if divergence_count == 0:
-        status = "ALIGNED"
-
-    elif divergence_count == 1:
-        status = "PARTIAL_DIVERGENCE"
-
+    if direction_status == "DIVERGE":
+        primary = "DIRECTION_DIVERGENCE"
+    elif divergences:
+        primary = "GATE_DIVERGENCE:" + ",".join(divergences)
+    elif authority_status == "DIVERGE":
+        primary = "AUTHORITY_DIVERGENCE"
     else:
-        status = "DIVERGENCE"
+        primary = "ALIGNED"
 
     return {
-        "status": status,
-        "direction_divergence": (
-            direction_divergence
-        ),
-        "entry_authority_divergence": (
-            entry_authority_divergence
-        ),
-        "state_divergence": (
-            state_divergence
-        ),
-        "divergence_count": divergence_count,
+        "status": primary,
+        "primary_status": primary,
+        "direction_divergence": direction_status == "DIVERGE",
+        "entry_authority_divergence": authority_status == "DIVERGE",
+        "state_divergence": False,
+        "divergence_count": len(divergences) + (1 if direction_status == "DIVERGE" else 0) + (1 if authority_status == "DIVERGE" else 0),
         "bot_direction": bot_direction,
         "soyuz_direction": soyuz_direction,
-        "bot_operational_entry_allowed": (
-            bot_entry
-        ),
-        "soyuz_authorized": (
-            soyuz_entry
-        ),
-        "bot_state": bot_state,
-        "soyuz_state": soyuz_state,
-        "bot_state_normalized": (
-            normalized_bot_state
-        ),
-        "soyuz_state_normalized": (
-            normalized_soyuz_state
-        ),
+        "bot_operational_entry_allowed": bot_entry,
+        "soyuz_authorized": soyuz_entry,
+        "bot_state": _upper(bot_snapshot.get("gagarin_state"), "UNKNOWN"),
+        "soyuz_state": _upper(getattr(soyuz_decision, "state", "UNKNOWN"), "UNKNOWN"),
+        "layers": layers,
+        "layer_values": layer_values,
+        "divergences": divergences,
     }
+
+
+def diagnostic_line(result: Dict[str, Any]) -> str:
+    """Formato leggibile per il log del run."""
+    commodity = _text(result.get("commodity"), "UNKNOWN")
+    bot = _dict(result.get("bot"))
+    soyuz = _dict(result.get("soyuz"))
+    cmp = _dict(result.get("comparison"))
+    layers = _dict(cmp.get("layers"))
+
+    def mark(name: str) -> str:
+        return {
+            "PASS": "OK",
+            "FAIL": "NO",
+            "DIVERGE": "DIFF",
+        }.get(_upper(layers.get(name), "UNKNOWN"), "?")
+
+    return (
+        f"SOYUZ DIAG | {commodity} | "
+        f"BOT={_text(bot.get('direction'), 'WAIT')} | "
+        f"SOYUZ={_text(soyuz.get('direction'), 'WAIT')} | "
+        f"REG={mark('REGIME')} "
+        f"STR={mark('STRUCTURE')} "
+        f"SET={mark('SETUP')} "
+        f"TRG={mark('TRIGGER')} "
+        f"RISK={mark('RISK')} "
+        f"SAFE={mark('SAFETY')} | "
+        f"AUTH={'DIFF' if cmp.get('entry_authority_divergence') else 'OK'} | "
+        f"{_text(cmp.get('primary_status'), 'UNKNOWN')}"
+    )
 
 
 # ============================================================
@@ -1353,6 +1294,7 @@ def evaluate_shadow(
     comparison = compare_bot_and_soyuz(
         bot_snapshot,
         decision,
+        soyuz_gates=gagarin_data,
     )
 
     return {
@@ -1397,9 +1339,16 @@ def evaluate_shadow(
             },
         },
         "comparison": comparison,
-        "summary": decision_summary(
-            decision
-        ),
+        "diagnostic": diagnostic_line({
+            "commodity": commodity,
+            "bot": bot_snapshot,
+            "soyuz": {
+                "direction": decision.direction,
+                "state": decision.state,
+            },
+            "comparison": comparison,
+        }),
+        "summary": decision_summary(decision),
     }
 
 
@@ -1497,9 +1446,10 @@ def run_shadow_for_results(
             analysis=analysis,
         )
 
-        output.append(
-            result
-        )
+        output.append(result)
+
+        # Non modifica il bot; produce solo diagnostica.
+        print(result.get("diagnostic") or result.get("summary", ""))
 
     return output
 
