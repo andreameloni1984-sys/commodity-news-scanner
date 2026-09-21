@@ -1105,8 +1105,8 @@ def build_bot_snapshot(
     # Questi valori sono letti, non modificati.
     bot_gates = {
         "regime_ok": extract_regime_ok(analysis, gagarin),
-        "structure_ok": extract_structure_ok(analysis, gagarin),
-        "setup_ok": extract_setup_ok(analysis, gagarin),
+        "structure_ok": extract_structure_ok(analysis, gagarin, extract_direction(analysis)),
+        "setup_ok": extract_setup_ok(analysis, gagarin, extract_direction(analysis)),
         "trigger_ok": extract_trigger_ok(analysis, gagarin),
         "risk_ok": extract_risk_ok(analysis, gagarin),
         "safety_ok": extract_safety_ok(analysis, gagarin),
