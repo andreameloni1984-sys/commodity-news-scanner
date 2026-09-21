@@ -21,6 +21,11 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from soyuz_adapter import SoyuzAdapter, decision_summary
 
+try:
+    from soyuz_social_intelligence import collect_social_intelligence
+except Exception:
+    collect_social_intelligence = None
+
 
 # ============================================================
 # GENERIC HELPERS
@@ -910,6 +915,27 @@ def build_intelligence_data(
         direction,
     )
 
+    social = _dict(analysis.get("social_intelligence"))
+    social_signal = _dict(social.get("signal"))
+    social_score = _num(social_signal.get("score"), 0.0)
+    social_confidence = _bounded(social_signal.get("confidence"), 0.0, 100.0)
+    # Social is evidence, never an entry trigger. Blend it only into SOYUZ's
+    # intelligence/news context and keep its influence bounded.
+    social_news_score = 50.0 + (social_score * 0.5)
+    base_news_score = _extract_score_from_nested(
+        analysis,
+        (
+            "news_score",
+            "news_confirmation_score",
+            "intelligence_score",
+        ),
+    )
+    if social_confidence > 0.0:
+        blend = min(0.30, social_confidence / 333.0)
+        news_score = (base_news_score * (1.0 - blend)) + (social_news_score * blend)
+    else:
+        news_score = base_news_score
+
     return {
         "direction": direction,
         "mtf_score": mtf_score,
@@ -921,14 +947,7 @@ def build_intelligence_data(
                 "cross_market_score",
             ),
         ),
-        "news_score": _extract_score_from_nested(
-            analysis,
-            (
-                "news_score",
-                "news_confirmation_score",
-                "intelligence_score",
-            ),
-        ),
+        "news_score": _bounded(news_score),
         "futures_score": _extract_score_from_nested(
             analysis,
             (
@@ -1415,6 +1434,14 @@ def run_shadow_for_results(
 
     output: List[Dict[str, Any]] = []
 
+    social_context: Dict[str, Any] = {}
+    if collect_social_intelligence is not None:
+        try:
+            social_context = collect_social_intelligence() or {}
+        except Exception as exc:
+            print(f"⚠️ SOYUZ SOCIAL ERROR | {type(exc).__name__}: {exc}")
+            social_context = {}
+
     for item in results or []:
 
         if not isinstance(
@@ -1443,9 +1470,17 @@ def run_shadow_for_results(
         ):
             continue
 
+        # Work on a copy so the legacy bot remains untouched.
+        local_analysis = deepcopy(analysis)
+        social_signals = _dict(social_context.get("signals"))
+        if commodity in social_signals:
+            local_analysis["social_intelligence"] = {
+                "signal": social_signals.get(commodity) or {}
+            }
+
         result = run_shadow_safe(
             commodity=commodity,
-            analysis=analysis,
+            analysis=local_analysis,
         )
 
         output.append(result)
