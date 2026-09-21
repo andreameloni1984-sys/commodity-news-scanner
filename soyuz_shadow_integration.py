@@ -122,11 +122,12 @@ def _bounded(
     )
 
 
-def _text(value: Any) -> str:
+def _text(value: Any, default: str = "") -> str:
     if value is None:
-        return ""
+        return default
 
-    return str(value).strip()
+    text = str(value).strip()
+    return text if text else default
 
 
 def _upper(value: Any, default: str = "") -> str:
