@@ -2,10 +2,12 @@ name: SOYUZ Tests
 
 on:
   workflow_dispatch:
+
   push:
     paths:
       - "soyuz_motors.py"
       - "soyuz_adapter.py"
+      - "soyuz_shadow_integration.py"
       - "tests/**"
       - ".github/workflows/soyuz-tests.yml"
 
