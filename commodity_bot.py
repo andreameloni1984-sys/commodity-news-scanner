@@ -62,7 +62,7 @@ KNOWLEDGE_DELTA_CAP = float(os.getenv("KNOWLEDGE_DELTA_CAP", "4.0"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "6.2.0-SOYUZ-GAGARIN-CANONICAL"
+BOT_VERSION = "6.2.1-SOYUZ-GAGARIN-SINGLE-STATE"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -4841,7 +4841,16 @@ def prediction_engine_v53_legacy(analysis):
     pts=a.get('pattern_timeframes') or {}
     rows15=pts.get('15m') or pts.get('1H') or []
     rows5=pts.get('5m') or rows15
-    regime=market_regime_engine(a)
+    # V6.2.1: when Gagarin has already finalized a regime, prediction must
+    # consume that same canonical regime instead of recalculating a second
+    # potentially different regime snapshot. The fallback preserves the
+    # original behavior during the first pre-Gagarin prediction pass.
+    _g = a.get("gagarin") if isinstance(a.get("gagarin"), dict) else {}
+    _g_regime = _g.get("regime") if isinstance(_g.get("regime"), dict) else {}
+    if _g_regime.get("state"):
+        regime = dict(_g_regime)
+    else:
+        regime=market_regime_engine(a)
     regime_state=str(regime.get('state','UNKNOWN')).upper()
     structure=_prediction_structure(rows15,direction)
     trendline=_prediction_trendline(rows15,direction)
@@ -11489,18 +11498,74 @@ def main():
         )
 
     # ========================================================
-    # FINAL GAGARIN AUTHORITY + DUAL RANKING
+    # V6.2.1 — SOYUZ SINGLE CANONICAL STATE PIPELINE
     # ========================================================
-    # Re-run the architecture after ALL legacy/finalization/live layers.
-    # This closes the previous failure where RBOB could be LONG 99 while
-    # Gagarin simultaneously reported SHOCK/NO_SETUP/BLOCKED.
+    # There used to be three different snapshots in the same run:
+    # technical trigger, prediction trigger and final Gagarin trigger.
+    # The final ranking could therefore print Trigger:OK while Gagarin said
+    # TRIGGER=False, or Gagarin could report a concrete regime while the
+    # prediction layer still displayed UNKNOWN.
+    #
+    # V6.2.1 deliberately does NOT lower any gate. It only establishes one
+    # deterministic order: Gagarin core -> prediction -> Gagarin safety/policy
+    # with the fresh prediction -> final prediction authority.
     for item in results:
+        if not item.get("available"):
+            continue
+        _a = item.get("analysis") or {}
+
+        # Remove stale prediction snapshots before the canonical rebuild.
+        _a.pop("prediction_v53", None)
+        _a.pop("prediction_authority_v531", None)
+
+        # PASS 1: build the canonical Gagarin regime/structure/setup/trigger
+        # without allowing an old prediction snapshot to contaminate safety.
         gagarin_apply_final_authority(item)
-        if item.get("available"):
-            _a=item["analysis"]
-            _a["prediction_v53"]=prediction_engine_v53(_a)
-            _a["prediction_authority_v531"]=prediction_authority_v531(_a)
-            gagarin_normalize_final_state(_a)
+
+        # PASS 2: prediction consumes the freshly finalized Gagarin regime.
+        _a["prediction_v53"] = prediction_engine_v53(_a)
+
+        # PASS 3: rebuild Gagarin safety/policy using the fresh prediction.
+        # This removes the historical PREDICTION_NOT_CONFIRMED stale blocker.
+        gagarin_apply_final_authority(item)
+
+        # PASS 4: final prediction and authority are now display-only snapshots
+        # of the same canonical state. No independent trigger is invented.
+        _a["prediction_v53"] = prediction_engine_v53(_a)
+        _a["prediction_authority_v531"] = prediction_authority_v531(_a)
+        gagarin_normalize_final_state(_a)
+
+        _pa = _a["prediction_authority_v531"]
+        _g = _a.get("gagarin") if isinstance(_a.get("gagarin"), dict) else {}
+        _gt = _g.get("trigger") if isinstance(_g.get("trigger"), dict) else {}
+        _g_reg = _g.get("regime") if isinstance(_g.get("regime"), dict) else {}
+        _g_setup = _g.get("setup") if isinstance(_g.get("setup"), dict) else {}
+
+        # Canonical diagnostic snapshot: every downstream renderer can read
+        # this object without recalculating regime/setup/trigger.
+        _a["soyuz_canonical_state"] = {
+            "direction": _pa.get("direction"),
+            "regime": str(_g_reg.get("state") or _pa.get("regime") or "UNKNOWN"),
+            "setup": str(_g_setup.get("type") or _pa.get("setup") or "NONE"),
+            "technical_trigger": bool((_a.get("entry_trigger") or {}).get("confirmed")),
+            "gagarin_trigger": bool(_gt.get("confirmed")),
+            "prediction_trigger": bool(_pa.get("prediction_trigger_confirmed")),
+            "trigger": bool(_pa.get("trigger_confirmed")),
+            "operational": bool(_a.get("operational_entry_allowed")),
+            "live": _a.get("live_price_status", "UNKNOWN"),
+            "state": _pa.get("state") or _a.get("gagarin_state", "WAIT"),
+            "blockers": list(_a.get("gagarin_blockers") or []),
+        }
+        print(
+            f"   🔗 SOYUZ CANONICAL | {item.get('name','UNKNOWN')} | "
+            f"REGIME={_a['soyuz_canonical_state']['regime']} | "
+            f"SETUP={_a['soyuz_canonical_state']['setup']} | "
+            f"TECH_TRG={'OK' if _a['soyuz_canonical_state']['technical_trigger'] else 'NO'} | "
+            f"GAG_TRG={'OK' if _a['soyuz_canonical_state']['gagarin_trigger'] else 'NO'} | "
+            f"PRED_TRG={'OK' if _a['soyuz_canonical_state']['prediction_trigger'] else 'NO'} | "
+            f"FINAL_TRG={'OK' if _a['soyuz_canonical_state']['trigger'] else 'NO'} | "
+            f"STATE={_a['soyuz_canonical_state']['state']}"
+        )
 
     # MARKET RANKING = analytical opportunity, regardless of entry permission.
     for item in results:
@@ -11791,6 +11856,7 @@ def main():
         quality = safe_float(policy.get("quality"), safe_float(x.get("quality"), 0)) or 0
         confidence = safe_float(policy.get("confidence"), safe_float(x.get("confidence"), 0)) or 0
         pred = x.get("prediction_v53") or {}
+        canonical = x.get("soyuz_canonical_state") or {}
         g_raw = x.get("gagarin_state") or x.get("gagarin") or {}
         # Gagarin state is historically stored both as a dict and as a label string.
         # Normalize it here so the complete ranking can never crash on .get().
@@ -11801,7 +11867,7 @@ def main():
 
         g_state = str(g.get("state") or x.get("gagarin_state_label") or "").upper()
         setup = str(pred.get("setup") or g.get("setup") or "NONE").upper()
-        trigger_ok = bool(pred.get("trigger_confirmed"))
+        trigger_ok = bool(canonical.get("trigger", pred.get("trigger_confirmed")))
         rr3 = safe_float(
             pred.get("rr_tp3"),
             safe_float((x.get("adaptive_risk", {}) or {}).get("rr_tp3"), 0),
@@ -11907,4 +11973,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main() 
+    main()
