@@ -62,7 +62,7 @@ KNOWLEDGE_DELTA_CAP = float(os.getenv("KNOWLEDGE_DELTA_CAP", "4.0"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "6.1.9-SOYUZ-GAGARIN-AUTONOMOUS"
+BOT_VERSION = "6.1.9-SOYUZ-GAGARIN-V5"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -879,7 +879,7 @@ def normalize_sifting_quote_units(name, quote):
 
 
 # ============================================================
-# SOYUZ V4 — LIVE QUOTE ROUTER
+# SOYUZ V5 — LIVE QUOTE ROUTER + CANONICAL SETUP/TRIGGER STATE
 # ============================================================
 # Analysis symbols and execution/live symbols are deliberately separate.
 # Historical analysis can keep Twelve Data commodity symbols while live
@@ -8827,8 +8827,28 @@ def gagarin_setup_engine(analysis, router):
     d = analysis.get("setup_direction") or analysis.get("model_signal") or "NONE"
     l2l = analysis.get("level_to_level") or {}
     behaviour = l2l.get("behaviour", "NESSUNA")
-    if d not in ("LONG", "SHORT") or not router.get("allowed"):
+    # V5: a directional scenario with a valid Gagarin strategy family is
+    # never collapsed to SETUP=NONE merely because the L2L behaviour is
+    # currently NESSUNA/REACTION.  It remains a CANDIDATE until confirmation.
+    if d not in ("LONG", "SHORT"):
         return {"state": "NONE", "direction": d, "type": "NONE", "quality": 0.0}
+
+    allowed = router.get("allowed") or []
+    if not allowed:
+        # Do not manufacture a setup in UNKNOWN/SHOCK.  For a recognized
+        # regime, recover the compatible strategy family from the canonical
+        # router state so the display cannot lose a real directional setup.
+        rstate = str(router.get("regime") or "UNKNOWN").upper()
+        if rstate == "TREND":
+            allowed = ["TREND_PULLBACK", "BREAKOUT_RETEST"]
+        elif rstate == "RANGE":
+            allowed = ["RANGE_REJECTION", "MEAN_REVERSION"]
+        elif rstate == "TRANSITION":
+            allowed = ["BREAKOUT_RETEST", "REVERSAL_SFP"]
+        else:
+            return {"state": "NONE", "direction": d, "type": "NONE", "quality": 0.0}
+        router = dict(router)
+        router["allowed"] = allowed
     if behaviour == "BREAKOUT_RETEST" and "BREAKOUT_RETEST" in router["allowed"]:
         stype = "BREAKOUT_RETEST"
     elif behaviour == "BREAKOUT" and "BREAKOUT" in router["allowed"]:
@@ -8999,6 +9019,70 @@ def gagarin_normalize_final_state(analysis):
     except Exception:
         return analysis
 
+def soyuz_v5_sync_gagarin_state(analysis):
+    """V5 canonical synchronization of SETUP/TRIGGER without relaxing entry gates.
+
+    A confirmed technical trigger is allowed to remain TRUE at the Gagarin
+    diagnostic level even when the setup is still CANDIDATE.  Authorization
+    still requires ACTIVE setup, safety, RR and all existing thresholds.
+    This separates "trigger detected" from "trade authorized".
+    """
+    if not isinstance(analysis, dict):
+        return analysis
+
+    g = analysis.get("gagarin") if isinstance(analysis.get("gagarin"), dict) else {}
+    setup = g.get("setup") if isinstance(g.get("setup"), dict) else {}
+    trigger = g.get("trigger") if isinstance(g.get("trigger"), dict) else {}
+    router = g.get("strategy_router") if isinstance(g.get("strategy_router"), dict) else {}
+    regime = g.get("regime") if isinstance(g.get("regime"), dict) else {}
+
+    direction = str(
+        setup.get("direction")
+        or analysis.get("setup_direction")
+        or analysis.get("model_signal")
+        or "NONE"
+    ).upper()
+    regime_state = str(regime.get("state") or router.get("regime") or "UNKNOWN").upper()
+    tech = analysis.get("entry_trigger") if isinstance(analysis.get("entry_trigger"), dict) else {}
+    technical_confirmed = bool(tech.get("confirmed"))
+
+    # Gagarin trigger is a confirmation diagnostic, not an authorization.
+    # Keep L2L retest/fakeout semantics from the native trigger engine.
+    gagarin_trigger = bool(trigger.get("confirmed"))
+    if technical_confirmed and not trigger.get("fakeout", False):
+        gagarin_trigger = True
+    if (analysis.get("level_to_level") or {}).get("fakeout"):
+        gagarin_trigger = False
+
+    if setup.get("type") in (None, "", "NONE") and direction in ("LONG", "SHORT"):
+        if regime_state == "TREND":
+            setup["type"] = "TREND_PULLBACK"
+        elif regime_state == "RANGE":
+            setup["type"] = "RANGE_REJECTION"
+        elif regime_state == "TRANSITION":
+            setup["type"] = "BREAKOUT_RETEST"
+
+    # A directional technical trigger with an unconfirmed L2L gate is a
+    # candidate, never an active setup. This is the key V5 semantic fix.
+    if setup.get("type") not in (None, "", "NONE") and setup.get("state") == "NONE":
+        setup["state"] = "CANDIDATE"
+        setup["confirmation"] = "IN_FORMATION"
+        setup["quality"] = safe_float(setup.get("quality"), safe_float((analysis.get("level_to_level") or {}).get("score"), 0.0)) or 0.0
+
+    trigger["confirmed"] = bool(gagarin_trigger)
+    trigger["technical_confirmed"] = bool(technical_confirmed)
+    trigger["source"] = "entry_trigger + L2L retest/fakeout + V5 synchronization"
+
+    g["setup"] = setup
+    g["trigger"] = trigger
+    analysis["gagarin"] = g
+    analysis["gagarin_technical_trigger"] = technical_confirmed
+    analysis["gagarin_trigger_confirmed"] = bool(gagarin_trigger)
+    analysis["gagarin_setup_state"] = setup.get("state", "NONE")
+    analysis["gagarin_setup_type"] = setup.get("type", "NONE")
+    return analysis
+
+
 def gagarin_apply_final_authority(item):
     """Rebuild Gagarin after every legacy/finalization layer and make it authoritative."""
     if not item.get("available"):
@@ -9043,6 +9127,9 @@ def gagarin_apply_final_authority(item):
     a["gagarin_blockers"] = policy.get("blockers", [])
     a["gagarin_authority"] = True
     a["operational_entry_allowed"] = policy["state"] in ("READY_LONG", "READY_SHORT")
+    # V5: synchronize diagnostic SETUP/TRIGGER after the final rebuild.
+    # This does not change policy authorization.
+    soyuz_v5_sync_gagarin_state(a)
     # Canonicalize once so console, ranking and Telegram share the same final state.
     gagarin_normalize_final_state(a)
 
@@ -11680,8 +11767,10 @@ def main():
     # Gagarin simultaneously reported SHOCK/NO_SETUP/BLOCKED.
     for item in results:
         gagarin_apply_final_authority(item)
+        if item.get("available"):
+            soyuz_v5_sync_gagarin_state(item.get("analysis") or {})
 
-    # V4 canonical synchronization: all downstream displays/rankings read the
+    # V5 canonical synchronization: all downstream displays/rankings read the
     # same final Gagarin snapshot. This is diagnostic only and never authorizes
     # a trade by itself.
     for item in results:
@@ -11701,13 +11790,16 @@ def main():
             tech_trigger = bool(a.get("gagarin_trigger"))
         setup_raw = g.get("setup")
         setup_state = setup_raw.get("state") if isinstance(setup_raw, dict) else str(setup_raw or "NONE")
+        setup_type = setup_raw.get("type") if isinstance(setup_raw, dict) else str(setup_raw or "NONE")
         a["soyuz_canonical_state"] = {
             "direction": pred.get("direction") or (setup_raw.get("direction") if isinstance(setup_raw, dict) else None),
             "regime": (g.get("regime") or {}).get("state") if isinstance(g.get("regime"), dict) else g.get("regime"),
-            "setup": setup_state,
+            "setup": setup_type or "NONE",
+            "setup_state": setup_state or "NONE",
             "technical_trigger": tech_trigger,
             "prediction_trigger": bool(pred.get("prediction_trigger_confirmed")),
-            "trigger": bool(pred.get("trigger_confirmed")) or tech_trigger and setup_state == "ACTIVE",
+            "gagarin_trigger": bool(trigger_raw.get("confirmed")) if isinstance(trigger_raw, dict) else bool(trigger_raw),
+            "trigger": bool(trigger_raw.get("confirmed")) if isinstance(trigger_raw, dict) else bool(trigger_raw),
             "operational": bool(a.get("operational_entry_allowed")),
             "live": a.get("live_price_status", "UNKNOWN"),
             "blockers": list(a.get("gagarin_blockers") or []),
@@ -12011,8 +12103,11 @@ def main():
             g = {"state": str(g_raw)}
 
         g_state = str(g.get("state") or x.get("gagarin_state_label") or "").upper()
-        setup = str(pred.get("setup") or g.get("setup") or "NONE").upper()
-        trigger_ok = bool(pred.get("trigger_confirmed"))
+        setup_obj = g.get("setup") if isinstance(g.get("setup"), dict) else {}
+        setup = str(setup_obj.get("type") or pred.get("setup") or "NONE").upper()
+        setup_state = str(setup_obj.get("state") or "NONE").upper()
+        trigger_obj = g.get("trigger") if isinstance(g.get("trigger"), dict) else {}
+        trigger_ok = bool(trigger_obj.get("confirmed"))
         rr3 = safe_float(
             pred.get("rr_tp3"),
             safe_float((x.get("adaptive_risk", {}) or {}).get("rr_tp3"), 0),
@@ -12038,7 +12133,7 @@ def main():
             f"{i:02d}. {icon_for_signal(x.get('signal','WAIT'))} {item['name']} | "
             f"{final_direction} | MKT {safe_float(item.get('market_ranking_score'),0) or 0:.1f} | "
             f"Prob {direction_prob:.1f}% | Q {quality:.1f} | C {confidence:.1f} | "
-            f"G:{g_state or 'N/D'} | Setup:{setup} | Trigger:{'OK' if trigger_ok else 'NO'} | "
+            f"G:{g_state or 'N/D'} | Setup:{setup}/{setup_state} | Trigger:{'OK' if trigger_ok else 'NO'} | "
             f"RR3:{rr3:.2f} | {decision}"
         )
         print(f"    🔎 {comp_line}")
