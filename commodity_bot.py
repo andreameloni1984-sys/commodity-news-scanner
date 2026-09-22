@@ -67,7 +67,6 @@ PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
 EARLY_OPPORTUNITY_ENABLED = os.getenv("EARLY_OPPORTUNITY_ENABLED", "1") == "1"
-SOYUZ_SHADOW_ENABLED = os.getenv("SOYUZ_SHADOW_ENABLED", "1") == "1"
 
 # v3.0 — Early Opportunity Engine configuration.
 # These defaults restore the v2.8/v2.9 research horizon settings.
@@ -879,57 +878,6 @@ def normalize_sifting_quote_units(name, quote):
     return normalized
 
 
-LIVE_QUOTE_SYMBOLS = {
-    "Oro":["GC=F","XAU/USD"],"Argento":["SI=F","XAG/USD"],"Platino":["PL=F","XPT/USD"],"Palladio":["PA=F","XPD/USD"],
-    "Petrolio WTI":["CL=F","WTI/USD"],"Petrolio Brent":["BZ=F","BRN/USD"],"Benzina RBOB":["RB=F","RB/USD"],"Heating Oil":["HO=F","HOIL/USD"],"Gas Naturale":["NG=F","NATGAS/USD"],
-    "Rame":["HG=F","COPPER/USD"],"Grano":["ZW=F","WHEAT/USD"],"Mais":["ZC=F","CORN/USD"],"Soia":["ZS=F","SOYBEAN/USD"],"Riso":["ZR=F","RICE/USD"],
-    "Caffè":["KC=F","COFFEE/USD"],"Cacao":["CC=F","COCOA/USD"],"Zucchero":["SB=F","SUGAR/USD"],"Cotone":["CT=F","COTTON/USD"],
-    "Bovini vivi":["LE=F","CATTLE/USD"],"Feeder Cattle":["GF=F","FEEDC/USD"],"Maiali magri":["HE=F","HOGS/USD"],
-}
-
-def _live_quote_symbols(name, analysis):
-    configured=analysis.get("symbol") if isinstance(analysis,dict) else None
-    out=[]
-    for x in LIVE_QUOTE_SYMBOLS.get(name,[]):
-        if x not in out: out.append(x)
-    if configured and configured not in out: out.append(configured)
-    return out
-
-
-def get_twelvedata_live_quote(symbol):
-    """Best-effort timestamped quote from Twelve Data."""
-    if not API_KEY or not symbol: return None
-    r=requests.get("https://api.twelvedata.com/quote",params={"symbol":symbol,"apikey":API_KEY},timeout=12)
-    try: d=r.json()
-    except Exception: d={}
-    if r.status_code==429: raise RuntimeError("Twelve Data quote: HTTP 429 rate limit")
-    if r.status_code>=400: raise RuntimeError(f"Twelve Data quote HTTP {r.status_code}: {(d or {}).get('message','errore') if isinstance(d,dict) else 'errore'}")
-    if not isinstance(d,dict) or d.get("status")=="error": raise RuntimeError((d or {}).get("message","Twelve Data quote non disponibile"))
-    price=safe_float(d.get("close") or d.get("price")); ts=safe_float(d.get("timestamp"))
-    if price is None or price<=0 or ts is None: raise RuntimeError("Twelve Data quote: prezzo/timestamp mancanti")
-    age=max(0.0,time.time()-ts)
-    if age>SIFTING_LIVE_MAX_AGE_SECONDS: raise RuntimeError(f"Twelve Data quote: dato vecchio {age:.1f}s > soglia {SIFTING_LIVE_MAX_AGE_SECONDS:.1f}s")
-    return {"provider":"TWELVE_DATA_QUOTE","symbol":symbol,"bid":price,"ask":price,"mid":price,"spread":0.0,"timestamp_ms":ts*1000.0,"age_seconds":age,"fallback":True}
-
-
-def get_yahoo_live_quote(name):
-    """Timestamped Yahoo futures quote; stale data is never promoted to LIVE."""
-    ticker=YAHOO_TICKERS.get(name)
-    if not ticker: raise RuntimeError(f"Yahoo live: ticker non configurato per {name}")
-    r=requests.get(f"{YAHOO_BASE_URL}/{ticker}",params={"range":"1d","interval":"1m","includePrePost":"false","events":"div,splits"},headers=YAHOO_HEADERS,timeout=12)
-    if r.status_code>=400: raise RuntimeError(f"Yahoo live HTTP {r.status_code}")
-    d=r.json(); result=(d.get("chart") or {}).get("result")
-    if not result: raise RuntimeError(f"Yahoo live: nessun risultato per {ticker}")
-    result=result[0]; tslist=result.get("timestamp") or []; closes=((result.get("indicators") or {}).get("quote") or [{}])[0].get("close") or []
-    for i in range(len(tslist)-1,-1,-1):
-        price=safe_float(closes[i] if i<len(closes) else None); ts=safe_float(tslist[i])
-        if price and price>0 and ts:
-            age=max(0.0,time.time()-ts)
-            if age>SIFTING_LIVE_MAX_AGE_SECONDS: raise RuntimeError(f"Yahoo live: dato vecchio {age:.1f}s > soglia {SIFTING_LIVE_MAX_AGE_SECONDS:.1f}s")
-            return {"provider":"YAHOO_LIVE","symbol":ticker,"bid":price,"ask":price,"mid":price,"spread":0.0,"timestamp_ms":ts*1000.0,"age_seconds":age,"fallback":True}
-    raise RuntimeError(f"Yahoo live: prezzo non valido per {ticker}")
-
-
 def apply_sifting_live_price(analysis, name):
     """Replace analytical candle price with the current SiftingIO quote.
 
@@ -942,60 +890,13 @@ def apply_sifting_live_price(analysis, name):
         return analysis
 
     try:
-        # IMPORTANT: get_sifting_live_quote() can raise on 404/429/stale.
-        # The old implementation let that exception jump directly to the
-        # outer handler, so Twelve Data was never reached. Keep the providers
-        # isolated: any SiftingIO failure must flow into the fallback.
-        quote = None
-        sifting_error = None
-        try:
-            quote = get_sifting_live_quote(name, analysis.get("symbol"))
-            if quote:
-                quote = normalize_sifting_quote_units(name, quote)
-        except Exception as sifting_exc:
-            sifting_error = sifting_exc
-            analysis["sifting_live_error"] = str(sifting_exc)
-
-        # SiftingIO is the preferred live source. If it returns 404/429/stale
-        # or is temporarily unavailable, try a genuine Twelve Data quote.
-        # Never promote a historical candle close to LIVE.
-        if not quote:
-            try:
-                fallback_errors=[]
-                for fallback_symbol in _live_quote_symbols(name, analysis):
-                    try:
-                        fallback_quote=get_twelvedata_live_quote(fallback_symbol)
-                        if fallback_quote:
-                            quote=normalize_sifting_quote_units(name,fallback_quote)
-                            analysis["live_price_fallback"]="TWELVE_DATA_QUOTE"
-                            print(f"   🔁 LIVE {name}: SiftingIO unavailable → Twelve Data {fallback_symbol} OK")
-                            break
-                    except Exception as fallback_exc:
-                        fallback_errors.append(f"{fallback_symbol}: {fallback_exc}")
-                if not quote:
-                    try:
-                        quote=get_yahoo_live_quote(name); quote=normalize_sifting_quote_units(name,quote)
-                        analysis["live_price_fallback"]="YAHOO_LIVE"
-                        print(f"   🔁 LIVE {name}: SiftingIO/Twelve Data unavailable → Yahoo {quote.get('symbol')} OK")
-                    except Exception as yahoo_exc:
-                        fallback_errors.append(f"Yahoo: {yahoo_exc}")
-                if fallback_errors:
-                    analysis["live_price_fallback_error"]=" | ".join(fallback_errors[-6:])
-            except Exception as fallback_exc:
-                analysis["live_price_fallback_error"] = str(fallback_exc)
-
+        quote = get_sifting_live_quote(name, analysis.get("symbol"))
+        if quote:
+            quote = normalize_sifting_quote_units(name, quote)
         if not quote:
             analysis["live_price_status"] = "UNAVAILABLE"
-            # Keep provider failures visible. Previously both SiftingIO and
-            # Twelve Data exceptions were swallowed, making the log look as if
-            # the live pass had never executed.
-            if sifting_error:
-                print(f"   ⚠️ LIVE {name}: SiftingIO failed: {sifting_error}")
-            if analysis.get("live_price_fallback_error"):
-                print(f"   ⚠️ LIVE {name}: Twelve Data fallback failed: {analysis['live_price_fallback_error']}")
-            print(f"   ⚪ LIVE {name}: UNAVAILABLE — historical price kept; no LIVE promotion")
             if SIFTING_LIVE_REQUIRED:
-                raise RuntimeError("Live price non disponibile: SiftingIO + Twelve Data quote")
+                raise RuntimeError("SiftingIO live price non disponibile")
             return analysis
 
         direction = str(
@@ -5972,6 +5873,36 @@ def demo_execution_adapter(results, position):
 # TELEGRAM
 # ============================================================
 
+def send_telegram(message, chat_id=None):
+    """Send a Telegram message safely, splitting oversized messages."""
+    target_chat_id = str(chat_id or TELEGRAM_CHAT_ID or "").strip()
+    if not TELEGRAM_BOT_TOKEN or not target_chat_id:
+        print("⚠️ Telegram non configurato.")
+        return False
+
+    text = str(message or "").strip()
+    if not text:
+        return False
+
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    # Telegram's practical text limit is 4096 characters. Keep a small margin.
+    chunks = [text[i:i+3900] for i in range(0, len(text), 3900)]
+    ok = True
+    for chunk in chunks:
+        payload = {"chat_id": target_chat_id, "text": chunk}
+        try:
+            response = requests.post(url, json=payload, timeout=20)
+            response.raise_for_status()
+        except Exception as error:
+            ok = False
+            print(f"⚠️ Errore Telegram: {error}")
+    return ok
+
+
+TELEGRAM_COMMAND_OFFSET_FILE = "telegram_update_offset.json"
+TELEGRAM_COMMAND_MAX_AGE_SECONDS = int(os.getenv("TELEGRAM_COMMAND_MAX_AGE_SECONDS", "900"))
+
+
 def _canonical_gagarin_display(analysis):
     """Return one type-safe, final Gagarin display snapshot.
 
@@ -8914,6 +8845,73 @@ def gagarin_normalize_final_state(analysis):
     except Exception:
         return analysis
 
+def soyuz_gagarin_single_state_pipeline(results):
+    """
+    SOYUZ GAGARIN — CANONICAL SINGLE STATE PIPELINE.
+
+    Normalizes legacy Gagarin representations so the final pipeline cannot
+    crash when analysis["gagarin"] is temporarily a boolean instead of a dict.
+    This function does not lower thresholds, bypass gates, or authorize trades.
+    """
+    for item in results or []:
+        if not item.get("available"):
+            continue
+
+        gagarin_apply_final_authority(item)
+        a = item.get("analysis") or {}
+
+        try:
+            a["prediction_v53"] = prediction_engine_v53(a)
+        except Exception as exc:
+            print(f"   ⚠️ SOYUZ prediction_v53 error {item.get('name', 'UNKNOWN')}: {exc}")
+            a["prediction_v53"] = {}
+
+        try:
+            a["prediction_authority_v531"] = prediction_authority_v531(a)
+        except Exception as exc:
+            print(f"   ⚠️ SOYUZ prediction_authority error {item.get('name', 'UNKNOWN')}: {exc}")
+            a["prediction_authority_v531"] = {}
+
+        pred = a.get("prediction_authority_v531") if isinstance(a.get("prediction_authority_v531"), dict) else {}
+        g_raw = a.get("gagarin")
+        g = g_raw if isinstance(g_raw, dict) else {}
+
+        trigger_raw = g.get("trigger")
+        if isinstance(trigger_raw, dict):
+            technical_trigger = bool(trigger_raw.get("confirmed"))
+        elif isinstance(trigger_raw, bool):
+            technical_trigger = trigger_raw
+        else:
+            legacy_trigger = a.get("gagarin_trigger")
+            technical_trigger = bool(legacy_trigger) if isinstance(legacy_trigger, bool) else False
+
+        blockers = a.get("gagarin_blockers")
+        if not isinstance(blockers, list):
+            blockers = []
+
+        a["soyuz_canonical_state"] = {
+            "direction": pred.get("direction"),
+            "regime": pred.get("regime"),
+            "setup": pred.get("setup"),
+            "technical_trigger": technical_trigger,
+            "prediction_trigger": bool(pred.get("prediction_trigger_confirmed")),
+            "trigger": bool(pred.get("trigger_confirmed")),
+            "operational": bool(a.get("operational_entry_allowed")),
+            "live": a.get("live_price_status", "UNKNOWN"),
+            "blockers": list(blockers),
+        }
+
+        print(
+            f"   🔗 SOYUZ CANONICAL | {item.get('name', 'UNKNOWN')} | "
+            f"TECH={'OK' if technical_trigger else 'NO'} | "
+            f"PRED={'OK' if pred.get('prediction_trigger_confirmed') else 'NO'} | "
+            f"FINAL={'OK' if pred.get('trigger_confirmed') else 'NO'} | "
+            f"SETUP={pred.get('setup', 'NONE')} | REGIME={pred.get('regime', 'UNKNOWN')}"
+        )
+
+    return results
+
+
 def gagarin_apply_final_authority(item):
     """Rebuild Gagarin after every legacy/finalization layer and make it authoritative."""
     if not item.get("available"):
@@ -10571,46 +10569,28 @@ def demo_execution_adapter(results, position):
 # ============================================================
 
 def send_telegram(message, chat_id=None):
-    """Reliable Telegram sender: explicit chat id + retries + full API errors."""
-    target=str(chat_id or TELEGRAM_CHAT_ID or "").strip()
-    if not TELEGRAM_BOT_TOKEN or not target:
-        print("❌ Telegram non configurato: manca token o chat id")
+    """Send a Telegram message safely, splitting oversized messages."""
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("⚠️ Telegram non configurato.")
         return False
-    text=str(message or "").strip()
-    if not text: return False
-    url=f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    chunks=[text[i:i+3900] for i in range(0,len(text),3900)]
-    for no,chunk in enumerate(chunks,1):
-        payload={"chat_id":target,"text":chunk,"disable_web_page_preview":True}
-        last=None
-        for attempt in range(1,4):
-            try:
-                r=requests.post(url,json=payload,timeout=20); d=r.json() if r.content else {}
-                if r.status_code==429:
-                    wait=int(((d.get("parameters") or {}).get("retry_after",2)) if isinstance(d,dict) else 2)
-                    print(f"⚠️ Telegram 429: retry {wait}s"); time.sleep(min(wait,10)); continue
-                if r.status_code>=500:
-                    last=f"HTTP {r.status_code}: {d}"; time.sleep(attempt); continue
-                if r.status_code>=400 or not isinstance(d,dict) or not d.get("ok"):
-                    last=f"HTTP {r.status_code}: {d}"; break
-                print(f"📨 Telegram OK | chat={target} | chunk={no}/{len(chunks)}"); last=None; break
-            except Exception as e:
-                last=str(e); time.sleep(attempt)
-        if last is not None:
-            print(f"❌ Telegram INVIO FALLITO | chat={target} | {last}"); return False
-    return True
 
+    text = str(message or "").strip()
+    if not text:
+        return False
 
-def telegram_api_healthcheck():
-    if not TELEGRAM_BOT_TOKEN:
-        print("⚠️ Telegram healthcheck: token mancante"); return False
-    try:
-        r=requests.get(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getMe",timeout=10); d=r.json() if r.content else {}
-        if not d.get("ok"):
-            print(f"❌ Telegram getMe FAILED | HTTP {r.status_code} | {d}"); return False
-        print(f"🤖 Telegram API OK | @{(d.get('result') or {}).get('username','unknown')} | chat={TELEGRAM_CHAT_ID or 'MISSING'}"); return True
-    except Exception as e:
-        print(f"❌ Telegram getMe ERROR | {e}"); return False
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    # Telegram's practical text limit is 4096 characters. Keep a small margin.
+    chunks = [text[i:i+3900] for i in range(0, len(text), 3900)]
+    ok = True
+    for chunk in chunks:
+        payload = {"chat_id": TELEGRAM_CHAT_ID, "text": chunk}
+        try:
+            response = requests.post(url, json=payload, timeout=20)
+            response.raise_for_status()
+        except Exception as error:
+            ok = False
+            print(f"⚠️ Errore Telegram: {error}")
+    return ok
 
 
 TELEGRAM_COMMAND_OFFSET_FILE = "telegram_update_offset.json"
@@ -11304,47 +11284,6 @@ if RAW_ON_DEMAND_REQUEST and not REQUEST_TYPE:
         if _scope:
             REQUEST_COMMODITY = _scope
 
-def run_soyuz_shadow_for_results(results):
-    """Run the independent SOYUZ comparison after final Gagarin state.
-
-    This is diagnostic only. It never changes signals, gates, SL/TP or orders.
-    """
-    if not SOYUZ_SHADOW_ENABLED:
-        return
-
-    try:
-        from soyuz_shadow_integration import run_shadow_for_results
-    except Exception as exc:
-        print(f"⚠️ SOYUZ shadow non disponibile: {exc}")
-        return
-
-    try:
-        shadow_results = run_shadow_for_results(results)
-        if not isinstance(shadow_results, list):
-            print("⚠️ SOYUZ shadow: risultato non valido")
-            return
-        print(f"\n🛰️ SOYUZ SHADOW DIAGNOSTICS | {len(shadow_results)} commodity")
-        for row in shadow_results:
-            diagnostic = row.get("diagnostic") if isinstance(row, dict) else None
-            if diagnostic:
-                print(f"   {diagnostic}")
-    except Exception as exc:
-        print(f"⚠️ SOYUZ shadow evaluation failed: {exc}")
-
-
-def soyuz_gagarin_single_state_pipeline(results):
-    """V3 canonical state pipeline; preserves every existing safety threshold."""
-    for item in results or []:
-        if not item.get("available"): continue
-        gagarin_apply_final_authority(item)
-        a=item.get("analysis") or {}
-        a["prediction_v53"]=prediction_engine_v53(a)
-        a["prediction_authority_v531"]=prediction_authority_v531(a)
-        pred=a["prediction_authority_v531"]; g=a.get("gagarin") or {}
-        a["soyuz_canonical_state"]={"direction":pred.get("direction"),"regime":pred.get("regime"),"setup":pred.get("setup"),"technical_trigger":bool((g.get("trigger") or {}).get("confirmed")),"prediction_trigger":bool(pred.get("prediction_trigger_confirmed")),"trigger":bool(pred.get("trigger_confirmed")),"operational":bool(a.get("operational_entry_allowed")),"live":a.get("live_price_status","UNKNOWN"),"blockers":list(a.get("gagarin_blockers") or [])}
-    return results
-
-
 def main():
     print()
     print("=" * 70)
@@ -11355,7 +11294,6 @@ def main():
     print("=" * 70)
     print()
 
-    telegram_api_healthcheck()
     position = load_position()
     print("🧠 Aggiornamento Trading Knowledge Engine...")
     trading_knowledge = refresh_trading_knowledge()
@@ -11653,11 +11591,12 @@ def main():
     # Re-run the architecture after ALL legacy/finalization/live layers.
     # This closes the previous failure where RBOB could be LONG 99 while
     # Gagarin simultaneously reported SHOCK/NO_SETUP/BLOCKED.
-    soyuz_gagarin_single_state_pipeline(results)
+    for item in results:
+        gagarin_apply_final_authority(item)
 
-    # Independent SOYUZ diagnostic pass. It runs only after live price, SL/TP,
-    # prediction authority and final Gagarin gates are settled.
-    run_soyuz_shadow_for_results(results)
+    # SOYUZ canonical normalization: final state is type-safe and synchronized
+    # before any ranking/display logic can read it.
+    soyuz_gagarin_single_state_pipeline(results)
 
     # MARKET RANKING = analytical opportunity, regardless of entry permission.
     for item in results:
