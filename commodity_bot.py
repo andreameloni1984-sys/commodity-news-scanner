@@ -878,25 +878,183 @@ def normalize_sifting_quote_units(name, quote):
     return normalized
 
 
-def apply_sifting_live_price(analysis, name):
-    """Replace analytical candle price with the current SiftingIO quote.
+# ============================================================
+# SOYUZ V4 — LIVE QUOTE ROUTER
+# ============================================================
+# Analysis symbols and execution/live symbols are deliberately separate.
+# Historical analysis can keep Twelve Data commodity symbols while live
+# execution prefers exchange futures through Yahoo and then Twelve Data.
+LIVE_QUOTE_CANDIDATES = {
+    "Oro": ["GC=F", "XAU/USD", "XAUUSD"],
+    "Argento": ["SI=F", "XAG/USD", "XAGUSD"],
+    "Platino": ["PL=F", "XPT/USD", "XPTUSD"],
+    "Palladio": ["PA=F", "XPD/USD", "XPDUSD"],
+    "Petrolio WTI": ["CL=F", "WTI/USD", "WTIUSD"],
+    "Petrolio Brent": ["BZ=F", "BRN/USD", "XBR/USD", "XBRUSD"],
+    "Benzina RBOB": ["RB=F", "RB/USD", "RBUSD"],
+    "Heating Oil": ["HO=F", "HOIL/USD", "HOILUSD"],
+    "Gas Naturale": ["NG=F", "NATGAS/USD", "NATGASUSD"],
+    "Rame": ["HG=F", "HG1", "COPPER/USD", "XCUUSD"],
+    "Grano": ["ZW=F", "WHEAT/USD", "WHEATUSD"],
+    "Mais": ["ZC=F", "CORN/USD", "CORNUSD"],
+    "Soia": ["ZS=F", "SOYBEAN/USD", "SOYBUSD"],
+    "Riso": ["ZR=F", "RICE/USD", "RICEUSD"],
+    "Caffè": ["KC=F", "COFFEE/USD", "COFFEEUSD"],
+    "Cacao": ["CC=F", "COCOA/USD", "COCOAUSD"],
+    "Zucchero": ["SB=F", "SUGAR/USD", "SUGARUSD"],
+    "Cotone": ["CT=F", "COTTON/USD", "COTTONUSD"],
+    "Bovini vivi": ["LE=F", "CATTLE/USD", "CATTLEUSD"],
+    "Feeder Cattle": ["GF=F", "FEEDC/USD", "FEEDCUSD"],
+    "Maiali magri": ["HE=F", "HOGS/USD", "HOGSUSD"],
+}
 
-    LONG entries use ASK, SHORT entries use BID, and neutral/WAIT uses MID.
-    The historical candles remain untouched: they continue to drive ATR and
-    structure, while the current entry reference is the live quote.
+
+def _live_quote_candidates(name, analysis=None):
+    analysis = analysis or {}
+    configured = analysis.get("symbol")
+    values = list(LIVE_QUOTE_CANDIDATES.get(name, []))
+    if configured:
+        values.append(str(configured))
+    # Preserve order while removing duplicates.
+    return list(dict.fromkeys(x for x in values if x))
+
+
+def _twelvedata_live_quote(symbol):
+    if not API_KEY or not symbol:
+        return None
+    url = "https://api.twelvedata.com/quote"
+    response = requests.get(
+        url,
+        params={"symbol": symbol, "apikey": API_KEY, "format": "JSON"},
+        timeout=SIFTING_TIMEOUT_SECONDS,
+        headers={"User-Agent": "CommoditiesBot/4.6"},
+    )
+    if response.status_code == 429:
+        raise RuntimeError(f"Twelve Data 429: {symbol}")
+    response.raise_for_status()
+    data = response.json()
+    if not isinstance(data, dict) or data.get("status") == "error":
+        msg = data.get("message") if isinstance(data, dict) else "invalid response"
+        raise RuntimeError(f"Twelve Data {symbol}: {msg}")
+    price = safe_float(data.get("close"), safe_float(data.get("price")))
+    if price is None or price <= 0:
+        raise RuntimeError(f"Twelve Data {symbol}: prezzo non valido")
+    timestamp = safe_float(data.get("timestamp"))
+    age = None
+    if timestamp:
+        age = max(0.0, time.time() - timestamp)
+        if age > SIFTING_LIVE_MAX_AGE_SECONDS:
+            raise RuntimeError(f"Twelve Data {symbol}: dato vecchio {age:.1f}s")
+    return {
+        "provider": "TWELVE_DATA_QUOTE",
+        "symbol": symbol,
+        "bid": price,
+        "ask": price,
+        "mid": price,
+        "spread": 0.0,
+        "timestamp_ms": timestamp * 1000 if timestamp else None,
+        "age_seconds": age,
+    }
+
+
+def _yahoo_live_quote(name):
+    ticker = YAHOO_TICKERS.get(name)
+    if not ticker:
+        return None
+    params = {
+        "range": "1d",
+        "interval": "1m",
+        "includePrePost": "true",
+        "events": "div,splits",
+    }
+    response = requests.get(
+        f"{YAHOO_BASE_URL}/{ticker}",
+        params=params,
+        headers=YAHOO_HEADERS,
+        timeout=SIFTING_TIMEOUT_SECONDS,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    result = (payload.get("chart") or {}).get("result")
+    if not result:
+        raise RuntimeError(f"Yahoo {ticker}: nessun risultato")
+    meta = result[0].get("meta") or {}
+    timestamps = result[0].get("timestamp") or []
+    indicators = (result[0].get("indicators") or {}).get("quote") or []
+    quote = indicators[0] if indicators else {}
+    closes = quote.get("close") or []
+    pairs = [(ts, safe_float(px)) for ts, px in zip(timestamps, closes)]
+    pairs = [(ts, px) for ts, px in pairs if px is not None and px > 0]
+    if not pairs:
+        price = safe_float(meta.get("regularMarketPrice"))
+        ts = safe_float(meta.get("regularMarketTime"))
+    else:
+        ts, price = pairs[-1]
+    if price is None or price <= 0:
+        raise RuntimeError(f"Yahoo {ticker}: prezzo non valido")
+    age = max(0.0, time.time() - ts) if ts else None
+    if age is not None and age > SIFTING_LIVE_MAX_AGE_SECONDS:
+        raise RuntimeError(f"Yahoo {ticker}: dato vecchio {age:.1f}s")
+    return {
+        "provider": "YAHOO_LIVE_1M",
+        "symbol": ticker,
+        "bid": price,
+        "ask": price,
+        "mid": price,
+        "spread": 0.0,
+        "timestamp_ms": ts * 1000 if ts else None,
+        "age_seconds": age,
+    }
+
+
+def get_live_quote_router(name, analysis):
+    """Try SiftingIO, then Yahoo 1m futures, then Twelve Data quote."""
+    errors = []
+    try:
+        q = get_sifting_live_quote(name, analysis.get("symbol"))
+        if q:
+            return normalize_sifting_quote_units(name, q), errors
+    except Exception as exc:
+        errors.append(f"SiftingIO: {exc}")
+
+    try:
+        q = _yahoo_live_quote(name)
+        if q:
+            return q, errors
+    except Exception as exc:
+        errors.append(f"Yahoo: {exc}")
+
+    for symbol in _live_quote_candidates(name, analysis):
+        try:
+            q = _twelvedata_live_quote(symbol)
+            if q:
+                return q, errors
+        except Exception as exc:
+            errors.append(str(exc))
+            if "429" in str(exc).upper():
+                break
+    return None, errors
+
+
+def apply_sifting_live_price(analysis, name):
+    """V4 live router: SiftingIO -> Yahoo 1m -> Twelve Data quote.
+
+    Historical candles are never replaced. Only the execution/reference price
+    is promoted when a fresh live quote passes the age check.
     """
     if not SIFTING_LIVE_ENABLED:
         analysis["live_price_status"] = "DISABLED"
         return analysis
 
     try:
-        quote = get_sifting_live_quote(name, analysis.get("symbol"))
-        if quote:
-            quote = normalize_sifting_quote_units(name, quote)
+        quote, errors = get_live_quote_router(name, analysis)
         if not quote:
             analysis["live_price_status"] = "UNAVAILABLE"
+            analysis["live_price_errors"] = errors
+            analysis["live_price_error"] = " | ".join(errors[-3:]) if errors else "no provider returned a quote"
+            print(f"   ⚪ LIVE {name}: UNAVAILABLE — {' | '.join(errors[-3:]) if errors else 'nessuna quotazione'}")
             if SIFTING_LIVE_REQUIRED:
-                raise RuntimeError("SiftingIO live price non disponibile")
+                raise RuntimeError(f"Live price non disponibile: {' | '.join(errors[-3:])}")
             return analysis
 
         direction = str(
@@ -917,7 +1075,7 @@ def apply_sifting_live_price(analysis, name):
             execution_side = "MID"
 
         if execution_price is None or execution_price <= 0:
-            raise RuntimeError("SiftingIO prezzo live non valido")
+            raise RuntimeError(f"{quote.get('provider')}: prezzo live non valido")
 
         old_price = safe_float(analysis.get("price"))
         analysis["historical_price"] = old_price
@@ -933,32 +1091,23 @@ def apply_sifting_live_price(analysis, name):
         analysis["live_price_provider"] = quote.get("provider")
         analysis["live_price_symbol"] = quote.get("symbol")
         analysis["live_price_side"] = execution_side
-        analysis["live_price_unit_normalization"] = quote.get("unit_normalization")
-        analysis["live_price_raw_bid"] = quote.get("raw_bid")
-        analysis["live_price_raw_ask"] = quote.get("raw_ask")
-        analysis["live_price_raw_mid"] = quote.get("raw_mid")
         analysis["live_price_status"] = "LIVE"
+        analysis["live_price_errors"] = errors
 
+        print(
+            f"   🟢 LIVE {name}: {quote.get('provider')} "
+            f"{quote.get('symbol')} price={execution_price} "
+            f"age={quote.get('age_seconds')}s"
+        )
         return analysis
 
     except Exception as exc:
-        err = str(exc)
-        upper = err.upper()
-        if "429" in upper or "TOO MANY REQUESTS" in upper:
-            status = "RATE_LIMIT"
-        elif "404" in upper or "NOT FOUND" in upper:
-            status = "NOT_AVAILABLE"
-        elif "STALE" in upper or "AGE" in upper:
-            status = "STALE"
-        else:
-            status = "ERROR"
-        analysis["live_price_status"] = status
-        analysis["live_price_error"] = err
+        analysis["live_price_status"] = "ERROR"
+        analysis["live_price_error"] = str(exc)
         if SIFTING_LIVE_REQUIRED:
             raise
-        print(f"   ⚠️ SiftingIO LIVE {name}: {status}: {exc}")
+        print(f"   ⚠️ LIVE {name}: {exc}")
         return analysis
-
 
 def event_risk_snapshot(analysis):
     """Normalize known high-impact event risk without forcing a direction.
@@ -8697,7 +8846,12 @@ def gagarin_setup_engine(analysis, router):
     # confirmation (breakout/retest/trigger) is not complete. It must never
     # authorize an entry. ACTIVE is reserved for a genuinely formed setup.
     formed_behaviour = behaviour in {"BREAKOUT_RETEST", "BREAKOUT", "FAKEOUT"}
-    state = "ACTIVE" if formed_behaviour and quality >= 50 else "CANDIDATE"
+    trigger = analysis.get("entry_trigger") or {}
+    trigger_confirmed = bool(trigger.get("confirmed"))
+    l2l_gate = bool(l2l.get("gate"))
+    pullback_restart = behaviour in {"PULLBACK + RIPARTENZA", "PULLBACK_RIPARTENZA", "PULLBACK_RIPARTENZA_5M"}
+    confirmed_pullback = pullback_restart and trigger_confirmed and l2l_gate and quality >= 50
+    state = "ACTIVE" if quality >= 50 and (formed_behaviour or confirmed_pullback) else "CANDIDATE"
     return {"state": state, "direction": d, "type": stype, "quality": round(quality, 1),
             "confirmation": "CONFIRMED" if state == "ACTIVE" else "IN_FORMATION"}
 
@@ -8844,73 +8998,6 @@ def gagarin_normalize_final_state(analysis):
         return analysis
     except Exception:
         return analysis
-
-def soyuz_gagarin_single_state_pipeline(results):
-    """
-    SOYUZ GAGARIN — CANONICAL SINGLE STATE PIPELINE.
-
-    Normalizes legacy Gagarin representations so the final pipeline cannot
-    crash when analysis["gagarin"] is temporarily a boolean instead of a dict.
-    This function does not lower thresholds, bypass gates, or authorize trades.
-    """
-    for item in results or []:
-        if not item.get("available"):
-            continue
-
-        gagarin_apply_final_authority(item)
-        a = item.get("analysis") or {}
-
-        try:
-            a["prediction_v53"] = prediction_engine_v53(a)
-        except Exception as exc:
-            print(f"   ⚠️ SOYUZ prediction_v53 error {item.get('name', 'UNKNOWN')}: {exc}")
-            a["prediction_v53"] = {}
-
-        try:
-            a["prediction_authority_v531"] = prediction_authority_v531(a)
-        except Exception as exc:
-            print(f"   ⚠️ SOYUZ prediction_authority error {item.get('name', 'UNKNOWN')}: {exc}")
-            a["prediction_authority_v531"] = {}
-
-        pred = a.get("prediction_authority_v531") if isinstance(a.get("prediction_authority_v531"), dict) else {}
-        g_raw = a.get("gagarin")
-        g = g_raw if isinstance(g_raw, dict) else {}
-
-        trigger_raw = g.get("trigger")
-        if isinstance(trigger_raw, dict):
-            technical_trigger = bool(trigger_raw.get("confirmed"))
-        elif isinstance(trigger_raw, bool):
-            technical_trigger = trigger_raw
-        else:
-            legacy_trigger = a.get("gagarin_trigger")
-            technical_trigger = bool(legacy_trigger) if isinstance(legacy_trigger, bool) else False
-
-        blockers = a.get("gagarin_blockers")
-        if not isinstance(blockers, list):
-            blockers = []
-
-        a["soyuz_canonical_state"] = {
-            "direction": pred.get("direction"),
-            "regime": pred.get("regime"),
-            "setup": pred.get("setup"),
-            "technical_trigger": technical_trigger,
-            "prediction_trigger": bool(pred.get("prediction_trigger_confirmed")),
-            "trigger": bool(pred.get("trigger_confirmed")),
-            "operational": bool(a.get("operational_entry_allowed")),
-            "live": a.get("live_price_status", "UNKNOWN"),
-            "blockers": list(blockers),
-        }
-
-        print(
-            f"   🔗 SOYUZ CANONICAL | {item.get('name', 'UNKNOWN')} | "
-            f"TECH={'OK' if technical_trigger else 'NO'} | "
-            f"PRED={'OK' if pred.get('prediction_trigger_confirmed') else 'NO'} | "
-            f"FINAL={'OK' if pred.get('trigger_confirmed') else 'NO'} | "
-            f"SETUP={pred.get('setup', 'NONE')} | REGIME={pred.get('regime', 'UNKNOWN')}"
-        )
-
-    return results
-
 
 def gagarin_apply_final_authority(item):
     """Rebuild Gagarin after every legacy/finalization layer and make it authoritative."""
@@ -11594,9 +11681,37 @@ def main():
     for item in results:
         gagarin_apply_final_authority(item)
 
-    # SOYUZ canonical normalization: final state is type-safe and synchronized
-    # before any ranking/display logic can read it.
-    soyuz_gagarin_single_state_pipeline(results)
+    # V4 canonical synchronization: all downstream displays/rankings read the
+    # same final Gagarin snapshot. This is diagnostic only and never authorizes
+    # a trade by itself.
+    for item in results:
+        if not item.get("available"):
+            continue
+        a = item.get("analysis") or {}
+        g_raw = a.get("gagarin")
+        g = g_raw if isinstance(g_raw, dict) else {}
+        pred_raw = a.get("prediction_authority_v531")
+        pred = pred_raw if isinstance(pred_raw, dict) else {}
+        trigger_raw = g.get("trigger")
+        if isinstance(trigger_raw, dict):
+            tech_trigger = bool(trigger_raw.get("confirmed"))
+        elif isinstance(trigger_raw, bool):
+            tech_trigger = trigger_raw
+        else:
+            tech_trigger = bool(a.get("gagarin_trigger"))
+        setup_raw = g.get("setup")
+        setup_state = setup_raw.get("state") if isinstance(setup_raw, dict) else str(setup_raw or "NONE")
+        a["soyuz_canonical_state"] = {
+            "direction": pred.get("direction") or (setup_raw.get("direction") if isinstance(setup_raw, dict) else None),
+            "regime": (g.get("regime") or {}).get("state") if isinstance(g.get("regime"), dict) else g.get("regime"),
+            "setup": setup_state,
+            "technical_trigger": tech_trigger,
+            "prediction_trigger": bool(pred.get("prediction_trigger_confirmed")),
+            "trigger": bool(pred.get("trigger_confirmed")) or tech_trigger and setup_state == "ACTIVE",
+            "operational": bool(a.get("operational_entry_allowed")),
+            "live": a.get("live_price_status", "UNKNOWN"),
+            "blockers": list(a.get("gagarin_blockers") or []),
+        }
 
     # MARKET RANKING = analytical opportunity, regardless of entry permission.
     for item in results:
