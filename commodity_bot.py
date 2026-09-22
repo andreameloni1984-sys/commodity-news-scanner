@@ -62,7 +62,7 @@ KNOWLEDGE_DELTA_CAP = float(os.getenv("KNOWLEDGE_DELTA_CAP", "4.0"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "6.1.9-SOYUZ-GAGARIN-AUTONOMOUS"
+BOT_VERSION = "6.2.0-SOYUZ-GAGARIN-CANONICAL"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -878,87 +878,55 @@ def normalize_sifting_quote_units(name, quote):
     return normalized
 
 
-def apply_sifting_live_price(analysis, name):
-    """Replace analytical candle price with the current SiftingIO quote.
+# ============================================================
+# v6.2 — LIVE PROVIDER ROUTER
+# ============================================================
+YAHOO_LIVE_SYMBOLS={"Oro":"GC=F","Argento":"SI=F","Rame":"HG=F","Platino":"PL=F","Palladio":"PA=F","Petrolio WTI":"CL=F","Petrolio Brent":"BZ=F","Benzina RBOB":"RB=F","Heating Oil":"HO=F","Gas Naturale":"NG=F","Grano":"ZW=F","Mais":"ZC=F","Soia":"ZS=F","Riso":"ZR=F","Zucchero":"SB=F","Cacao":"CC=F","Caffè":"KC=F","Cotone":"CT=F","Bovini vivi":"LE=F","Feeder Cattle":"GF=F","Maiali magri":"HE=F"}
 
-    LONG entries use ASK, SHORT entries use BID, and neutral/WAIT uses MID.
-    The historical candles remain untouched: they continue to drive ATR and
-    structure, while the current entry reference is the live quote.
-    """
-    if not SIFTING_LIVE_ENABLED:
-        analysis["live_price_status"] = "DISABLED"
-        return analysis
+def get_yahoo_live_quote(name):
+    symbol=YAHOO_LIVE_SYMBOLS.get(name)
+    if not symbol:return None
+    r=requests.get(f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",params={"range":"1d","interval":"1m","includePrePost":"true"},headers={"User-Agent":"Mozilla/5.0 CommoditiesBot/6.2"},timeout=10);r.raise_for_status();d=r.json().get("chart",{}).get("result") or []
+    if not d:raise RuntimeError(f"Yahoo {symbol}: risultato vuoto")
+    d=d[0];ts=d.get("timestamp") or [];q=(d.get("indicators",{}).get("quote") or [{}])[0];closes=q.get("close") or [];pairs=[(t,p) for t,p in zip(ts,closes) if t and safe_float(p) and safe_float(p)>0]
+    if not pairs:raise RuntimeError(f"Yahoo {symbol}: nessun prezzo 1m")
+    t,p=pairs[-1];age=max(0.0,time.time()-float(t))
+    if age>SIFTING_LIVE_MAX_AGE_SECONDS:raise RuntimeError(f"Yahoo {symbol}: dato vecchio {age:.1f}s > soglia {SIFTING_LIVE_MAX_AGE_SECONDS:.1f}s")
+    p=float(p);return {"provider":"YAHOO_FUTURES","symbol":symbol,"bid":p,"ask":p,"mid":p,"spread":0.0,"timestamp_ms":float(t)*1000.0,"age_seconds":age}
 
+def get_live_quote_router(name,analysis=None):
+    errors=[]
     try:
-        quote = get_sifting_live_quote(name, analysis.get("symbol"))
-        if quote:
-            quote = normalize_sifting_quote_units(name, quote)
+        q=get_sifting_live_quote(name,(analysis or {}).get("symbol"))
+        if q:return normalize_sifting_quote_units(name,q),errors
+    except Exception as e:errors.append(f"SIFTINGIO: {e}")
+    try:
+        q=get_yahoo_live_quote(name)
+        if q:return q,errors
+    except Exception as e:errors.append(f"YAHOO_FUTURES: {e}")
+    return None,errors
+
+
+def apply_sifting_live_price(analysis,name):
+    if not SIFTING_LIVE_ENABLED:analysis["live_price_status"]="DISABLED";return analysis
+    try:
+        quote,errors=get_live_quote_router(name,analysis)
         if not quote:
-            analysis["live_price_status"] = "UNAVAILABLE"
-            if SIFTING_LIVE_REQUIRED:
-                raise RuntimeError("SiftingIO live price non disponibile")
+            analysis["live_price_status"]="UNAVAILABLE";analysis["live_price_provider_errors"]=errors[-4:];analysis["live_price_error"]=" | ".join(errors[-4:])
+            print(f"   ⚪ LIVE {name}: UNAVAILABLE — {' | '.join(errors[-2:]) or 'nessun provider disponibile'}")
+            if SIFTING_LIVE_REQUIRED:raise RuntimeError(analysis["live_price_error"])
             return analysis
-
-        direction = str(
-            analysis.get("setup_direction")
-            or analysis.get("signal")
-            or analysis.get("model_signal")
-            or ""
-        ).upper()
-
-        if direction == "LONG" and quote.get("ask") is not None:
-            execution_price = quote["ask"]
-            execution_side = "ASK"
-        elif direction == "SHORT" and quote.get("bid") is not None:
-            execution_price = quote["bid"]
-            execution_side = "BID"
-        else:
-            execution_price = quote.get("mid")
-            execution_side = "MID"
-
-        if execution_price is None or execution_price <= 0:
-            raise RuntimeError("SiftingIO prezzo live non valido")
-
-        old_price = safe_float(analysis.get("price"))
-        analysis["historical_price"] = old_price
-        analysis["price"] = _price_round(execution_price)
-        analysis["entry"] = _price_round(execution_price)
-        analysis["live_price"] = _price_round(execution_price)
-        analysis["live_price_bid"] = quote.get("bid")
-        analysis["live_price_ask"] = quote.get("ask")
-        analysis["live_price_mid"] = quote.get("mid")
-        analysis["live_price_spread"] = quote.get("spread")
-        analysis["live_price_timestamp_ms"] = quote.get("timestamp_ms")
-        analysis["live_price_age_seconds"] = quote.get("age_seconds")
-        analysis["live_price_provider"] = quote.get("provider")
-        analysis["live_price_symbol"] = quote.get("symbol")
-        analysis["live_price_side"] = execution_side
-        analysis["live_price_unit_normalization"] = quote.get("unit_normalization")
-        analysis["live_price_raw_bid"] = quote.get("raw_bid")
-        analysis["live_price_raw_ask"] = quote.get("raw_ask")
-        analysis["live_price_raw_mid"] = quote.get("raw_mid")
-        analysis["live_price_status"] = "LIVE"
-
-        return analysis
-
+        direction=str(analysis.get("setup_direction") or analysis.get("signal") or analysis.get("model_signal") or "").upper();price=quote.get("ask") if direction=="LONG" else quote.get("bid") if direction=="SHORT" else quote.get("mid");side="ASK" if direction=="LONG" else "BID" if direction=="SHORT" else "MID"
+        if price is None or price<=0:raise RuntimeError("prezzo live non valido")
+        analysis["historical_price"]=safe_float(analysis.get("price"));analysis["price"]=_price_round(price);analysis["entry"]=_price_round(price);analysis["live_price"]=_price_round(price)
+        for k in ("bid","ask","mid","spread"):analysis[f"live_price_{k}"]=quote.get(k)
+        analysis["live_price_timestamp_ms"]=quote.get("timestamp_ms");analysis["live_price_age_seconds"]=quote.get("age_seconds");analysis["live_price_provider"]=quote.get("provider");analysis["live_price_symbol"]=quote.get("symbol");analysis["live_price_side"]=side;analysis["live_price_status"]="LIVE";analysis["live_price_provider_errors"]=[]
+        if quote.get("unit_normalization"):analysis["live_price_unit_normalization"]=quote.get("unit_normalization");analysis["live_price_raw_bid"]=quote.get("raw_bid");analysis["live_price_raw_ask"]=quote.get("raw_ask");analysis["live_price_raw_mid"]=quote.get("raw_mid")
+        print(f"   🟢 LIVE {name}: {quote.get('provider')} {quote.get('symbol')} price={price} age={quote.get('age_seconds')}");return analysis
     except Exception as exc:
-        err = str(exc)
-        upper = err.upper()
-        if "429" in upper or "TOO MANY REQUESTS" in upper:
-            status = "RATE_LIMIT"
-        elif "404" in upper or "NOT FOUND" in upper:
-            status = "NOT_AVAILABLE"
-        elif "STALE" in upper or "AGE" in upper:
-            status = "STALE"
-        else:
-            status = "ERROR"
-        analysis["live_price_status"] = status
-        analysis["live_price_error"] = err
-        if SIFTING_LIVE_REQUIRED:
-            raise
-        print(f"   ⚠️ SiftingIO LIVE {name}: {status}: {exc}")
-        return analysis
-
+        analysis["live_price_status"]="ERROR";analysis["live_price_error"]=str(exc)
+        if SIFTING_LIVE_REQUIRED:raise
+        print(f"   ⚠️ LIVE {name}: ERROR: {exc}");return analysis
 
 def event_risk_snapshot(analysis):
     """Normalize known high-impact event risk without forcing a direction.
@@ -4859,7 +4827,7 @@ def apply_structure_precedence(analysis):
     return a
 
 
-def prediction_engine_v53(analysis):
+def prediction_engine_v53_legacy(analysis):
     """Prediction chain v5.3: regime → structure → zone → pattern → confirmation → space.
 
     It produces a scenario state, not a guaranteed price forecast. A pattern alone
@@ -4957,7 +4925,7 @@ def prediction_engine_v53(analysis):
         'reasons':reasons[:10]
     }
 
-def prediction_authority_v531(analysis):
+def prediction_authority_v531_legacy(analysis):
     """Canonical v5.3.1 prediction authority for display and entry gating.
 
     One label is used everywhere: regime/setup/trigger/prediction. The legacy
@@ -5873,7 +5841,7 @@ def demo_execution_adapter(results, position):
 # TELEGRAM
 # ============================================================
 
-def send_telegram(message, chat_id=None):
+def send_telegram_legacy(message, chat_id=None):
     """Send a Telegram message safely, splitting oversized messages."""
     target_chat_id = str(chat_id or TELEGRAM_CHAT_ID or "").strip()
     if not TELEGRAM_BOT_TOKEN or not target_chat_id:
@@ -10501,6 +10469,35 @@ def demo_execution_adapter(results, position):
 # TELEGRAM
 # ============================================================
 
+def send_telegram(message,chat_id=None):
+    """Send Telegram and verify the Bot API response."""
+    token=str(TELEGRAM_BOT_TOKEN or "").strip();target=str(chat_id or TELEGRAM_CHAT_ID or "").strip();text=str(message or "").strip()
+    if not token or not target:print("❌ TELEGRAM FAILED: token/chat_id non configurati");return False
+    if not text:print("❌ TELEGRAM FAILED: messaggio vuoto");return False
+    url=f"https://api.telegram.org/bot{token}/sendMessage";chunks=[];rest=text
+    while rest:
+        if len(rest)<=3900:chunks.append(rest);break
+        cut=rest.rfind("\n",0,3900);cut=3900 if cut<1000 else cut;chunks.append(rest[:cut]);rest=rest[cut:].lstrip("\n")
+    ok_all=True
+    for i,chunk in enumerate(chunks,1):
+        sent=False
+        for attempt in range(1,4):
+            try:
+                r=requests.post(url,json={"chat_id":target,"text":chunk,"disable_web_page_preview":True},timeout=30);d=r.json()
+                if 200<=r.status_code<300 and d.get("ok"):
+                    print(f"✅ TELEGRAM API OK | chunk {i}/{len(chunks)} | message_id={(d.get('result') or {}).get('message_id')}");sent=True;break
+                print(f"❌ TELEGRAM API ERROR | chunk {i}/{len(chunks)} | attempt={attempt}/3 | HTTP={r.status_code} | ok={d.get('ok',False)} | description={d.get('description','N/D')}")
+                if not (r.status_code==429 or r.status_code>=500) or attempt>=3:break
+                time.sleep(min(10,2**(attempt-1)))
+            except requests.RequestException as e:
+                print(f"❌ TELEGRAM NETWORK ERROR | chunk {i}/{len(chunks)} | attempt={attempt}/3 | {e}")
+                if attempt<3:time.sleep(min(5,2**(attempt-1)))
+        if not sent:ok_all=False
+    print("📨 TELEGRAM DELIVERY CONFIRMED | %d chunk(s)"%len(chunks) if ok_all else "🚨 TELEGRAM DELIVERY FAILED — report non confermato");return ok_all
+
+
+TELEGRAM_COMMAND_OFFSET_FILE = "telegram_update_offset.json"
+TELEGRAM_COMMAND_MAX_AGE_SECONDS = int(os.getenv("TELEGRAM_COMMAND_MAX_AGE_SECONDS", "900"))
 
 
 def _canonical_gagarin_display(analysis):
@@ -11499,6 +11496,11 @@ def main():
     # Gagarin simultaneously reported SHOCK/NO_SETUP/BLOCKED.
     for item in results:
         gagarin_apply_final_authority(item)
+        if item.get("available"):
+            _a=item["analysis"]
+            _a["prediction_v53"]=prediction_engine_v53(_a)
+            _a["prediction_authority_v531"]=prediction_authority_v531(_a)
+            gagarin_normalize_final_state(_a)
 
     # MARKET RANKING = analytical opportunity, regardless of entry permission.
     for item in results:
@@ -11876,14 +11878,14 @@ def main():
     elif REPORT_TYPE in ("ASIA", "EUROPE", "USA", "EOD"):
         if REPORT_TYPE == "ASIA":
             message = send_asia_morning_report(global_intel, results)
-            send_telegram(message)
-            print("📨 Telegram: report ASIA & OCEANIA inviato")
+            _sent=send_telegram(message)
+            print("📨 Telegram: report ASIA & OCEANIA CONSEGNATO" if _sent else "🚨 Telegram: report ASIA & OCEANIA NON CONSEGNATO")
         elif REPORT_TYPE == "EUROPE":
-            send_telegram(_session_message("🌅 EUROPE — MARKET REPORT", ranked, best, position_message))
-            print("📨 Telegram: report EUROPA inviato")
+            _sent=send_telegram(_session_message("🌅 EUROPE — MARKET REPORT", ranked, best, position_message))
+            print("📨 Telegram: report EUROPA CONSEGNATO" if _sent else "🚨 Telegram: report EUROPA NON CONSEGNATO")
         elif REPORT_TYPE == "USA":
-            send_telegram(_session_message("🇺🇸 USA — MARKET REPORT", ranked, best, position_message))
-            print("📨 Telegram: report USA inviato")
+            _sent=send_telegram(_session_message("🇺🇸 USA — MARKET REPORT", ranked, best, position_message))
+            print("📨 Telegram: report USA CONSEGNATO" if _sent else "🚨 Telegram: report USA NON CONSEGNATO")
         elif REPORT_TYPE == "EOD":
             eod_report = run_end_of_day_test(force=True)
             if eod_report:
@@ -11895,8 +11897,8 @@ def main():
         # Manual test without an explicit request sends a compact Europe report.
         # Scheduled runs remain fully deterministic through REPORT_TYPE.
         if os.getenv("RUN_MODE", "").strip().upper() == "MANUAL_TEST":
-            send_telegram(_session_message("🧪 MANUAL TEST — MARKET REPORT", ranked, best, position_message))
-            print("📨 Telegram: manual test inviato")
+            _sent=send_telegram(_session_message("🧪 MANUAL TEST — MARKET REPORT", ranked, best, position_message))
+            print("📨 Telegram: manual test CONSEGNATO" if _sent else "🚨 Telegram: manual test NON CONSEGNATO")
         else:
             print(f"📡 REPORT_TYPE={REPORT_TYPE or 'AUTO'} — nessun invio Telegram in questa esecuzione")
 
@@ -11905,4 +11907,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main() 
+    main()
