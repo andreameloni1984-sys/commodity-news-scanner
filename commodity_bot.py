@@ -837,6 +837,47 @@ def get_sifting_live_quote(name, symbol=None):
     return quote
 
 
+# ============================================================
+# SIFTINGIO UNIT NORMALIZATION
+# ============================================================
+# SiftingIO XCUUSD may be returned in USD/metric-tonne while the historical
+# COMEX/HG=F copper series used by the bot is expressed in USD/lb. Mixing the
+# two scales corrupts the live entry price and therefore SL/TP, RR and Gagarin.
+SIFTING_COPPER_TONNES_TO_POUNDS = 2204.6226218488
+
+
+def normalize_sifting_quote_units(name, quote):
+    """Normalize SiftingIO copper quotes to the historical USD/lb scale."""
+    if not isinstance(quote, dict):
+        return quote
+    if str(name or '').strip() != 'Rame':
+        return quote
+
+    values = [safe_float(quote.get(k)) for k in ('bid', 'ask', 'mid')]
+    values = [v for v in values if v is not None and v > 0]
+    if not values:
+        return quote
+
+    # COMEX copper in USD/lb is normally far below 100. A value above 100
+    # is treated as USD/metric-tonne and converted to USD/lb.
+    if max(values) <= 100.0:
+        return quote
+
+    factor = 1.0 / SIFTING_COPPER_TONNES_TO_POUNDS
+    normalized = dict(quote)
+    for key in ('bid', 'ask', 'mid', 'spread'):
+        value = safe_float(normalized.get(key))
+        if value is not None:
+            normalized[key] = value * factor
+
+    normalized['unit_normalization'] = 'USD_METRIC_TONNE_TO_USD_LB'
+    normalized['unit_conversion_factor'] = factor
+    normalized['raw_bid'] = quote.get('bid')
+    normalized['raw_ask'] = quote.get('ask')
+    normalized['raw_mid'] = quote.get('mid')
+    return normalized
+
+
 def apply_sifting_live_price(analysis, name):
     """Replace analytical candle price with the current SiftingIO quote.
 
@@ -850,6 +891,8 @@ def apply_sifting_live_price(analysis, name):
 
     try:
         quote = get_sifting_live_quote(name, analysis.get("symbol"))
+        if quote:
+            quote = normalize_sifting_quote_units(name, quote)
         if not quote:
             analysis["live_price_status"] = "UNAVAILABLE"
             if SIFTING_LIVE_REQUIRED:
@@ -890,6 +933,10 @@ def apply_sifting_live_price(analysis, name):
         analysis["live_price_provider"] = quote.get("provider")
         analysis["live_price_symbol"] = quote.get("symbol")
         analysis["live_price_side"] = execution_side
+        analysis["live_price_unit_normalization"] = quote.get("unit_normalization")
+        analysis["live_price_raw_bid"] = quote.get("raw_bid")
+        analysis["live_price_raw_ask"] = quote.get("raw_ask")
+        analysis["live_price_raw_mid"] = quote.get("raw_mid")
         analysis["live_price_status"] = "LIVE"
 
         return analysis
@@ -5827,103 +5874,29 @@ def demo_execution_adapter(results, position):
 # ============================================================
 
 def send_telegram(message, chat_id=None):
-    """Send a Telegram message and verify the Bot API response."""
-    token = str(TELEGRAM_BOT_TOKEN or "").strip()
-    target_chat = str(chat_id or TELEGRAM_CHAT_ID or "").strip()
-    if not token or not target_chat:
-        print("❌ TELEGRAM FAILED: token/chat_id non configurati")
+    """Send a Telegram message safely, splitting oversized messages."""
+    target_chat_id = str(chat_id or TELEGRAM_CHAT_ID or "").strip()
+    if not TELEGRAM_BOT_TOKEN or not target_chat_id:
+        print("⚠️ Telegram non configurato.")
         return False
 
     text = str(message or "").strip()
     if not text:
-        print("❌ TELEGRAM FAILED: messaggio vuoto")
         return False
 
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    chunks = []
-    remaining = text
-    while remaining:
-        if len(remaining) <= 3900:
-            chunks.append(remaining)
-            break
-        cut = remaining.rfind("\n", 0, 3900)
-        if cut < 1000:
-            cut = 3900
-        chunks.append(remaining[:cut])
-        remaining = remaining[cut:].lstrip("\n")
-
-    all_ok = True
-    for index, chunk in enumerate(chunks, 1):
-        payload = {
-            "chat_id": target_chat,
-            "text": chunk,
-            "disable_web_page_preview": True,
-        }
-        sent = False
-        for attempt in range(1, 4):
-            try:
-                response = requests.post(url, json=payload, timeout=30)
-                status = response.status_code
-                try:
-                    data = response.json()
-                except Exception:
-                    data = {}
-
-                api_ok = bool(data.get("ok")) if isinstance(data, dict) else False
-                description = str(data.get("description", "")).strip() if isinstance(data, dict) else ""
-                result = data.get("result") if isinstance(data, dict) else {}
-                message_id = result.get("message_id") if isinstance(result, dict) else None
-
-                if 200 <= status < 300 and api_ok:
-                    print(
-                        f"✅ TELEGRAM API OK | chunk {index}/{len(chunks)} | "
-                        f"chat={target_chat} | message_id={message_id}"
-                    )
-                    sent = True
-                    break
-
-                retry_after = None
-                params = data.get("parameters") if isinstance(data, dict) else None
-                if isinstance(params, dict):
-                    try:
-                        retry_after = int(params.get("retry_after"))
-                    except Exception:
-                        retry_after = None
-
-                transient = status == 429 or status >= 500
-                print(
-                    f"❌ TELEGRAM API ERROR | chunk {index}/{len(chunks)} | "
-                    f"attempt={attempt}/3 | HTTP={status} | ok={api_ok} | "
-                    f"description={description or 'N/D'}"
-                )
-                if not transient or attempt >= 3:
-                    break
-
-                time.sleep(max(1, min(retry_after or (2 ** (attempt - 1)), 10)))
-
-            except requests.RequestException as error:
-                print(
-                    f"❌ TELEGRAM NETWORK ERROR | chunk {index}/{len(chunks)} | "
-                    f"attempt={attempt}/3 | {error}"
-                )
-                if attempt < 3:
-                    time.sleep(min(2 ** (attempt - 1), 5))
-            except Exception as error:
-                print(
-                    f"❌ TELEGRAM UNEXPECTED ERROR | chunk {index}/{len(chunks)} | "
-                    f"{type(error).__name__}: {error}"
-                )
-                break
-
-        if not sent:
-            all_ok = False
-
-    if all_ok:
-        print(f"📨 TELEGRAM DELIVERY CONFIRMED | {len(chunks)} chunk(s)")
-    else:
-        print("🚨 TELEGRAM DELIVERY FAILED — il report NON è stato confermato da Telegram.")
-
-    return all_ok
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    # Telegram's practical text limit is 4096 characters. Keep a small margin.
+    chunks = [text[i:i+3900] for i in range(0, len(text), 3900)]
+    ok = True
+    for chunk in chunks:
+        payload = {"chat_id": target_chat_id, "text": chunk}
+        try:
+            response = requests.post(url, json=payload, timeout=20)
+            response.raise_for_status()
+        except Exception as error:
+            ok = False
+            print(f"⚠️ Errore Telegram: {error}")
+    return ok
 
 
 TELEGRAM_COMMAND_OFFSET_FILE = "telegram_update_offset.json"
@@ -10528,33 +10501,6 @@ def demo_execution_adapter(results, position):
 # TELEGRAM
 # ============================================================
 
-def send_telegram(message, chat_id=None):
-    """Send a Telegram message safely, splitting oversized messages."""
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("⚠️ Telegram non configurato.")
-        return False
-
-    text = str(message or "").strip()
-    if not text:
-        return False
-
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    # Telegram's practical text limit is 4096 characters. Keep a small margin.
-    chunks = [text[i:i+3900] for i in range(0, len(text), 3900)]
-    ok = True
-    for chunk in chunks:
-        payload = {"chat_id": TELEGRAM_CHAT_ID, "text": chunk}
-        try:
-            response = requests.post(url, json=payload, timeout=20)
-            response.raise_for_status()
-        except Exception as error:
-            ok = False
-            print(f"⚠️ Errore Telegram: {error}")
-    return ok
-
-
-TELEGRAM_COMMAND_OFFSET_FILE = "telegram_update_offset.json"
-TELEGRAM_COMMAND_MAX_AGE_SECONDS = int(os.getenv("TELEGRAM_COMMAND_MAX_AGE_SECONDS", "900"))
 
 
 def _canonical_gagarin_display(analysis):
@@ -11959,4 +11905,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main() 
