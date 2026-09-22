@@ -62,7 +62,7 @@ KNOWLEDGE_DELTA_CAP = float(os.getenv("KNOWLEDGE_DELTA_CAP", "4.0"))
 
 # v3.0 — multi-horizon research and market-structure layer.
 # Real/demo order execution remains OFF by default.
-BOT_VERSION = "6.1.9-SOYUZ-GAGARIN-V5"
+BOT_VERSION = "6.1.9-SOYUZ-GAGARIN-AUTONOMOUS"
 PAPER_TRADING_ONLY = os.getenv("PAPER_TRADING_ONLY", "1") == "1"
 FUTURES_STRUCTURE_ENABLED = os.getenv("FUTURES_STRUCTURE_ENABLED", "1") == "1"
 POLITICAL_IMPACT_ENABLED = os.getenv("POLITICAL_IMPACT_ENABLED", "1") == "1"
@@ -837,224 +837,23 @@ def get_sifting_live_quote(name, symbol=None):
     return quote
 
 
-# ============================================================
-# SIFTINGIO UNIT NORMALIZATION
-# ============================================================
-# SiftingIO XCUUSD may be returned in USD/metric-tonne while the historical
-# COMEX/HG=F copper series used by the bot is expressed in USD/lb. Mixing the
-# two scales corrupts the live entry price and therefore SL/TP, RR and Gagarin.
-SIFTING_COPPER_TONNES_TO_POUNDS = 2204.6226218488
-
-
-def normalize_sifting_quote_units(name, quote):
-    """Normalize SiftingIO copper quotes to the historical USD/lb scale."""
-    if not isinstance(quote, dict):
-        return quote
-    if str(name or '').strip() != 'Rame':
-        return quote
-
-    values = [safe_float(quote.get(k)) for k in ('bid', 'ask', 'mid')]
-    values = [v for v in values if v is not None and v > 0]
-    if not values:
-        return quote
-
-    # COMEX copper in USD/lb is normally far below 100. A value above 100
-    # is treated as USD/metric-tonne and converted to USD/lb.
-    if max(values) <= 100.0:
-        return quote
-
-    factor = 1.0 / SIFTING_COPPER_TONNES_TO_POUNDS
-    normalized = dict(quote)
-    for key in ('bid', 'ask', 'mid', 'spread'):
-        value = safe_float(normalized.get(key))
-        if value is not None:
-            normalized[key] = value * factor
-
-    normalized['unit_normalization'] = 'USD_METRIC_TONNE_TO_USD_LB'
-    normalized['unit_conversion_factor'] = factor
-    normalized['raw_bid'] = quote.get('bid')
-    normalized['raw_ask'] = quote.get('ask')
-    normalized['raw_mid'] = quote.get('mid')
-    return normalized
-
-
-# ============================================================
-# SOYUZ V5 — LIVE QUOTE ROUTER + CANONICAL SETUP/TRIGGER STATE
-# ============================================================
-# Analysis symbols and execution/live symbols are deliberately separate.
-# Historical analysis can keep Twelve Data commodity symbols while live
-# execution prefers exchange futures through Yahoo and then Twelve Data.
-LIVE_QUOTE_CANDIDATES = {
-    "Oro": ["GC=F", "XAU/USD", "XAUUSD"],
-    "Argento": ["SI=F", "XAG/USD", "XAGUSD"],
-    "Platino": ["PL=F", "XPT/USD", "XPTUSD"],
-    "Palladio": ["PA=F", "XPD/USD", "XPDUSD"],
-    "Petrolio WTI": ["CL=F", "WTI/USD", "WTIUSD"],
-    "Petrolio Brent": ["BZ=F", "BRN/USD", "XBR/USD", "XBRUSD"],
-    "Benzina RBOB": ["RB=F", "RB/USD", "RBUSD"],
-    "Heating Oil": ["HO=F", "HOIL/USD", "HOILUSD"],
-    "Gas Naturale": ["NG=F", "NATGAS/USD", "NATGASUSD"],
-    "Rame": ["HG=F", "HG1", "COPPER/USD", "XCUUSD"],
-    "Grano": ["ZW=F", "WHEAT/USD", "WHEATUSD"],
-    "Mais": ["ZC=F", "CORN/USD", "CORNUSD"],
-    "Soia": ["ZS=F", "SOYBEAN/USD", "SOYBUSD"],
-    "Riso": ["ZR=F", "RICE/USD", "RICEUSD"],
-    "Caffè": ["KC=F", "COFFEE/USD", "COFFEEUSD"],
-    "Cacao": ["CC=F", "COCOA/USD", "COCOAUSD"],
-    "Zucchero": ["SB=F", "SUGAR/USD", "SUGARUSD"],
-    "Cotone": ["CT=F", "COTTON/USD", "COTTONUSD"],
-    "Bovini vivi": ["LE=F", "CATTLE/USD", "CATTLEUSD"],
-    "Feeder Cattle": ["GF=F", "FEEDC/USD", "FEEDCUSD"],
-    "Maiali magri": ["HE=F", "HOGS/USD", "HOGSUSD"],
-}
-
-
-def _live_quote_candidates(name, analysis=None):
-    analysis = analysis or {}
-    configured = analysis.get("symbol")
-    values = list(LIVE_QUOTE_CANDIDATES.get(name, []))
-    if configured:
-        values.append(str(configured))
-    # Preserve order while removing duplicates.
-    return list(dict.fromkeys(x for x in values if x))
-
-
-def _twelvedata_live_quote(symbol):
-    if not API_KEY or not symbol:
-        return None
-    url = "https://api.twelvedata.com/quote"
-    response = requests.get(
-        url,
-        params={"symbol": symbol, "apikey": API_KEY, "format": "JSON"},
-        timeout=SIFTING_TIMEOUT_SECONDS,
-        headers={"User-Agent": "CommoditiesBot/4.6"},
-    )
-    if response.status_code == 429:
-        raise RuntimeError(f"Twelve Data 429: {symbol}")
-    response.raise_for_status()
-    data = response.json()
-    if not isinstance(data, dict) or data.get("status") == "error":
-        msg = data.get("message") if isinstance(data, dict) else "invalid response"
-        raise RuntimeError(f"Twelve Data {symbol}: {msg}")
-    price = safe_float(data.get("close"), safe_float(data.get("price")))
-    if price is None or price <= 0:
-        raise RuntimeError(f"Twelve Data {symbol}: prezzo non valido")
-    timestamp = safe_float(data.get("timestamp"))
-    age = None
-    if timestamp:
-        age = max(0.0, time.time() - timestamp)
-        if age > SIFTING_LIVE_MAX_AGE_SECONDS:
-            raise RuntimeError(f"Twelve Data {symbol}: dato vecchio {age:.1f}s")
-    return {
-        "provider": "TWELVE_DATA_QUOTE",
-        "symbol": symbol,
-        "bid": price,
-        "ask": price,
-        "mid": price,
-        "spread": 0.0,
-        "timestamp_ms": timestamp * 1000 if timestamp else None,
-        "age_seconds": age,
-    }
-
-
-def _yahoo_live_quote(name):
-    ticker = YAHOO_TICKERS.get(name)
-    if not ticker:
-        return None
-    params = {
-        "range": "1d",
-        "interval": "1m",
-        "includePrePost": "true",
-        "events": "div,splits",
-    }
-    response = requests.get(
-        f"{YAHOO_BASE_URL}/{ticker}",
-        params=params,
-        headers=YAHOO_HEADERS,
-        timeout=SIFTING_TIMEOUT_SECONDS,
-    )
-    response.raise_for_status()
-    payload = response.json()
-    result = (payload.get("chart") or {}).get("result")
-    if not result:
-        raise RuntimeError(f"Yahoo {ticker}: nessun risultato")
-    meta = result[0].get("meta") or {}
-    timestamps = result[0].get("timestamp") or []
-    indicators = (result[0].get("indicators") or {}).get("quote") or []
-    quote = indicators[0] if indicators else {}
-    closes = quote.get("close") or []
-    pairs = [(ts, safe_float(px)) for ts, px in zip(timestamps, closes)]
-    pairs = [(ts, px) for ts, px in pairs if px is not None and px > 0]
-    if not pairs:
-        price = safe_float(meta.get("regularMarketPrice"))
-        ts = safe_float(meta.get("regularMarketTime"))
-    else:
-        ts, price = pairs[-1]
-    if price is None or price <= 0:
-        raise RuntimeError(f"Yahoo {ticker}: prezzo non valido")
-    age = max(0.0, time.time() - ts) if ts else None
-    if age is not None and age > SIFTING_LIVE_MAX_AGE_SECONDS:
-        raise RuntimeError(f"Yahoo {ticker}: dato vecchio {age:.1f}s")
-    return {
-        "provider": "YAHOO_LIVE_1M",
-        "symbol": ticker,
-        "bid": price,
-        "ask": price,
-        "mid": price,
-        "spread": 0.0,
-        "timestamp_ms": ts * 1000 if ts else None,
-        "age_seconds": age,
-    }
-
-
-def get_live_quote_router(name, analysis):
-    """Try SiftingIO, then Yahoo 1m futures, then Twelve Data quote."""
-    errors = []
-    try:
-        q = get_sifting_live_quote(name, analysis.get("symbol"))
-        if q:
-            return normalize_sifting_quote_units(name, q), errors
-    except Exception as exc:
-        errors.append(f"SiftingIO: {exc}")
-
-    try:
-        q = _yahoo_live_quote(name)
-        if q:
-            return q, errors
-    except Exception as exc:
-        errors.append(f"Yahoo: {exc}")
-
-    for symbol in _live_quote_candidates(name, analysis):
-        try:
-            q = _twelvedata_live_quote(symbol)
-            if q:
-                return q, errors
-        except Exception as exc:
-            errors.append(str(exc))
-            if "429" in str(exc).upper():
-                break
-    return None, errors
-
-
 def apply_sifting_live_price(analysis, name):
-    """V4 live router: SiftingIO -> Yahoo 1m -> Twelve Data quote.
+    """Replace analytical candle price with the current SiftingIO quote.
 
-    Historical candles are never replaced. Only the execution/reference price
-    is promoted when a fresh live quote passes the age check.
+    LONG entries use ASK, SHORT entries use BID, and neutral/WAIT uses MID.
+    The historical candles remain untouched: they continue to drive ATR and
+    structure, while the current entry reference is the live quote.
     """
     if not SIFTING_LIVE_ENABLED:
         analysis["live_price_status"] = "DISABLED"
         return analysis
 
     try:
-        quote, errors = get_live_quote_router(name, analysis)
+        quote = get_sifting_live_quote(name, analysis.get("symbol"))
         if not quote:
             analysis["live_price_status"] = "UNAVAILABLE"
-            analysis["live_price_errors"] = errors
-            analysis["live_price_error"] = " | ".join(errors[-3:]) if errors else "no provider returned a quote"
-            print(f"   ⚪ LIVE {name}: UNAVAILABLE — {' | '.join(errors[-3:]) if errors else 'nessuna quotazione'}")
             if SIFTING_LIVE_REQUIRED:
-                raise RuntimeError(f"Live price non disponibile: {' | '.join(errors[-3:])}")
+                raise RuntimeError("SiftingIO live price non disponibile")
             return analysis
 
         direction = str(
@@ -1075,7 +874,7 @@ def apply_sifting_live_price(analysis, name):
             execution_side = "MID"
 
         if execution_price is None or execution_price <= 0:
-            raise RuntimeError(f"{quote.get('provider')}: prezzo live non valido")
+            raise RuntimeError("SiftingIO prezzo live non valido")
 
         old_price = safe_float(analysis.get("price"))
         analysis["historical_price"] = old_price
@@ -1092,22 +891,27 @@ def apply_sifting_live_price(analysis, name):
         analysis["live_price_symbol"] = quote.get("symbol")
         analysis["live_price_side"] = execution_side
         analysis["live_price_status"] = "LIVE"
-        analysis["live_price_errors"] = errors
 
-        print(
-            f"   🟢 LIVE {name}: {quote.get('provider')} "
-            f"{quote.get('symbol')} price={execution_price} "
-            f"age={quote.get('age_seconds')}s"
-        )
         return analysis
 
     except Exception as exc:
-        analysis["live_price_status"] = "ERROR"
-        analysis["live_price_error"] = str(exc)
+        err = str(exc)
+        upper = err.upper()
+        if "429" in upper or "TOO MANY REQUESTS" in upper:
+            status = "RATE_LIMIT"
+        elif "404" in upper or "NOT FOUND" in upper:
+            status = "NOT_AVAILABLE"
+        elif "STALE" in upper or "AGE" in upper:
+            status = "STALE"
+        else:
+            status = "ERROR"
+        analysis["live_price_status"] = status
+        analysis["live_price_error"] = err
         if SIFTING_LIVE_REQUIRED:
             raise
-        print(f"   ⚠️ LIVE {name}: {exc}")
+        print(f"   ⚠️ SiftingIO LIVE {name}: {status}: {exc}")
         return analysis
+
 
 def event_risk_snapshot(analysis):
     """Normalize known high-impact event risk without forcing a direction.
@@ -6023,29 +5827,103 @@ def demo_execution_adapter(results, position):
 # ============================================================
 
 def send_telegram(message, chat_id=None):
-    """Send a Telegram message safely, splitting oversized messages."""
-    target_chat_id = str(chat_id or TELEGRAM_CHAT_ID or "").strip()
-    if not TELEGRAM_BOT_TOKEN or not target_chat_id:
-        print("⚠️ Telegram non configurato.")
+    """Send a Telegram message and verify the Bot API response."""
+    token = str(TELEGRAM_BOT_TOKEN or "").strip()
+    target_chat = str(chat_id or TELEGRAM_CHAT_ID or "").strip()
+    if not token or not target_chat:
+        print("❌ TELEGRAM FAILED: token/chat_id non configurati")
         return False
 
     text = str(message or "").strip()
     if not text:
+        print("❌ TELEGRAM FAILED: messaggio vuoto")
         return False
 
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    # Telegram's practical text limit is 4096 characters. Keep a small margin.
-    chunks = [text[i:i+3900] for i in range(0, len(text), 3900)]
-    ok = True
-    for chunk in chunks:
-        payload = {"chat_id": target_chat_id, "text": chunk}
-        try:
-            response = requests.post(url, json=payload, timeout=20)
-            response.raise_for_status()
-        except Exception as error:
-            ok = False
-            print(f"⚠️ Errore Telegram: {error}")
-    return ok
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    chunks = []
+    remaining = text
+    while remaining:
+        if len(remaining) <= 3900:
+            chunks.append(remaining)
+            break
+        cut = remaining.rfind("\n", 0, 3900)
+        if cut < 1000:
+            cut = 3900
+        chunks.append(remaining[:cut])
+        remaining = remaining[cut:].lstrip("\n")
+
+    all_ok = True
+    for index, chunk in enumerate(chunks, 1):
+        payload = {
+            "chat_id": target_chat,
+            "text": chunk,
+            "disable_web_page_preview": True,
+        }
+        sent = False
+        for attempt in range(1, 4):
+            try:
+                response = requests.post(url, json=payload, timeout=30)
+                status = response.status_code
+                try:
+                    data = response.json()
+                except Exception:
+                    data = {}
+
+                api_ok = bool(data.get("ok")) if isinstance(data, dict) else False
+                description = str(data.get("description", "")).strip() if isinstance(data, dict) else ""
+                result = data.get("result") if isinstance(data, dict) else {}
+                message_id = result.get("message_id") if isinstance(result, dict) else None
+
+                if 200 <= status < 300 and api_ok:
+                    print(
+                        f"✅ TELEGRAM API OK | chunk {index}/{len(chunks)} | "
+                        f"chat={target_chat} | message_id={message_id}"
+                    )
+                    sent = True
+                    break
+
+                retry_after = None
+                params = data.get("parameters") if isinstance(data, dict) else None
+                if isinstance(params, dict):
+                    try:
+                        retry_after = int(params.get("retry_after"))
+                    except Exception:
+                        retry_after = None
+
+                transient = status == 429 or status >= 500
+                print(
+                    f"❌ TELEGRAM API ERROR | chunk {index}/{len(chunks)} | "
+                    f"attempt={attempt}/3 | HTTP={status} | ok={api_ok} | "
+                    f"description={description or 'N/D'}"
+                )
+                if not transient or attempt >= 3:
+                    break
+
+                time.sleep(max(1, min(retry_after or (2 ** (attempt - 1)), 10)))
+
+            except requests.RequestException as error:
+                print(
+                    f"❌ TELEGRAM NETWORK ERROR | chunk {index}/{len(chunks)} | "
+                    f"attempt={attempt}/3 | {error}"
+                )
+                if attempt < 3:
+                    time.sleep(min(2 ** (attempt - 1), 5))
+            except Exception as error:
+                print(
+                    f"❌ TELEGRAM UNEXPECTED ERROR | chunk {index}/{len(chunks)} | "
+                    f"{type(error).__name__}: {error}"
+                )
+                break
+
+        if not sent:
+            all_ok = False
+
+    if all_ok:
+        print(f"📨 TELEGRAM DELIVERY CONFIRMED | {len(chunks)} chunk(s)")
+    else:
+        print("🚨 TELEGRAM DELIVERY FAILED — il report NON è stato confermato da Telegram.")
+
+    return all_ok
 
 
 TELEGRAM_COMMAND_OFFSET_FILE = "telegram_update_offset.json"
@@ -8827,28 +8705,8 @@ def gagarin_setup_engine(analysis, router):
     d = analysis.get("setup_direction") or analysis.get("model_signal") or "NONE"
     l2l = analysis.get("level_to_level") or {}
     behaviour = l2l.get("behaviour", "NESSUNA")
-    # V5: a directional scenario with a valid Gagarin strategy family is
-    # never collapsed to SETUP=NONE merely because the L2L behaviour is
-    # currently NESSUNA/REACTION.  It remains a CANDIDATE until confirmation.
-    if d not in ("LONG", "SHORT"):
+    if d not in ("LONG", "SHORT") or not router.get("allowed"):
         return {"state": "NONE", "direction": d, "type": "NONE", "quality": 0.0}
-
-    allowed = router.get("allowed") or []
-    if not allowed:
-        # Do not manufacture a setup in UNKNOWN/SHOCK.  For a recognized
-        # regime, recover the compatible strategy family from the canonical
-        # router state so the display cannot lose a real directional setup.
-        rstate = str(router.get("regime") or "UNKNOWN").upper()
-        if rstate == "TREND":
-            allowed = ["TREND_PULLBACK", "BREAKOUT_RETEST"]
-        elif rstate == "RANGE":
-            allowed = ["RANGE_REJECTION", "MEAN_REVERSION"]
-        elif rstate == "TRANSITION":
-            allowed = ["BREAKOUT_RETEST", "REVERSAL_SFP"]
-        else:
-            return {"state": "NONE", "direction": d, "type": "NONE", "quality": 0.0}
-        router = dict(router)
-        router["allowed"] = allowed
     if behaviour == "BREAKOUT_RETEST" and "BREAKOUT_RETEST" in router["allowed"]:
         stype = "BREAKOUT_RETEST"
     elif behaviour == "BREAKOUT" and "BREAKOUT" in router["allowed"]:
@@ -8866,12 +8724,7 @@ def gagarin_setup_engine(analysis, router):
     # confirmation (breakout/retest/trigger) is not complete. It must never
     # authorize an entry. ACTIVE is reserved for a genuinely formed setup.
     formed_behaviour = behaviour in {"BREAKOUT_RETEST", "BREAKOUT", "FAKEOUT"}
-    trigger = analysis.get("entry_trigger") or {}
-    trigger_confirmed = bool(trigger.get("confirmed"))
-    l2l_gate = bool(l2l.get("gate"))
-    pullback_restart = behaviour in {"PULLBACK + RIPARTENZA", "PULLBACK_RIPARTENZA", "PULLBACK_RIPARTENZA_5M"}
-    confirmed_pullback = pullback_restart and trigger_confirmed and l2l_gate and quality >= 50
-    state = "ACTIVE" if quality >= 50 and (formed_behaviour or confirmed_pullback) else "CANDIDATE"
+    state = "ACTIVE" if formed_behaviour and quality >= 50 else "CANDIDATE"
     return {"state": state, "direction": d, "type": stype, "quality": round(quality, 1),
             "confirmation": "CONFIRMED" if state == "ACTIVE" else "IN_FORMATION"}
 
@@ -9019,70 +8872,6 @@ def gagarin_normalize_final_state(analysis):
     except Exception:
         return analysis
 
-def soyuz_v5_sync_gagarin_state(analysis):
-    """V5 canonical synchronization of SETUP/TRIGGER without relaxing entry gates.
-
-    A confirmed technical trigger is allowed to remain TRUE at the Gagarin
-    diagnostic level even when the setup is still CANDIDATE.  Authorization
-    still requires ACTIVE setup, safety, RR and all existing thresholds.
-    This separates "trigger detected" from "trade authorized".
-    """
-    if not isinstance(analysis, dict):
-        return analysis
-
-    g = analysis.get("gagarin") if isinstance(analysis.get("gagarin"), dict) else {}
-    setup = g.get("setup") if isinstance(g.get("setup"), dict) else {}
-    trigger = g.get("trigger") if isinstance(g.get("trigger"), dict) else {}
-    router = g.get("strategy_router") if isinstance(g.get("strategy_router"), dict) else {}
-    regime = g.get("regime") if isinstance(g.get("regime"), dict) else {}
-
-    direction = str(
-        setup.get("direction")
-        or analysis.get("setup_direction")
-        or analysis.get("model_signal")
-        or "NONE"
-    ).upper()
-    regime_state = str(regime.get("state") or router.get("regime") or "UNKNOWN").upper()
-    tech = analysis.get("entry_trigger") if isinstance(analysis.get("entry_trigger"), dict) else {}
-    technical_confirmed = bool(tech.get("confirmed"))
-
-    # Gagarin trigger is a confirmation diagnostic, not an authorization.
-    # Keep L2L retest/fakeout semantics from the native trigger engine.
-    gagarin_trigger = bool(trigger.get("confirmed"))
-    if technical_confirmed and not trigger.get("fakeout", False):
-        gagarin_trigger = True
-    if (analysis.get("level_to_level") or {}).get("fakeout"):
-        gagarin_trigger = False
-
-    if setup.get("type") in (None, "", "NONE") and direction in ("LONG", "SHORT"):
-        if regime_state == "TREND":
-            setup["type"] = "TREND_PULLBACK"
-        elif regime_state == "RANGE":
-            setup["type"] = "RANGE_REJECTION"
-        elif regime_state == "TRANSITION":
-            setup["type"] = "BREAKOUT_RETEST"
-
-    # A directional technical trigger with an unconfirmed L2L gate is a
-    # candidate, never an active setup. This is the key V5 semantic fix.
-    if setup.get("type") not in (None, "", "NONE") and setup.get("state") == "NONE":
-        setup["state"] = "CANDIDATE"
-        setup["confirmation"] = "IN_FORMATION"
-        setup["quality"] = safe_float(setup.get("quality"), safe_float((analysis.get("level_to_level") or {}).get("score"), 0.0)) or 0.0
-
-    trigger["confirmed"] = bool(gagarin_trigger)
-    trigger["technical_confirmed"] = bool(technical_confirmed)
-    trigger["source"] = "entry_trigger + L2L retest/fakeout + V5 synchronization"
-
-    g["setup"] = setup
-    g["trigger"] = trigger
-    analysis["gagarin"] = g
-    analysis["gagarin_technical_trigger"] = technical_confirmed
-    analysis["gagarin_trigger_confirmed"] = bool(gagarin_trigger)
-    analysis["gagarin_setup_state"] = setup.get("state", "NONE")
-    analysis["gagarin_setup_type"] = setup.get("type", "NONE")
-    return analysis
-
-
 def gagarin_apply_final_authority(item):
     """Rebuild Gagarin after every legacy/finalization layer and make it authoritative."""
     if not item.get("available"):
@@ -9127,9 +8916,6 @@ def gagarin_apply_final_authority(item):
     a["gagarin_blockers"] = policy.get("blockers", [])
     a["gagarin_authority"] = True
     a["operational_entry_allowed"] = policy["state"] in ("READY_LONG", "READY_SHORT")
-    # V5: synchronize diagnostic SETUP/TRIGGER after the final rebuild.
-    # This does not change policy authorization.
-    soyuz_v5_sync_gagarin_state(a)
     # Canonicalize once so console, ranking and Telegram share the same final state.
     gagarin_normalize_final_state(a)
 
@@ -11767,43 +11553,6 @@ def main():
     # Gagarin simultaneously reported SHOCK/NO_SETUP/BLOCKED.
     for item in results:
         gagarin_apply_final_authority(item)
-        if item.get("available"):
-            soyuz_v5_sync_gagarin_state(item.get("analysis") or {})
-
-    # V5 canonical synchronization: all downstream displays/rankings read the
-    # same final Gagarin snapshot. This is diagnostic only and never authorizes
-    # a trade by itself.
-    for item in results:
-        if not item.get("available"):
-            continue
-        a = item.get("analysis") or {}
-        g_raw = a.get("gagarin")
-        g = g_raw if isinstance(g_raw, dict) else {}
-        pred_raw = a.get("prediction_authority_v531")
-        pred = pred_raw if isinstance(pred_raw, dict) else {}
-        trigger_raw = g.get("trigger")
-        if isinstance(trigger_raw, dict):
-            tech_trigger = bool(trigger_raw.get("confirmed"))
-        elif isinstance(trigger_raw, bool):
-            tech_trigger = trigger_raw
-        else:
-            tech_trigger = bool(a.get("gagarin_trigger"))
-        setup_raw = g.get("setup")
-        setup_state = setup_raw.get("state") if isinstance(setup_raw, dict) else str(setup_raw or "NONE")
-        setup_type = setup_raw.get("type") if isinstance(setup_raw, dict) else str(setup_raw or "NONE")
-        a["soyuz_canonical_state"] = {
-            "direction": pred.get("direction") or (setup_raw.get("direction") if isinstance(setup_raw, dict) else None),
-            "regime": (g.get("regime") or {}).get("state") if isinstance(g.get("regime"), dict) else g.get("regime"),
-            "setup": setup_type or "NONE",
-            "setup_state": setup_state or "NONE",
-            "technical_trigger": tech_trigger,
-            "prediction_trigger": bool(pred.get("prediction_trigger_confirmed")),
-            "gagarin_trigger": bool(trigger_raw.get("confirmed")) if isinstance(trigger_raw, dict) else bool(trigger_raw),
-            "trigger": bool(trigger_raw.get("confirmed")) if isinstance(trigger_raw, dict) else bool(trigger_raw),
-            "operational": bool(a.get("operational_entry_allowed")),
-            "live": a.get("live_price_status", "UNKNOWN"),
-            "blockers": list(a.get("gagarin_blockers") or []),
-        }
 
     # MARKET RANKING = analytical opportunity, regardless of entry permission.
     for item in results:
@@ -12103,11 +11852,8 @@ def main():
             g = {"state": str(g_raw)}
 
         g_state = str(g.get("state") or x.get("gagarin_state_label") or "").upper()
-        setup_obj = g.get("setup") if isinstance(g.get("setup"), dict) else {}
-        setup = str(setup_obj.get("type") or pred.get("setup") or "NONE").upper()
-        setup_state = str(setup_obj.get("state") or "NONE").upper()
-        trigger_obj = g.get("trigger") if isinstance(g.get("trigger"), dict) else {}
-        trigger_ok = bool(trigger_obj.get("confirmed"))
+        setup = str(pred.get("setup") or g.get("setup") or "NONE").upper()
+        trigger_ok = bool(pred.get("trigger_confirmed"))
         rr3 = safe_float(
             pred.get("rr_tp3"),
             safe_float((x.get("adaptive_risk", {}) or {}).get("rr_tp3"), 0),
@@ -12133,7 +11879,7 @@ def main():
             f"{i:02d}. {icon_for_signal(x.get('signal','WAIT'))} {item['name']} | "
             f"{final_direction} | MKT {safe_float(item.get('market_ranking_score'),0) or 0:.1f} | "
             f"Prob {direction_prob:.1f}% | Q {quality:.1f} | C {confidence:.1f} | "
-            f"G:{g_state or 'N/D'} | Setup:{setup}/{setup_state} | Trigger:{'OK' if trigger_ok else 'NO'} | "
+            f"G:{g_state or 'N/D'} | Setup:{setup} | Trigger:{'OK' if trigger_ok else 'NO'} | "
             f"RR3:{rr3:.2f} | {decision}"
         )
         print(f"    🔎 {comp_line}")
