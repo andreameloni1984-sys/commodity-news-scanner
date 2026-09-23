@@ -181,3 +181,330 @@ def _normalize_candle(row: dict) -> Optional[dict]:
 
         if not (
             low_price <= open_price <= high_price
+            and low_price <= close_price <= high_price
+        ):
+            return None
+
+        return {
+            "timestamp": timestamp,
+            "open": open_price,
+            "high": high_price,
+            "low": low_price,
+            "close": close_price,
+        }
+
+    except (
+        KeyError,
+        TypeError,
+        ValueError,
+    ):
+        return None
+
+
+# ============================================================
+# INTERNAL TWELVE DATA FETCH
+# ============================================================
+
+
+def _fetch_twelve_data_diagnostic(
+    symbol: str,
+) -> tuple[Optional[dict], Optional[dict]]:
+    """
+    Fetch Twelve Data con diagnostica dettagliata.
+
+    Restituisce:
+
+        (data, error)
+
+    oppure:
+
+        (data, None)
+
+    IMPORTANTE:
+    nessuna API key viene inserita nei messaggi di errore.
+    """
+
+    if not TWELVE_DATA_API_KEY:
+
+        return None, {
+            "code": "MISSING_API_KEY",
+            "message": "TWELVE_DATA_API_KEY non configurata",
+        }
+
+    params = {
+        "symbol": symbol,
+        "interval": BASE_INTERVAL,
+        "outputsize": LOOKBACK,
+        "apikey": TWELVE_DATA_API_KEY,
+        "timezone": "UTC",
+        "order": "desc",
+        "include_ohlc": "true",
+    }
+
+    # --------------------------------------------------------
+    # HTTP REQUEST
+    # --------------------------------------------------------
+
+    try:
+
+        response = requests.get(
+            API_URL,
+            params=params,
+            timeout=TIMEOUT_SECONDS,
+        )
+
+    except requests.Timeout:
+
+        return None, {
+            "code": "TIMEOUT",
+            "message": (
+                f"Twelve Data timeout "
+                f"({TIMEOUT_SECONDS}s)"
+            ),
+        }
+
+    except requests.RequestException as exc:
+
+        return None, {
+            "code": "REQUEST_ERROR",
+            "message": str(exc)[:250],
+        }
+
+    # --------------------------------------------------------
+    # HTTP STATUS
+    # --------------------------------------------------------
+
+    if response.status_code != 200:
+
+        return None, {
+            "code": "HTTP_ERROR",
+            "http_status": response.status_code,
+            "message": (
+                response.text[:250]
+                if response.text
+                else "HTTP error"
+            ),
+        }
+
+    # --------------------------------------------------------
+    # JSON
+    # --------------------------------------------------------
+
+    try:
+
+        payload = response.json()
+
+    except ValueError:
+
+        return None, {
+            "code": "INVALID_JSON",
+            "http_status": response.status_code,
+            "message": "Risposta Twelve Data non JSON",
+        }
+
+    if not isinstance(payload, dict):
+
+        return None, {
+            "code": "INVALID_RESPONSE",
+            "message": "Payload Twelve Data non valido",
+        }
+
+    # --------------------------------------------------------
+    # TWELVE DATA API ERROR
+    # --------------------------------------------------------
+
+    if payload.get("status") == "error":
+
+        code = payload.get(
+            "code",
+            "API_ERROR",
+        )
+
+        message = payload.get(
+            "message",
+            "Twelve Data API error",
+        )
+
+        return None, {
+            "code": f"API_ERROR_{code}",
+            "message": str(message)[:300],
+        }
+
+    # --------------------------------------------------------
+    # VALUES
+    # --------------------------------------------------------
+
+    values = payload.get("values")
+
+    if not isinstance(values, list):
+
+        return None, {
+            "code": "NO_VALUES",
+            "message": (
+                "Twelve Data non ha restituito "
+                "la serie values"
+            ),
+        }
+
+    if not values:
+
+        return None, {
+            "code": "EMPTY_VALUES",
+            "message": (
+                "Twelve Data ha restituito "
+                "values vuoto"
+            ),
+        }
+
+    # --------------------------------------------------------
+    # NORMALIZATION
+    # --------------------------------------------------------
+
+    candles = []
+
+    for row in reversed(values):
+
+        candle = _normalize_candle(row)
+
+        if candle is not None:
+            candles.append(candle)
+
+    if len(candles) < 30:
+
+        return None, {
+            "code": "INSUFFICIENT_CANDLES",
+            "message": (
+                f"Candele valide: {len(candles)} "
+                f"/ minimo 30"
+            ),
+        }
+
+    # --------------------------------------------------------
+    # CURRENT PRICE
+    # --------------------------------------------------------
+
+    price = candles[-1]["close"]
+
+    previous_price = candles[-2]["close"]
+
+    # --------------------------------------------------------
+    # ATR
+    # --------------------------------------------------------
+
+    atr = _calculate_atr(candles)
+
+    if atr is None or atr <= 0:
+
+        return None, {
+            "code": "INVALID_ATR",
+            "message": (
+                f"ATR non valido: {atr}"
+            ),
+        }
+
+    # --------------------------------------------------------
+    # DATA AGE
+    # --------------------------------------------------------
+
+    latest_timestamp = _parse_time(
+        candles[-1]["timestamp"]
+    )
+
+    if latest_timestamp is None:
+
+        return None, {
+            "code": "INVALID_TIMESTAMP",
+            "message": (
+                "Timestamp ultima candela non valido"
+            ),
+        }
+
+    now = datetime.now(timezone.utc)
+
+    age_seconds = max(
+        0.0,
+        (
+            now - latest_timestamp
+        ).total_seconds(),
+    )
+
+    # --------------------------------------------------------
+    # SUCCESS
+    # --------------------------------------------------------
+
+    return {
+        "candles": candles,
+        "price": price,
+        "previous_price": previous_price,
+        "atr": atr,
+        "age_seconds": age_seconds,
+        "source": "TWELVE_DATA",
+    }, None
+
+
+# ============================================================
+# PUBLIC TWELVE DATA FUNCTION
+# ============================================================
+
+
+def fetch_twelve_data(
+    symbol: str,
+) -> Optional[dict]:
+    """
+    Compatibilità con il vecchio adapter.
+
+    Restituisce solamente i dati oppure None.
+    """
+
+    data, _error = _fetch_twelve_data_diagnostic(
+        symbol
+    )
+
+    return data
+
+
+# ============================================================
+# TIMEFRAME AGGREGATION
+# ============================================================
+
+
+def _aggregate_candles(
+    candles: list[dict],
+    minutes: int,
+) -> list[dict]:
+    """
+    Aggrega candele 5m in timeframe superiori.
+
+    Supportati:
+
+        15m
+        30m
+        60m
+    """
+
+    if not candles:
+        return []
+
+    bucket_seconds = minutes * 60
+
+    buckets = {}
+
+    for candle in candles:
+
+        dt = _parse_time(
+            candle["timestamp"]
+        )
+
+        if dt is None:
+            continue
+
+        epoch = int(
+            dt.timestamp()
+        )
+
+        bucket_epoch = (
+            epoch // bucket_seconds
+        ) * bucket_seconds
+
+        buckets.setdefault(
+            bucket_epoch
