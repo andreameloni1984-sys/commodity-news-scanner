@@ -507,4 +507,493 @@ def _aggregate_candles(
         ) * bucket_seconds
 
         buckets.setdefault(
-            bucket_epoch
+            bucket_epoch,
+            [],
+        ).append(candle)
+
+    result = []
+
+    for bucket_epoch in sorted(buckets):
+
+        group = buckets[bucket_epoch]
+
+        if not group:
+            continue
+
+        first_dt = _parse_time(
+            group[0]["timestamp"]
+        )
+
+        last_dt = _parse_time(
+            group[-1]["timestamp"]
+        )
+
+        if (
+            first_dt is None
+            or last_dt is None
+        ):
+            continue
+
+        expected_bars = minutes // 5
+
+        if len(group) < expected_bars:
+            continue
+
+        result.append(
+            {
+                "timestamp": datetime.fromtimestamp(
+                    bucket_epoch,
+                    tz=timezone.utc,
+                ).isoformat(),
+
+                "open": group[0]["open"],
+
+                "high": max(
+                    candle["high"]
+                    for candle in group
+                ),
+
+                "low": min(
+                    candle["low"]
+                    for candle in group
+                ),
+
+                "close": group[-1]["close"],
+            }
+        )
+
+    return result
+
+
+# ============================================================
+# MTF
+# ============================================================
+
+
+def _build_mtf_data(
+    candles: list[dict],
+) -> dict:
+    """
+    Costruisce le serie:
+
+        M5
+        M15
+        M30
+        H1
+    """
+
+    return {
+        "5min": {
+            "candles": candles,
+        },
+
+        "15min": {
+            "candles": _aggregate_candles(
+                candles,
+                15,
+            ),
+        },
+
+        "30min": {
+            "candles": _aggregate_candles(
+                candles,
+                30,
+            ),
+        },
+
+        "1h": {
+            "candles": _aggregate_candles(
+                candles,
+                60,
+            ),
+        },
+    }
+
+
+# ============================================================
+# PUBLIC DATA LOADER
+# ============================================================
+
+
+def load_data(
+    state: SoyuzState,
+) -> SoyuzState:
+    """
+    DATA GATE principale.
+
+    Carica i dati di mercato e aggiorna
+    lo stato canonico.
+
+    Non prende decisioni operative.
+    """
+
+    # --------------------------------------------------------
+    # RESET
+    # --------------------------------------------------------
+
+    state.data_ok = False
+    state.live = False
+
+    state.data_age_seconds = None
+    state.data_source = ""
+
+    state.opens = []
+    state.highs = []
+    state.lows = []
+    state.closes = []
+    state.timestamps = []
+
+    state.mtf_data = {}
+
+    state.blockers = []
+
+    # Manteniamo eventuali metadati generali,
+    # ma azzeriamo quelli della precedente richiesta DATA.
+    if not isinstance(
+        state.metadata,
+        dict,
+    ):
+        state.metadata = {}
+
+    state.metadata.pop(
+        "data_error",
+        None,
+    )
+
+    state.metadata.pop(
+        "data_diagnostic",
+        None,
+    )
+
+    # --------------------------------------------------------
+    # API KEY
+    # --------------------------------------------------------
+
+    if not TWELVE_DATA_API_KEY:
+
+        error = {
+            "code": "MISSING_API_KEY",
+            "message": (
+                "TWELVE_DATA_API_KEY "
+                "non configurata"
+            ),
+        }
+
+        state.metadata[
+            "data_error"
+        ] = error
+
+        state.blockers.append(
+            "MISSING_TWELVE_DATA_API_KEY"
+        )
+
+        return state
+
+    # --------------------------------------------------------
+    # FETCH
+    # --------------------------------------------------------
+
+    result, error = (
+        _fetch_twelve_data_diagnostic(
+            state.symbol
+        )
+    )
+
+    # --------------------------------------------------------
+    # FETCH FAILURE
+    # --------------------------------------------------------
+
+    if result is None:
+
+        if error is None:
+
+            error = {
+                "code": "UNKNOWN_DATA_ERROR",
+                "message": (
+                    "Errore dati sconosciuto"
+                ),
+            }
+
+        state.metadata[
+            "data_error"
+        ] = error
+
+        state.metadata[
+            "data_diagnostic"
+        ] = {
+            "symbol": state.symbol,
+            "error_code": error.get(
+                "code"
+            ),
+            "error_message": error.get(
+                "message"
+            ),
+        }
+
+        state.blockers.append(
+            "DATA_UNAVAILABLE"
+        )
+
+        return state
+
+    candles = result["candles"]
+
+    if not candles:
+
+        error = {
+            "code": "NO_CANDLES",
+            "message": (
+                "Nessuna candela disponibile"
+            ),
+        }
+
+        state.metadata[
+            "data_error"
+        ] = error
+
+        state.blockers.append(
+            "NO_CANDLES"
+        )
+
+        return state
+
+    # --------------------------------------------------------
+    # MARKET DATA
+    # --------------------------------------------------------
+
+    state.price = result["price"]
+
+    state.previous_price = (
+        result["previous_price"]
+    )
+
+    state.atr = result["atr"]
+
+    state.data_age_seconds = (
+        result["age_seconds"]
+    )
+
+    state.data_source = (
+        result["source"]
+    )
+
+    # --------------------------------------------------------
+    # PRIMARY OHLC
+    # --------------------------------------------------------
+
+    state.opens = [
+        candle["open"]
+        for candle in candles
+    ]
+
+    state.highs = [
+        candle["high"]
+        for candle in candles
+    ]
+
+    state.lows = [
+        candle["low"]
+        for candle in candles
+    ]
+
+    state.closes = [
+        candle["close"]
+        for candle in candles
+    ]
+
+    state.timestamps = [
+        candle["timestamp"]
+        for candle in candles
+    ]
+
+    # --------------------------------------------------------
+    # MTF
+    # --------------------------------------------------------
+
+    state.mtf_data = _build_mtf_data(
+        candles
+    )
+
+    state.timeframe = BASE_INTERVAL
+
+    # --------------------------------------------------------
+    # MTF DIAGNOSTICS
+    # --------------------------------------------------------
+
+    state.metadata[
+        "data_diagnostic"
+    ] = {
+        "symbol": state.symbol,
+        "candles_5m": len(
+            state.mtf_data.get(
+                "5min",
+                {},
+            ).get(
+                "candles",
+                [],
+            )
+        ),
+        "candles_15m": len(
+            state.mtf_data.get(
+                "15min",
+                {},
+            ).get(
+                "candles",
+                [],
+            )
+        ),
+        "candles_30m": len(
+            state.mtf_data.get(
+                "30min",
+                {},
+            ).get(
+                "candles",
+                [],
+            )
+        ),
+        "candles_1h": len(
+            state.mtf_data.get(
+                "1h",
+                {},
+            ).get(
+                "candles",
+                [],
+            )
+        ),
+        "price": state.price,
+        "atr": state.atr,
+        "age_seconds": (
+            state.data_age_seconds
+        ),
+    }
+
+    # --------------------------------------------------------
+    # LIVE GATE
+    # --------------------------------------------------------
+
+    age = state.data_age_seconds
+
+    if age is None:
+
+        error = {
+            "code": "DATA_AGE_UNKNOWN",
+            "message": (
+                "Età dei dati sconosciuta"
+            ),
+        }
+
+        state.metadata[
+            "data_error"
+        ] = error
+
+        state.blockers.append(
+            "DATA_AGE_UNKNOWN"
+        )
+
+        return state
+
+    state.live = (
+        age <= EFFECTIVE_LIVE_MAX_AGE
+    )
+
+    if not state.live:
+
+        error = {
+            "code": "DATA_NOT_LIVE",
+            "message": (
+                f"Dati troppo vecchi: "
+                f"{age:.0f}s"
+            ),
+        }
+
+        state.metadata[
+            "data_error"
+        ] = error
+
+        state.blockers.append(
+            "DATA_NOT_LIVE"
+        )
+
+        return state
+
+    # --------------------------------------------------------
+    # FINAL DATA VALIDATION
+    # --------------------------------------------------------
+
+    if state.price is None:
+
+        error = {
+            "code": "PRICE_MISSING",
+            "message": (
+                "Prezzo mancante"
+            ),
+        }
+
+        state.metadata[
+            "data_error"
+        ] = error
+
+        state.blockers.append(
+            "PRICE_MISSING"
+        )
+
+        return state
+
+    if (
+        state.atr is None
+        or state.atr <= 0
+    ):
+
+        error = {
+            "code": "ATR_INVALID",
+            "message": (
+                f"ATR non valido: "
+                f"{state.atr}"
+            ),
+        }
+
+        state.metadata[
+            "data_error"
+        ] = error
+
+        state.blockers.append(
+            "ATR_INVALID"
+        )
+
+        return state
+
+    if len(state.closes) < 30:
+
+        error = {
+            "code": "INSUFFICIENT_HISTORY",
+            "message": (
+                f"Storia insufficiente: "
+                f"{len(state.closes)}"
+            ),
+        }
+
+        state.metadata[
+            "data_error"
+        ] = error
+
+        state.blockers.append(
+            "INSUFFICIENT_HISTORY"
+        )
+
+        return state
+
+    # --------------------------------------------------------
+    # SUCCESS
+    # --------------------------------------------------------
+
+    state.data_ok = True
+
+    state.metadata[
+        "data_error"
+    ] = None
+
+    state.metadata[
+        "data_status"
+    ] = "OK"
+
+    return state
