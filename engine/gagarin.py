@@ -12,66 +12,55 @@ from engine.safety import apply_safety
 
 
 # ============================================================
-# SOYUZ GAGARIN v1.0
-# GAGARIN ORCHESTRATOR
+# SOYUZ GAGARIN v1.1
+# SINGLE DECISION AUTHORITY
 # ============================================================
 #
-# UNICA CATENA DECISIONALE
+# DATA -> REGIME -> STRUCTURE -> SETUP -> TRIGGER
+#      -> QUALITY -> RISK -> SAFETY -> FINAL DECISION
 #
-# DATA
-#   ↓
-# REGIME
-#   ↓
-# STRUCTURE
-#   ↓
-# SETUP
-#   ↓
-# TRIGGER
-#   ↓
-# RISK
-#   ↓
-# SAFETY
-#   ↓
-# FINAL DECISION
+# probability / quality / confidence sono CONFLUENCE SCORES.
+# Non sono probabilità statisticamente calibrate.
 #
+# Gagarin è l'unica autorità sulla decisione finale.
 # ============================================================
-#
-# REGOLA ARCHITETTURALE PRINCIPALE
-#
-# Esiste UN SOLO SoyuzState.
-#
-# Ogni modulo:
-#
-#     riceve SoyuzState
-#     modifica SoyuzState
-#     restituisce SoyuzState
-#
-# Nessun modulo crea una seconda decisione indipendente.
-#
-# ============================================================
+
+
+def _clamp(
+    value: float,
+    minimum: float = 0.0,
+    maximum: float = 100.0,
+) -> float:
+    return max(minimum, min(maximum, float(value)))
 
 
 def calculate_quality(state: SoyuzState) -> SoyuzState:
     """
-    Calcola probability, quality e confidence.
+    Calcola le metriche operative di confluence.
 
-    Questo NON decide ENTRY.
+    I punteggi richiedono più passaggi indipendenti.
+    Un singolo movimento del prezzo non deve essere
+    sufficiente a creare un'entrata ad alta confidenza.
 
-    Produce solamente le metriche che verranno poi
-    sottoposte al Safety Engine.
+    Questa funzione NON decide ENTRY/WAIT.
+    La decisione finale rimane al Safety Engine.
     """
 
     # --------------------------------------------------------
-    # VALORI BASE
+    # BASE
     # --------------------------------------------------------
 
-    state.probability = 50.0
+    probability = 40.0
+    quality = 0.0
+    confidence = 0.0
 
-    state.quality = (
-        state.setup_quality
-    )
+    # --------------------------------------------------------
+    # DATA QUALITY
+    # --------------------------------------------------------
 
-    state.confidence = 0.0
+    if state.data_ok:
+        quality += 15.0
+        confidence += 10.0
 
     # --------------------------------------------------------
     # REGIME
@@ -81,10 +70,16 @@ def calculate_quality(state: SoyuzState) -> SoyuzState:
         "TREND_UP",
         "TREND_DOWN",
     }:
+        probability += 10.0
+        quality += 15.0
+        confidence += 10.0
 
-        state.probability += 15.0
-
-        state.confidence += 25.0
+    # Alta volatilità NON viene considerata una conferma
+    # direzionale.
+    if state.regime == "HIGH_VOLATILITY":
+        probability -= 10.0
+        quality -= 15.0
+        confidence -= 10.0
 
     # --------------------------------------------------------
     # STRUCTURE
@@ -94,40 +89,126 @@ def calculate_quality(state: SoyuzState) -> SoyuzState:
         "BULLISH",
         "BEARISH",
     }:
+        probability += 8.0
+        quality += 15.0
+        confidence += 10.0
 
-        state.probability += 10.0
+    # --------------------------------------------------------
+    # SETUP
+    # --------------------------------------------------------
 
-        state.confidence += 20.0
+    if state.setup_direction in {
+        "LONG",
+        "SHORT",
+    }:
+        probability += 5.0
+
+        quality += max(
+            0.0,
+            min(
+                15.0,
+                state.setup_quality * 0.15,
+            ),
+        )
+
+        confidence += 10.0
 
     # --------------------------------------------------------
     # TRIGGER
     # --------------------------------------------------------
 
     if state.trigger_confirmed:
+        probability += 12.0
+        quality += 15.0
+        confidence += 20.0
 
-        state.probability += 15.0
-
-        state.quality += 20.0
-
-        state.confidence += 30.0
+    # Un trigger non confermato non può aumentare
+    # la confidence.
+    if state.trigger in {
+        "WAIT_LIVE",
+        "NOT_CONFIRMED",
+    }:
+        confidence -= 5.0
 
     # --------------------------------------------------------
-    # LIMITI
+    # LIVE DATA
     # --------------------------------------------------------
 
-    state.probability = min(
+    if state.live and state.data_ok:
+        probability += 5.0
+        quality += 5.0
+        confidence += 10.0
+
+    # --------------------------------------------------------
+    # RISK
+    # --------------------------------------------------------
+    #
+    # Il rischio viene calcolato dopo questa funzione.
+    # Non inventiamo punti RR prima di avere SL/TP reali.
+    #
+    # --------------------------------------------------------
+
+    # --------------------------------------------------------
+    # HARD CONSISTENCY
+    # --------------------------------------------------------
+
+    chain_complete = (
+        state.data_ok
+        and state.live
+        and state.regime in {
+            "TREND_UP",
+            "TREND_DOWN",
+        }
+        and state.structure in {
+            "BULLISH",
+            "BEARISH",
+        }
+        and state.setup_direction in {
+            "LONG",
+            "SHORT",
+        }
+        and state.trigger_confirmed
+    )
+
+    # Se la catena non è completa, la confidence non può
+    # raggiungere livelli da ingresso.
+    if not chain_complete:
+        confidence = min(
+            confidence,
+            55.0,
+        )
+
+    # Senza setup direzionale non esiste una qualità
+    # operativa significativa.
+    if state.setup_direction not in {
+        "LONG",
+        "SHORT",
+    }:
+        quality = min(
+            quality,
+            40.0,
+        )
+
+    # --------------------------------------------------------
+    # FINAL SCORE LIMITS
+    # --------------------------------------------------------
+
+    state.probability = _clamp(
+        probability,
+        0.0,
         99.0,
-        state.probability,
     )
 
-    state.quality = min(
+    state.quality = _clamp(
+        quality,
+        0.0,
         100.0,
-        state.quality,
     )
 
-    state.confidence = min(
+    state.confidence = _clamp(
+        confidence,
+        0.0,
         100.0,
-        state.confidence,
     )
 
     return state
@@ -137,14 +218,12 @@ def analyze_one(
     commodity: Commodity,
 ) -> SoyuzState:
     """
-    Analizza una singola commodity.
-
-    La funzione costruisce UN SOLO SoyuzState
-    e lo fa attraversare tutta la pipeline.
+    Analizza una singola commodity attraverso
+    l'unica catena decisionale Gagarin.
     """
 
     # ========================================================
-    # CREAZIONE STATO CANONICO
+    # CANONICAL STATE
     # ========================================================
 
     state = SoyuzState(
@@ -211,23 +290,14 @@ def analyze_one(
     # ========================================================
     # 8. SAFETY
     # ========================================================
+    #
+    # Safety è l'unico modulo autorizzato a stabilire
+    # ENTRY oppure WAIT.
+    #
 
     state = apply_safety(
         state
     )
-
-    # ========================================================
-    # 9. FINAL STATE
-    # ========================================================
-    #
-    # apply_safety() ha già impostato:
-    #
-    #     ENTRY
-    # oppure
-    #     WAIT
-    #
-    # Non esiste un secondo motore che possa sovrascriverlo.
-    # ========================================================
 
     return state
 
@@ -236,37 +306,28 @@ def analyze_universe(
     commodities,
 ):
     """
-    Analizza tutto l'universo commodity.
+    Analizza l'intero universo commodity.
 
-    Restituisce una lista di SoyuzState.
-
-    Ordinamento:
-    1. ENTRY prima di WAIT
-    2. probability
-    3. quality
+    Il ranking è solamente di presentazione.
+    Non crea una seconda autorità decisionale.
     """
 
     results = []
 
     for commodity in commodities:
 
-        state = analyze_one(
-            commodity
-        )
-
         results.append(
-            state
+            analyze_one(
+                commodity
+            )
         )
-
-    # --------------------------------------------------------
-    # RANKING
-    # --------------------------------------------------------
 
     results.sort(
         key=lambda state: (
             state.final_decision == "ENTRY",
             state.probability,
             state.quality,
+            state.confidence,
         ),
         reverse=True,
     )
