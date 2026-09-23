@@ -1,2 +1,2 @@
-requests>=2.31
-youtube-transcript-api>=1.2.0
+requests>=2.31,<3
+pytest>=8,<9
