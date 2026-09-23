@@ -1,10 +1,6 @@
-from dataclasses import dataclass, field, asdict
-from typing import Optional, Any
-
-
 # ============================================================
 # SOYUZ GAGARIN v1.2
-# SINGLE CANONICAL STATE
+# DATA ENGINE
 # ============================================================
 #
 # DATA
@@ -23,287 +19,604 @@ from typing import Optional, Any
 #   ↓
 # GAGARIN
 #
-# UN SOLO STATO CANONICO.
+# Single data adapter:
+# Twelve Data
 #
-# La v1.2 prepara lo stato per:
-#
-# - OHLC
-# - serie storiche
-# - swing structure
-# - MTF
-# - HH / HL / LH / LL
-# - breakout
-# - retest
-#
-# I dati vengono aggiunti progressivamente dai moduli
-# DATA e STRUCTURE.
+# Nessun fallback parallelo in questa versione.
+# ============================================================
+
+from datetime import datetime, timezone
+from typing import Optional
+
+import requests
+
+from config import (
+    TWELVE_DATA_API_KEY,
+    LOOKBACK,
+    TIMEOUT_SECONDS,
+    LIVE_MAX_AGE_SECONDS,
+)
+
+from engine.state import SoyuzState
+
+
+API_URL = "https://api.twelvedata.com/time_series"
+
+BASE_INTERVAL = "5min"
+
+BAR_SECONDS = 300
+
+LIVE_BUFFER_SECONDS = 60
+
+EFFECTIVE_LIVE_MAX_AGE = max(
+    LIVE_MAX_AGE_SECONDS,
+    BAR_SECONDS + LIVE_BUFFER_SECONDS,
+)
+
+
+# ============================================================
+# TIME
 # ============================================================
 
 
-@dataclass
-class SoyuzState:
+def _parse_time(value: str) -> Optional[datetime]:
+    """
+    Converte il timestamp Twelve Data in datetime UTC.
+    """
 
-    # ========================================================
-    # IDENTITÀ
-    # ========================================================
+    if not value:
+        return None
 
-    commodity: str
-    symbol: str
-
-    # ========================================================
-    # DATA — CURRENT MARKET
-    # ========================================================
-
-    price: Optional[float] = None
-
-    previous_price: Optional[float] = None
-
-    atr: Optional[float] = None
+    try:
+        value = value.strip()
 
-    data_ok: bool = False
+        if value.endswith("Z"):
+            value = value[:-1] + "+00:00"
 
-    live: bool = False
+        dt = datetime.fromisoformat(value)
 
-    data_age_seconds: Optional[float] = None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
 
-    data_source: str = ""
+        return dt.astimezone(timezone.utc)
 
-    # ========================================================
-    # DATA — PRIMARY TIMEFRAME
-    # ========================================================
+    except (TypeError, ValueError):
+        return None
 
-    timeframe: str = "5min"
 
-    # Serie OHLC ordinate dal passato verso il presente.
-    #
-    # Queste liste vengono alimentate dal Data Engine.
-    # ========================================================
+# ============================================================
+# ATR
+# ============================================================
 
-    opens: list = field(default_factory=list)
 
-    highs: list = field(default_factory=list)
+def _true_range(
+    high: float,
+    low: float,
+    previous_close: Optional[float],
+) -> float:
 
-    lows: list = field(default_factory=list)
+    if previous_close is None:
+        return high - low
 
-    closes: list = field(default_factory=list)
+    return max(
+        high - low,
+        abs(high - previous_close),
+        abs(low - previous_close),
+    )
 
-    timestamps: list = field(default_factory=list)
 
-    # ========================================================
-    # DATA — MULTI TIMEFRAME
-    # ========================================================
-    #
-    # Preparazione per:
-    #
-    # M5
-    # M15
-    # M30
-    # H1
-    #
-    # Ogni timeframe potrà contenere la propria serie OHLC.
-    #
-    # Esempio:
-    #
-    # {
-    #     "5min": {...},
-    #     "15min": {...},
-    #     "30min": {...},
-    #     "1h": {...}
-    # }
-    #
-    # In questa fase viene inizializzato vuoto.
-    # ========================================================
+def _calculate_atr(candles: list[dict], period: int = 14) -> Optional[float]:
+    """
+    ATR semplice basato sugli ultimi `period` true ranges.
+    """
 
-    mtf_data: dict = field(default_factory=dict)
+    if len(candles) < period + 1:
+        return None
 
-    # ========================================================
-    # REGIME
-    # ========================================================
+    ranges = []
 
-    regime: str = "UNKNOWN"
+    start = max(1, len(candles) - period)
 
-    # Intensità del movimento normalizzata rispetto all'ATR.
-    #
-    # Esempio:
-    #
-    # 0.20 = 0.20 ATR
-    # 1.00 = 1 ATR
-    # 1.80 = 1.8 ATR
-    #
-    normalized_move_atr: Optional[float] = None
+    for i in range(start, len(candles)):
 
-    # ========================================================
-    # MARKET STRUCTURE
-    # ========================================================
+        current = candles[i]
+        previous = candles[i - 1]
 
-    structure: str = "UNKNOWN"
+        tr = _true_range(
+            current["high"],
+            current["low"],
+            previous["close"],
+        )
 
-    structure_direction: str = "NONE"
+        ranges.append(tr)
 
-    # ========================================================
-    # SWING STRUCTURE
-    # ========================================================
-    #
-    # Preparazione per:
-    #
-    # HH = Higher High
-    # HL = Higher Low
-    # LH = Lower High
-    # LL = Lower Low
-    #
-    # Non vengono ancora calcolati automaticamente.
-    # ========================================================
+    if not ranges:
+        return None
 
-    swing_highs: list = field(default_factory=list)
+    return sum(ranges) / len(ranges)
 
-    swing_lows: list = field(default_factory=list)
 
-    last_swing_high: Optional[float] = None
+# ============================================================
+# CANDLE NORMALIZATION
+# ============================================================
 
-    last_swing_low: Optional[float] = None
 
-    previous_swing_high: Optional[float] = None
+def _normalize_candle(row: dict) -> Optional[dict]:
+    """
+    Normalizza una candela Twelve Data.
+    """
 
-    previous_swing_low: Optional[float] = None
+    try:
+        timestamp = row.get("datetime")
 
-    structure_pattern: str = "NONE"
+        open_price = float(row["open"])
+        high_price = float(row["high"])
+        low_price = float(row["low"])
+        close_price = float(row["close"])
 
-    # Valori possibili futuri:
-    #
-    # HH_HL
-    # LH_LL
-    # MIXED
-    # RANGE
-    # NONE
+        if high_price < low_price:
+            return None
 
-    # ========================================================
-    # BREAKOUT / RETEST
-    # ========================================================
+        if not (
+            low_price <= open_price <= high_price
+            and low_price <= close_price <= high_price
+        ):
+            return None
 
-    breakout: bool = False
+        return {
+            "timestamp": timestamp,
+            "open": open_price,
+            "high": high_price,
+            "low": low_price,
+            "close": close_price,
+        }
 
-    breakout_direction: str = "NONE"
+    except (KeyError, TypeError, ValueError):
+        return None
 
-    breakout_level: Optional[float] = None
 
-    retest: bool = False
+# ============================================================
+# TWELVE DATA
+# ============================================================
 
-    retest_direction: str = "NONE"
 
-    retest_level: Optional[float] = None
+def fetch_twelve_data(symbol: str) -> Optional[dict]:
+    """
+    Recupera dati 5 minuti da Twelve Data.
 
-    # ========================================================
-    # MTF STRUCTURE
-    # ========================================================
+    Restituisce:
 
-    mtf_structure: str = "UNCONFIRMED"
+        candles
+        price
+        previous_price
+        atr
+        age_seconds
+        source
+    """
 
-    mtf_direction: str = "NONE"
+    if not TWELVE_DATA_API_KEY:
+        return None
 
-    mtf_alignment: float = 0.0
+    params = {
+        "symbol": symbol,
+        "interval": BASE_INTERVAL,
+        "outputsize": LOOKBACK,
+        "apikey": TWELVE_DATA_API_KEY,
+        "timezone": "UTC",
+        "order": "desc",
+        "include_ohlc": "true",
+    }
 
-    # ========================================================
-    # SETUP
-    # ========================================================
+    try:
 
-    setup: str = "NONE"
+        response = requests.get(
+            API_URL,
+            params=params,
+            timeout=TIMEOUT_SECONDS,
+        )
 
-    setup_direction: str = "NONE"
+        response.raise_for_status()
 
-    setup_quality: float = 0.0
+        payload = response.json()
 
-    # ========================================================
-    # TRIGGER
-    # ========================================================
+    except (
+        requests.RequestException,
+        ValueError,
+    ):
+        return None
 
-    trigger: str = "NONE"
+    # --------------------------------------------------------
+    # Twelve Data error
+    # --------------------------------------------------------
 
-    trigger_direction: str = "NONE"
+    if not isinstance(payload, dict):
+        return None
 
-    trigger_confirmed: bool = False
+    if payload.get("status") == "error":
+        return None
 
-    # ========================================================
-    # RISK MANAGEMENT
-    # ========================================================
+    values = payload.get("values")
 
-    entry: Optional[float] = None
+    if not isinstance(values, list):
+        return None
 
-    stop: Optional[float] = None
+    # --------------------------------------------------------
+    # Normalize
+    # --------------------------------------------------------
 
-    tp1: Optional[float] = None
+    candles = []
 
-    tp2: Optional[float] = None
+    for row in reversed(values):
 
-    tp3: Optional[float] = None
+        candle = _normalize_candle(row)
 
-    stop_atr: Optional[float] = None
+        if candle is not None:
+            candles.append(candle)
 
-    rr1: Optional[float] = None
+    if len(candles) < 30:
+        return None
 
-    rr2: Optional[float] = None
+    # --------------------------------------------------------
+    # Current price
+    # --------------------------------------------------------
 
-    rr3: Optional[float] = None
+    price = candles[-1]["close"]
 
-    # ========================================================
-    # QUALITY / CONFIDENCE
-    # ========================================================
+    previous_price = candles[-2]["close"]
 
-    probability: float = 0.0
+    # --------------------------------------------------------
+    # ATR
+    # --------------------------------------------------------
 
-    quality: float = 0.0
+    atr = _calculate_atr(candles)
 
-    confidence: float = 0.0
+    if atr is None or atr <= 0:
+        return None
 
-    # ========================================================
-    # SAFETY
-    # ========================================================
+    # --------------------------------------------------------
+    # Data age
+    # --------------------------------------------------------
 
-    safety: str = "BLOCKED"
+    latest_timestamp = _parse_time(
+        candles[-1]["timestamp"]
+    )
 
-    blockers: list = field(default_factory=list)
+    if latest_timestamp is None:
+        return None
 
-    # ========================================================
-    # FINAL GAGARIN DECISION
-    # ========================================================
+    now = datetime.now(timezone.utc)
 
-    final_decision: str = "WAIT"
+    age_seconds = max(
+        0.0,
+        (now - latest_timestamp).total_seconds(),
+    )
 
-    # ========================================================
-    # METADATA
-    # ========================================================
+    return {
+        "candles": candles,
+        "price": price,
+        "previous_price": previous_price,
+        "atr": atr,
+        "age_seconds": age_seconds,
+        "source": "TWELVE_DATA",
+    }
 
-    analysis_timestamp: Optional[str] = None
 
-    engine_version: str = "SOYUZ-GAGARIN-1.2"
+# ============================================================
+# TIMEFRAME AGGREGATION
+# ============================================================
 
-    # ========================================================
-    # EXTRA INTERNAL DATA
-    # ========================================================
-    #
-    # Spazio controllato per informazioni che potranno essere
-    # introdotte dai nuovi adapter senza creare un secondo
-    # stato.
-    #
-    # Non deve essere usato per prendere decisioni parallele.
-    # ========================================================
 
-    metadata: dict = field(default_factory=dict)
+def _aggregate_candles(
+    candles: list[dict],
+    minutes: int,
+) -> list[dict]:
+    """
+    Aggrega candele 5m in timeframe superiori.
 
-    # ========================================================
-    # SERIALIZATION
-    # ========================================================
+    Supportati:
 
-    def to_dict(self) -> dict[str, Any]:
-        """
-        Restituisce lo stato completo come dizionario.
+        15m
+        30m
+        60m
+    """
 
-        Utile per:
-        - journal
-        - debugging
-        - Telegram
-        - storico
-        - backtest
-        - API future
-        """
+    if not candles:
+        return []
 
-        return asdict(self)
+    bucket_seconds = minutes * 60
+
+    buckets = {}
+
+    for candle in candles:
+
+        dt = _parse_time(candle["timestamp"])
+
+        if dt is None:
+            continue
+
+        epoch = int(dt.timestamp())
+
+        bucket_epoch = (
+            epoch // bucket_seconds
+        ) * bucket_seconds
+
+        buckets.setdefault(
+            bucket_epoch,
+            [],
+        ).append(candle)
+
+    result = []
+
+    for bucket_epoch in sorted(buckets):
+
+        group = buckets[bucket_epoch]
+
+        if not group:
+            continue
+
+        # ----------------------------------------------------
+        # Evitiamo di utilizzare il bucket ancora incompleto.
+        # ----------------------------------------------------
+
+        first_dt = _parse_time(group[0]["timestamp"])
+        last_dt = _parse_time(group[-1]["timestamp"])
+
+        if first_dt is None or last_dt is None:
+            continue
+
+        expected_bars = minutes // 5
+
+        if len(group) < expected_bars:
+            continue
+
+        result.append(
+            {
+                "timestamp": datetime.fromtimestamp(
+                    bucket_epoch,
+                    tz=timezone.utc,
+                ).isoformat(),
+                "open": group[0]["open"],
+                "high": max(
+                    candle["high"]
+                    for candle in group
+                ),
+                "low": min(
+                    candle["low"]
+                    for candle in group
+                ),
+                "close": group[-1]["close"],
+            }
+        )
+
+    return result
+
+
+# ============================================================
+# MTF
+# ============================================================
+
+
+def _build_mtf_data(
+    candles: list[dict],
+) -> dict:
+    """
+    Costruisce le serie M5 / M15 / M30 / H1.
+    """
+
+    return {
+        "5min": {
+            "candles": candles,
+        },
+        "15min": {
+            "candles": _aggregate_candles(
+                candles,
+                15,
+            ),
+        },
+        "30min": {
+            "candles": _aggregate_candles(
+                candles,
+                30,
+            ),
+        },
+        "1h": {
+            "candles": _aggregate_candles(
+                candles,
+                60,
+            ),
+        },
+    }
+
+
+# ============================================================
+# PUBLIC DATA LOADER
+# ============================================================
+
+
+def load_data(state: SoyuzState) -> SoyuzState:
+    """
+    DATA GATE principale.
+
+    Carica i dati di mercato e aggiorna lo stato canonico.
+
+    Non prende decisioni operative.
+    """
+
+    # --------------------------------------------------------
+    # RESET DATA
+    # --------------------------------------------------------
+
+    state.data_ok = False
+    state.live = False
+
+    state.data_age_seconds = None
+    state.data_source = ""
+
+    state.opens = []
+    state.highs = []
+    state.lows = []
+    state.closes = []
+    state.timestamps = []
+
+    state.mtf_data = {}
+
+    state.blockers = []
+
+    # --------------------------------------------------------
+    # API KEY
+    # --------------------------------------------------------
+
+    if not TWELVE_DATA_API_KEY:
+
+        state.blockers.append(
+            "MISSING_TWELVE_DATA_API_KEY"
+        )
+
+        return state
+
+    # --------------------------------------------------------
+    # FETCH
+    # --------------------------------------------------------
+
+    result = fetch_twelve_data(
+        state.symbol
+    )
+
+    if result is None:
+
+        state.blockers.append(
+            "DATA_UNAVAILABLE"
+        )
+
+        return state
+
+    candles = result["candles"]
+
+    if not candles:
+
+        state.blockers.append(
+            "NO_CANDLES"
+        )
+
+        return state
+
+    # --------------------------------------------------------
+    # MARKET DATA
+    # --------------------------------------------------------
+
+    state.price = result["price"]
+
+    state.previous_price = result[
+        "previous_price"
+    ]
+
+    state.atr = result["atr"]
+
+    state.data_age_seconds = result[
+        "age_seconds"
+    ]
+
+    state.data_source = result[
+        "source"
+    ]
+
+    # --------------------------------------------------------
+    # PRIMARY OHLC
+    # --------------------------------------------------------
+
+    state.opens = [
+        candle["open"]
+        for candle in candles
+    ]
+
+    state.highs = [
+        candle["high"]
+        for candle in candles
+    ]
+
+    state.lows = [
+        candle["low"]
+        for candle in candles
+    ]
+
+    state.closes = [
+        candle["close"]
+        for candle in candles
+    ]
+
+    state.timestamps = [
+        candle["timestamp"]
+        for candle in candles
+    ]
+
+    # --------------------------------------------------------
+    # MTF
+    # --------------------------------------------------------
+
+    state.mtf_data = _build_mtf_data(
+        candles
+    )
+
+    state.timeframe = BASE_INTERVAL
+
+    # --------------------------------------------------------
+    # LIVE GATE
+    # --------------------------------------------------------
+
+    age = state.data_age_seconds
+
+    if age is None:
+
+        state.blockers.append(
+            "DATA_AGE_UNKNOWN"
+        )
+
+        return state
+
+    state.live = (
+        age <= EFFECTIVE_LIVE_MAX_AGE
+    )
+
+    if not state.live:
+
+        state.blockers.append(
+            "DATA_NOT_LIVE"
+        )
+
+        return state
+
+    # --------------------------------------------------------
+    # FINAL DATA VALIDATION
+    # --------------------------------------------------------
+
+    if state.price is None:
+
+        state.blockers.append(
+            "PRICE_MISSING"
+        )
+
+        return state
+
+    if state.atr is None or state.atr <= 0:
+
+        state.blockers.append(
+            "ATR_INVALID"
+        )
+
+        return state
+
+    if len(state.closes) < 30:
+
+        state.blockers.append(
+            "INSUFFICIENT_HISTORY"
+        )
+
+        return state
+
+    # --------------------------------------------------------
+    # SUCCESS
+    # --------------------------------------------------------
+
+    state.data_ok = True
+
+    return state
