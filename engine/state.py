@@ -1,15 +1,11 @@
 from dataclasses import dataclass, field, asdict
-from typing import Optional
+from typing import Optional, Any
 
 
 # ============================================================
-# SOYUZ GAGARIN v1.0
+# SOYUZ GAGARIN v1.2
 # SINGLE CANONICAL STATE
 # ============================================================
-#
-# Questo oggetto rappresenta lo STATO UNICO della commodity.
-#
-# Pipeline:
 #
 # DATA
 #   ↓
@@ -27,8 +23,20 @@ from typing import Optional
 #   ↓
 # GAGARIN
 #
-# Nessun motore deve creare una seconda versione dello stato.
-# Tutti i moduli lavorano sullo stesso SoyuzState.
+# UN SOLO STATO CANONICO.
+#
+# La v1.2 prepara lo stato per:
+#
+# - OHLC
+# - serie storiche
+# - swing structure
+# - MTF
+# - HH / HL / LH / LL
+# - breakout
+# - retest
+#
+# I dati vengono aggiunti progressivamente dai moduli
+# DATA e STRUCTURE.
 # ============================================================
 
 
@@ -43,7 +51,7 @@ class SoyuzState:
     symbol: str
 
     # ========================================================
-    # DATA
+    # DATA — CURRENT MARKET
     # ========================================================
 
     price: Optional[float] = None
@@ -61,10 +69,68 @@ class SoyuzState:
     data_source: str = ""
 
     # ========================================================
+    # DATA — PRIMARY TIMEFRAME
+    # ========================================================
+
+    timeframe: str = "5min"
+
+    # Serie OHLC ordinate dal passato verso il presente.
+    #
+    # Queste liste vengono alimentate dal Data Engine.
+    # ========================================================
+
+    opens: list = field(default_factory=list)
+
+    highs: list = field(default_factory=list)
+
+    lows: list = field(default_factory=list)
+
+    closes: list = field(default_factory=list)
+
+    timestamps: list = field(default_factory=list)
+
+    # ========================================================
+    # DATA — MULTI TIMEFRAME
+    # ========================================================
+    #
+    # Preparazione per:
+    #
+    # M5
+    # M15
+    # M30
+    # H1
+    #
+    # Ogni timeframe potrà contenere la propria serie OHLC.
+    #
+    # Esempio:
+    #
+    # {
+    #     "5min": {...},
+    #     "15min": {...},
+    #     "30min": {...},
+    #     "1h": {...}
+    # }
+    #
+    # In questa fase viene inizializzato vuoto.
+    # ========================================================
+
+    mtf_data: dict = field(default_factory=dict)
+
+    # ========================================================
     # REGIME
     # ========================================================
 
     regime: str = "UNKNOWN"
+
+    # Intensità del movimento normalizzata rispetto all'ATR.
+    #
+    # Esempio:
+    #
+    # 0.20 = 0.20 ATR
+    # 1.00 = 1 ATR
+    # 1.80 = 1.8 ATR
+    #
+    normalized_move_atr: Optional[float] = None
 
     # ========================================================
     # MARKET STRUCTURE
@@ -73,6 +139,68 @@ class SoyuzState:
     structure: str = "UNKNOWN"
 
     structure_direction: str = "NONE"
+
+    # ========================================================
+    # SWING STRUCTURE
+    # ========================================================
+    #
+    # Preparazione per:
+    #
+    # HH = Higher High
+    # HL = Higher Low
+    # LH = Lower High
+    # LL = Lower Low
+    #
+    # Non vengono ancora calcolati automaticamente.
+    # ========================================================
+
+    swing_highs: list = field(default_factory=list)
+
+    swing_lows: list = field(default_factory=list)
+
+    last_swing_high: Optional[float] = None
+
+    last_swing_low: Optional[float] = None
+
+    previous_swing_high: Optional[float] = None
+
+    previous_swing_low: Optional[float] = None
+
+    structure_pattern: str = "NONE"
+
+    # Valori possibili futuri:
+    #
+    # HH_HL
+    # LH_LL
+    # MIXED
+    # RANGE
+    # NONE
+
+    # ========================================================
+    # BREAKOUT / RETEST
+    # ========================================================
+
+    breakout: bool = False
+
+    breakout_direction: str = "NONE"
+
+    breakout_level: Optional[float] = None
+
+    retest: bool = False
+
+    retest_direction: str = "NONE"
+
+    retest_level: Optional[float] = None
+
+    # ========================================================
+    # MTF STRUCTURE
+    # ========================================================
+
+    mtf_structure: str = "UNCONFIRMED"
+
+    mtf_direction: str = "NONE"
+
+    mtf_alignment: float = 0.0
 
     # ========================================================
     # SETUP
@@ -141,10 +269,31 @@ class SoyuzState:
     final_decision: str = "WAIT"
 
     # ========================================================
+    # METADATA
+    # ========================================================
+
+    analysis_timestamp: Optional[str] = None
+
+    engine_version: str = "SOYUZ-GAGARIN-1.2"
+
+    # ========================================================
+    # EXTRA INTERNAL DATA
+    # ========================================================
+    #
+    # Spazio controllato per informazioni che potranno essere
+    # introdotte dai nuovi adapter senza creare un secondo
+    # stato.
+    #
+    # Non deve essere usato per prendere decisioni parallele.
+    # ========================================================
+
+    metadata: dict = field(default_factory=dict)
+
+    # ========================================================
     # SERIALIZATION
     # ========================================================
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, Any]:
         """
         Restituisce lo stato completo come dizionario.
 
@@ -153,7 +302,8 @@ class SoyuzState:
         - debugging
         - Telegram
         - storico
-        - future API
+        - backtest
+        - API future
         """
 
         return asdict(self)
