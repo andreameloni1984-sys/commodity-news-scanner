@@ -10,35 +10,28 @@ def _print_data_diagnostics(results):
     """
     Diagnostica interna DATA.
 
-    Viene stampata nei log GitHub Actions
-    ma NON viene inviata su Telegram.
+    Legge direttamente i dati prodotti da
+    engine/data.py v1.6.
 
+    NON viene inviata su Telegram.
     Non stampa API key o token.
     """
 
     print()
     print("🔎 DATA DIAGNOSTICS")
-    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
     for state in results:
 
         metadata = (
             state.metadata
-            if isinstance(
-                state.metadata,
-                dict,
-            )
+            if isinstance(state.metadata, dict)
             else {}
         )
 
-        diagnostic = metadata.get(
-            "data_diagnostic",
-            {},
-        )
-
-        error = metadata.get(
-            "data_error",
-        )
+        # ----------------------------------------------------
+        # STATUS
+        # ----------------------------------------------------
 
         status = (
             "OK"
@@ -46,69 +39,109 @@ def _print_data_diagnostics(results):
             else "FAIL"
         )
 
-        price = diagnostic.get(
-            "price",
-            state.price,
+        live_status = (
+            "LIVE"
+            if state.live
+            else "NOT-LIVE"
         )
 
-        atr = diagnostic.get(
-            "atr",
-            state.atr,
+        provider = metadata.get(
+            "data_provider",
+            state.data_source or "UNKNOWN",
         )
 
-        age = diagnostic.get(
-            "age_seconds",
-            state.data_age_seconds,
+        data_status = metadata.get(
+            "data_status",
+            "UNKNOWN",
         )
 
-        candles_5m = diagnostic.get(
-            "candles_5m",
-            0,
-        )
+        # ----------------------------------------------------
+        # MARKET DATA
+        # ----------------------------------------------------
 
-        candles_15m = diagnostic.get(
-            "candles_15m",
-            0,
-        )
+        price = state.price
+        atr = state.atr
+        age = state.data_age_seconds
 
-        candles_30m = diagnostic.get(
-            "candles_30m",
-            0,
-        )
+        # ----------------------------------------------------
+        # MTF
+        # ----------------------------------------------------
 
-        candles_1h = diagnostic.get(
-            "candles_1h",
-            0,
-        )
-
-        error_code = ""
-        error_message = ""
-
-        if isinstance(error, dict):
-
-            error_code = str(
-                error.get(
-                    "code",
-                    "",
-                )
+        mtf_data = (
+            state.mtf_data
+            if isinstance(
+                state.mtf_data,
+                dict,
             )
+            else {}
+        )
 
-            error_message = str(
-                error.get(
-                    "message",
-                    "",
-                )
+        candles_5m = len(
+            mtf_data.get(
+                "M5",
+                [],
             )
+        )
+
+        candles_15m = len(
+            mtf_data.get(
+                "M15",
+                [],
+            )
+        )
+
+        candles_30m = len(
+            mtf_data.get(
+                "M30",
+                [],
+            )
+        )
+
+        candles_1h = len(
+            mtf_data.get(
+                "H1",
+                [],
+            )
+        )
+
+        # ----------------------------------------------------
+        # ERROR / WARNING
+        # ----------------------------------------------------
+
+        error = metadata.get(
+            "data_error",
+        )
+
+        provider_warning = metadata.get(
+            "provider_warning",
+        )
+
+        # ----------------------------------------------------
+        # MAIN LINE
+        # ----------------------------------------------------
 
         print(
             f"{state.commodity:<18} "
             f"{state.symbol:<14} "
             f"{status:<4} "
-            f"LIVE={str(state.live):<5} "
-            f"PRICE={price!s:<12} "
-            f"ATR={atr!s:<10} "
-            f"AGE={age!s:<8}"
+            f"{live_status:<8} "
+            f"PROVIDER={provider:<12} "
+            f"PRICE={str(price):<14} "
+            f"ATR={str(atr):<12} "
+            f"AGE={str(round(age, 1) if age is not None else None):<10}"
         )
+
+        # ----------------------------------------------------
+        # DATA STATUS
+        # ----------------------------------------------------
+
+        print(
+            f"  DATA STATUS: {data_status}"
+        )
+
+        # ----------------------------------------------------
+        # MTF COUNTS
+        # ----------------------------------------------------
 
         print(
             f"  MTF: "
@@ -118,28 +151,57 @@ def _print_data_diagnostics(results):
             f"H1={candles_1h}"
         )
 
-        if error_code:
+        # ----------------------------------------------------
+        # LATEST DATA
+        # ----------------------------------------------------
 
+        latest_datetime = metadata.get(
+            "latest_datetime",
+        )
+
+        if latest_datetime:
             print(
-                f"  ERROR: "
-                f"{error_code} | "
-                f"{error_message}"
+                f"  LAST BAR: {latest_datetime}"
             )
 
-        if state.blockers:
+        # ----------------------------------------------------
+        # ERRORS
+        # ----------------------------------------------------
 
+        if error:
+            print(
+                f"  ERROR: {error}"
+            )
+
+        if provider_warning:
+            print(
+                f"  PROVIDER WARNING: "
+                f"{provider_warning}"
+            )
+
+        # ----------------------------------------------------
+        # BLOCKERS
+        # ----------------------------------------------------
+
+        if state.blockers:
             print(
                 f"  BLOCKERS: "
                 f"{', '.join(state.blockers)}"
             )
 
+        print()
+
     print(
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     )
     print()
 
 
 def main():
+
+    # ========================================================
+    # GAGARIN
+    # ========================================================
 
     results = analyze_universe(
         COMMODITIES
