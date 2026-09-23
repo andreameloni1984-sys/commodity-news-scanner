@@ -2,11 +2,9 @@ from engine.state import SoyuzState
 
 
 # ============================================================
-# SOYUZ GAGARIN v1.0
+# SOYUZ GAGARIN v1.1
 # MARKET STRUCTURE ENGINE
 # ============================================================
-#
-# Pipeline:
 #
 # DATA
 #   ↓
@@ -14,32 +12,77 @@ from engine.state import SoyuzState
 #   ↓
 # STRUCTURE
 #
-# Questo modulo NON crea un nuovo stato.
-# Aggiorna esclusivamente lo SoyuzState esistente.
+# Questo modulo NON crea un nuovo SoyuzState.
 #
-# V1.0:
-# La struttura è volutamente semplice.
+# V1.1:
 #
-# TREND_UP   → BULLISH / LONG
-# TREND_DOWN → BEARISH / SHORT
-# RANGE      → RANGE / NONE
-# altro      → UNCONFIRMED / NONE
+# La struttura deve essere coerente con il regime.
 #
-# La vera struttura MTF, swing HH/HL/LH/LL, breakout,
-# retest e livelli verrà aggiunta in una fase successiva.
+# TREND_UP
+#     → BULLISH / LONG
+#
+# TREND_DOWN
+#     → BEARISH / SHORT
+#
+# RANGE
+#     → RANGE / NONE
+#
+# HIGH_VOLATILITY
+#     → UNCONFIRMED / NONE
+#
+# UNKNOWN
+#     → UNCONFIRMED / NONE
+#
+# NOTA:
+#
+# La vera struttura swing:
+#
+# HH / HL
+# LH / LL
+# BREAKOUT
+# RETEST
+# SUPPORT / RESISTANCE
+# MTF STRUCTURE
+#
+# richiede una serie storica disponibile nello stato.
+# Non viene simulata artificialmente in questa versione.
 # ============================================================
 
 
-def apply_structure(state: SoyuzState) -> SoyuzState:
+def apply_structure(
+    state: SoyuzState,
+) -> SoyuzState:
     """
-    Determina la struttura di mercato coerente con il regime.
+    Determina la struttura coerente con il regime.
 
-    Riceve e restituisce lo stesso oggetto SoyuzState.
+    Non crea un nuovo stato.
+
+    Non decide ENTRY.
+
+    Non crea un trigger.
+
+    Non modifica la Safety.
     """
 
-    # --------------------------------------------------------
-    # STRUTTURA RIALZISTA
-    # --------------------------------------------------------
+    # ========================================================
+    # RESET DIREZIONALE
+    # ========================================================
+
+    state.structure_direction = "NONE"
+
+    # ========================================================
+    # DATI NON VALIDATI
+    # ========================================================
+
+    if not state.data_ok:
+
+        state.structure = "UNCONFIRMED"
+
+        return state
+
+    # ========================================================
+    # TREND UP
+    # ========================================================
 
     if state.regime == "TREND_UP":
 
@@ -49,9 +92,9 @@ def apply_structure(state: SoyuzState) -> SoyuzState:
 
         return state
 
-    # --------------------------------------------------------
-    # STRUTTURA RIBASSISTA
-    # --------------------------------------------------------
+    # ========================================================
+    # TREND DOWN
+    # ========================================================
 
     if state.regime == "TREND_DOWN":
 
@@ -61,9 +104,9 @@ def apply_structure(state: SoyuzState) -> SoyuzState:
 
         return state
 
-    # --------------------------------------------------------
-    # MERCATO LATERALE
-    # --------------------------------------------------------
+    # ========================================================
+    # RANGE
+    # ========================================================
 
     if state.regime == "RANGE":
 
@@ -73,9 +116,32 @@ def apply_structure(state: SoyuzState) -> SoyuzState:
 
         return state
 
-    # --------------------------------------------------------
-    # STRUTTURA NON CONFERMATA
-    # --------------------------------------------------------
+    # ========================================================
+    # HIGH VOLATILITY
+    # ========================================================
+    #
+    # Una candela/movimento molto ampio non viene considerato
+    # automaticamente una struttura rialzista o ribassista.
+    #
+    # Questo impedisce:
+    #
+    # HIGH_VOLATILITY
+    #       ↓
+    # falso LONG/SHORT
+    #
+    # ========================================================
+
+    if state.regime == "HIGH_VOLATILITY":
+
+        state.structure = "UNCONFIRMED"
+
+        state.structure_direction = "NONE"
+
+        return state
+
+    # ========================================================
+    # UNKNOWN / FALLBACK
+    # ========================================================
 
     state.structure = "UNCONFIRMED"
 
