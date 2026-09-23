@@ -1,0 +1,57 @@
+name: SOYUZ GAGARIN v1
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * 1-5"
+
+permissions:
+  contents: read
+
+jobs:
+  soyuz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+      TELEGRAM_ENABLED: "1"
+      PAPER_TRADING_ONLY: "1"
+
+      MIN_ENTRY_PROBABILITY: "62"
+      MIN_ENTRY_QUALITY: "55"
+      MIN_ENTRY_CONFIDENCE: "60"
+      MIN_ENTRY_RR: "2.5"
+      MAX_ENTRY_STOP_ATR: "2.5"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Compile
+        run: |
+          python -m py_compile main.py config.py
+          python -m py_compile engine/*.py
+          python -m py_compile commodities/*.py
+          python -m py_compile telegram/*.py
+
+      - name: Tests
+        run: |
+          python -m pytest -q
+
+      - name: Run SOYUZ GAGARIN
+        run: |
+          python main.py
