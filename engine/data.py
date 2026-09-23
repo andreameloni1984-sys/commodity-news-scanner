@@ -1,6 +1,6 @@
 # ============================================================
-# SOYUZ GAGARIN v1.3
-# DATA ENGINE + DIAGNOSTICS
+# SOYUZ GAGARIN v1.5
+# DATA ENGINE
 # ============================================================
 #
 # DATA
@@ -19,25 +19,27 @@
 #   ↓
 # GAGARIN
 #
-# Single data adapter:
-# Twelve Data
+# DATA PROVIDERS
 #
-# Nessun fallback parallelo in questa versione.
+# 1. Twelve Data
+#    - utilizzato per gli strumenti realmente disponibili
+#      sul piano corrente
 #
-# v1.3
-# - diagnostica completa errori Twelve Data
-# - mantiene compatibilità con fetch_twelve_data()
-# - errori salvati in state.metadata
-# - distingue:
-#     HTTP_ERROR
-#     API_ERROR
-#     NO_VALUES
-#     INVALID_RESPONSE
-#     INSUFFICIENT_CANDLES
-#     INVALID_TIMESTAMP
-#     INVALID_ATR
-#     DATA_NOT_LIVE
-# - non espone API key
+# 2. Yahoo Finance Futures
+#    - fallback per strumenti non disponibili su Twelve Data
+#    - utilizza futures come proxy di mercato
+#
+# OBIETTIVI v1.5
+#
+# - eliminare il problema degli 8 crediti/minuto
+# - non interrogare inutilmente Twelve Data
+# - mantenere dati intraday
+# - mantenere M5 / M15 / M30 / H1
+# - mantenere ATR
+# - mantenere diagnostica
+# - mantenere compatibilità con Gagarin
+# - nessuna modifica a SETUP / TRIGGER / RISK / SAFETY
+#
 # ============================================================
 
 from datetime import datetime, timezone
@@ -55,7 +57,22 @@ from config import (
 from engine.state import SoyuzState
 
 
-API_URL = "https://api.twelvedata.com/time_series"
+# ============================================================
+# PROVIDERS
+# ============================================================
+
+TWELVE_DATA_URL = (
+    "https://api.twelvedata.com/time_series"
+)
+
+YAHOO_CHART_URL = (
+    "https://query1.finance.yahoo.com/v8/finance/chart"
+)
+
+
+# ============================================================
+# BASE SETTINGS
+# ============================================================
 
 BASE_INTERVAL = "5min"
 
@@ -70,32 +87,115 @@ EFFECTIVE_LIVE_MAX_AGE = max(
 
 
 # ============================================================
+# TWELVE DATA ROUTING
+# ============================================================
+#
+# Sul piano corrente abbiamo verificato che:
+#
+# XAU/USD -> disponibile
+#
+# XAG/XPT/XPD/WTI -> piano superiore richiesto
+#
+# BRENT/RICE/SUGAR -> simbolo corrente non valido
+#
+# COCOA/COFFEE -> raggiungono il limite crediti
+#
+# Non sprechiamo quindi 10 richieste Twelve Data.
+#
+# Se in futuro verrà attivato un piano superiore possiamo
+# ampliare questa lista.
+#
+# ============================================================
+
+TWELVE_DATA_ALLOWED_SYMBOLS = {
+    "XAU/USD",
+}
+
+
+# ============================================================
+# YAHOO FUTURES MAP
+# ============================================================
+#
+# Yahoo utilizza futures come riferimento:
+#
+# GC=F   Gold
+# SI=F   Silver
+# PL=F   Platinum
+# PA=F   Palladium
+# CL=F   WTI
+# BZ=F   Brent
+# ZR=F   Rough Rice
+# SB=F   Sugar
+# CC=F   Cocoa
+# KC=F   Coffee
+#
+# ATTENZIONE:
+# questi non sono dichiarati equivalenti perfetti ai prezzi
+# spot Twelve Data.
+#
+# Sono proxy futures utilizzati per alimentare l'engine
+# intraday quando la fonte primaria non è disponibile.
+#
+# ============================================================
+
+YAHOO_FUTURES_SYMBOLS = {
+    "XAU/USD": "GC=F",
+    "XAG/USD": "SI=F",
+    "XPT/USD": "PL=F",
+    "XPD/USD": "PA=F",
+    "WTI/USD": "CL=F",
+    "BRENT/USD": "BZ=F",
+    "RICE/USD": "ZR=F",
+    "SUGAR/USD": "SB=F",
+    "COCOA/USD": "CC=F",
+    "COFFEE/USD": "KC=F",
+}
+
+
+# ============================================================
 # TIME
 # ============================================================
 
 
-def _parse_time(value: str) -> Optional[datetime]:
+def _parse_time(
+    value: str,
+) -> Optional[datetime]:
     """
-    Converte il timestamp Twelve Data in datetime UTC.
+    Converte timestamp in UTC.
     """
 
     if not value:
         return None
 
     try:
+
         value = value.strip()
 
         if value.endswith("Z"):
-            value = value[:-1] + "+00:00"
+            value = (
+                value[:-1]
+                + "+00:00"
+            )
 
-        dt = datetime.fromisoformat(value)
+        dt = datetime.fromisoformat(
+            value
+        )
 
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
 
-        return dt.astimezone(timezone.utc)
+            dt = dt.replace(
+                tzinfo=timezone.utc
+            )
 
-    except (TypeError, ValueError):
+        return dt.astimezone(
+            timezone.utc
+        )
+
+    except (
+        TypeError,
+        ValueError,
+    ):
+
         return None
 
 
@@ -111,12 +211,17 @@ def _true_range(
 ) -> float:
 
     if previous_close is None:
+
         return high - low
 
     return max(
         high - low,
-        abs(high - previous_close),
-        abs(low - previous_close),
+        abs(
+            high - previous_close
+        ),
+        abs(
+            low - previous_close
+        ),
     )
 
 
@@ -125,10 +230,12 @@ def _calculate_atr(
     period: int = 14,
 ) -> Optional[float]:
     """
-    ATR semplice basato sugli ultimi `period` true ranges.
+    ATR semplice sugli ultimi `period`
+    True Range.
     """
 
     if len(candles) < period + 1:
+
         return None
 
     ranges = []
@@ -138,23 +245,39 @@ def _calculate_atr(
         len(candles) - period,
     )
 
-    for i in range(start, len(candles)):
+    for index in range(
+        start,
+        len(candles),
+    ):
 
-        current = candles[i]
-        previous = candles[i - 1]
+        current = candles[index]
 
-        tr = _true_range(
-            current["high"],
-            current["low"],
-            previous["close"],
+        previous = candles[
+            index - 1
+        ]
+
+        ranges.append(
+            _true_range(
+                current["high"],
+                current["low"],
+                previous["close"],
+            )
         )
 
-        ranges.append(tr)
-
     if not ranges:
+
         return None
 
-    return sum(ranges) / len(ranges)
+    atr = (
+        sum(ranges)
+        / len(ranges)
+    )
+
+    if atr <= 0:
+
+        return None
+
+    return atr
 
 
 # ============================================================
@@ -162,27 +285,53 @@ def _calculate_atr(
 # ============================================================
 
 
-def _normalize_candle(row: dict) -> Optional[dict]:
+def _normalize_candle(
+    row: dict,
+) -> Optional[dict]:
     """
-    Normalizza una candela Twelve Data.
+    Normalizza una candela generica.
     """
 
     try:
 
-        timestamp = row.get("datetime")
+        timestamp = row.get(
+            "datetime"
+        )
 
-        open_price = float(row["open"])
-        high_price = float(row["high"])
-        low_price = float(row["low"])
-        close_price = float(row["close"])
+        open_price = float(
+            row["open"]
+        )
+
+        high_price = float(
+            row["high"]
+        )
+
+        low_price = float(
+            row["low"]
+        )
+
+        close_price = float(
+            row["close"]
+        )
 
         if high_price < low_price:
+
             return None
 
         if not (
-            low_price <= open_price <= high_price
-            and low_price <= close_price <= high_price
+            low_price
+            <= open_price
+            <= high_price
         ):
+
+            return None
+
+        if not (
+            low_price
+            <= close_price
+            <= high_price
+        ):
+
             return None
 
         return {
@@ -198,37 +347,33 @@ def _normalize_candle(row: dict) -> Optional[dict]:
         TypeError,
         ValueError,
     ):
+
         return None
 
 
 # ============================================================
-# INTERNAL TWELVE DATA FETCH
+# TWELVE DATA FETCH
 # ============================================================
 
 
 def _fetch_twelve_data_diagnostic(
     symbol: str,
-) -> tuple[Optional[dict], Optional[dict]]:
+) -> tuple[
+    Optional[dict],
+    Optional[dict],
+]:
     """
-    Fetch Twelve Data con diagnostica dettagliata.
-
-    Restituisce:
-
-        (data, error)
-
-    oppure:
-
-        (data, None)
-
-    IMPORTANTE:
-    nessuna API key viene inserita nei messaggi di errore.
+    Fetch Twelve Data con diagnostica.
     """
 
     if not TWELVE_DATA_API_KEY:
 
         return None, {
             "code": "MISSING_API_KEY",
-            "message": "TWELVE_DATA_API_KEY non configurata",
+            "message": (
+                "TWELVE_DATA_API_KEY "
+                "non configurata"
+            ),
         }
 
     params = {
@@ -241,14 +386,10 @@ def _fetch_twelve_data_diagnostic(
         "include_ohlc": "true",
     }
 
-    # --------------------------------------------------------
-    # HTTP REQUEST
-    # --------------------------------------------------------
-
     try:
 
         response = requests.get(
-            API_URL,
+            TWELVE_DATA_URL,
             params=params,
             timeout=TIMEOUT_SECONDS,
         )
@@ -258,7 +399,7 @@ def _fetch_twelve_data_diagnostic(
         return None, {
             "code": "TIMEOUT",
             "message": (
-                f"Twelve Data timeout "
+                "Twelve Data timeout "
                 f"({TIMEOUT_SECONDS}s)"
             ),
         }
@@ -270,25 +411,19 @@ def _fetch_twelve_data_diagnostic(
             "message": str(exc)[:250],
         }
 
-    # --------------------------------------------------------
-    # HTTP STATUS
-    # --------------------------------------------------------
-
     if response.status_code != 200:
 
         return None, {
             "code": "HTTP_ERROR",
-            "http_status": response.status_code,
+            "http_status": (
+                response.status_code
+            ),
             "message": (
-                response.text[:250]
+                response.text[:300]
                 if response.text
                 else "HTTP error"
             ),
         }
-
-    # --------------------------------------------------------
-    # JSON
-    # --------------------------------------------------------
 
     try:
 
@@ -298,75 +433,69 @@ def _fetch_twelve_data_diagnostic(
 
         return None, {
             "code": "INVALID_JSON",
-            "http_status": response.status_code,
-            "message": "Risposta Twelve Data non JSON",
+            "message": (
+                "Risposta Twelve Data "
+                "non JSON"
+            ),
         }
 
-    if not isinstance(payload, dict):
+    if not isinstance(
+        payload,
+        dict,
+    ):
 
         return None, {
             "code": "INVALID_RESPONSE",
-            "message": "Payload Twelve Data non valido",
+            "message": (
+                "Payload Twelve Data "
+                "non valido"
+            ),
         }
 
-    # --------------------------------------------------------
-    # TWELVE DATA API ERROR
-    # --------------------------------------------------------
-
-    if payload.get("status") == "error":
-
-        code = payload.get(
-            "code",
-            "API_ERROR",
-        )
-
-        message = payload.get(
-            "message",
-            "Twelve Data API error",
-        )
+    if payload.get(
+        "status"
+    ) == "error":
 
         return None, {
-            "code": f"API_ERROR_{code}",
-            "message": str(message)[:300],
+            "code": (
+                f"API_ERROR_"
+                f"{payload.get('code', 'UNKNOWN')}"
+            ),
+            "message": str(
+                payload.get(
+                    "message",
+                    "Twelve Data API error",
+                )
+            )[:300],
         }
 
-    # --------------------------------------------------------
-    # VALUES
-    # --------------------------------------------------------
+    values = payload.get(
+        "values"
+    )
 
-    values = payload.get("values")
-
-    if not isinstance(values, list):
+    if not isinstance(
+        values,
+        list,
+    ):
 
         return None, {
             "code": "NO_VALUES",
             "message": (
-                "Twelve Data non ha restituito "
-                "la serie values"
+                "Nessuna serie values "
+                "da Twelve Data"
             ),
         }
-
-    if not values:
-
-        return None, {
-            "code": "EMPTY_VALUES",
-            "message": (
-                "Twelve Data ha restituito "
-                "values vuoto"
-            ),
-        }
-
-    # --------------------------------------------------------
-    # NORMALIZATION
-    # --------------------------------------------------------
 
     candles = []
 
     for row in reversed(values):
 
-        candle = _normalize_candle(row)
+        candle = _normalize_candle(
+            row
+        )
 
         if candle is not None:
+
             candles.append(candle)
 
     if len(candles) < 30:
@@ -374,37 +503,341 @@ def _fetch_twelve_data_diagnostic(
         return None, {
             "code": "INSUFFICIENT_CANDLES",
             "message": (
-                f"Candele valide: {len(candles)} "
-                f"/ minimo 30"
+                f"Candele valide: "
+                f"{len(candles)}"
             ),
         }
 
+    return _finalize_market_data(
+        candles,
+        "TWELVE_DATA",
+    )
+
+
+# ============================================================
+# YAHOO FETCH
+# ============================================================
+
+
+def _fetch_yahoo_data_diagnostic(
+    logical_symbol: str,
+) -> tuple[
+    Optional[dict],
+    Optional[dict],
+]:
+    """
+    Scarica dati intraday da Yahoo Finance
+    utilizzando il futures symbol associato.
+    """
+
+    yahoo_symbol = (
+        YAHOO_FUTURES_SYMBOLS.get(
+            logical_symbol
+        )
+    )
+
+    if not yahoo_symbol:
+
+        return None, {
+            "code": "YAHOO_SYMBOL_MISSING",
+            "message": (
+                "Nessun mapping Yahoo "
+                f"per {logical_symbol}"
+            ),
+        }
+
+    url = (
+        f"{YAHOO_CHART_URL}/"
+        f"{yahoo_symbol}"
+    )
+
+    params = {
+        "interval": "5m",
+        "range": "5d",
+        "includePrePost": "true",
+        "events": "history",
+    }
+
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 "
+            "SOYUZ-GAGARIN/1.5"
+        ),
+    }
+
+    try:
+
+        response = requests.get(
+            url,
+            params=params,
+            headers=headers,
+            timeout=TIMEOUT_SECONDS,
+        )
+
+    except requests.Timeout:
+
+        return None, {
+            "code": "YAHOO_TIMEOUT",
+            "message": (
+                "Yahoo Finance timeout"
+            ),
+        }
+
+    except requests.RequestException as exc:
+
+        return None, {
+            "code": "YAHOO_REQUEST_ERROR",
+            "message": str(exc)[:250],
+        }
+
+    if response.status_code != 200:
+
+        return None, {
+            "code": "YAHOO_HTTP_ERROR",
+            "http_status": (
+                response.status_code
+            ),
+            "message": (
+                response.text[:300]
+                if response.text
+                else "Yahoo HTTP error"
+            ),
+        }
+
+    try:
+
+        payload = response.json()
+
+    except ValueError:
+
+        return None, {
+            "code": "YAHOO_INVALID_JSON",
+            "message": (
+                "Yahoo ha restituito "
+                "una risposta non JSON"
+            ),
+        }
+
+    chart = payload.get(
+        "chart"
+    )
+
+    if not isinstance(
+        chart,
+        dict,
+    ):
+
+        return None, {
+            "code": "YAHOO_INVALID_CHART",
+            "message": (
+                "Struttura chart Yahoo "
+                "non valida"
+            ),
+        }
+
+    chart_error = chart.get(
+        "error"
+    )
+
+    if chart_error:
+
+        return None, {
+            "code": "YAHOO_API_ERROR",
+            "message": str(
+                chart_error
+            )[:300],
+        }
+
+    results = chart.get(
+        "result"
+    )
+
+    if not results:
+
+        return None, {
+            "code": "YAHOO_NO_RESULT",
+            "message": (
+                "Yahoo non ha restituito "
+                "result"
+            ),
+        }
+
+    result = results[0]
+
+    timestamps = result.get(
+        "timestamp"
+    )
+
+    indicators = result.get(
+        "indicators",
+        {},
+    )
+
+    quote_list = indicators.get(
+        "quote",
+        [],
+    )
+
+    if not timestamps or not quote_list:
+
+        return None, {
+            "code": "YAHOO_NO_VALUES",
+            "message": (
+                "Yahoo non ha restituito "
+                "dati OHLC"
+            ),
+        }
+
+    quote = quote_list[0]
+
+    opens = quote.get(
+        "open",
+        [],
+    )
+
+    highs = quote.get(
+        "high",
+        [],
+    )
+
+    lows = quote.get(
+        "low",
+        [],
+    )
+
+    closes = quote.get(
+        "close",
+        [],
+    )
+
+    candles = []
+
+    count = min(
+        len(timestamps),
+        len(opens),
+        len(highs),
+        len(lows),
+        len(closes),
+    )
+
+    for index in range(count):
+
+        try:
+
+            timestamp = (
+                datetime.fromtimestamp(
+                    int(
+                        timestamps[index]
+                    ),
+                    tz=timezone.utc,
+                ).isoformat()
+            )
+
+            row = {
+                "datetime": timestamp,
+                "open": opens[index],
+                "high": highs[index],
+                "low": lows[index],
+                "close": closes[index],
+            }
+
+            candle = _normalize_candle(
+                row
+            )
+
+            if candle is not None:
+
+                candles.append(
+                    candle
+                )
+
+        except (
+            TypeError,
+            ValueError,
+            OverflowError,
+        ):
+
+            continue
+
     # --------------------------------------------------------
-    # CURRENT PRICE
+    # Yahoo può restituire meno barre del LOOKBACK.
+    # Per Gagarin servono almeno 30.
     # --------------------------------------------------------
 
-    price = candles[-1]["close"]
+    if len(candles) < 30:
 
-    previous_price = candles[-2]["close"]
+        return None, {
+            "code": "YAHOO_INSUFFICIENT_CANDLES",
+            "message": (
+                f"Candele Yahoo valide: "
+                f"{len(candles)}"
+            ),
+        }
 
-    # --------------------------------------------------------
-    # ATR
-    # --------------------------------------------------------
+    # Yahoo può restituire dati non ordinati.
+    candles.sort(
+        key=lambda candle: (
+            _parse_time(
+                candle["timestamp"]
+            )
+            or datetime.min.replace(
+                tzinfo=timezone.utc
+            )
+        )
+    )
 
-    atr = _calculate_atr(candles)
+    return _finalize_market_data(
+        candles,
+        "YAHOO_FUTURES",
+    )
 
-    if atr is None or atr <= 0:
+
+# ============================================================
+# FINALIZE MARKET DATA
+# ============================================================
+
+
+def _finalize_market_data(
+    candles: list[dict],
+    source: str,
+) -> tuple[
+    Optional[dict],
+    Optional[dict],
+]:
+    """
+    Completa price / previous / ATR / age.
+    """
+
+    if len(candles) < 30:
+
+        return None, {
+            "code": "INSUFFICIENT_CANDLES",
+            "message": (
+                f"Candele disponibili: "
+                f"{len(candles)}"
+            ),
+        }
+
+    price = candles[-1][
+        "close"
+    ]
+
+    previous_price = candles[-2][
+        "close"
+    ]
+
+    atr = _calculate_atr(
+        candles
+    )
+
+    if atr is None:
 
         return None, {
             "code": "INVALID_ATR",
             "message": (
-                f"ATR non valido: {atr}"
+                "ATR non valido"
             ),
         }
-
-    # --------------------------------------------------------
-    # DATA AGE
-    # --------------------------------------------------------
 
     latest_timestamp = _parse_time(
         candles[-1]["timestamp"]
@@ -415,35 +848,111 @@ def _fetch_twelve_data_diagnostic(
         return None, {
             "code": "INVALID_TIMESTAMP",
             "message": (
-                "Timestamp ultima candela non valido"
+                "Timestamp non valido"
             ),
         }
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(
+        timezone.utc
+    )
 
     age_seconds = max(
         0.0,
         (
-            now - latest_timestamp
+            now
+            - latest_timestamp
         ).total_seconds(),
     )
-
-    # --------------------------------------------------------
-    # SUCCESS
-    # --------------------------------------------------------
 
     return {
         "candles": candles,
         "price": price,
-        "previous_price": previous_price,
+        "previous_price": (
+            previous_price
+        ),
         "atr": atr,
-        "age_seconds": age_seconds,
-        "source": "TWELVE_DATA",
+        "age_seconds": (
+            age_seconds
+        ),
+        "source": source,
     }, None
 
 
 # ============================================================
-# PUBLIC TWELVE DATA FUNCTION
+# PROVIDER ROUTER
+# ============================================================
+
+
+def _fetch_market_data(
+    symbol: str,
+) -> tuple[
+    Optional[dict],
+    Optional[dict],
+]:
+    """
+    Router principale.
+
+    Twelve Data viene usato solamente
+    per i simboli esplicitamente autorizzati.
+
+    Gli altri passano direttamente a Yahoo
+    evitando di bruciare gli 8 crediti/minuto.
+    """
+
+    # --------------------------------------------------------
+    # TWELVE DATA
+    # --------------------------------------------------------
+
+    if (
+        symbol
+        in TWELVE_DATA_ALLOWED_SYMBOLS
+    ):
+
+        data, error = (
+            _fetch_twelve_data_diagnostic(
+                symbol
+            )
+        )
+
+        if data is not None:
+
+            return data, None
+
+        # ----------------------------------------------------
+        # FALLBACK
+        # ----------------------------------------------------
+
+        yahoo_data, yahoo_error = (
+            _fetch_yahoo_data_diagnostic(
+                symbol
+            )
+        )
+
+        if yahoo_data is not None:
+
+            return yahoo_data, None
+
+        return None, {
+            "code": "ALL_PROVIDERS_FAILED",
+            "message": (
+                "Twelve Data: "
+                f"{error} | "
+                "Yahoo: "
+                f"{yahoo_error}"
+            ),
+        }
+
+    # --------------------------------------------------------
+    # YAHOO DIRECT
+    # --------------------------------------------------------
+
+    return _fetch_yahoo_data_diagnostic(
+        symbol
+    )
+
+
+# ============================================================
+# PUBLIC COMPATIBILITY FUNCTION
 # ============================================================
 
 
@@ -451,12 +960,16 @@ def fetch_twelve_data(
     symbol: str,
 ) -> Optional[dict]:
     """
-    Compatibilità con il vecchio adapter.
+    Compatibilità con il vecchio codice.
 
-    Restituisce solamente i dati oppure None.
+    Manteniamo il nome della funzione per non
+    rompere eventuali import esterni.
+
+    Da v1.5 però il router può utilizzare
+    Twelve Data oppure Yahoo.
     """
 
-    data, _error = _fetch_twelve_data_diagnostic(
+    data, _error = _fetch_market_data(
         symbol
     )
 
@@ -473,19 +986,20 @@ def _aggregate_candles(
     minutes: int,
 ) -> list[dict]:
     """
-    Aggrega candele 5m in timeframe superiori.
+    Aggrega M5 in:
 
-    Supportati:
-
-        15m
-        30m
-        60m
+        M15
+        M30
+        H1
     """
 
     if not candles:
+
         return []
 
-    bucket_seconds = minutes * 60
+    bucket_seconds = (
+        minutes * 60
+    )
 
     buckets = {}
 
@@ -496,6 +1010,7 @@ def _aggregate_candles(
         )
 
         if dt is None:
+
             continue
 
         epoch = int(
@@ -503,7 +1018,8 @@ def _aggregate_candles(
         )
 
         bucket_epoch = (
-            epoch // bucket_seconds
+            epoch
+            // bucket_seconds
         ) * bucket_seconds
 
         buckets.setdefault(
@@ -513,52 +1029,44 @@ def _aggregate_candles(
 
     result = []
 
-    for bucket_epoch in sorted(buckets):
+    for bucket_epoch in sorted(
+        buckets
+    ):
 
-        group = buckets[bucket_epoch]
+        group = buckets[
+            bucket_epoch
+        ]
 
-        if not group:
-            continue
-
-        first_dt = _parse_time(
-            group[0]["timestamp"]
+        expected_bars = (
+            minutes // 5
         )
-
-        last_dt = _parse_time(
-            group[-1]["timestamp"]
-        )
-
-        if (
-            first_dt is None
-            or last_dt is None
-        ):
-            continue
-
-        expected_bars = minutes // 5
 
         if len(group) < expected_bars:
+
             continue
 
         result.append(
             {
-                "timestamp": datetime.fromtimestamp(
-                    bucket_epoch,
-                    tz=timezone.utc,
-                ).isoformat(),
-
-                "open": group[0]["open"],
-
+                "timestamp": (
+                    datetime.fromtimestamp(
+                        bucket_epoch,
+                        tz=timezone.utc,
+                    ).isoformat()
+                ),
+                "open": group[0][
+                    "open"
+                ],
                 "high": max(
                     candle["high"]
                     for candle in group
                 ),
-
                 "low": min(
                     candle["low"]
                     for candle in group
                 ),
-
-                "close": group[-1]["close"],
+                "close": group[-1][
+                    "close"
+                ],
             }
         )
 
@@ -574,12 +1082,7 @@ def _build_mtf_data(
     candles: list[dict],
 ) -> dict:
     """
-    Costruisce le serie:
-
-        M5
-        M15
-        M30
-        H1
+    Costruisce M5 / M15 / M30 / H1.
     """
 
     return {
@@ -619,12 +1122,12 @@ def load_data(
     state: SoyuzState,
 ) -> SoyuzState:
     """
-    DATA GATE principale.
+    DATA GATE canonico.
 
-    Carica i dati di mercato e aggiorna
-    lo stato canonico.
+    Non prende decisioni di trading.
 
-    Non prende decisioni operative.
+    Fornisce solamente dati affidabili
+    agli engine successivi.
     """
 
     # --------------------------------------------------------
@@ -645,14 +1148,11 @@ def load_data(
 
     state.mtf_data = {}
 
-    state.blockers = []
-
-    # Manteniamo eventuali metadati generali,
-    # ma azzeriamo quelli della precedente richiesta DATA.
     if not isinstance(
         state.metadata,
         dict,
     ):
+
         state.metadata = {}
 
     state.metadata.pop(
@@ -665,42 +1165,23 @@ def load_data(
         None,
     )
 
-    # --------------------------------------------------------
-    # API KEY
-    # --------------------------------------------------------
-
-    if not TWELVE_DATA_API_KEY:
-
-        error = {
-            "code": "MISSING_API_KEY",
-            "message": (
-                "TWELVE_DATA_API_KEY "
-                "non configurata"
-            ),
-        }
-
-        state.metadata[
-            "data_error"
-        ] = error
-
-        state.blockers.append(
-            "MISSING_TWELVE_DATA_API_KEY"
-        )
-
-        return state
+    state.metadata.pop(
+        "data_status",
+        None,
+    )
 
     # --------------------------------------------------------
-    # FETCH
+    # ROUTER
     # --------------------------------------------------------
 
     result, error = (
-        _fetch_twelve_data_diagnostic(
+        _fetch_market_data(
             state.symbol
         )
     )
 
     # --------------------------------------------------------
-    # FETCH FAILURE
+    # FAILURE
     # --------------------------------------------------------
 
     if result is None:
@@ -708,7 +1189,9 @@ def load_data(
         if error is None:
 
             error = {
-                "code": "UNKNOWN_DATA_ERROR",
+                "code": (
+                    "UNKNOWN_DATA_ERROR"
+                ),
                 "message": (
                     "Errore dati sconosciuto"
                 ),
@@ -722,6 +1205,7 @@ def load_data(
             "data_diagnostic"
         ] = {
             "symbol": state.symbol,
+            "provider": "NONE",
             "error_code": error.get(
                 "code"
             ),
@@ -736,7 +1220,10 @@ def load_data(
 
         return state
 
-    candles = result["candles"]
+    candles = result.get(
+        "candles",
+        [],
+    )
 
     if not candles:
 
@@ -761,24 +1248,30 @@ def load_data(
     # MARKET DATA
     # --------------------------------------------------------
 
-    state.price = result["price"]
+    state.price = result[
+        "price"
+    ]
 
-    state.previous_price = (
-        result["previous_price"]
-    )
+    state.previous_price = result[
+        "previous_price"
+    ]
 
-    state.atr = result["atr"]
+    state.atr = result[
+        "atr"
+    ]
 
     state.data_age_seconds = (
-        result["age_seconds"]
+        result[
+            "age_seconds"
+        ]
     )
 
-    state.data_source = (
-        result["source"]
-    )
+    state.data_source = result[
+        "source"
+    ]
 
     # --------------------------------------------------------
-    # PRIMARY OHLC
+    # OHLC
     # --------------------------------------------------------
 
     state.opens = [
@@ -810,20 +1303,27 @@ def load_data(
     # MTF
     # --------------------------------------------------------
 
-    state.mtf_data = _build_mtf_data(
-        candles
+    state.mtf_data = (
+        _build_mtf_data(
+            candles
+        )
     )
 
     state.timeframe = BASE_INTERVAL
 
     # --------------------------------------------------------
-    # MTF DIAGNOSTICS
+    # DIAGNOSTIC
     # --------------------------------------------------------
 
     state.metadata[
         "data_diagnostic"
     ] = {
         "symbol": state.symbol,
+
+        "provider": (
+            state.data_source
+        ),
+
         "candles_5m": len(
             state.mtf_data.get(
                 "5min",
@@ -833,6 +1333,7 @@ def load_data(
                 [],
             )
         ),
+
         "candles_15m": len(
             state.mtf_data.get(
                 "15min",
@@ -842,6 +1343,7 @@ def load_data(
                 [],
             )
         ),
+
         "candles_30m": len(
             state.mtf_data.get(
                 "30min",
@@ -851,6 +1353,7 @@ def load_data(
                 [],
             )
         ),
+
         "candles_1h": len(
             state.mtf_data.get(
                 "1h",
@@ -860,15 +1363,18 @@ def load_data(
                 [],
             )
         ),
+
         "price": state.price,
+
         "atr": state.atr,
+
         "age_seconds": (
             state.data_age_seconds
         ),
     }
 
     # --------------------------------------------------------
-    # LIVE GATE
+    # LIVE
     # --------------------------------------------------------
 
     age = state.data_age_seconds
@@ -878,7 +1384,7 @@ def load_data(
         error = {
             "code": "DATA_AGE_UNKNOWN",
             "message": (
-                "Età dei dati sconosciuta"
+                "Età dati sconosciuta"
             ),
         }
 
@@ -893,7 +1399,8 @@ def load_data(
         return state
 
     state.live = (
-        age <= EFFECTIVE_LIVE_MAX_AGE
+        age
+        <= EFFECTIVE_LIVE_MAX_AGE
     )
 
     if not state.live:
@@ -917,7 +1424,7 @@ def load_data(
         return state
 
     # --------------------------------------------------------
-    # FINAL DATA VALIDATION
+    # PRICE
     # --------------------------------------------------------
 
     if state.price is None:
@@ -938,6 +1445,10 @@ def load_data(
         )
 
         return state
+
+    # --------------------------------------------------------
+    # ATR
+    # --------------------------------------------------------
 
     if (
         state.atr is None
@@ -962,10 +1473,18 @@ def load_data(
 
         return state
 
-    if len(state.closes) < 30:
+    # --------------------------------------------------------
+    # HISTORY
+    # --------------------------------------------------------
+
+    if len(
+        state.closes
+    ) < 30:
 
         error = {
-            "code": "INSUFFICIENT_HISTORY",
+            "code": (
+                "INSUFFICIENT_HISTORY"
+            ),
             "message": (
                 f"Storia insufficiente: "
                 f"{len(state.closes)}"
