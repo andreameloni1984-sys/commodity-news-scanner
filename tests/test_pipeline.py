@@ -1,36 +1,72 @@
-from commodities.universe import COMMODITIES
+# ============================================================
+# SOYUZ GAGARIN v1.2
+# PIPELINE TESTS
+# ============================================================
+#
+# Test della catena:
+#
+# DATA
+#   ↓
+# REGIME
+#   ↓
+# STRUCTURE
+#   ↓
+# SETUP
+#   ↓
+# TRIGGER
+#   ↓
+# RISK
+#   ↓
+# SAFETY
+#
+# I test sono deterministici:
+# NON usano API esterne.
+# NON usano Twelve Data.
+# NON usano Telegram.
+#
+# ============================================================
+
 from engine.state import SoyuzState
+from engine.regime import apply_regime
+from engine.structure import apply_structure
+from engine.setup import apply_setup
+from engine.trigger import apply_trigger
+from engine.risk import apply_risk
+from engine.safety import apply_safety
 
 
 # ============================================================
-# SOYUZ GAGARIN v1.0
-# BASIC PIPELINE TEST
+# HELPERS
 # ============================================================
 
 
-def test_single_state_schema():
+def _make_candles(
+    direction="LONG",
+    count=80,
+):
     """
-    Verifica che il motore utilizzi un singolo stato canonico.
+    Crea una serie OHLC deterministica.
+
+    Serve solamente per testare la pipeline.
+    Non rappresenta dati reali di mercato.
     """
 
-    commodity = COMMODITIES[0]
+    opens = []
+    highs = []
+    lows = []
+    closes = []
+    timestamps = []
 
-    state = SoyuzState(
-        commodity.name,
-        commodity.symbol,
-    )
+    price = 100.0
 
-    assert state.final_decision in {
-        "ENTRY",
-        "WAIT",
-    }
+    for i in range(count):
 
-    assert state.safety in {
-        "SAFE",
-        "BLOCKED",
-    }
+        if direction == "LONG":
 
-    assert isinstance(
-        state.blockers,
-        list,
-    )
+            open_price = price
+            close_price = price + 0.20
+
+            high_price = close_price + 0.10
+            low_price = open_price - 0.05
+
+            price = close_price
