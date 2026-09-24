@@ -1,7 +1,5 @@
 from commodities.universe import Commodity
-
 from engine.state import SoyuzState
-
 from engine.data import load_data
 from engine.regime import apply_regime
 from engine.structure import apply_structure
@@ -12,7 +10,7 @@ from engine.safety import apply_safety
 
 
 # ============================================================
-# SOYUZ GAGARIN v1.1
+# SOYUZ GAGARIN v1.2
 # SINGLE DECISION AUTHORITY
 # ============================================================
 #
@@ -26,301 +24,124 @@ from engine.safety import apply_safety
 # ============================================================
 
 
-def _clamp(
-    value: float,
-    minimum: float = 0.0,
-    maximum: float = 100.0,
-) -> float:
+def _clamp(value: float, minimum: float = 0.0, maximum: float = 100.0) -> float:
     return max(minimum, min(maximum, float(value)))
 
 
 def calculate_quality(state: SoyuzState) -> SoyuzState:
-    """
-    Calcola le metriche operative di confluence.
-
-    I punteggi richiedono più passaggi indipendenti.
-    Un singolo movimento del prezzo non deve essere
-    sufficiente a creare un'entrata ad alta confidenza.
-
-    Questa funzione NON decide ENTRY/WAIT.
-    La decisione finale rimane al Safety Engine.
-    """
-
-    # --------------------------------------------------------
-    # BASE
-    # --------------------------------------------------------
-
     probability = 40.0
     quality = 0.0
     confidence = 0.0
-
-    # --------------------------------------------------------
-    # DATA QUALITY
-    # --------------------------------------------------------
 
     if state.data_ok:
         quality += 15.0
         confidence += 10.0
 
-    # --------------------------------------------------------
-    # REGIME
-    # --------------------------------------------------------
-
-    if state.regime in {
-        "TREND_UP",
-        "TREND_DOWN",
-    }:
+    if state.regime in {"TREND_UP", "TREND_DOWN"}:
         probability += 10.0
         quality += 15.0
         confidence += 10.0
 
-    # Alta volatilità NON viene considerata una conferma
-    # direzionale.
     if state.regime == "HIGH_VOLATILITY":
         probability -= 10.0
         quality -= 15.0
         confidence -= 10.0
 
-    # --------------------------------------------------------
-    # STRUCTURE
-    # --------------------------------------------------------
-
-    if state.structure in {
-        "BULLISH",
-        "BEARISH",
-    }:
+    if state.structure in {"BULLISH", "BEARISH"}:
         probability += 8.0
         quality += 15.0
         confidence += 10.0
 
-    # --------------------------------------------------------
-    # SETUP
-    # --------------------------------------------------------
-
-    if state.setup_direction in {
-        "LONG",
-        "SHORT",
-    }:
+    if state.setup_direction in {"LONG", "SHORT"}:
         probability += 5.0
-
-        quality += max(
-            0.0,
-            min(
-                15.0,
-                state.setup_quality * 0.15,
-            ),
-        )
-
+        quality += max(0.0, min(15.0, state.setup_quality * 0.15))
         confidence += 10.0
-
-    # --------------------------------------------------------
-    # TRIGGER
-    # --------------------------------------------------------
 
     if state.trigger_confirmed:
         probability += 12.0
         quality += 15.0
         confidence += 20.0
 
-    # Un trigger non confermato non può aumentare
-    # la confidence.
-    if state.trigger in {
-        "WAIT_LIVE",
-        "NOT_CONFIRMED",
-    }:
+    if state.trigger in {"WAIT_LIVE", "NOT_CONFIRMED"}:
         confidence -= 5.0
-
-    # --------------------------------------------------------
-    # LIVE DATA
-    # --------------------------------------------------------
 
     if state.live and state.data_ok:
         probability += 5.0
         quality += 5.0
         confidence += 10.0
 
-    # --------------------------------------------------------
-    # RISK
-    # --------------------------------------------------------
-    #
-    # Il rischio viene calcolato dopo questa funzione.
-    # Non inventiamo punti RR prima di avere SL/TP reali.
-    #
-    # --------------------------------------------------------
-
-    # --------------------------------------------------------
-    # HARD CONSISTENCY
-    # --------------------------------------------------------
-
     chain_complete = (
         state.data_ok
         and state.live
-        and state.regime in {
-            "TREND_UP",
-            "TREND_DOWN",
-        }
-        and state.structure in {
-            "BULLISH",
-            "BEARISH",
-        }
-        and state.setup_direction in {
-            "LONG",
-            "SHORT",
-        }
+        and state.regime in {"TREND_UP", "TREND_DOWN"}
+        and state.structure in {"BULLISH", "BEARISH"}
+        and state.setup_direction in {"LONG", "SHORT"}
         and state.trigger_confirmed
     )
 
-    # Se la catena non è completa, la confidence non può
-    # raggiungere livelli da ingresso.
     if not chain_complete:
-        confidence = min(
-            confidence,
-            55.0,
-        )
+        confidence = min(confidence, 55.0)
 
-    # Senza setup direzionale non esiste una qualità
-    # operativa significativa.
-    if state.setup_direction not in {
-        "LONG",
-        "SHORT",
-    }:
-        quality = min(
-            quality,
-            40.0,
-        )
+    if state.setup_direction not in {"LONG", "SHORT"}:
+        quality = min(quality, 40.0)
 
-    # --------------------------------------------------------
-    # FINAL SCORE LIMITS
-    # --------------------------------------------------------
-
-    state.probability = _clamp(
-        probability,
-        0.0,
-        99.0,
-    )
-
-    state.quality = _clamp(
-        quality,
-        0.0,
-        100.0,
-    )
-
-    state.confidence = _clamp(
-        confidence,
-        0.0,
-        100.0,
-    )
+    state.probability = _clamp(probability, 0.0, 99.0)
+    state.quality = _clamp(quality, 0.0, 100.0)
+    state.confidence = _clamp(confidence, 0.0, 100.0)
 
     return state
 
 
-def analyze_one(
-    commodity: Commodity,
-) -> SoyuzState:
-    """
-    Analizza una singola commodity attraverso
-    l'unica catena decisionale Gagarin.
-    """
-
-    # ========================================================
-    # CANONICAL STATE
-    # ========================================================
-
+def analyze_one(commodity: Commodity) -> SoyuzState:
     state = SoyuzState(
         commodity=commodity.name,
         symbol=commodity.symbol,
     )
 
-    # ========================================================
     # 1. DATA
-    # ========================================================
-
+    # v1.2: passiamo esplicitamente anche la commodity al data adapter.
+    # Questo corregge il TypeError introdotto con data.py v1.7.
     state = load_data(
-        state
+        state,
+        commodity,
     )
 
-    # ========================================================
     # 2. REGIME
-    # ========================================================
+    state = apply_regime(state)
 
-    state = apply_regime(
-        state
-    )
-
-    # ========================================================
     # 3. STRUCTURE
-    # ========================================================
+    state = apply_structure(state)
 
-    state = apply_structure(
-        state
-    )
-
-    # ========================================================
     # 4. SETUP
-    # ========================================================
+    state = apply_setup(state)
 
-    state = apply_setup(
-        state
-    )
-
-    # ========================================================
     # 5. TRIGGER
-    # ========================================================
+    state = apply_trigger(state)
 
-    state = apply_trigger(
-        state
-    )
-
-    # ========================================================
     # 6. QUALITY / CONFIDENCE
-    # ========================================================
+    state = calculate_quality(state)
 
-    state = calculate_quality(
-        state
-    )
-
-    # ========================================================
     # 7. RISK
-    # ========================================================
+    state = apply_risk(state)
 
-    state = apply_risk(
-        state
-    )
-
-    # ========================================================
     # 8. SAFETY
-    # ========================================================
-    #
-    # Safety è l'unico modulo autorizzato a stabilire
-    # ENTRY oppure WAIT.
-    #
-
-    state = apply_safety(
-        state
-    )
+    # Safety è l'unico modulo autorizzato a stabilire ENTRY oppure WAIT.
+    state = apply_safety(state)
 
     return state
 
 
-def analyze_universe(
-    commodities,
-):
+def analyze_universe(commodities):
     """
     Analizza l'intero universo commodity.
 
     Il ranking è solamente di presentazione.
     Non crea una seconda autorità decisionale.
     """
-
     results = []
 
     for commodity in commodities:
-
-        results.append(
-            analyze_one(
-                commodity
-            )
-        )
+        results.append(analyze_one(commodity))
 
     results.sort(
         key=lambda state: (
