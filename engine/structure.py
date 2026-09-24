@@ -2,7 +2,7 @@ from engine.state import SoyuzState
 
 
 # ============================================================
-# SOYUZ GAGARIN v1.2
+# SOYUZ GAGARIN v1.3
 # MARKET STRUCTURE ENGINE
 # ============================================================
 #
@@ -12,28 +12,21 @@ from engine.state import SoyuzState
 #   ↓
 # STRUCTURE
 #
-# Questa versione utilizza le candele realmente presenti
-# nello SoyuzState.
+# v1.3
+# ------------------------------------------------------------
+# Migliorie:
 #
-# FUNZIONI:
+# - struttura M5 separata dalla conferma MTF
+# - MTF calcolato senza perdere informazione parziale
+# - direzione strutturale più robusta
+# - diagnostica completa
+# - swing recenti conservati
+# - breakout / retest conservati
 #
-# - swing high / swing low
-# - HH / HL
-# - LH / LL
-# - breakout
-# - retest
-# - struttura MTF
-# - allineamento M5 / M15 / M30 / H1
-#
-# NON decide ENTRY.
-# NON decide LONG/SHORT operativo da solo.
+# NON autorizza ENTRY.
 # NON modifica SAFETY.
 # ============================================================
 
-
-# ============================================================
-# PARAMETRI
-# ============================================================
 
 SWING_LEFT = 2
 SWING_RIGHT = 2
@@ -43,21 +36,16 @@ RETEST_ATR_TOLERANCE = 0.25
 
 MIN_MTF_BARS = 5
 
+MIN_MTF_ALIGNMENT = 50.0
+STRONG_MTF_ALIGNMENT = 75.0
+
 
 # ============================================================
-# GENERIC SWING DETECTION
+# SWINGS
 # ============================================================
 
 
-def _find_swing_highs(
-    candles,
-) -> list:
-    """
-    Individua swing high locali.
-
-    Una candela è swing high se il suo massimo è superiore
-    ai massimi delle candele vicine.
-    """
+def _find_swing_highs(candles) -> list:
 
     if len(candles) < (
         SWING_LEFT
@@ -68,38 +56,28 @@ def _find_swing_highs(
 
     swings = []
 
-    start = SWING_LEFT
-
-    end = (
-        len(candles)
-        - SWING_RIGHT
-    )
-
     for index in range(
-        start,
-        end,
+        SWING_LEFT,
+        len(candles) - SWING_RIGHT,
     ):
 
-        current_high = candles[index][
-            "high"
-        ]
+        current = candles[index]["high"]
 
-        is_swing = True
+        valid = True
 
         for offset in range(
             1,
             SWING_LEFT + 1,
         ):
 
-            if current_high <= candles[
+            if current <= candles[
                 index - offset
             ]["high"]:
 
-                is_swing = False
-
+                valid = False
                 break
 
-        if not is_swing:
+        if not valid:
             continue
 
         for offset in range(
@@ -107,20 +85,19 @@ def _find_swing_highs(
             SWING_RIGHT + 1,
         ):
 
-            if current_high <= candles[
+            if current <= candles[
                 index + offset
             ]["high"]:
 
-                is_swing = False
-
+                valid = False
                 break
 
-        if is_swing:
+        if valid:
 
             swings.append(
                 {
                     "index": index,
-                    "price": current_high,
+                    "price": current,
                     "datetime": candles[
                         index
                     ].get("datetime"),
@@ -130,12 +107,7 @@ def _find_swing_highs(
     return swings
 
 
-def _find_swing_lows(
-    candles,
-) -> list:
-    """
-    Individua swing low locali.
-    """
+def _find_swing_lows(candles) -> list:
 
     if len(candles) < (
         SWING_LEFT
@@ -146,38 +118,28 @@ def _find_swing_lows(
 
     swings = []
 
-    start = SWING_LEFT
-
-    end = (
-        len(candles)
-        - SWING_RIGHT
-    )
-
     for index in range(
-        start,
-        end,
+        SWING_LEFT,
+        len(candles) - SWING_RIGHT,
     ):
 
-        current_low = candles[index][
-            "low"
-        ]
+        current = candles[index]["low"]
 
-        is_swing = True
+        valid = True
 
         for offset in range(
             1,
             SWING_LEFT + 1,
         ):
 
-            if current_low >= candles[
+            if current >= candles[
                 index - offset
             ]["low"]:
 
-                is_swing = False
-
+                valid = False
                 break
 
-        if not is_swing:
+        if not valid:
             continue
 
         for offset in range(
@@ -185,20 +147,19 @@ def _find_swing_lows(
             SWING_RIGHT + 1,
         ):
 
-            if current_low >= candles[
+            if current >= candles[
                 index + offset
             ]["low"]:
 
-                is_swing = False
-
+                valid = False
                 break
 
-        if is_swing:
+        if valid:
 
             swings.append(
                 {
                     "index": index,
-                    "price": current_low,
+                    "price": current,
                     "datetime": candles[
                         index
                     ].get("datetime"),
@@ -217,18 +178,6 @@ def _classify_structure(
     swing_highs,
     swing_lows,
 ):
-    """
-    Classifica la struttura usando gli ultimi due swing
-    dello stesso tipo.
-
-    Possibili risultati:
-
-        HH_HL
-        LH_LL
-        MIXED
-        RANGE
-        NONE
-    """
 
     if (
         len(swing_highs) < 2
@@ -236,41 +185,17 @@ def _classify_structure(
     ):
         return "NONE"
 
-    previous_high = swing_highs[-2][
-        "price"
-    ]
+    previous_high = swing_highs[-2]["price"]
+    latest_high = swing_highs[-1]["price"]
 
-    latest_high = swing_highs[-1][
-        "price"
-    ]
+    previous_low = swing_lows[-2]["price"]
+    latest_low = swing_lows[-1]["price"]
 
-    previous_low = swing_lows[-2][
-        "price"
-    ]
+    higher_high = latest_high > previous_high
+    higher_low = latest_low > previous_low
 
-    latest_low = swing_lows[-1][
-        "price"
-    ]
-
-    higher_high = (
-        latest_high
-        > previous_high
-    )
-
-    higher_low = (
-        latest_low
-        > previous_low
-    )
-
-    lower_high = (
-        latest_high
-        < previous_high
-    )
-
-    lower_low = (
-        latest_low
-        < previous_low
-    )
+    lower_high = latest_high < previous_high
+    lower_low = latest_low < previous_low
 
     if higher_high and higher_low:
         return "HH_HL"
@@ -301,13 +226,6 @@ def _detect_breakout(
     direction,
     atr,
 ):
-    """
-    Determina se il prezzo corrente ha superato
-    l'ultimo swing rilevante.
-
-    Richiede un piccolo buffer ATR per evitare che
-    un semplice tocco venga classificato come breakout.
-    """
 
     if not candles:
         return False, "NONE", None
@@ -315,27 +233,18 @@ def _detect_breakout(
     if atr is None or atr <= 0:
         return False, "NONE", None
 
-    current_close = candles[-1][
-        "close"
-    ]
+    current_close = candles[-1]["close"]
 
-    buffer = (
-        atr
-        * BREAKOUT_ATR_BUFFER
-    )
+    buffer = atr * BREAKOUT_ATR_BUFFER
 
     if (
         direction == "LONG"
         and swing_highs
     ):
 
-        level = swing_highs[-1][
-            "price"
-        ]
+        level = swing_highs[-1]["price"]
 
-        if current_close > (
-            level + buffer
-        ):
+        if current_close > level + buffer:
 
             return (
                 True,
@@ -348,13 +257,9 @@ def _detect_breakout(
         and swing_lows
     ):
 
-        level = swing_lows[-1][
-            "price"
-        ]
+        level = swing_lows[-1]["price"]
 
-        if current_close < (
-            level - buffer
-        ):
+        if current_close < level - buffer:
 
             return (
                 True,
@@ -362,11 +267,7 @@ def _detect_breakout(
                 level,
             )
 
-    return (
-        False,
-        "NONE",
-        None,
-    )
+    return False, "NONE", None
 
 
 # ============================================================
@@ -381,13 +282,6 @@ def _detect_retest(
     breakout_level,
     atr,
 ):
-    """
-    Cerca un retest del livello di breakout.
-
-    Il retest viene considerato valido quando una delle
-    ultime candele torna entro una tolleranza ATR dal livello
-    e chiude nuovamente nella direzione del breakout.
-    """
 
     if not breakout:
         return False, "NONE", None
@@ -401,36 +295,24 @@ def _detect_retest(
     if len(candles) < 2:
         return False, "NONE", None
 
-    tolerance = (
-        atr
-        * RETEST_ATR_TOLERANCE
-    )
+    tolerance = atr * RETEST_ATR_TOLERANCE
 
     recent = candles[-3:]
 
     for candle in recent:
 
         close = candle["close"]
-
         high = candle["high"]
-
         low = candle["low"]
 
         if breakout_direction == "LONG":
 
             touched = (
-                low
-                <= breakout_level
-                + tolerance
-                and high
-                >= breakout_level
-                - tolerance
+                low <= breakout_level + tolerance
+                and high >= breakout_level - tolerance
             )
 
-            held = (
-                close
-                > breakout_level
-            )
+            held = close > breakout_level
 
             if touched and held:
 
@@ -440,21 +322,14 @@ def _detect_retest(
                     breakout_level,
                 )
 
-        if breakout_direction == "SHORT":
+        elif breakout_direction == "SHORT":
 
             touched = (
-                high
-                >= breakout_level
-                - tolerance
-                and low
-                <= breakout_level
-                + tolerance
+                high >= breakout_level - tolerance
+                and low <= breakout_level + tolerance
             )
 
-            held = (
-                close
-                < breakout_level
-            )
+            held = close < breakout_level
 
             if touched and held:
 
@@ -464,15 +339,11 @@ def _detect_retest(
                     breakout_level,
                 )
 
-    return (
-        False,
-        "NONE",
-        None,
-    )
+    return False, "NONE", None
 
 
 # ============================================================
-# SINGLE TIMEFRAME ANALYSIS
+# TIMEFRAME ANALYSIS
 # ============================================================
 
 
@@ -480,35 +351,43 @@ def _analyze_timeframe(
     candles,
     atr,
 ):
-    """
-    Analizza un singolo timeframe.
-    """
+
+    empty = {
+        "structure": "NONE",
+        "direction": "NONE",
+        "swing_highs": [],
+        "swing_lows": [],
+        "breakout": False,
+        "breakout_direction": "NONE",
+        "breakout_level": None,
+        "retest": False,
+        "retest_direction": "NONE",
+        "retest_level": None,
+    }
 
     if (
         not candles
         or len(candles) < MIN_MTF_BARS
     ):
+        return empty
 
-        return {
-            "structure": "NONE",
-            "direction": "NONE",
-            "swing_highs": [],
-            "swing_lows": [],
-            "breakout": False,
-            "breakout_direction": "NONE",
-            "breakout_level": None,
-            "retest": False,
-            "retest_direction": "NONE",
-            "retest_level": None,
-        }
+    try:
 
-    swing_highs = _find_swing_highs(
-        candles
-    )
+        swing_highs = _find_swing_highs(
+            candles
+        )
 
-    swing_lows = _find_swing_lows(
-        candles
-    )
+        swing_lows = _find_swing_lows(
+            candles
+        )
+
+    except (
+        KeyError,
+        TypeError,
+        ValueError,
+    ):
+
+        return empty
 
     pattern = _classify_structure(
         swing_highs,
@@ -573,19 +452,6 @@ def _analyze_timeframe(
 def _calculate_mtf_alignment(
     analyses,
 ):
-    """
-    Calcola l'allineamento tra:
-
-        M5
-        M15
-        M30
-        H1
-
-    Restituisce:
-
-        direction
-        score
-    """
 
     directions = []
 
@@ -597,11 +463,9 @@ def _calculate_mtf_alignment(
     ):
 
         analysis = analyses.get(
-            timeframe
+            timeframe,
+            {},
         )
-
-        if not analysis:
-            continue
 
         direction = analysis.get(
             "direction",
@@ -613,24 +477,14 @@ def _calculate_mtf_alignment(
             "SHORT",
         }:
 
-            directions.append(
-                direction
-            )
+            directions.append(direction)
 
     if not directions:
 
-        return (
-            "NONE",
-            0.0,
-        )
+        return "NONE", 0.0
 
-    long_count = directions.count(
-        "LONG"
-    )
-
-    short_count = directions.count(
-        "SHORT"
-    )
+    long_count = directions.count("LONG")
+    short_count = directions.count("SHORT")
 
     total = len(directions)
 
@@ -638,88 +492,65 @@ def _calculate_mtf_alignment(
 
         return (
             "LONG",
-            (
-                long_count
-                / total
-            )
-            * 100.0,
+            long_count / total * 100.0,
         )
 
     if short_count > long_count:
 
         return (
             "SHORT",
-            (
-                short_count
-                / total
-            )
-            * 100.0,
+            short_count / total * 100.0,
         )
 
-    return (
-        "NONE",
-        0.0,
-    )
+    return "NONE", 0.0
 
 
 # ============================================================
-# MAIN STRUCTURE ENGINE
+# MAIN
 # ============================================================
 
 
 def apply_structure(
     state: SoyuzState,
 ) -> SoyuzState:
-    """
-    Costruisce la struttura reale usando le candele
-    disponibili nello SoyuzState.
 
-    Non crea un secondo stato.
-    """
-
-    # ========================================================
+    # --------------------------------------------------------
     # RESET
-    # ========================================================
+    # --------------------------------------------------------
 
     state.structure = "UNCONFIRMED"
-
     state.structure_direction = "NONE"
-
     state.structure_pattern = "NONE"
 
     state.swing_highs = []
-
     state.swing_lows = []
 
     state.last_swing_high = None
-
     state.last_swing_low = None
 
     state.previous_swing_high = None
-
     state.previous_swing_low = None
 
     state.breakout = False
-
     state.breakout_direction = "NONE"
-
     state.breakout_level = None
 
     state.retest = False
-
     state.retest_direction = "NONE"
-
     state.retest_level = None
 
     state.mtf_structure = "UNCONFIRMED"
-
     state.mtf_direction = "NONE"
-
     state.mtf_alignment = 0.0
 
-    # ========================================================
-    # DATA VALIDATION
-    # ========================================================
+    state.metadata.pop(
+        "structure_diagnostics",
+        None,
+    )
+
+    # --------------------------------------------------------
+    # DATA GATE
+    # --------------------------------------------------------
 
     if not state.data_ok:
 
@@ -729,9 +560,9 @@ def apply_structure(
 
         return state
 
-    # ========================================================
-    # ANALYZE ALL TIMEFRAMES
-    # ========================================================
+    # --------------------------------------------------------
+    # ANALISI MTF
+    # --------------------------------------------------------
 
     analyses = {}
 
@@ -754,9 +585,9 @@ def apply_structure(
             )
         )
 
-    # ========================================================
-    # PRIMARY M5 STRUCTURE
-    # ========================================================
+    # --------------------------------------------------------
+    # M5 PRIMARY
+    # --------------------------------------------------------
 
     primary = analyses.get(
         "5min",
@@ -783,51 +614,35 @@ def apply_structure(
     if state.swing_highs:
 
         state.last_swing_high = (
-            state.swing_highs[-1][
-                "price"
-            ]
+            state.swing_highs[-1]["price"]
         )
 
-        if len(
-            state.swing_highs
-        ) >= 2:
+        if len(state.swing_highs) >= 2:
 
             state.previous_swing_high = (
-                state.swing_highs[-2][
-                    "price"
-                ]
+                state.swing_highs[-2]["price"]
             )
 
     if state.swing_lows:
 
         state.last_swing_low = (
-            state.swing_lows[-1][
-                "price"
-            ]
+            state.swing_lows[-1]["price"]
         )
 
-        if len(
-            state.swing_lows
-        ) >= 2:
+        if len(state.swing_lows) >= 2:
 
             state.previous_swing_low = (
-                state.swing_lows[-2][
-                    "price"
-                ]
+                state.swing_lows[-2]["price"]
             )
-
-    # ========================================================
-    # PRIMARY DIRECTION
-    # ========================================================
 
     primary_direction = primary.get(
         "direction",
         "NONE",
     )
 
-    # ========================================================
-    # MTF ALIGNMENT
-    # ========================================================
+    # --------------------------------------------------------
+    # MTF
+    # --------------------------------------------------------
 
     (
         mtf_direction,
@@ -836,117 +651,100 @@ def apply_structure(
         analyses
     )
 
-    state.mtf_direction = (
-        mtf_direction
-    )
+    state.mtf_direction = mtf_direction
+    state.mtf_alignment = mtf_alignment
 
-    state.mtf_alignment = (
-        mtf_alignment
-    )
-
-    # ========================================================
-    # MTF STRUCTURE
-    # ========================================================
-
-    if mtf_alignment >= 75.0:
+    if mtf_alignment >= STRONG_MTF_ALIGNMENT:
 
         if mtf_direction == "LONG":
-
-            state.mtf_structure = (
-                "BULLISH"
-            )
+            state.mtf_structure = "BULLISH"
 
         elif mtf_direction == "SHORT":
+            state.mtf_structure = "BEARISH"
 
-            state.mtf_structure = (
-                "BEARISH"
-            )
+    elif mtf_alignment >= MIN_MTF_ALIGNMENT:
 
-    elif mtf_alignment >= 50.0:
-
-        state.mtf_structure = (
-            "PARTIAL"
-        )
+        state.mtf_structure = "PARTIAL"
 
     else:
 
-        state.mtf_structure = (
-            "UNCONFIRMED"
-        )
+        state.mtf_structure = "UNCONFIRMED"
 
-    # ========================================================
-    # FINAL STRUCTURE DIRECTION
-    # ========================================================
-    #
-    # La direzione non viene assegnata soltanto perché M5
-    # è positivo/negativo.
-    #
-    # Richiediamo coerenza tra regime, struttura primaria
-    # e almeno una conferma MTF.
-    # ========================================================
+    # --------------------------------------------------------
+    # STRUTTURA PRIMARIA
+    # --------------------------------------------------------
 
-    if (
-        state.regime == "TREND_UP"
-        and primary_direction == "LONG"
-        and mtf_direction == "LONG"
-        and mtf_alignment >= 50.0
-    ):
+    if primary_direction == "LONG":
 
         state.structure = "BULLISH"
 
-        state.structure_direction = "LONG"
-
-    elif (
-        state.regime == "TREND_DOWN"
-        and primary_direction == "SHORT"
-        and mtf_direction == "SHORT"
-        and mtf_alignment >= 50.0
-    ):
+    elif primary_direction == "SHORT":
 
         state.structure = "BEARISH"
 
-        state.structure_direction = "SHORT"
-
-    elif (
-        state.structure_pattern
-        == "HH_HL"
-    ):
-
-        state.structure = "BULLISH"
-
-        state.structure_direction = "LONG"
-
-    elif (
-        state.structure_pattern
-        == "LH_LL"
-    ):
-
-        state.structure = "BEARISH"
-
-        state.structure_direction = "SHORT"
-
-    elif (
-        state.structure_pattern
-        == "RANGE"
-    ):
+    elif state.structure_pattern == "RANGE":
 
         state.structure = "RANGE"
 
-        state.structure_direction = "NONE"
+    else:
+
+        state.structure = "UNCONFIRMED"
+
+    # --------------------------------------------------------
+    # DIREZIONE OPERATIVA STRUTTURALE
+    # --------------------------------------------------------
+    #
+    # Qui NON richiediamo più che il regime sia perfettamente
+    # sincronizzato con M5 nello stesso istante.
+    #
+    # La direzione nasce dalla struttura M5 + conferma MTF.
+    # Il SETUP continuerà comunque a richiedere il regime.
+    #
+    # Questo evita che un singolo cambio di regime cancelli
+    # una struttura reale appena formata.
+    # --------------------------------------------------------
+
+    if (
+        primary_direction == "LONG"
+        and (
+            mtf_direction == "LONG"
+            or mtf_alignment >= 50.0
+        )
+    ):
+
+        state.structure_direction = "LONG"
+
+    elif (
+        primary_direction == "SHORT"
+        and (
+            mtf_direction == "SHORT"
+            or mtf_alignment >= 50.0
+        )
+    ):
+
+        state.structure_direction = "SHORT"
+
+    elif (
+        primary_direction == "LONG"
+        and state.regime == "TREND_UP"
+    ):
+
+        state.structure_direction = "LONG"
+
+    elif (
+        primary_direction == "SHORT"
+        and state.regime == "TREND_DOWN"
+    ):
+
+        state.structure_direction = "SHORT"
 
     else:
 
-        state.structure = (
-            "UNCONFIRMED"
-        )
+        state.structure_direction = "NONE"
 
-        state.structure_direction = (
-            "NONE"
-        )
-
-    # ========================================================
-    # BREAKOUT / RETEST
-    # ========================================================
+    # --------------------------------------------------------
+    # BREAKOUT
+    # --------------------------------------------------------
 
     state.breakout = primary.get(
         "breakout",
@@ -962,9 +760,14 @@ def apply_structure(
 
     state.breakout_level = (
         primary.get(
-            "breakout_level"
+            "breakout_level",
+            None,
         )
     )
+
+    # --------------------------------------------------------
+    # RETEST
+    # --------------------------------------------------------
 
     state.retest = primary.get(
         "retest",
@@ -980,8 +783,126 @@ def apply_structure(
 
     state.retest_level = (
         primary.get(
-            "retest_level"
+            "retest_level",
+            None,
         )
     )
+
+    # --------------------------------------------------------
+    # DIAGNOSTICA
+    # --------------------------------------------------------
+
+    state.metadata[
+        "structure_diagnostics"
+    ] = {
+
+        "primary_timeframe": "5min",
+
+        "primary_structure": (
+            state.structure_pattern
+        ),
+
+        "primary_direction": (
+            primary_direction
+        ),
+
+        "structure": (
+            state.structure
+        ),
+
+        "structure_direction": (
+            state.structure_direction
+        ),
+
+        "regime": (
+            state.regime
+        ),
+
+        "mtf_direction": (
+            state.mtf_direction
+        ),
+
+        "mtf_alignment": (
+            state.mtf_alignment
+        ),
+
+        "mtf_structure": (
+            state.mtf_structure
+        ),
+
+        "m5_swing_highs": len(
+            state.swing_highs
+        ),
+
+        "m5_swing_lows": len(
+            state.swing_lows
+        ),
+
+        "last_swing_high": (
+            state.last_swing_high
+        ),
+
+        "last_swing_low": (
+            state.last_swing_low
+        ),
+
+        "breakout": (
+            state.breakout
+        ),
+
+        "breakout_direction": (
+            state.breakout_direction
+        ),
+
+        "breakout_level": (
+            state.breakout_level
+        ),
+
+        "retest": (
+            state.retest
+        ),
+
+        "retest_direction": (
+            state.retest_direction
+        ),
+
+        "retest_level": (
+            state.retest_level
+        ),
+
+        "timeframes": {
+
+            timeframe: {
+
+                "structure": analysis.get(
+                    "structure",
+                    "NONE",
+                ),
+
+                "direction": analysis.get(
+                    "direction",
+                    "NONE",
+                ),
+
+                "swing_highs": len(
+                    analysis.get(
+                        "swing_highs",
+                        [],
+                    )
+                ),
+
+                "swing_lows": len(
+                    analysis.get(
+                        "swing_lows",
+                        [],
+                    )
+                ),
+
+            }
+
+            for timeframe, analysis
+            in analyses.items()
+        },
+    }
 
     return state
