@@ -1,4 +1,5 @@
-# SOYUZ GAGARIN — engine/data.py v1.7
+"""SOYUZ GAGARIN — engine/data.py v1.8"""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -12,14 +13,40 @@ TWELVE_DATA_URL = "https://api.twelvedata.com/time_series"
 YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
 
 YAHOO_SYMBOLS = {
-    "XAU/USD": "GC=F", "XAG/USD": "SI=F", "XPT/USD": "PL=F",
-    "XPD/USD": "PA=F", "WTI/USD": "CL=F", "BRENT/USD": "BZ=F",
-    "RICE/USD": "ZR=F", "SUGAR/USD": "SB=F",
-    "COCOA/USD": "CC=F", "COFFEE/USD": "KC=F",
+    "XAU/USD": "GC=F",
+    "XAG/USD": "SI=F",
+    "XPT/USD": "PL=F",
+    "XPD/USD": "PA=F",
+    "WTI/USD": "CL=F",
+    "BRENT/USD": "BZ=F",
+    "RICE/USD": "ZR=F",
+    "SUGAR/USD": "SB=F",
+    "COCOA/USD": "CC=F",
+    "COFFEE/USD": "KC=F",
 }
 
 INTERVAL = "5min"
+
+# Per un M5, 60 secondi era troppo rigido per un feed esterno.
+# 360s = 6 minuti: consente un ritardo normale senza rendere
+# automaticamente operativo un dato vecchio.
+EFFECTIVE_LIVE_MAX_AGE_SECONDS = max(float(LIVE_MAX_AGE_SECONDS), 360.0)
+
+# Una barra oltre 90s nel futuro rispetto all'orologio del runner
+# viene considerata non valida e MAI LIVE.
 FUTURE_TIMESTAMP_TOLERANCE_SECONDS = 90.0
+
+YAHOO_RETRIES = 3
+YAHOO_BACKOFF_SECONDS = 2.0
+
+HTTP_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (X11; Linux x86_64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0 Safari/537.36"
+    ),
+    "Accept": "application/json,text/plain,*/*",
+}
 
 
 def _parse_time(value: Any) -> Optional[float]:
@@ -42,52 +69,113 @@ def _parse_time(value: Any) -> Optional[float]:
 
 
 def _true_range(candle: Dict[str, float], previous_close: Optional[float]) -> float:
-    h, l = candle["high"], candle["low"]
+    high = candle["high"]
+    low = candle["low"]
     if previous_close is None:
-        return max(0.0, h - l)
-    return max(h - l, abs(h - previous_close), abs(l - previous_close))
+        return max(0.0, high - low)
+    return max(
+        high - low,
+        abs(high - previous_close),
+        abs(low - previous_close),
+    )
 
 
 def _calculate_atr(candles: List[Dict[str, float]], period: int = 14) -> float:
     if not candles:
         return 0.0
-    ranges = []
-    previous_close = None
+
+    ranges: List[float] = []
+    previous_close: Optional[float] = None
+
     for candle in candles:
         ranges.append(_true_range(candle, previous_close))
         previous_close = candle["close"]
+
     values = ranges[-period:]
     return sum(values) / len(values) if values else 0.0
 
 
-def _normalize_candle(timestamp, open_price, high, low, close, volume=0):
+def _normalize_candle(
+    timestamp: Any,
+    open_price: Any,
+    high: Any,
+    low: Any,
+    close: Any,
+    volume: Any = 0,
+) -> Optional[Dict[str, float]]:
     try:
         ts = _parse_time(timestamp)
-        o, h, l, c = map(float, (open_price, high, low, close))
+        o = float(open_price)
+        h = float(high)
+        l = float(low)
+        c = float(close)
         v = float(volume or 0)
+
         if ts is None or h < l or min(o, h, l, c) <= 0:
             return None
+
         return {
-            "timestamp": ts, "open": o, "high": h, "low": l,
-            "close": c, "volume": v,
+            "timestamp": ts,
+            "open": o,
+            "high": h,
+            "low": l,
+            "close": c,
+            "volume": v,
         }
     except (TypeError, ValueError):
         return None
 
 
-def _request_json(url: str, params: Dict[str, Any]):
-    try:
-        response = requests.get(url, params=params, timeout=TIMEOUT_SECONDS)
-        if response.status_code != 200:
-            return None, f"HTTP_{response.status_code}: {response.text[:300]}"
-        payload = response.json()
-        if isinstance(payload, dict) and payload.get("status") == "error":
-            return None, str(payload.get("message") or payload.get("code") or "API_ERROR")
-        return payload, None
-    except requests.RequestException as exc:
-        return None, f"REQUEST_ERROR: {exc}"
-    except ValueError as exc:
-        return None, f"JSON_ERROR: {exc}"
+def _request_json(
+    url: str,
+    params: Dict[str, Any],
+    headers: Optional[Dict[str, str]] = None,
+    retries: int = 0,
+    backoff_seconds: float = 0.0,
+):
+    last_error = None
+
+    for attempt in range(retries + 1):
+        try:
+            response = requests.get(
+                url,
+                params=params,
+                headers=headers,
+                timeout=TIMEOUT_SECONDS,
+            )
+
+            if response.status_code == 429:
+                last_error = f"HTTP_429: {response.text[:300]}"
+                if attempt < retries:
+                    time.sleep(backoff_seconds * (2 ** attempt))
+                    continue
+                return None, last_error
+
+            if response.status_code != 200:
+                return None, f"HTTP_{response.status_code}: {response.text[:300]}"
+
+            payload = response.json()
+
+            if isinstance(payload, dict) and payload.get("status") == "error":
+                return None, str(
+                    payload.get("message")
+                    or payload.get("code")
+                    or "API_ERROR"
+                )
+
+            return payload, None
+
+        except requests.RequestException as exc:
+            last_error = f"REQUEST_ERROR: {exc}"
+            if attempt < retries:
+                time.sleep(backoff_seconds * (2 ** attempt))
+                continue
+            return None, last_error
+
+        except ValueError as exc:
+            return None, f"JSON_ERROR: {exc}"
+
+    return None, last_error or "UNKNOWN_REQUEST_ERROR"
 
 
 def _fetch_twelve_data(symbol: str):
@@ -101,18 +189,31 @@ def _fetch_twelve_data(symbol: str):
         "apikey": TWELVE_DATA_API_KEY,
         "timezone": "UTC",
     }
-    payload, error = _request_json(TWELVE_DATA_URL, params)
+
+    payload, error = _request_json(
+        TWELVE_DATA_URL,
+        params,
+        retries=1,
+        backoff_seconds=1.0,
+    )
+
     if error:
         return [], error
 
-    candles = []
+    candles: List[Dict[str, float]] = []
+
     for row in reversed(payload.get("values", []) if payload else []):
         candle = _normalize_candle(
-            row.get("datetime"), row.get("open"), row.get("high"),
-            row.get("low"), row.get("close"), row.get("volume", 0)
+            row.get("datetime"),
+            row.get("open"),
+            row.get("high"),
+            row.get("low"),
+            row.get("close"),
+            row.get("volume", 0),
         )
         if candle:
             candles.append(candle)
+
     return candles[-LOOKBACK:], None
 
 
@@ -122,6 +223,7 @@ def _fetch_yahoo(symbol: str):
         return [], "YAHOO_SYMBOL_NOT_MAPPED"
 
     now = int(time.time())
+
     params = {
         "period1": now - LOOKBACK * 5 * 60 * 3,
         "period2": now,
@@ -130,42 +232,65 @@ def _fetch_yahoo(symbol: str):
         "includePrePost": "true",
         "range": "5d",
     }
-    payload, error = _request_json(YAHOO_CHART_URL.format(symbol=yahoo_symbol), params)
+
+    payload, error = _request_json(
+        YAHOO_CHART_URL.format(symbol=yahoo_symbol),
+        params,
+        headers=HTTP_HEADERS,
+        retries=YAHOO_RETRIES,
+        backoff_seconds=YAHOO_BACKOFF_SECONDS,
+    )
+
     if error:
         return [], error
 
     chart = payload.get("chart", {}) if payload else {}
     result = chart.get("result") or []
+
     if not result:
         return [], "YAHOO_EMPTY_RESULT"
 
     item = result[0]
     timestamps = item.get("timestamp") or []
     quote = ((item.get("indicators") or {}).get("quote") or [{}])[0]
-    opens, highs = quote.get("open") or [], quote.get("high") or []
-    lows, closes = quote.get("low") or [], quote.get("close") or []
+
+    opens = quote.get("open") or []
+    highs = quote.get("high") or []
+    lows = quote.get("low") or []
+    closes = quote.get("close") or []
     volumes = quote.get("volume") or []
 
-    candles = []
-    for i, ts in enumerate(timestamps):
+    candles: List[Dict[str, float]] = []
+
+    for i, timestamp in enumerate(timestamps):
         if i >= len(opens) or i >= len(highs) or i >= len(lows) or i >= len(closes):
             continue
+
         candle = _normalize_candle(
-            ts, opens[i], highs[i], lows[i], closes[i],
+            timestamp,
+            opens[i],
+            highs[i],
+            lows[i],
+            closes[i],
             volumes[i] if i < len(volumes) else 0,
         )
+
         if candle:
             candles.append(candle)
+
     return candles[-LOOKBACK:], None
 
 
-def _aggregate_candles(candles, minutes):
+def _aggregate_candles(candles: List[Dict[str, float]], minutes: int):
     if not candles:
         return []
+
     bucket_seconds = minutes * 60
-    buckets = {}
+    buckets: Dict[int, Dict[str, float]] = {}
+
     for candle in candles:
         bucket = int(candle["timestamp"] // bucket_seconds) * bucket_seconds
+
         if bucket not in buckets:
             buckets[bucket] = {
                 "timestamp": float(bucket),
@@ -181,17 +306,26 @@ def _aggregate_candles(candles, minutes):
             current["low"] = min(current["low"], candle["low"])
             current["close"] = candle["close"]
             current["volume"] += candle.get("volume", 0.0)
+
     return [buckets[k] for k in sorted(buckets)]
 
 
-def _build_mtf_data(candles):
+def _build_mtf_data(candles: List[Dict[str, float]]):
     m5 = list(candles)
     m15 = _aggregate_candles(candles, 15)
     m30 = _aggregate_candles(candles, 30)
     h1 = _aggregate_candles(candles, 60)
+
     return {
-        "M5": m5, "M15": m15, "M30": m30, "H1": h1,
-        "5min": m5, "15min": m15, "30min": m30, "1h": h1,
+        "M5": m5,
+        "M15": m15,
+        "M30": m30,
+        "H1": h1,
+        # Compatibilità con structure.py
+        "5min": m5,
+        "15min": m15,
+        "30min": m30,
+        "1h": h1,
     }
 
 
@@ -204,7 +338,7 @@ def _validate_latest_timestamp(latest_timestamp: float, provider: str):
 
     age = max(0.0, delta)
 
-    if age <= LIVE_MAX_AGE_SECONDS:
+    if age <= EFFECTIVE_LIVE_MAX_AGE_SECONDS:
         return True, age, "LIVE"
 
     if provider == "YAHOO":
@@ -213,50 +347,72 @@ def _validate_latest_timestamp(latest_timestamp: float, provider: str):
     return False, age, "STALE"
 
 
-def _finalize_market_data(state, candles, provider, data_error=None):
+def _finalize_market_data(
+    state: Any,
+    candles: List[Dict[str, float]],
+    provider: str,
+    data_error: Optional[str] = None,
+):
     if not candles:
         state.data_ok = False
         state.live = False
         state.data_source = provider
         state.metadata["data_error"] = data_error or "NO_DATA"
         state.metadata["data_status"] = "NO_DATA"
+
         if "DATA_MISSING" not in state.blockers:
             state.blockers.append("DATA_MISSING")
+
         return state
 
     candles = sorted(candles, key=lambda x: x["timestamp"])
+
     state.candles = candles
     state.opens = [x["open"] for x in candles]
     state.highs = [x["high"] for x in candles]
     state.lows = [x["low"] for x in candles]
     state.closes = [x["close"] for x in candles]
     state.volumes = [x["volume"] for x in candles]
+
     state.price = candles[-1]["close"]
-    state.previous_price = candles[-2]["close"] if len(candles) >= 2 else state.price
+    state.previous_price = (
+        candles[-2]["close"] if len(candles) >= 2 else state.price
+    )
     state.atr = _calculate_atr(candles)
     state.mtf_data = _build_mtf_data(candles)
 
     latest = candles[-1]["timestamp"]
+
     state.metadata["last_bar_timestamp"] = datetime.fromtimestamp(
-        latest, tz=timezone.utc
+        latest,
+        tz=timezone.utc,
     ).isoformat()
 
-    valid, age, status = _validate_latest_timestamp(latest, provider)
+    valid, age, status = _validate_latest_timestamp(
+        latest,
+        provider,
+    )
 
     state.data_source = provider
     state.data_age_seconds = age
     state.metadata["data_status"] = status
     state.metadata["provider"] = provider
     state.metadata["data_error"] = data_error
+    state.metadata["effective_live_max_age_seconds"] = (
+        EFFECTIVE_LIVE_MAX_AGE_SECONDS
+    )
 
     if status == "FUTURE_TIMESTAMP":
         state.data_ok = False
         state.live = False
         state.metadata["data_error"] = (
-            "Latest market timestamp is in the future relative to the runner clock."
+            "Latest market timestamp is in the future "
+            "relative to the runner clock."
         )
+
         if "DATA_TIMESTAMP_INVALID" not in state.blockers:
             state.blockers.append("DATA_TIMESTAMP_INVALID")
+
         return state
 
     state.data_ok = True
@@ -268,20 +424,39 @@ def _finalize_market_data(state, candles, provider, data_error=None):
     return state
 
 
-def load_data(state, commodity):
+def load_data(state: Any, commodity: Any):
     symbol = commodity.symbol
+
     state.commodity = commodity.name
     state.symbol = symbol
 
+    # Gold: Twelve Data first, Yahoo fallback.
     if symbol == "XAU/USD":
         candles, error = _fetch_twelve_data(symbol)
+
         if candles:
-            return _finalize_market_data(state, candles, "TWELVE_DATA", error)
+            return _finalize_market_data(
+                state,
+                candles,
+                "TWELVE_DATA",
+                error,
+            )
 
         yahoo_candles, yahoo_error = _fetch_yahoo(symbol)
+
         return _finalize_market_data(
-            state, yahoo_candles, "YAHOO", error or yahoo_error
+            state,
+            yahoo_candles,
+            "YAHOO",
+            error or yahoo_error,
         )
 
+    # Other commodities: Yahoo futures.
     candles, error = _fetch_yahoo(symbol)
-    return _finalize_market_data(state, candles, "YAHOO", error)
+
+    return _finalize_market_data(
+        state,
+        candles,
+        "YAHOO",
+        error,
+    )
