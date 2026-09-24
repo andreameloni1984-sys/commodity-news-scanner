@@ -377,4 +377,4 @@ def apply_regime(
         "regime_diagnostics"
     ]["status"] = "RANGE_INTERMEDIATE"
 
-    return state
+    return state 
