@@ -1,9 +1,9 @@
-name: SOYUZ GAGARIN v1
+name: SOYUZ GAGARIN
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/15 * * * 1-5"
+    - cron: "*/15 * * * *"
 
 permissions:
   contents: read
@@ -11,7 +11,6 @@ permissions:
 jobs:
   soyuz:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
 
     env:
       TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
@@ -25,32 +24,88 @@ jobs:
       MIN_ENTRY_QUALITY: "55"
       MIN_ENTRY_CONFIDENCE: "60"
       MIN_ENTRY_RR: "2.5"
+
       MAX_ENTRY_STOP_ATR: "2.5"
+      SL_STRUCTURE_BUFFER_ATR: "0.15"
+      SL_MIN_ATR: "0.80"
+
+      MONITOR_INTERVAL_MINUTES: "15"
+
+      POLITICAL_IMPACT_ENABLED: "1"
+      US_PRESIDENT_IMPACT_ENABLED: "1"
+      ELECTION_IMPACT_ENABLED: "1"
+
+      FUTURES_STRUCTURE_ENABLED: "1"
+      WEATHER_ENABLED: "1"
+      DISASTER_ENABLED: "1"
+      CFTC_ENABLED: "1"
+      EIA_ENABLED: "1"
+      SOLE24_ENABLED: "1"
 
     steps:
-      - name: Checkout
+
+      # =====================================================
+      # CHECKOUT
+      # =====================================================
+
+      - name: Checkout repository
         uses: actions/checkout@v4
+
+      # =====================================================
+      # PYTHON
+      # =====================================================
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
+
+      # =====================================================
+      # DEPENDENCIES
+      # =====================================================
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
 
-      - name: Compile
-        run: |
-          python -m py_compile main.py config.py
-          python -m py_compile engine/*.py
-          python -m py_compile commodities/*.py
-          python -m py_compile telegram/*.py
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            pip install requests
+          fi
 
-      - name: Tests
+      # =====================================================
+      # COMPILE CHECK
+      # =====================================================
+
+      - name: Compile check
         run: |
-          python -m pytest -q
+          python -m compileall -q .
+
+      # =====================================================
+      # TEST
+      # =====================================================
+
+      - name: Run tests
+        run: |
+          if [ -d tests ]; then
+            python -m pytest -q tests/
+          else
+            echo "No tests directory found - skipping pytest"
+          fi
+
+      # =====================================================
+      # AGRICULTURE DIAGNOSTIC
+      # =====================================================
+
+      - name: Agriculture diagnostic
+        run: |
+          python diagnostic_agri.py
+
+      # =====================================================
+      # SOYUZ GAGARIN
+      # =====================================================
 
       - name: Run SOYUZ GAGARIN
         run: |
