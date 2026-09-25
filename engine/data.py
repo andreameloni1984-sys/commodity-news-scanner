@@ -1,5 +1,5 @@
 """
-SOYUZ GAGARIN — engine/data.py v3.0
+SOYUZ GAGARIN — engine/data.py v4.0
 
 DATA ENGINE
 
@@ -7,22 +7,20 @@ Provider strategy
 -----------------
 
 PRIMARY
-- Twelve Data → XAU/USD
-- Biquote    → metals / energy
-- Biquote    → agricultural instruments when available
+- Twelve Data → Gold
+- Twelve Data → Agriculture
+- Biquote    → Metals / Energy
 
 FALLBACK
-- Yahoo      → agriculture
+- Yahoo      → Agriculture / generic
 
 IMPORTANT
 ---------
-A market is marked LIVE only when the provider timestamp is
-inside the real freshness window.
-
-STALE data is NEVER converted into LIVE artificially.
+LIVE is never invented.
 
 The data engine is responsible only for:
-    DATA → OHLC → MTF → ATR → FRESHNESS
+
+DATA → OHLC → MTF → ATR → FRESHNESS
 
 It does NOT make trading decisions.
 """
@@ -49,8 +47,14 @@ from config import (
 
 BIQUOTE_BASE = "https://biquote.io/api"
 
-TWELVE_DATA_URL = (
-    "https://api.twelvedata.com/time_series"
+TWELVE_DATA_BASE = "https://api.twelvedata.com"
+
+TWELVE_DATA_TIME_SERIES = (
+    f"{TWELVE_DATA_BASE}/time_series"
+)
+
+TWELVE_DATA_COMMODITIES = (
+    f"{TWELVE_DATA_BASE}/commodities"
 )
 
 YAHOO_URLS = (
@@ -60,19 +64,7 @@ YAHOO_URLS = (
 
 
 # ============================================================
-# YAHOO FALLBACK SYMBOLS
-# ============================================================
-
-YAHOO_SYMBOLS = {
-    "RICE/USD": "ZR=F",
-    "SUGAR/USD": "SB=F",
-    "COCOA/USD": "CC=F",
-    "COFFEE/USD": "KC=F",
-}
-
-
-# ============================================================
-# KNOWN BIQUOTE SYMBOLS
+# SYMBOLS
 # ============================================================
 
 BIQUOTE_SYMBOLS = {
@@ -85,11 +77,15 @@ BIQUOTE_SYMBOLS = {
 }
 
 
-# ============================================================
-# AGRICULTURAL SEARCH TERMS
-# ============================================================
+YAHOO_SYMBOLS = {
+    "RICE/USD": "ZR=F",
+    "SUGAR/USD": "SB=F",
+    "COCOA/USD": "CC=F",
+    "COFFEE/USD": "KC=F",
+}
 
-AGRI_SEARCH_TERMS = {
+
+AGRI_TERMS = {
     "RICE/USD": (
         "rice",
         "rough rice",
@@ -124,19 +120,23 @@ FUTURE_TIMESTAMP_TOLERANCE_SECONDS = 90.0
 # ============================================================
 
 HEADERS = {
-    "User-Agent": "SOYUZ-GAGARIN/3.0",
-    "Accept": (
-        "application/json,"
-        "text/plain,*/*"
-    ),
+    "User-Agent": "SOYUZ-GAGARIN/4.0",
+    "Accept": "application/json,text/plain,*/*",
 }
 
 
 # ============================================================
-# INTERNAL SYMBOL CACHE
+# CACHES
 # ============================================================
 
-_DYNAMIC_BIQUOTE_SYMBOLS: Dict[str, str] = {}
+_TWELVE_COMMODITY_CATALOG: Optional[
+    List[Dict[str, Any]]
+] = None
+
+_TWELVE_SYMBOL_CACHE: Dict[
+    str,
+    str,
+] = {}
 
 
 # ============================================================
@@ -156,18 +156,14 @@ def _parse_time(
             value,
             (int, float),
         ):
-
             return float(value)
 
-        text = str(
-            value
-        ).strip()
+        text = str(value).strip()
 
         if not text:
             return None
 
         if text.endswith("Z"):
-
             text = (
                 text[:-1]
                 + "+00:00"
@@ -178,7 +174,6 @@ def _parse_time(
         )
 
         if dt.tzinfo is None:
-
             dt = dt.replace(
                 tzinfo=timezone.utc
             )
@@ -188,7 +183,6 @@ def _parse_time(
         ).timestamp()
 
     except Exception:
-
         return None
 
 
@@ -237,7 +231,6 @@ def _normalize(
             l,
             c,
         ) <= 0:
-
             return None
 
         return {
@@ -258,7 +251,7 @@ def _normalize(
 
 
 # ============================================================
-# GENERIC JSON REQUEST
+# GENERIC HTTP
 # ============================================================
 
 def _request_json(
@@ -284,10 +277,6 @@ def _request_json(
                 timeout=TIMEOUT_SECONDS,
             )
 
-            # ------------------------------------------------
-            # RATE LIMIT
-            # ------------------------------------------------
-
             if response.status_code == 429:
 
                 last_error = (
@@ -308,10 +297,6 @@ def _request_json(
                     last_error,
                 )
 
-            # ------------------------------------------------
-            # HTTP ERROR
-            # ------------------------------------------------
-
             if response.status_code != 200:
 
                 return (
@@ -322,10 +307,6 @@ def _request_json(
                         f"{response.text[:300]}"
                     ),
                 )
-
-            # ------------------------------------------------
-            # JSON
-            # ------------------------------------------------
 
             return (
                 response.json(),
@@ -366,11 +347,252 @@ def _request_json(
 
 
 # ============================================================
-# TWELVE DATA
+# TWELVE DATA — COMMODITY CATALOG
 # ============================================================
 
-def _fetch_twelve(
-    symbol: str,
+def _load_twelve_commodity_catalog():
+
+    global _TWELVE_COMMODITY_CATALOG
+
+    if _TWELVE_COMMODITY_CATALOG is not None:
+        return (
+            _TWELVE_COMMODITY_CATALOG,
+            None,
+        )
+
+    if not TWELVE_DATA_API_KEY:
+
+        return (
+            [],
+            "TWELVE_DATA_API_KEY_MISSING",
+        )
+
+    payload, error = _request_json(
+        TWELVE_DATA_COMMODITIES,
+        {
+            "apikey": TWELVE_DATA_API_KEY,
+            "outputsize": 500,
+        },
+        retries=1,
+    )
+
+    if error:
+        return (
+            [],
+            error,
+        )
+
+    if not isinstance(
+        payload,
+        dict,
+    ):
+
+        return (
+            [],
+            "TWELVE_DATA_INVALID_CATALOG",
+        )
+
+    if payload.get("status") == "error":
+
+        return (
+            [],
+            str(
+                payload.get(
+                    "message"
+                )
+                or "TWELVE_DATA_CATALOG_ERROR"
+            ),
+        )
+
+    data = payload.get(
+        "data",
+        [],
+    )
+
+    if not isinstance(
+        data,
+        list,
+    ):
+
+        return (
+            [],
+            "TWELVE_DATA_CATALOG_EMPTY",
+        )
+
+    _TWELVE_COMMODITY_CATALOG = [
+        item
+        for item in data
+        if isinstance(
+            item,
+            dict,
+        )
+    ]
+
+    return (
+        _TWELVE_COMMODITY_CATALOG,
+        None,
+    )
+
+
+# ============================================================
+# TWELVE DATA — AGRICULTURE SYMBOL DISCOVERY
+# ============================================================
+
+def _find_twelve_agri_symbol(
+    internal_symbol: str,
+):
+
+    if internal_symbol in _TWELVE_SYMBOL_CACHE:
+
+        return (
+            _TWELVE_SYMBOL_CACHE[
+                internal_symbol
+            ],
+            None,
+        )
+
+    terms = AGRI_TERMS.get(
+        internal_symbol
+    )
+
+    if not terms:
+
+        return (
+            None,
+            "AGRI_TERMS_NOT_FOUND",
+        )
+
+    catalog, error = (
+        _load_twelve_commodity_catalog()
+    )
+
+    if error:
+        return (
+            None,
+            error,
+        )
+
+    candidates = []
+
+    for item in catalog:
+
+        symbol = str(
+            item.get(
+                "symbol",
+                "",
+            )
+        ).strip()
+
+        name = str(
+            item.get(
+                "name",
+                "",
+            )
+        ).strip()
+
+        description = str(
+            item.get(
+                "description",
+                "",
+            )
+        ).strip()
+
+        category = str(
+            item.get(
+                "category",
+                "",
+            )
+        ).strip()
+
+        if not symbol:
+            continue
+
+        text = (
+            f"{symbol} "
+            f"{name} "
+            f"{description} "
+            f"{category}"
+        ).lower()
+
+        score = 0
+
+        for term in terms:
+
+            if term.lower() in text:
+                score += 20
+
+        if (
+            "agriculture"
+            in text
+            or "agricultural"
+            in text
+            or "grain"
+            in text
+            or "soft"
+            in text
+            or "softs"
+            in text
+        ):
+            score += 10
+
+        if (
+            "futures"
+            in text
+            or "future"
+            in text
+        ):
+            score += 5
+
+        candidates.append(
+            (
+                score,
+                symbol,
+                name,
+                category,
+            )
+        )
+
+    candidates.sort(
+        key=lambda x: (
+            x[0],
+            x[1],
+        ),
+        reverse=True,
+    )
+
+    if not candidates:
+        return (
+            None,
+            "TWELVE_DATA_AGRI_NOT_FOUND",
+        )
+
+    best = candidates[0]
+
+    if best[0] <= 0:
+
+        return (
+            None,
+            "TWELVE_DATA_AGRI_UNCERTAIN",
+        )
+
+    resolved_symbol = best[1]
+
+    _TWELVE_SYMBOL_CACHE[
+        internal_symbol
+    ] = resolved_symbol
+
+    return (
+        resolved_symbol,
+        None,
+    )
+
+
+# ============================================================
+# TWELVE DATA — TIME SERIES
+# ============================================================
+
+def _fetch_twelve_symbol(
+    provider_symbol: str,
 ):
 
     if not TWELVE_DATA_API_KEY:
@@ -381,9 +603,9 @@ def _fetch_twelve(
         )
 
     payload, error = _request_json(
-        TWELVE_DATA_URL,
+        TWELVE_DATA_TIME_SERIES,
         {
-            "symbol": symbol,
+            "symbol": provider_symbol,
             "interval": "5min",
             "outputsize": LOOKBACK,
             "apikey": TWELVE_DATA_API_KEY,
@@ -393,7 +615,6 @@ def _fetch_twelve(
     )
 
     if error:
-
         return (
             [],
             error,
@@ -418,14 +639,21 @@ def _fetch_twelve(
             ),
         )
 
-    candles = []
-
-    for row in reversed(
-        (payload or {}).get(
+    values = (
+        payload.get(
             "values",
             [],
         )
-    ):
+        if isinstance(
+            payload,
+            dict,
+        )
+        else []
+    )
+
+    candles = []
+
+    for row in reversed(values):
 
         candle = _normalize(
             row.get("datetime"),
@@ -440,7 +668,6 @@ def _fetch_twelve(
         )
 
         if candle:
-
             candles.append(
                 candle
             )
@@ -452,183 +679,64 @@ def _fetch_twelve(
 
 
 # ============================================================
-# BIQUOTE SYMBOL DISCOVERY
+# TWELVE DATA — GOLD
 # ============================================================
 
-def _search_biquote_symbol(
+def _fetch_twelve(
     symbol: str,
 ):
 
-    # Already cached.
-    if symbol in _DYNAMIC_BIQUOTE_SYMBOLS:
-
-        return (
-            _DYNAMIC_BIQUOTE_SYMBOLS[
-                symbol
-            ],
-            None,
-        )
-
-    search_terms = (
-        AGRI_SEARCH_TERMS.get(
-            symbol,
-            (),
-        )
-    )
-
-    if not search_terms:
-
-        return (
-            None,
-            "BIQUOTE_SEARCH_TERM_MISSING",
-        )
-
-    candidates = []
-
-    for term in search_terms:
-
-        payload, error = _request_json(
-            f"{BIQUOTE_BASE}/symbols/search",
-            {
-                "q": term,
-                "liveOnly": "false",
-                "limit": 50,
-            },
-            retries=0,
-        )
-
-        if error:
-            continue
-
-        if not isinstance(
-            payload,
-            list,
-        ):
-
-            continue
-
-        for item in payload:
-
-            if not isinstance(
-                item,
-                dict,
-            ):
-
-                continue
-
-            name = str(
-                item.get(
-                    "name",
-                    "",
-                )
-            ).strip()
-
-            description = str(
-                item.get(
-                    "description",
-                    "",
-                )
-            ).strip()
-
-            candidate_symbol = str(
-                item.get(
-                    "symbol",
-                    "",
-                )
-            ).strip()
-
-            if not candidate_symbol:
-                continue
-
-            text = (
-                name
-                + " "
-                + description
-            ).lower()
-
-            candidates.append(
-                (
-                    candidate_symbol,
-                    text,
-                )
-            )
-
-    if not candidates:
-
-        return (
-            None,
-            "BIQUOTE_AGRI_SYMBOL_NOT_FOUND",
-        )
-
-    # --------------------------------------------------------
-    # Score candidates conservatively.
-    #
-    # We prefer commodity/futures-like results and avoid
-    # unrelated equities or ETFs.
-    # --------------------------------------------------------
-
-    wanted_terms = {
-        term.lower()
-        for term in search_terms
-    }
-
-    scored = []
-
-    for candidate_symbol, text in candidates:
-
-        score = 0
-
-        for term in wanted_terms:
-
-            if term in text:
-
-                score += 10
-
-        if "commodity" in text:
-
-            score += 5
-
-        if (
-            "futures" in text
-            or "future" in text
-        ):
-
-            score += 5
-
-        scored.append(
-            (
-                score,
-                candidate_symbol,
-            )
-        )
-
-    scored.sort(
-        reverse=True
-    )
-
-    best_score, best_symbol = (
-        scored[0]
-    )
-
-    if best_score <= 0:
-
-        return (
-            None,
-            "BIQUOTE_AGRI_SYMBOL_UNCERTAIN",
-        )
-
-    _DYNAMIC_BIQUOTE_SYMBOLS[
+    return _fetch_twelve_symbol(
         symbol
-    ] = best_symbol
+    )
+
+
+# ============================================================
+# TWELVE DATA — AGRICULTURE
+# ============================================================
+
+def _fetch_twelve_agriculture(
+    symbol: str,
+):
+
+    provider_symbol, resolve_error = (
+        _find_twelve_agri_symbol(
+            symbol
+        )
+    )
+
+    if not provider_symbol:
+
+        return (
+            [],
+            resolve_error
+            or "TWELVE_DATA_AGRI_SYMBOL_MISSING",
+        )
+
+    candles, error = (
+        _fetch_twelve_symbol(
+            provider_symbol
+        )
+    )
+
+    if error:
+
+        return (
+            [],
+            (
+                f"SYMBOL={provider_symbol} | "
+                f"{error}"
+            ),
+        )
 
     return (
-        best_symbol,
+        candles,
         None,
     )
 
 
 # ============================================================
-# PARSE BIQUOTE OHLC
+# BIQUOTE
 # ============================================================
 
 def _parse_biquote(
@@ -675,7 +783,6 @@ def _parse_biquote(
             row,
             dict,
         ):
-
             continue
 
         timestamp = (
@@ -697,7 +804,6 @@ def _parse_biquote(
         )
 
         if candle:
-
             candles.append(
                 candle
             )
@@ -714,21 +820,26 @@ def _parse_biquote(
     )
 
 
-# ============================================================
-# BIQUOTE OHLC
-# ============================================================
-
-def _fetch_biquote_by_symbol(
-    biquote_symbol: str,
+def _fetch_biquote(
+    symbol: str,
 ):
 
-    url = (
-        f"{BIQUOTE_BASE}/"
-        f"{biquote_symbol}/ohlc"
+    biquote_symbol = (
+        BIQUOTE_SYMBOLS.get(
+            symbol
+        )
     )
 
+    if not biquote_symbol:
+
+        return (
+            [],
+            "BIQUOTE_SYMBOL_NOT_MAPPED",
+        )
+
     payload, error = _request_json(
-        url,
+        f"{BIQUOTE_BASE}/"
+        f"{biquote_symbol}/ohlc",
         {
             "interval": "5m",
             "limit": min(
@@ -743,7 +854,6 @@ def _fetch_biquote_by_symbol(
     )
 
     if error:
-
         return (
             [],
             error,
@@ -754,51 +864,8 @@ def _fetch_biquote_by_symbol(
     )
 
 
-def _fetch_biquote(
-    symbol: str,
-):
-
-    # --------------------------------------------------------
-    # Known symbol
-    # --------------------------------------------------------
-
-    biquote_symbol = (
-        BIQUOTE_SYMBOLS.get(
-            symbol
-        )
-    )
-
-    if biquote_symbol:
-
-        return _fetch_biquote_by_symbol(
-            biquote_symbol
-        )
-
-    # --------------------------------------------------------
-    # Dynamic agriculture discovery
-    # --------------------------------------------------------
-
-    discovered_symbol, search_error = (
-        _search_biquote_symbol(
-            symbol
-        )
-    )
-
-    if not discovered_symbol:
-
-        return (
-            [],
-            search_error
-            or "BIQUOTE_SYMBOL_NOT_MAPPED",
-        )
-
-    return _fetch_biquote_by_symbol(
-        discovered_symbol
-    )
-
-
 # ============================================================
-# YAHOO PARSER
+# YAHOO
 # ============================================================
 
 def _parse_yahoo(
@@ -822,7 +889,6 @@ def _parse_yahoo(
     )
 
     if not result:
-
         return (
             [],
             "YAHOO_EMPTY_RESULT",
@@ -849,40 +915,25 @@ def _parse_yahoo(
         or [{}]
     )[0]
 
-    opens = (
-        quote.get(
-            "open"
-        )
-        or []
-    )
+    opens = quote.get(
+        "open"
+    ) or []
 
-    highs = (
-        quote.get(
-            "high"
-        )
-        or []
-    )
+    highs = quote.get(
+        "high"
+    ) or []
 
-    lows = (
-        quote.get(
-            "low"
-        )
-        or []
-    )
+    lows = quote.get(
+        "low"
+    ) or []
 
-    closes = (
-        quote.get(
-            "close"
-        )
-        or []
-    )
+    closes = quote.get(
+        "close"
+    ) or []
 
-    volumes = (
-        quote.get(
-            "volume"
-        )
-        or []
-    )
+    volumes = quote.get(
+        "volume"
+    ) or []
 
     candles = []
 
@@ -900,15 +951,12 @@ def _parse_yahoo(
                 closes[i],
                 (
                     volumes[i]
-                    if i < len(
-                        volumes
-                    )
+                    if i < len(volumes)
                     else 0
                 ),
             )
 
             if candle:
-
                 candles.append(
                     candle
                 )
@@ -917,7 +965,6 @@ def _parse_yahoo(
             IndexError,
             TypeError,
         ):
-
             continue
 
     candles.sort(
@@ -931,10 +978,6 @@ def _parse_yahoo(
         None,
     )
 
-
-# ============================================================
-# YAHOO
-# ============================================================
 
 def _fetch_yahoo(
     symbol: str,
@@ -973,9 +1016,6 @@ def _fetch_yahoo(
 
     errors = []
 
-    # One request per host.
-    # No aggressive retries after HTTP 429.
-
     for url_template in YAHOO_URLS:
 
         payload, error = (
@@ -993,7 +1033,6 @@ def _fetch_yahoo(
             errors.append(
                 error
             )
-
             continue
 
         candles, parse_error = (
@@ -1003,7 +1042,6 @@ def _fetch_yahoo(
         )
 
         if candles:
-
             return (
                 candles,
                 None,
@@ -1016,9 +1054,7 @@ def _fetch_yahoo(
 
     return (
         [],
-        " | ".join(
-            errors
-        ),
+        " | ".join(errors),
     )
 
 
@@ -1064,7 +1100,6 @@ def _atr(
 ):
 
     if not candles:
-
         return 0.0
 
     values = []
@@ -1079,16 +1114,15 @@ def _atr(
             )
         )
 
-        previous = (
-            candle["close"]
-        )
+        previous = candle[
+            "close"
+        ]
 
     values = values[
         -period:
     ]
 
     if not values:
-
         return 0.0
 
     return (
@@ -1098,7 +1132,7 @@ def _atr(
 
 
 # ============================================================
-# MTF AGGREGATION
+# MTF
 # ============================================================
 
 def _aggregate(
@@ -1107,7 +1141,6 @@ def _aggregate(
 ):
 
     if not candles:
-
         return []
 
     bucket_seconds = (
@@ -1154,9 +1187,9 @@ def _aggregate(
 
         else:
 
-            current = (
-                buckets[bucket]
-            )
+            current = buckets[
+                bucket
+            ]
 
             current["high"] = max(
                 current["high"],
@@ -1191,9 +1224,7 @@ def _build_mtf(
     candles,
 ):
 
-    m5 = list(
-        candles
-    )
+    m5 = list(candles)
 
     m15 = _aggregate(
         candles,
@@ -1241,10 +1272,6 @@ def _freshness(
         - latest_timestamp
     )
 
-    # --------------------------------------------------------
-    # Provider timestamp too far in future.
-    # --------------------------------------------------------
-
     if (
         delta
         < -FUTURE_TIMESTAMP_TOLERANCE_SECONDS
@@ -1280,7 +1307,7 @@ def _freshness(
 
 
 # ============================================================
-# FINALIZE STATE
+# FINALIZE
 # ============================================================
 
 def _finalize(
@@ -1294,9 +1321,7 @@ def _finalize(
 
         state.data_ok = False
         state.live = False
-        state.data_source = (
-            provider
-        )
+        state.data_source = provider
 
         state.metadata[
             "data_error"
@@ -1327,10 +1352,6 @@ def _finalize(
         ],
     )
 
-    # --------------------------------------------------------
-    # OHLC
-    # --------------------------------------------------------
-
     state.candles = candles
 
     state.opens = [
@@ -1358,10 +1379,6 @@ def _finalize(
         for x in candles
     ]
 
-    # --------------------------------------------------------
-    # PRICE
-    # --------------------------------------------------------
-
     state.price = (
         candles[-1]["close"]
     )
@@ -1372,27 +1389,15 @@ def _finalize(
         else state.price
     )
 
-    # --------------------------------------------------------
-    # ATR
-    # --------------------------------------------------------
-
     state.atr = _atr(
         candles
     )
-
-    # --------------------------------------------------------
-    # MTF
-    # --------------------------------------------------------
 
     state.mtf_data = (
         _build_mtf(
             candles
         )
     )
-
-    # --------------------------------------------------------
-    # FRESHNESS
-    # --------------------------------------------------------
 
     latest = (
         candles[-1]["timestamp"]
@@ -1404,21 +1409,10 @@ def _finalize(
         )
     )
 
-    state.data_source = (
-        provider
-    )
-
-    state.data_age_seconds = (
-        age
-    )
-
+    state.data_source = provider
+    state.data_age_seconds = age
     state.data_ok = True
-
     state.live = live
-
-    # --------------------------------------------------------
-    # METADATA
-    # --------------------------------------------------------
 
     state.metadata[
         "provider"
@@ -1447,13 +1441,7 @@ def _finalize(
         EFFECTIVE_LIVE_MAX_AGE_SECONDS
     )
 
-    # --------------------------------------------------------
-    # INVALID FUTURE TIMESTAMP
-    # --------------------------------------------------------
-
-    if status == (
-        "FUTURE_TIMESTAMP"
-    ):
+    if status == "FUTURE_TIMESTAMP":
 
         state.data_ok = False
         state.live = False
@@ -1462,8 +1450,7 @@ def _finalize(
             "data_error"
         ] = (
             "Latest market timestamp "
-            "is in the future relative "
-            "to the runner clock."
+            "is in the future."
         )
 
         if (
@@ -1474,10 +1461,6 @@ def _finalize(
             state.blockers.append(
                 "DATA_TIMESTAMP_INVALID"
             )
-
-    # --------------------------------------------------------
-    # STALE DATA
-    # --------------------------------------------------------
 
     elif not live:
 
@@ -1494,7 +1477,7 @@ def _finalize(
 
 
 # ============================================================
-# PUBLIC DATA ENTRY POINT
+# PUBLIC ENTRY POINT
 # ============================================================
 
 def load_data(
@@ -1502,20 +1485,16 @@ def load_data(
     commodity: Any,
 ):
 
-    symbol = (
-        commodity.symbol
-    )
+    symbol = commodity.symbol
 
     state.commodity = (
         commodity.name
     )
 
-    state.symbol = (
-        symbol
-    )
+    state.symbol = symbol
 
     # ========================================================
-    # 1. GOLD
+    # GOLD
     # ========================================================
 
     if symbol == "XAU/USD":
@@ -1536,7 +1515,7 @@ def load_data(
             )
 
     # ========================================================
-    # 2. KNOWN BIQUOTE
+    # METALS / ENERGY
     # ========================================================
 
     if symbol in BIQUOTE_SYMBOLS:
@@ -1557,52 +1536,75 @@ def load_data(
             )
 
     # ========================================================
-    # 3. AGRICULTURE
+    # AGRICULTURE
     #
-    # First attempt:
-    # dynamically discover whether Biquote currently has
-    # an agricultural instrument.
+    # PRIMARY:
+    # Twelve Data commodity catalog
     #
-    # Second attempt:
-    # Yahoo fallback.
+    # FALLBACK:
+    # Yahoo futures
     # ========================================================
 
-    if symbol in AGRI_SEARCH_TERMS:
+    if symbol in AGRI_TERMS:
 
-        biquote_candles, (
-            biquote_error
-        ) = _fetch_biquote(
-            symbol
+        candles, error = (
+            _fetch_twelve_agriculture(
+                symbol
+            )
         )
 
-        if biquote_candles:
+        if candles:
+
+            provider_symbol = (
+                _TWELVE_SYMBOL_CACHE.get(
+                    symbol
+                )
+            )
+
+            state.metadata[
+                "resolved_symbol"
+            ] = provider_symbol
 
             return _finalize(
                 state,
-                biquote_candles,
-                "BIQUOTE",
-                biquote_error,
+                candles,
+                "TWELVE_DATA",
+                error,
             )
 
-        yahoo_candles, (
-            yahoo_error
-        ) = _fetch_yahoo(
-            symbol
+        twelve_error = error
+
+        yahoo_candles, yahoo_error = (
+            _fetch_yahoo(
+                symbol
+            )
         )
+
+        if yahoo_candles:
+
+            return _finalize(
+                state,
+                yahoo_candles,
+                "YAHOO",
+                (
+                    "TWELVE_DATA_FALLBACK: "
+                    f"{twelve_error}"
+                ),
+            )
 
         return _finalize(
             state,
-            yahoo_candles,
+            [],
             "YAHOO",
             (
-                "BIQUOTE_FALLBACK: "
-                f"{biquote_error} | "
+                "TWELVE_DATA: "
+                f"{twelve_error} | "
                 f"YAHOO: {yahoo_error}"
             ),
         )
 
     # ========================================================
-    # 4. GENERIC FALLBACK
+    # GENERIC FALLBACK
     # ========================================================
 
     candles, error = (
