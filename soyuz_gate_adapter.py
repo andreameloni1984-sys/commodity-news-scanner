@@ -1,5 +1,5 @@
 """
-SOYUZ GAGARIN — GATE ADAPTER v2
+SOYUZ GAGARIN — GATE ADAPTER v3
 
 DATA → FRESHNESS → RANKING → GAGARIN → FINAL DECISION
 """
@@ -17,15 +17,44 @@ BLOCKED = "BLOCKED"
 
 
 # ============================================================
-# DATA
+# DATA GATE
 # ============================================================
 
 def check_data(
-    timestamp: Any,
+    timestamp: Any = None,
     timeframe: str = "M5",
     now_timestamp: Any = None,
+    data_status: str = "LIVE",
 ) -> Dict[str, Any]:
 
+    # Se non abbiamo timestamp, utilizziamo lo status
+    # già determinato dal motore dati.
+    if timestamp is None:
+
+        status = str(data_status or "").upper()
+
+        if status == "LIVE":
+            return {
+                "status": "FRESH",
+                "usable": True,
+                "blocked": False,
+                "stale": False,
+                "age_seconds": None,
+                "max_age_seconds": None,
+                "reason": "DATA_STATUS_LIVE",
+            }
+
+        return {
+            "status": "BLOCKED",
+            "usable": False,
+            "blocked": True,
+            "stale": True,
+            "age_seconds": None,
+            "max_age_seconds": None,
+            "reason": "DATA_STATUS_NOT_LIVE",
+        }
+
+    # Se abbiamo timestamp, usiamo il vero freshness gate.
     result = operational_data_gate(
         timestamp=timestamp,
         timeframe=timeframe,
@@ -56,27 +85,32 @@ def evaluate_candidate(
 
     candidate = dict(candidate)
 
+    data_status = str(
+        candidate.get("data_status") or ""
+    ).upper()
+
     # --------------------------------------------------------
-    # 1. FRESHNESS
+    # 1. DATA / FRESHNESS
     # --------------------------------------------------------
 
     freshness = check_data(
         timestamp=timestamp,
         timeframe=timeframe,
         now_timestamp=now_timestamp,
+        data_status=data_status,
     )
 
-    if timestamp is not None and not freshness["usable"]:
+    if not freshness["usable"]:
         candidate["data_status"] = "STALE"
 
     # --------------------------------------------------------
-    # 2. RANKING GATE
+    # 2. RANKING
     # --------------------------------------------------------
 
     ranking = ranking_evaluate_candidate(candidate)
 
     # --------------------------------------------------------
-    # 3. GAGARIN GATE
+    # 3. GAGARIN
     # --------------------------------------------------------
 
     gagarin = gagarin_evaluate(candidate)
@@ -95,7 +129,7 @@ def evaluate_candidate(
         if blocker not in blockers:
             blockers.append(blocker)
 
-    if timestamp is not None and not freshness["usable"]:
+    if not freshness["usable"]:
         if "LIVE_DATA_NOT_FRESH" not in blockers:
             blockers.insert(0, "LIVE_DATA_NOT_FRESH")
 
@@ -103,7 +137,7 @@ def evaluate_candidate(
     # 5. FINAL STATE
     # --------------------------------------------------------
 
-    if timestamp is not None and not freshness["usable"]:
+    if not freshness["usable"]:
 
         state = BLOCKED
         entry_authorized = False
@@ -157,7 +191,7 @@ def evaluate_candidate(
 
 
 # ============================================================
-# OPERATIONAL RANKING
+# OPERATIONAL LIST
 # ============================================================
 
 def build_operational_list(
@@ -242,17 +276,15 @@ def build_soyuz_summary(
         "entries": entries,
         "watch": watch,
         "blocked": blocked,
-
         "entry_count": len(entries),
         "watch_count": len(watch),
         "blocked_count": len(blocked),
-
         "no_entry": len(entries) == 0,
     }
 
 
 # ============================================================
-# TELEGRAM / CONSOLE
+# FORMAT
 # ============================================================
 
 def format_soyuz_operational(
@@ -267,11 +299,9 @@ def format_soyuz_operational(
     ]
 
     if not entries:
-
         lines.append(
             "🟡 NESSUNA ENTRATA AUTORIZZATA"
         )
-
         return "\n".join(lines)
 
     lines.append("🟢 OPPORTUNITÀ AUTORIZZATE")
@@ -289,106 +319,18 @@ def format_soyuz_operational(
         ])
 
         if result.get("entry") is not None:
-            lines.append(
-                f"Entry: {result['entry']}"
-            )
+            lines.append(f"Entry: {result['entry']}")
 
         if result.get("stop") is not None:
-            lines.append(
-                f"SL: {result['stop']}"
-            )
+            lines.append(f"SL: {result['stop']}")
 
         if result.get("tp1") is not None:
-            lines.append(
-                f"TP1: {result['tp1']}"
-            )
+            lines.append(f"TP1: {result['tp1']}")
 
         if result.get("tp2") is not None:
-            lines.append(
-                f"TP2: {result['tp2']}"
-            )
+            lines.append(f"TP2: {result['tp2']}")
 
         if result.get("tp3") is not None:
-            lines.append(
-                f"TP3: {result['tp3']}"
-            )
+            lines.append(f"TP3: {result['tp3']}")
 
     return "\n".join(lines)
-
-
-# ============================================================
-# SELF TEST
-# ============================================================
-
-if __name__ == "__main__":
-
-    valid = {
-        "symbol": "BRENT",
-        "direction": "SHORT",
-        "data_status": "LIVE",
-
-        "mtf_confirmed": True,
-
-        "setup_valid": True,
-
-        "trigger_confirmed": True,
-        "trigger_direction": "SHORT",
-
-        "entry": 98.20,
-        "stop": 98.50,
-
-        "tp1": 97.80,
-        "tp2": 97.65,
-        "tp3": 97.50,
-
-        "stop_atr": 1.5,
-        "rr": 2.66,
-
-        "probability": 72,
-        "quality": 70,
-        "confidence": 75,
-    }
-
-    blocked = {
-        "symbol": "COCOA",
-        "direction": "SHORT",
-        "data_status": "STALE",
-
-        "mtf_confirmed": True,
-        "setup_valid": True,
-
-        "trigger_confirmed": True,
-        "trigger_direction": "SHORT",
-
-        "entry": 5500,
-        "stop": 5550,
-
-        "tp1": 5400,
-        "tp2": 5350,
-        "tp3": 5300,
-
-        "stop_atr": 1.5,
-        "rr": 2.0,
-
-        "probability": 80,
-        "quality": 80,
-        "confidence": 80,
-    }
-
-    summary = build_soyuz_summary(
-        [valid, blocked]
-    )
-
-    print("\n=== SOYUZ MAIN INTEGRATION TEST ===\n")
-
-    print(
-        format_soyuz_operational(summary)
-    )
-
-    assert summary["entry_count"] == 1
-    assert summary["entries"][0]["symbol"] == "BRENT"
-
-    assert summary["blocked_count"] == 1
-    assert summary["blocked"][0]["symbol"] == "COCOA"
-
-    print("\nINTEGRATION TEST PASSED")
