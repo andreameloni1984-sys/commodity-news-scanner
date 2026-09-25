@@ -1,34 +1,19 @@
-"""
-SOYUZ GAGARIN — RANKING GATE v1.0
-
-Scopo:
-- separare BIAS da SETUP operativo
-- impedire agli STALE di entrare nel ranking operativo
-- impedire che una probabilità alta venga scambiata per un setup valido
-- classificare: ENTRY / WATCH / BLOCKED
-
-NON esegue ordini.
-"""
-
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Any, Dict, List
 
 
 # ============================================================
-# SOGLIE OPERATIVE
+# SOYUZ GAGARIN — RANKING GATE v2
+# DATA → MTF → SETUP → TRIGGER → RISK → RR → QUALITY
+# → CONFIDENCE → PROBABILITY
 # ============================================================
 
 MIN_ENTRY_PROBABILITY = 62.0
 MIN_ENTRY_QUALITY = 55.0
 MIN_ENTRY_CONFIDENCE = 60.0
 MIN_ENTRY_RR = 2.5
+MAX_ENTRY_STOP_ATR = 2.5
 
-
-# ============================================================
-# RISULTATO
-# ============================================================
 
 @dataclass
 class RankingResult:
@@ -38,20 +23,22 @@ class RankingResult:
     quality: float
     confidence: float
     rr: float
-
     state: str
+
     operational: bool
     rankable: bool
 
     blockers: List[str]
+
     score: float = 0.0
+    data_status: str = ""
 
 
 # ============================================================
 # HELPERS
 # ============================================================
 
-def _number(value: Any, default: float = 0.0) -> float:
+def _num(value: Any, default: float = 0.0) -> float:
     try:
         if value is None:
             return default
@@ -60,208 +47,180 @@ def _number(value: Any, default: float = 0.0) -> float:
         return default
 
 
-def _text(value: Any, default: str = "") -> str:
-    if value is None:
-        return default
-
-    return str(value).strip()
+def _bool(value: Any) -> bool:
+    return bool(value)
 
 
 # ============================================================
-# CORE GATE
+# CANDIDATE EVALUATION
 # ============================================================
 
 def evaluate_candidate(candidate: Dict[str, Any]) -> RankingResult:
 
-    symbol = _text(
-        candidate.get("symbol"),
-        "UNKNOWN",
+    symbol = str(
+        candidate.get("symbol")
+        or candidate.get("name")
+        or "UNKNOWN"
     )
 
-    direction = _text(
-        candidate.get("direction"),
-        "NONE",
+    direction = str(
+        candidate.get("direction")
+        or ""
     ).upper()
 
-    probability = _number(
-        candidate.get("probability")
-    )
+    probability = _num(candidate.get("probability"))
+    quality = _num(candidate.get("quality"))
+    confidence = _num(candidate.get("confidence"))
+    rr = _num(candidate.get("rr"))
 
-    quality = _number(
-        candidate.get("quality")
-    )
-
-    confidence = _number(
-        candidate.get("confidence")
-    )
-
-    rr = _number(
-        candidate.get("rr")
-    )
-
-    data_status = _text(
-        candidate.get("data_status"),
-        "UNKNOWN",
+    data_status = str(
+        candidate.get("data_status")
+        or ""
     ).upper()
-
-    trigger_confirmed = bool(
-        candidate.get("trigger_confirmed", False)
-    )
-
-    setup_valid = bool(
-        candidate.get("setup_valid", False)
-    )
-
-    entry_present = bool(
-        candidate.get("entry_present", False)
-    )
-
-    stop_present = bool(
-        candidate.get("stop_present", False)
-    )
-
-    tp_present = bool(
-        candidate.get("tp_present", False)
-    )
 
     blockers = []
 
-    # ========================================================
-    # 1. DATA GATE
-    # ========================================================
+    # --------------------------------------------------------
+    # 1. DATA
+    # --------------------------------------------------------
 
     if data_status != "LIVE":
-        blockers.append(
-            "DATA_NOT_OPERATIONAL"
-        )
+        blockers.append("DATA_NOT_OPERATIONAL")
 
-    # ========================================================
+    # --------------------------------------------------------
     # 2. DIRECTION
-    # ========================================================
+    # --------------------------------------------------------
 
-    if direction not in {"LONG", "SHORT"}:
-        blockers.append(
-            "NO_VALID_DIRECTION"
-        )
+    if direction not in ("LONG", "SHORT"):
+        blockers.append("NO_VALID_DIRECTION")
 
-    # ========================================================
-    # 3. SETUP
-    # ========================================================
+    # --------------------------------------------------------
+    # 3. MTF
+    # --------------------------------------------------------
 
-    if not setup_valid:
-        blockers.append(
-            "NO_VALID_SETUP"
-        )
+    if not _bool(candidate.get("mtf_confirmed", False)):
+        blockers.append("MTF_NOT_CONFIRMED")
 
-    # ========================================================
-    # 4. TRIGGER
-    # ========================================================
+    # --------------------------------------------------------
+    # 4. SETUP
+    # --------------------------------------------------------
+
+    if not _bool(candidate.get("setup_valid", False)):
+        blockers.append("NO_VALID_SETUP")
+
+    # --------------------------------------------------------
+    # 5. TRIGGER
+    # --------------------------------------------------------
+
+    trigger_confirmed = _bool(
+        candidate.get("trigger_confirmed", False)
+    )
 
     if not trigger_confirmed:
-        blockers.append(
-            "TRIGGER_NOT_CONFIRMED"
-        )
+        blockers.append("TRIGGER_NOT_CONFIRMED")
 
-    # ========================================================
-    # 5. ENTRY
-    # ========================================================
+    trigger_direction = str(
+        candidate.get("trigger_direction")
+        or ""
+    ).upper()
 
-    if not entry_present:
-        blockers.append(
-            "ENTRY_MISSING"
-        )
+    if (
+        trigger_direction
+        and direction in ("LONG", "SHORT")
+        and trigger_direction != direction
+    ):
+        blockers.append("TRIGGER_DIRECTION_MISMATCH")
 
-    # ========================================================
-    # 6. STOP
-    # ========================================================
+    # --------------------------------------------------------
+    # 6. ENTRY / STOP / TP
+    # --------------------------------------------------------
 
-    if not stop_present:
-        blockers.append(
-            "STOP_MISSING"
-        )
+    entry = _num(candidate.get("entry"))
+    stop = _num(candidate.get("stop"))
+    tp1 = _num(candidate.get("tp1"))
+    tp2 = _num(candidate.get("tp2"))
+    tp3 = _num(candidate.get("tp3"))
 
-    # ========================================================
-    # 7. TAKE PROFIT
-    # ========================================================
+    if entry <= 0:
+        blockers.append("ENTRY_MISSING")
 
-    if not tp_present:
-        blockers.append(
-            "TP_MISSING"
-        )
+    if stop <= 0:
+        blockers.append("STOP_MISSING")
 
-    # ========================================================
+    if tp1 <= 0:
+        blockers.append("TP1_MISSING")
+
+    if tp2 <= 0:
+        blockers.append("TP2_MISSING")
+
+    if tp3 <= 0:
+        blockers.append("TP3_MISSING")
+
+    # --------------------------------------------------------
+    # 7. STOP ATR
+    # --------------------------------------------------------
+
+    stop_atr = _num(candidate.get("stop_atr"))
+
+    if stop_atr <= 0:
+        blockers.append("STOP_ATR_MISSING")
+    elif stop_atr > MAX_ENTRY_STOP_ATR:
+        blockers.append("STOP_GT_MAX_ATR")
+
+    # --------------------------------------------------------
     # 8. RR
-    # ========================================================
+    # --------------------------------------------------------
 
-    if rr < MIN_ENTRY_RR:
-        blockers.append(
-            "RR_FAIL"
-        )
+    if rr <= 0:
+        blockers.append("RR_MISSING")
+    elif rr < MIN_ENTRY_RR:
+        blockers.append("RR_FAIL")
 
-    # ========================================================
-    # 9. PROBABILITY
-    # ========================================================
+    # --------------------------------------------------------
+    # 9. SCORES
+    # --------------------------------------------------------
 
     if probability < MIN_ENTRY_PROBABILITY:
-        blockers.append(
-            "PROBABILITY_FAIL"
-        )
-
-    # ========================================================
-    # 10. QUALITY
-    # ========================================================
+        blockers.append("PROBABILITY_FAIL")
 
     if quality < MIN_ENTRY_QUALITY:
-        blockers.append(
-            "QUALITY_FAIL"
-        )
-
-    # ========================================================
-    # 11. CONFIDENCE
-    # ========================================================
+        blockers.append("QUALITY_FAIL")
 
     if confidence < MIN_ENTRY_CONFIDENCE:
-        blockers.append(
-            "CONFIDENCE_FAIL"
-        )
-
-    # ========================================================
-    # FINAL STATE
-    # ========================================================
+        blockers.append("CONFIDENCE_FAIL")
 
     # --------------------------------------------------------
-    # BLOCKED
+    # 10. FINAL CLASSIFICATION
     # --------------------------------------------------------
 
+    # DATA stale/non-live:
+    # non può competere nella classifica operativa.
     if data_status != "LIVE":
 
         state = "BLOCKED"
         operational = False
         rankable = False
 
-    # --------------------------------------------------------
-    # ENTRY
-    # --------------------------------------------------------
-
+    # Tutti i gate superati:
     elif not blockers:
 
         state = "ENTRY"
         operational = True
         rankable = True
 
-    # --------------------------------------------------------
-    # WATCH
-    # --------------------------------------------------------
-
+    # Dato live ma setup incompleto:
     else:
 
         state = "WATCH"
         operational = False
-        rankable = True
 
-    # ========================================================
+        # IMPORTANTE:
+        # WATCH non entra nella classifica operativa.
+        rankable = False
+
+    # --------------------------------------------------------
     # SCORE
-    # ========================================================
+    # --------------------------------------------------------
 
     score = (
         probability * 0.40
@@ -281,6 +240,7 @@ def evaluate_candidate(candidate: Dict[str, Any]) -> RankingResult:
         rankable=rankable,
         blockers=blockers,
         score=score,
+        data_status=data_status,
     )
 
 
@@ -292,136 +252,201 @@ def rank_candidates(
     candidates: List[Dict[str, Any]]
 ) -> List[RankingResult]:
 
-    results = []
+    results = [
+        evaluate_candidate(candidate)
+        for candidate in candidates
+    ]
 
-    for candidate in candidates:
+    # SOLO candidati realmente operativi.
+    operational = [
+        result
+        for result in results
+        if result.rankable
+    ]
 
-        result = evaluate_candidate(candidate)
-
-        if result.rankable:
-            results.append(result)
-
-    results.sort(
-        key=lambda x: (
-            x.operational,
-            x.score,
-            x.probability,
-            x.quality,
-            x.confidence,
+    # Ordine:
+    # 1. score
+    # 2. probability
+    # 3. quality
+    # 4. confidence
+    return sorted(
+        operational,
+        key=lambda result: (
+            result.score,
+            result.probability,
+            result.quality,
+            result.confidence,
         ),
         reverse=True,
     )
 
-    return results
-
 
 # ============================================================
-# TELEGRAM / LOG FORMAT
+# DISPLAY
 # ============================================================
 
-def format_result(result: RankingResult) -> str:
+def format_ranking(results: List[RankingResult]) -> str:
 
-    if result.state == "ENTRY":
-        icon = "🟢"
-
-    elif result.state == "WATCH":
-        icon = "🟡"
-
-    else:
-        icon = "🔴"
-
-    direction = (
-        result.direction
-        if result.direction in {"LONG", "SHORT"}
-        else "—"
-    )
-
-    blockers = ""
-
-    if result.blockers:
-        blockers = (
-            "\n   BLOCKERS: "
-            + ", ".join(result.blockers)
+    if not results:
+        return (
+            "📊 CLASSIFICA OPERATIVA\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "Nessun candidato ha superato tutti i gate."
         )
 
+    lines = [
+        "📊 CLASSIFICA OPERATIVA",
+        "━━━━━━━━━━━━━━━━━━━━",
+    ]
+
+    for index, result in enumerate(results, start=1):
+
+        direction = result.direction or "—"
+
+        lines.append(
+            f"{index}. {result.symbol} | "
+            f"{direction} | "
+            f"Prob {result.probability:.1f}% | "
+            f"Q {result.quality:.1f} | "
+            f"{result.state}"
+        )
+
+    return "\n".join(lines)
+
+
+# ============================================================
+# DIAGNOSTICS
+# ============================================================
+
+def format_blocked(candidate: Dict[str, Any]) -> str:
+
+    result = evaluate_candidate(candidate)
+
+    if not result.blockers:
+        return f"{result.symbol}: OK"
+
     return (
-        f"{icon} {result.symbol} | "
-        f"{result.state} | "
-        f"{direction} | "
-        f"Prob {result.probability:.1f}% | "
-        f"Q {result.quality:.1f} | "
-        f"Conf {result.confidence:.1f} | "
-        f"RR {result.rr:.2f}"
-        f"{blockers}"
+        f"{result.symbol}: {result.state} | "
+        + ", ".join(result.blockers)
     )
 
 
 # ============================================================
-# TEST
+# SELF TEST
 # ============================================================
 
 if __name__ == "__main__":
 
-    test_candidates = [
+    tests = [
 
         {
             "symbol": "COCOA",
             "direction": "SHORT",
-            "probability": 63,
-            "quality": 51,
-            "confidence": 55,
-            "rr": 0,
             "data_status": "STALE",
-            "setup_valid": False,
-            "trigger_confirmed": False,
-            "entry_present": False,
-            "stop_present": False,
-            "tp_present": False,
+            "mtf_confirmed": True,
+            "setup_valid": True,
+            "trigger_confirmed": True,
+            "trigger_direction": "SHORT",
+            "entry": 100,
+            "stop": 98,
+            "tp1": 106,
+            "tp2": 108,
+            "tp3": 110,
+            "stop_atr": 2.0,
+            "rr": 3.0,
+            "probability": 80,
+            "quality": 80,
+            "confidence": 80,
         },
 
         {
-            "symbol": "WTI",
-            "direction": "NONE",
-            "probability": 63,
-            "quality": 40,
-            "confidence": 45,
-            "rr": 0,
+            "symbol": "BRENT",
+            "direction": "SHORT",
             "data_status": "LIVE",
-            "setup_valid": False,
+            "mtf_confirmed": True,
+            "setup_valid": True,
             "trigger_confirmed": False,
-            "entry_present": False,
-            "stop_present": False,
-            "tp_present": False,
+            "trigger_direction": "LONG",
+            "entry": 100,
+            "stop": 98,
+            "tp1": 0,
+            "tp2": 0,
+            "tp3": 0,
+            "stop_atr": 2.0,
+            "rr": 0,
+            "probability": 68,
+            "quality": 56,
+            "confidence": 50,
         },
 
         {
-            "symbol": "TEST_VALID",
+            "symbol": "VALID_TEST",
             "direction": "LONG",
+            "data_status": "LIVE",
+            "mtf_confirmed": True,
+            "setup_valid": True,
+            "trigger_confirmed": True,
+            "trigger_direction": "LONG",
+            "entry": 100,
+            "stop": 98,
+            "tp1": 106,
+            "tp2": 108,
+            "tp3": 110,
+            "stop_atr": 2.0,
+            "rr": 3.0,
             "probability": 72,
             "quality": 70,
             "confidence": 75,
-            "rr": 3.1,
-            "data_status": "LIVE",
-            "setup_valid": True,
-            "trigger_confirmed": True,
-            "entry_present": True,
-            "stop_present": True,
-            "tp_present": True,
         },
     ]
 
-    print()
-    print("=" * 70)
-    print("SOYUZ GAGARIN — RANKING GATE TEST")
-    print("=" * 70)
+    print("\n=== SOYUZ GAGARIN RANKING TEST ===\n")
 
-    results = rank_candidates(test_candidates)
+    for candidate in tests:
 
-    for index, result in enumerate(results, 1):
+        result = evaluate_candidate(candidate)
 
         print(
-            f"{index}. "
-            + format_result(result)
+            result.symbol,
+            "|",
+            result.state,
+            "| rankable=",
+            result.rankable,
+            "| blockers=",
+            result.blockers,
         )
 
-    print("=" * 70)
+    ranked = rank_candidates(tests)
+
+    print("\n=== OPERATIONAL RANKING ===\n")
+
+    for index, result in enumerate(ranked, start=1):
+
+        print(
+            index,
+            result.symbol,
+            result.direction,
+            f"Prob={result.probability:.1f}",
+            f"Q={result.quality:.1f}",
+            result.state,
+        )
+
+    print("\n=== EXPECTED ===")
+
+    assert len(ranked) == 1
+    assert ranked[0].symbol == "VALID_TEST"
+    assert ranked[0].state == "ENTRY"
+
+    cocoa = evaluate_candidate(tests[0])
+    brent = evaluate_candidate(tests[1])
+
+    assert cocoa.state == "BLOCKED"
+    assert cocoa.rankable is False
+
+    assert brent.state == "WATCH"
+    assert brent.rankable is False
+
+    print("VALID_TEST = ENTRY")
+    print("COCOA = BLOCKED")
+    print("BRENT = WATCH")
+    print("RANKING TEST PASSED")
