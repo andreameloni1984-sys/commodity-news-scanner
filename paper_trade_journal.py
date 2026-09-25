@@ -7,10 +7,10 @@ from pathlib import Path
 
 JOURNAL_FILE = Path("paper_trade_log.csv")
 
-
 FIELDS = [
     "timestamp_utc",
     "commodity",
+    "symbol",
     "direction",
     "probability",
     "quality",
@@ -20,6 +20,8 @@ FIELDS = [
     "tp1",
     "tp2",
     "tp3",
+    "rr1",
+    "rr2",
     "rr3",
     "stop_atr",
     "data_source",
@@ -28,7 +30,6 @@ FIELDS = [
 
 
 def record_entries(results):
-
     entries = [
         state
         for state in results
@@ -39,6 +40,7 @@ def record_entries(results):
         return 0
 
     file_exists = JOURNAL_FILE.exists()
+    timestamp = datetime.now(timezone.utc).isoformat()
 
     with JOURNAL_FILE.open(
         "a",
@@ -57,55 +59,27 @@ def record_entries(results):
         for state in entries:
 
             writer.writerow({
-                "timestamp_utc":
-                    datetime.now(
-                        timezone.utc
-                    ).isoformat(),
-
-                "commodity":
-                    state.commodity,
-
-                "direction":
-                    state.setup_direction,
-
-                "probability":
-                    state.probability,
-
-                "quality":
-                    state.quality,
-
-                "confidence":
-                    state.confidence,
-
-                "entry":
-                    state.entry,
-
-                "stop":
-                    state.stop,
-
-                "tp1":
-                    state.tp1,
-
-                "tp2":
-                    state.tp2,
-
-                "tp3":
-                    state.tp3,
-
-                "rr3":
-                    state.rr3,
-
-                "stop_atr":
-                    state.stop_atr,
-
-                "data_source":
-                    state.data_source,
-
-                "data_status":
-                    state.metadata.get(
-                        "data_status",
-                        "UNKNOWN",
-                    ),
+                "timestamp_utc": timestamp,
+                "commodity": state.commodity,
+                "symbol": state.symbol,
+                "direction": state.setup_direction,
+                "probability": state.probability,
+                "quality": state.quality,
+                "confidence": state.confidence,
+                "entry": state.entry,
+                "stop": state.stop,
+                "tp1": state.tp1,
+                "tp2": state.tp2,
+                "tp3": state.tp3,
+                "rr1": state.rr1,
+                "rr2": state.rr2,
+                "rr3": state.rr3,
+                "stop_atr": state.stop_atr,
+                "data_source": state.data_source,
+                "data_status": state.metadata.get(
+                    "data_status",
+                    "UNKNOWN",
+                ),
             })
 
     return len(entries)
