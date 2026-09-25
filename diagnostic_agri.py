@@ -1,77 +1,112 @@
 """
-SOYUZ GAGARIN — AGRICULTURE DATA DIAGNOSTIC v1.0
+SOYUZ GAGARIN — AGRICULTURE DATA DIAGNOSTIC v2.0
 
-Scopo:
-- verificare la disponibilità Twelve Data
-- controllare /commodities
-- controllare /symbol_search
-- verificare access.plan
-- provare una serie 5min
-- distinguere:
-    A = simbolo non trovato
-    B = simbolo trovato ma piano non sufficiente
-    C = simbolo trovato ma time series non disponibile
-    D = simbolo funzionante
+Diagnostica completa per:
+
+    RICE
+    SUGAR
+    COCOA
+    COFFEE
+
+Controlla:
+
+1. Twelve Data /commodities
+2. Twelve Data /symbol_search
+3. Simbolo candidato
+4. Instrument type
+5. Exchange
+6. Access / plan
+7. Time series 5min
+8. Ultimo timestamp
+9. Età del dato
+10. Verdetto finale
 
 NON modifica:
+
 - Gagarin
 - Safety
 - probabilità
-- qualità
+- quality
 - confidence
 - Telegram
 - PAPER TRADING
+
+È un programma diagnostico indipendente.
 """
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 import sys
+import time
+
 import requests
 
 from config import (
-    TWELVE_DATA_API_KEY,
     TIMEOUT_SECONDS,
+    TWELVE_DATA_API_KEY,
 )
 
 
-BASE = "https://api.twelvedata.com"
+# ============================================================
+# CONFIG
+# ============================================================
+
+BASE_URL = "https://api.twelvedata.com"
 
 COMMODITIES_URL = (
-    f"{BASE}/commodities"
+    f"{BASE_URL}/commodities"
 )
 
-SEARCH_URL = (
-    f"{BASE}/symbol_search"
+SYMBOL_SEARCH_URL = (
+    f"{BASE_URL}/symbol_search"
 )
 
 TIME_SERIES_URL = (
-    f"{BASE}/time_series"
+    f"{BASE_URL}/time_series"
 )
 
 
+HEADERS = {
+    "User-Agent":
+        "SOYUZ-GAGARIN-AGRI-DIAGNOSTIC/2.0",
+    "Accept":
+        "application/json",
+}
+
+
+# ============================================================
+# AGRICULTURE UNIVERSE
+# ============================================================
+
 AGRICULTURE = {
+
     "RISO": {
-        "internal": "RICE/USD",
+        "internal_symbol": "RICE/USD",
         "terms": [
             "rice",
             "rough rice",
         ],
     },
+
     "ZUCCHERO": {
-        "internal": "SUGAR/USD",
+        "internal_symbol": "SUGAR/USD",
         "terms": [
             "sugar",
         ],
     },
+
     "CACAO": {
-        "internal": "COCOA/USD",
+        "internal_symbol": "COCOA/USD",
         "terms": [
             "cocoa",
             "cacao",
         ],
     },
+
     "CAFFÈ": {
-        "internal": "COFFEE/USD",
+        "internal_symbol": "COFFEE/USD",
         "terms": [
             "coffee",
             "arabica",
@@ -80,16 +115,26 @@ AGRICULTURE = {
 }
 
 
-HEADERS = {
-    "User-Agent": "SOYUZ-GAGARIN-AGRI-DIAGNOSTIC/1.0",
-    "Accept": "application/json",
-}
+# ============================================================
+# FRESHNESS
+# ============================================================
 
+LIVE_MAX_AGE_SECONDS = 360.0
+
+
+# ============================================================
+# HTTP
+# ============================================================
 
 def request_json(
     url: str,
-    params: dict,
+    params: Dict[str, Any],
 ):
+
+    print()
+    print(
+        f"HTTP REQUEST → {url}"
+    )
 
     try:
 
@@ -101,80 +146,184 @@ def request_json(
         )
 
         print(
-            f"HTTP {response.status_code}"
+            f"HTTP STATUS → "
+            f"{response.status_code}"
         )
 
         if response.status_code != 200:
 
             print(
-                response.text[:500]
+                "HTTP ERROR:"
+            )
+
+            print(
+                response.text[:1000]
             )
 
             return None
 
-        return response.json()
+        try:
 
-    except Exception as exc:
+            return response.json()
+
+        except ValueError:
+
+            print(
+                "JSON ERROR"
+            )
+
+            print(
+                response.text[:1000]
+            )
+
+            return None
+
+    except requests.RequestException as exc:
 
         print(
-            f"REQUEST ERROR: {exc}"
+            "REQUEST ERROR:"
+        )
+
+        print(
+            repr(exc)
         )
 
         return None
 
 
-def is_error(
-    payload,
-):
+# ============================================================
+# API ERROR
+# ============================================================
 
-    return (
-        isinstance(
-            payload,
-            dict,
-        )
-        and payload.get(
-            "status"
-        ) == "error"
-    )
-
-
-def show_error(
-    payload,
+def print_api_error(
+    payload: Any,
 ):
 
     if not isinstance(
         payload,
         dict,
     ):
-        return
+
+        return False
 
     if payload.get(
         "status"
     ) == "error":
 
+        print()
         print(
-            "ERROR:",
+            "❌ TWELVE DATA ERROR"
+        )
+
+        print(
+            "Code:",
             payload.get(
                 "code"
             ),
+        )
+
+        print(
+            "Message:",
             payload.get(
                 "message"
             ),
         )
 
+        return True
+
+    return False
+
 
 # ============================================================
-# COMMODITY CATALOG
+# TIME PARSER
 # ============================================================
 
-def load_catalog():
+def parse_timestamp(
+    value: Any,
+) -> Optional[float]:
+
+    try:
+
+        if value is None:
+            return None
+
+        if isinstance(
+            value,
+            (int, float),
+        ):
+
+            return float(value)
+
+        text = str(
+            value
+        ).strip()
+
+        if not text:
+            return None
+
+        if text.endswith("Z"):
+
+            text = (
+                text[:-1]
+                + "+00:00"
+            )
+
+        dt = datetime.fromisoformat(
+            text
+        )
+
+        if dt.tzinfo is None:
+
+            dt = dt.replace(
+                tzinfo=timezone.utc
+            )
+
+        return dt.astimezone(
+            timezone.utc
+        ).timestamp()
+
+    except Exception:
+
+        return None
+
+
+# ============================================================
+# AGE
+# ============================================================
+
+def calculate_age(
+    timestamp: float,
+):
+
+    now = (
+        datetime.now(
+            timezone.utc
+        ).timestamp()
+    )
+
+    return max(
+        0.0,
+        now - timestamp,
+    )
+
+
+# ============================================================
+# COMMODITIES CATALOG
+# ============================================================
+
+def load_commodities():
 
     print()
     print(
-        "1️⃣ TWELVE DATA /COMMODITIES"
+        "=" * 72
     )
+
     print(
-        "-" * 60
+        "📚 TWELVE DATA /COMMODITIES"
+    )
+
+    print(
+        "=" * 72
     )
 
     payload = request_json(
@@ -187,15 +336,13 @@ def load_catalog():
     )
 
     if payload is None:
+
         return []
 
-    show_error(
-        payload
-    )
-
-    if is_error(
+    if print_api_error(
         payload
     ):
+
         return []
 
     data = payload.get(
@@ -207,13 +354,188 @@ def load_catalog():
         data,
         list,
     ):
+
+        print(
+            "❌ Catalogo non valido"
+        )
+
         return []
 
     print(
-        f"Commodity ricevute: {len(data)}"
+        f"Commodity ricevute: "
+        f"{len(data)}"
     )
 
     return data
+
+
+# ============================================================
+# PRINT COMMODITY
+# ============================================================
+
+def print_commodity(
+    item: Dict[str, Any],
+):
+
+    print(
+        "  SYMBOL:",
+        item.get(
+            "symbol"
+        ),
+    )
+
+    print(
+        "  NAME:",
+        item.get(
+            "name"
+        ),
+    )
+
+    print(
+        "  DESCRIPTION:",
+        item.get(
+            "description"
+        ),
+    )
+
+    print(
+        "  CATEGORY:",
+        item.get(
+            "category"
+        ),
+    )
+
+    print(
+        "  EXCHANGE:",
+        item.get(
+            "exchange"
+        ),
+    )
+
+
+# ============================================================
+# CATALOG MATCH
+# ============================================================
+
+def catalog_matches(
+    catalog: List[Dict[str, Any]],
+    terms: List[str],
+):
+
+    matches = []
+
+    for item in catalog:
+
+        if not isinstance(
+            item,
+            dict,
+        ):
+
+            continue
+
+        symbol = str(
+            item.get(
+                "symbol",
+                "",
+            )
+        )
+
+        name = str(
+            item.get(
+                "name",
+                "",
+            )
+        )
+
+        description = str(
+            item.get(
+                "description",
+                "",
+            )
+        )
+
+        category = str(
+            item.get(
+                "category",
+                "",
+            )
+        )
+
+        text = (
+            f"{symbol} "
+            f"{name} "
+            f"{description} "
+            f"{category}"
+        ).lower()
+
+        score = 0
+
+        for term in terms:
+
+            term = term.lower()
+
+            if term in text:
+
+                score += 20
+
+            if term in name.lower():
+
+                score += 20
+
+            if term in symbol.lower():
+
+                score += 30
+
+        if (
+            "commodity"
+            in text
+        ):
+
+            score += 10
+
+        if (
+            "agriculture"
+            in text
+        ):
+
+            score += 15
+
+        if (
+            "agricultural"
+            in text
+        ):
+
+            score += 15
+
+        if (
+            "grain"
+            in text
+        ):
+
+            score += 10
+
+        if (
+            "soft"
+            in text
+        ):
+
+            score += 10
+
+        if score > 0:
+
+            matches.append(
+                (
+                    score,
+                    item,
+                )
+            )
+
+    matches.sort(
+        key=lambda x: x[0],
+        reverse=True,
+    )
+
+    return matches
 
 
 # ============================================================
@@ -226,17 +548,22 @@ def symbol_search(
 
     print()
     print(
-        f"2️⃣ SYMBOL SEARCH → {term}"
+        "=" * 72
     )
+
     print(
-        "-" * 60
+        f"🔎 SYMBOL SEARCH → {term}"
+    )
+
+    print(
+        "=" * 72
     )
 
     payload = request_json(
-        SEARCH_URL,
+        SYMBOL_SEARCH_URL,
         {
             "symbol": term,
-            "outputsize": 50,
+            "outputsize": 100,
             "show_plan": "true",
             "apikey":
                 TWELVE_DATA_API_KEY,
@@ -244,15 +571,13 @@ def symbol_search(
     )
 
     if payload is None:
+
         return []
 
-    show_error(
-        payload
-    )
-
-    if is_error(
+    if print_api_error(
         payload
     ):
+
         return []
 
     data = payload.get(
@@ -264,47 +589,69 @@ def symbol_search(
         data,
         list,
     ):
+
         return []
 
-    results = []
+    print(
+        f"Risultati: {len(data)}"
+    )
 
-    for item in data:
+    for index, item in enumerate(
+        data[:20],
+        start=1,
+    ):
 
         if not isinstance(
             item,
             dict,
         ):
+
             continue
 
-        results.append(
-            item
+        print()
+        print(
+            f"[{index}]"
         )
 
         print(
-            "SYMBOL:",
+            " SYMBOL:",
             item.get(
                 "symbol"
             ),
         )
 
         print(
-            "NAME:",
+            " NAME:",
             item.get(
                 "instrument_name"
             ),
         )
 
         print(
-            "TYPE:",
+            " TYPE:",
             item.get(
                 "instrument_type"
             ),
         )
 
         print(
-            "EXCHANGE:",
+            " EXCHANGE:",
             item.get(
                 "exchange"
+            ),
+        )
+
+        print(
+            " MIC:",
+            item.get(
+                "mic_code"
+            ),
+        )
+
+        print(
+            " COUNTRY:",
+            item.get(
+                "country"
             ),
         )
 
@@ -318,24 +665,27 @@ def symbol_search(
         ):
 
             print(
-                "ACCESS PLAN:",
+                " ACCESS PLAN:",
                 access.get(
                     "plan"
                 ),
             )
 
-        print()
+            print(
+                " ACCESS:",
+                access,
+            )
 
-    return results
+    return data
 
 
 # ============================================================
 # SCORE SEARCH RESULT
 # ============================================================
 
-def score_result(
-    item: dict,
-    terms: list[str],
+def score_search_result(
+    item: Dict[str, Any],
+    terms: List[str],
 ):
 
     symbol = str(
@@ -380,39 +730,101 @@ def score_result(
         term = term.lower()
 
         if term in text:
+
             score += 30
 
         if term in name.lower():
-            score += 20
+
+            score += 25
+
+        if term in symbol.lower():
+
+            score += 35
 
     if (
-        "future" in text
-        or "futures" in text
+        "future"
+        in text
     ):
-        score += 20
+
+        score += 25
 
     if (
-        "commodity" in text
-        or "agriculture" in text
-        or "agricultural" in text
-        or "grain" in text
-        or "soft" in text
+        "futures"
+        in text
     ):
+
+        score += 25
+
+    if (
+        "commodity"
+        in text
+    ):
+
         score += 15
 
     if (
-        "etf" in text
-        or "fund" in text
-        or "stock" in text
-        or "common stock" in text
+        "agriculture"
+        in text
     ):
+
+        score += 20
+
+    if (
+        "agricultural"
+        in text
+    ):
+
+        score += 20
+
+    if (
+        "grain"
+        in text
+    ):
+
+        score += 15
+
+    if (
+        "soft"
+        in text
+    ):
+
+        score += 15
+
+    # Penalità per risultati non adatti.
+
+    if (
+        "stock"
+        in text
+    ):
+
+        score -= 60
+
+    if (
+        "common stock"
+        in text
+    ):
+
+        score -= 60
+
+    if (
+        "etf"
+        in text
+    ):
+
+        score -= 60
+
+    if (
+        "fund"
+        in text
+    ):
+
         score -= 40
 
     return score
 
 
 # ============================================================
-# TIME SERIES TEST
+# TIME SERIES
 # ============================================================
 
 def test_time_series(
@@ -421,10 +833,15 @@ def test_time_series(
 
     print()
     print(
-        f"3️⃣ TIME SERIES 5m → {symbol}"
+        "=" * 72
     )
+
     print(
-        "-" * 60
+        f"📈 TIME SERIES 5m → {symbol}"
+    )
+
+    print(
+        "=" * 72
     )
 
     payload = request_json(
@@ -432,7 +849,7 @@ def test_time_series(
         {
             "symbol": symbol,
             "interval": "5min",
-            "outputsize": 5,
+            "outputsize": 10,
             "timezone": "UTC",
             "apikey":
                 TWELVE_DATA_API_KEY,
@@ -441,17 +858,25 @@ def test_time_series(
 
     if payload is None:
 
-        return False
+        return {
+            "ok": False,
+            "reason": "REQUEST_FAILED",
+        }
 
-    show_error(
-        payload
-    )
-
-    if is_error(
+    if print_api_error(
         payload
     ):
 
-        return False
+        return {
+            "ok": False,
+            "reason":
+                str(
+                    payload.get(
+                        "message",
+                        "API_ERROR",
+                    )
+                ),
+        }
 
     values = payload.get(
         "values",
@@ -461,64 +886,269 @@ def test_time_series(
     if not values:
 
         print(
-            "NESSUNA CANDELA 5m"
+            "❌ Nessuna candela ricevuta"
         )
 
-        return False
-
-    print(
-        f"Candele ricevute: {len(values)}"
-    )
+        return {
+            "ok": False,
+            "reason":
+                "NO_5M_DATA",
+        }
 
     latest = values[0]
 
+    timestamp = parse_timestamp(
+        latest.get(
+            "datetime"
+        )
+    )
+
+    if timestamp is None:
+
+        print(
+            "❌ Timestamp non interpretabile"
+        )
+
+        return {
+            "ok": False,
+            "reason":
+                "INVALID_TIMESTAMP",
+        }
+
+    age = calculate_age(
+        timestamp
+    )
+
+    print()
     print(
-        "Ultima candela:"
+        "Candele ricevute:",
+        len(values),
     )
 
     print(
-        "  datetime:",
+        "Ultima candela:",
         latest.get(
             "datetime"
         ),
     )
 
     print(
-        "  open:",
+        "Open:",
         latest.get(
             "open"
         ),
     )
 
     print(
-        "  high:",
+        "High:",
         latest.get(
             "high"
         ),
     )
 
     print(
-        "  low:",
+        "Low:",
         latest.get(
             "low"
         ),
     )
 
     print(
-        "  close:",
+        "Close:",
         latest.get(
             "close"
         ),
     )
 
-    return True
+    print(
+        f"AGE: {age:.1f}s"
+    )
+
+    if age <= LIVE_MAX_AGE_SECONDS:
+
+        print(
+            "STATUS: 🟢 LIVE"
+        )
+
+        return {
+            "ok": True,
+            "live": True,
+            "age": age,
+            "reason": "LIVE",
+        }
+
+    print(
+        "STATUS: 🟡 STALE"
+    )
+
+    return {
+        "ok": True,
+        "live": False,
+        "age": age,
+        "reason": "STALE",
+    }
 
 
 # ============================================================
-# DIAGNOSTIC
+# ACCESS ANALYSIS
 # ============================================================
 
-def diagnose():
+def get_access_plan(
+    item: Dict[str, Any],
+):
+
+    access = item.get(
+        "access"
+    )
+
+    if not isinstance(
+        access,
+        dict,
+    ):
+
+        return "UNKNOWN"
+
+    return str(
+        access.get(
+            "plan",
+            "UNKNOWN",
+        )
+    )
+
+
+# ============================================================
+# DIAGNOSTIC ONE
+# ============================================================
+
+def diagnose_one(
+    name: str,
+    config: Dict[str, Any],
+    catalog: List[Dict[str, Any]],
+):
+
+    internal = config[
+        "internal_symbol"
+    ]
+
+    terms = config[
+        "terms"
+    ]
+
+    print()
+    print()
+    print(
+        "#" * 72
+    )
+
+    print(
+        f"🌾 {name}"
+    )
+
+    print(
+        f"Internal symbol: {internal}"
+    )
+
+    print(
+        "#" * 72
+    )
+
+    # --------------------------------------------------------
+    # CATALOG
+    # --------------------------------------------------------
+
+    matches = catalog_matches(
+        catalog,
+        terms,
+    )
+
+    print()
+    print(
+        "📚 CATALOG MATCH"
+    )
+
+    if not matches:
+
+        print(
+            "❌ Nessun match nel catalogo"
+        )
+
+    else:
+
+        for score, item in matches[:10]:
+
+            print()
+            print(
+                f"SCORE: {score}"
+            )
+
+            print_commodity(
+                item
+            )
+
+    # --------------------------------------------------------
+    # SEARCH
+    # --------------------------------------------------------
+
+    search_results = []
+
+    for term in terms:
+
+        results = symbol_search(
+            term
+        )
+
+        search_results.extend(
+            results
+        )
+
+    # --------------------------------------------------------
+    # UNIQUE
+    # --------------------------------------------------------
+
+    unique = {}
+
+    for item in search_results:
+
+        if not isinstance(
+            item,
+            dict,
+        ):
+
+            continue
+
+        symbol = str(
+            item.get(
+                "symbol",
+                "",
+            )
+        ).strip()
+
+        if symbol:
+
+            unique[
+                symbol
+            ] = item
+
+    scored = []
+
+    for item in unique.values():
+
+        score = score_search_result(
+            item,
+            terms,
+        )
+
+        scored.append(
+            (
+                score,
+                item,
+            )
+        )
+
+    scored.sort(
+        key=lambda x: x[0],
+        reverse=True,
+    )
 
     print()
     print(
@@ -526,16 +1156,254 @@ def diagnose():
     )
 
     print(
-        "🌾 SOYUZ GAGARIN"
-    )
-
-    print(
-        "AGRICULTURE DATA DIAGNOSTIC v1.0"
+        "🏆 CANDIDATI ORDINATI"
     )
 
     print(
         "=" * 72
     )
+
+    for score, item in scored[:15]:
+
+        print(
+            f"SCORE={score:4d} | "
+            f"SYMBOL={item.get('symbol')} | "
+            f"NAME={item.get('instrument_name')} | "
+            f"TYPE={item.get('instrument_type')} | "
+            f"EXCHANGE={item.get('exchange')} | "
+            f"PLAN={get_access_plan(item)}"
+        )
+
+    # --------------------------------------------------------
+    # SELECT
+    # --------------------------------------------------------
+
+    if not scored:
+
+        print()
+        print(
+            "🚨 VERDETTO:"
+        )
+
+        print(
+            "SYMBOL_NOT_FOUND"
+        )
+
+        return {
+            "name": name,
+            "internal": internal,
+            "verdict":
+                "SYMBOL_NOT_FOUND",
+            "symbol": None,
+        }
+
+    best_score, best = scored[0]
+
+    best_symbol = str(
+        best.get(
+            "symbol",
+            "",
+        )
+    ).strip()
+
+    best_name = str(
+        best.get(
+            "instrument_name",
+            "",
+        )
+    )
+
+    best_type = str(
+        best.get(
+            "instrument_type",
+            "",
+        )
+    )
+
+    best_exchange = str(
+        best.get(
+            "exchange",
+            "",
+        )
+    )
+
+    best_plan = get_access_plan(
+        best
+    )
+
+    print()
+    print(
+        "=" * 72
+    )
+
+    print(
+        "🎯 BEST CANDIDATE"
+    )
+
+    print(
+        "=" * 72
+    )
+
+    print(
+        "Symbol:",
+        best_symbol
+    )
+
+    print(
+        "Name:",
+        best_name
+    )
+
+    print(
+        "Type:",
+        best_type
+    )
+
+    print(
+        "Exchange:",
+        best_exchange
+    )
+
+    print(
+        "Plan:",
+        best_plan
+    )
+
+    print(
+        "Score:",
+        best_score
+    )
+
+    # --------------------------------------------------------
+    # TIME SERIES
+    # --------------------------------------------------------
+
+    ts = test_time_series(
+        best_symbol
+    )
+
+    # --------------------------------------------------------
+    # VERDICT
+    # --------------------------------------------------------
+
+    if (
+        best_score >= 60
+        and ts.get(
+            "live"
+        )
+    ):
+
+        verdict = (
+            "LIVE_POSSIBLE"
+        )
+
+    elif (
+        best_score >= 60
+        and ts.get(
+            "ok"
+        )
+        and not ts.get(
+            "live"
+        )
+    ):
+
+        verdict = (
+            "SYMBOL_OK_DATA_STALE"
+        )
+
+    elif (
+        best_score >= 60
+        and not ts.get(
+            "ok"
+        )
+    ):
+
+        verdict = (
+            "SYMBOL_FOUND_TS_FAILED"
+        )
+
+    elif best_score >= 30:
+
+        verdict = (
+            "SYMBOL_UNCERTAIN"
+        )
+
+    else:
+
+        verdict = (
+            "NO_RELIABLE_SYMBOL"
+        )
+
+    print()
+    print(
+        "=" * 72
+    )
+
+    print(
+        "🚨 VERDETTO"
+    )
+
+    print(
+        "=" * 72
+    )
+
+    print(
+        verdict
+    )
+
+    return {
+        "name": name,
+        "internal": internal,
+        "verdict": verdict,
+        "symbol": best_symbol,
+        "score": best_score,
+        "plan": best_plan,
+        "type": best_type,
+        "exchange": best_exchange,
+        "time_series":
+            ts,
+    }
+
+
+# ============================================================
+# MAIN DIAGNOSTIC
+# ============================================================
+
+def main():
+
+    print()
+    print(
+        "=" * 72
+    )
+
+    print(
+        "🚀 SOYUZ GAGARIN"
+    )
+
+    print(
+        "🌾 AGRICULTURE DATA DIAGNOSTIC v2.0"
+    )
+
+    print(
+        "=" * 72
+    )
+
+    print()
+    print(
+        "Questo test NON modifica Gagarin."
+    )
+
+    print(
+        "Questo test NON invia Telegram."
+    )
+
+    print(
+        "Questo test NON esegue trading."
+    )
+
+    # --------------------------------------------------------
+    # API KEY
+    # --------------------------------------------------------
 
     if not TWELVE_DATA_API_KEY:
 
@@ -548,368 +1416,71 @@ def diagnose():
 
     print()
     print(
-        "API KEY: PRESENTE"
+        "🔐 TWELVE_DATA_API_KEY: PRESENTE"
     )
 
-    catalog = load_catalog()
+    # --------------------------------------------------------
+    # CATALOG
+    # --------------------------------------------------------
 
-    print()
-    print(
-        "=" * 72
-    )
+    catalog = load_commodities()
 
-    print(
-        "ANALISI STRUMENTI AGRICOLI"
-    )
+    # --------------------------------------------------------
+    # EACH AGRICULTURE
+    # --------------------------------------------------------
 
-    print(
-        "=" * 72
-    )
+    results = []
 
-    final_results = []
-
-    for name, config in AGRICULTURE.items():
-
-        internal = config[
-            "internal"
-        ]
-
-        terms = config[
-            "terms"
-        ]
-
-        print()
-        print(
-            "🌾",
-            name
-        )
-
-        print(
-            f"Internal symbol: {internal}"
-        )
-
-        # ----------------------------------------------------
-        # CATALOG MATCH
-        # ----------------------------------------------------
-
-        catalog_matches = []
-
-        for item in catalog:
-
-            if not isinstance(
-                item,
-                dict,
-            ):
-                continue
-
-            symbol = str(
-                item.get(
-                    "symbol",
-                    "",
-                )
-            ).strip()
-
-            item_name = str(
-                item.get(
-                    "name",
-                    "",
-                )
-            ).strip()
-
-            description = str(
-                item.get(
-                    "description",
-                    "",
-                )
-            ).strip()
-
-            text = (
-                f"{symbol} "
-                f"{item_name} "
-                f"{description}"
-            ).lower()
-
-            if (
-                any(
-                    term.lower()
-                    in text
-                    for term in terms
-                )
-            ):
-
-                catalog_matches.append(
-                    item
-                )
-
-        print()
-        print(
-            "CATALOG MATCH:",
-            len(
-                catalog_matches
-            ),
-        )
-
-        for item in catalog_matches[:10]:
-
-            print(
-                "  •",
-                item.get(
-                    "symbol"
-                ),
-                "|",
-                item.get(
-                    "name"
-                ),
-            )
-
-        # ----------------------------------------------------
-        # SEARCH
-        # ----------------------------------------------------
-
-        all_search_results = []
-
-        for term in terms:
-
-            results = symbol_search(
-                term
-            )
-
-            all_search_results.extend(
-                results
-            )
-
-        # ----------------------------------------------------
-        # UNIQUE RESULTS
-        # ----------------------------------------------------
-
-        unique = {}
-
-        for item in all_search_results:
-
-            symbol = str(
-                item.get(
-                    "symbol",
-                    "",
-                )
-            ).strip()
-
-            if symbol:
-                unique[
-                    symbol
-                ] = item
-
-        scored = []
-
-        for item in unique.values():
-
-            scored.append(
-                (
-                    score_result(
-                        item,
-                        terms,
-                    ),
-                    item,
-                )
-            )
-
-        scored.sort(
-            key=lambda x: x[0],
-            reverse=True,
-        )
-
-        print()
-        print(
-            "MIGLIORI CANDIDATI:"
-        )
-
-        for score, item in scored[:10]:
-
-            access = item.get(
-                "access",
-                {},
-            )
-
-            plan = ""
-
-            if isinstance(
-                access,
-                dict,
-            ):
-                plan = access.get(
-                    "plan",
-                    "",
-                )
-
-            print(
-                f"  • score={score:3d} "
-                f"symbol={item.get('symbol')} "
-                f"name={item.get('instrument_name')} "
-                f"type={item.get('instrument_type')} "
-                f"plan={plan}"
-            )
-
-        # ----------------------------------------------------
-        # SELECT BEST
-        # ----------------------------------------------------
-
-        if not scored:
-
-            print()
-            print(
-                "❌ VERDETTO: "
-                "NESSUN SIMBOLO TROVATO"
-            )
-
-            final_results.append(
-                (
-                    name,
-                    "NOT_FOUND",
-                    None,
-                )
-            )
-
-            continue
-
-        best_score, best = scored[0]
-
-        best_symbol = str(
-            best.get(
-                "symbol",
-                "",
-            )
-        ).strip()
-
-        access = best.get(
-            "access",
-            {},
-        )
-
-        plan = ""
-
-        if isinstance(
-            access,
-            dict,
-        ):
-
-            plan = str(
-                access.get(
-                    "plan",
-                    "",
-                )
-            )
-
-        print()
-        print(
-            "BEST SYMBOL:",
-            best_symbol
-        )
-
-        print(
-            "BEST NAME:",
-            best.get(
-                "instrument_name"
-            )
-        )
-
-        print(
-            "BEST TYPE:",
-            best.get(
-                "instrument_type"
-            )
-        )
-
-        print(
-            "BEST EXCHANGE:",
-            best.get(
-                "exchange"
-            )
-        )
-
-        print(
-            "BEST PLAN:",
-            plan
-        )
-
-        print(
-            "BEST SCORE:",
-            best_score
-        )
-
-        # ----------------------------------------------------
-        # TIME SERIES
-        # ----------------------------------------------------
-
-        ts_ok = test_time_series(
-            best_symbol
-        )
-
-        # ----------------------------------------------------
-        # FINAL VERDICT
-        # ----------------------------------------------------
-
-        if (
-            best_score >= 40
-            and ts_ok
-        ):
-
-            verdict = (
-                "LIVE_POSSIBLE"
-            )
-
-        elif (
-            best_score >= 40
-            and not ts_ok
-        ):
-
-            verdict = (
-                "SYMBOL_FOUND_TS_FAILED"
-            )
-
-        else:
-
-            verdict = (
-                "SYMBOL_UNCERTAIN"
-            )
-
-        print()
-        print(
-            "🎯 VERDETTO:",
-            verdict
-        )
-
-        final_results.append(
-            (
-                name,
-                verdict,
-                best_symbol,
-            )
-        )
-
-    # ========================================================
-    # FINAL SUMMARY
-    # ========================================================
-
-    print()
-    print(
-        "=" * 72
-    )
-
-    print(
-        "📊 RISULTATO FINALE"
-    )
-
-    print(
-        "=" * 72
-    )
-
-    for name, verdict, symbol in (
-        final_results
+    for name, config in (
+        AGRICULTURE.items()
     ):
 
+        result = diagnose_one(
+            name,
+            config,
+            catalog,
+        )
+
+        results.append(
+            result
+        )
+
+    # --------------------------------------------------------
+    # FINAL TABLE
+    # --------------------------------------------------------
+
+    print()
+    print()
+    print(
+        "=" * 72
+    )
+
+    print(
+        "📊 SOYUZ — AGRICULTURE FINAL REPORT"
+    )
+
+    print(
+        "=" * 72
+    )
+
+    print()
+
+    print(
+        f"{'ASSET':12} "
+        f"{'VERDICT':28} "
+        f"{'SYMBOL':15}"
+    )
+
+    print(
+        "-" * 72
+    )
+
+    for result in results:
+
         print(
-            f"{name:12s} "
-            f"{verdict:28s} "
-            f"{symbol or '-'}"
+            f"{result['name']:12} "
+            f"{result['verdict']:28} "
+            f"{str(result.get('symbol') or '-'):15}"
         )
 
     print()
@@ -918,18 +1489,58 @@ def diagnose():
     )
 
     print(
-        "DIAGNOSTIC COMPLETATO"
+        "LETTURA DEL RISULTATO"
     )
 
     print(
         "=" * 72
+    )
+
+    print()
+    print(
+        "LIVE_POSSIBLE"
+        "        = simbolo + 5m LIVE"
+    )
+
+    print(
+        "SYMBOL_OK_DATA_STALE"
+        " = simbolo valido ma dato vecchio"
+    )
+
+    print(
+        "SYMBOL_FOUND_TS_FAILED"
+        " = simbolo trovato ma 5m non disponibile"
+    )
+
+    print(
+        "SYMBOL_UNCERTAIN"
+        "    = candidato debole"
+    )
+
+    print(
+        "NO_RELIABLE_SYMBOL"
+        "  = nessun candidato affidabile"
+    )
+
+    print(
+        "SYMBOL_NOT_FOUND"
+        "    = Twelve Data non ha trovato strumento"
+    )
+
+    print()
+    print(
+        "🏁 DIAGNOSTIC COMPLETATO"
     )
 
     return 0
 
 
+# ============================================================
+# ENTRY POINT
+# ============================================================
+
 if __name__ == "__main__":
 
     sys.exit(
-        diagnose()
+        main()
     )
