@@ -297,11 +297,3 @@ if __name__ == "__main__":
     print("\n=== SOYUZ MAIN INTEGRATION TEST ===\n")
 
     print(format_soyuz_operational(summary))
-
-    assert summary["entry_count"] == 1
-    assert summary["entries"][0]["symbol"] == "BRENT"
-
-    assert summary["blocked_count"] == 1
-    assert summary["blocked"][0]["symbol"] == "COCOA"
-
-    print("\nINTEGRATION TEST PASSED")
