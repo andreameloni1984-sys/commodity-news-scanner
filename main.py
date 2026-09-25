@@ -1,299 +1,281 @@
 """
-SOYUZ GAGARIN — MAIN INTEGRATION v1
+SOYUZ GAGARIN — MAIN RUNNER v2.0
 
-Ponte tra main.py e i tre gate:
-    data_freshness
-    ranking_gate
-    gagarin_gate
+Entry point operativo del progetto.
 
-NON modifica la logica originale del motore.
-Filtra soltanto il risultato finale operativo.
+Pipeline unica:
+    UNIVERSE
+        ↓
+    GAGARIN ENGINE
+        ↓
+    SAFETY
+        ↓
+    TELEGRAM
+
+IMPORTANTE:
+- main.py NON contiene self-test.
+- main.py NON crea una seconda decision authority.
+- La decisione ENTRY/WAIT resta in engine/gagarin.py + engine/safety.py.
+- PAPER ONLY: nessun ordine viene eseguito.
 """
 
-from typing import Any, Dict, List
+from __future__ import annotations
 
-from soyuz_gate_adapter import evaluate_candidate
+from datetime import datetime, timezone
 
-
-def prepare_candidate(raw: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Normalizza il risultato prodotto dal motore attuale.
-    """
-
-    candidate = dict(raw)
-
-    # Alias comuni
-    if "symbol" not in candidate:
-        candidate["symbol"] = (
-            candidate.get("ticker")
-            or candidate.get("asset")
-            or candidate.get("name")
-            or "UNKNOWN"
-        )
-
-    if "probability" not in candidate:
-        candidate["probability"] = candidate.get(
-            "prob", candidate.get("entry_probability", 0)
-        )
-
-    if "quality" not in candidate:
-        candidate["quality"] = candidate.get(
-            "entry_quality", 0
-        )
-
-    if "confidence" not in candidate:
-        candidate["confidence"] = candidate.get(
-            "entry_confidence", 0
-        )
-
-    if "rr" not in candidate:
-        candidate["rr"] = candidate.get(
-            "risk_reward", 0
-        )
-
-    return candidate
+from commodities.universe import enabled_commodities, validate_universe
+from config import PAPER_TRADING_ONLY, TELEGRAM_ENABLED
+from engine.gagarin import analyze_universe
+from telegram.bot import format_report, send_telegram
 
 
-def evaluate_for_main(
-    raw: Dict[str, Any],
-    timeframe: str = "M5",
-) -> Dict[str, Any]:
-    """
-    Valuta un singolo candidato attraverso SOYUZ.
-    """
-
-    candidate = prepare_candidate(raw)
-
-    return evaluate_candidate(
-        candidate=candidate,
-        timestamp=candidate.get("timestamp"),
-        timeframe=timeframe,
+def _print_header():
+    print()
+    print("=" * 72)
+    print("🚀 SOYUZ GAGARIN")
+    print("=" * 72)
+    print(
+        "DATA → REGIME → STRUCTURE → SETUP → "
+        "TRIGGER → RISK → SAFETY"
     )
 
+    if PAPER_TRADING_ONLY:
+        print("MODE: PAPER ONLY")
+    else:
+        print("MODE: UNSAFE CONFIGURATION")
 
-def build_operational_list(
-    results: List[Dict[str, Any]],
-    timeframe: str = "M5",
-) -> List[Dict[str, Any]]:
-    """
-    Restituisce SOLO le opportunità autorizzate.
+    print("UTC:", datetime.now(timezone.utc).isoformat())
+    print()
 
-    ENTRY  -> incluso
-    WATCH  -> escluso
-    BLOCKED -> escluso
-    """
 
-    operational = []
+def _validate():
+    errors = validate_universe()
 
-    for raw in results:
+    if not PAPER_TRADING_ONLY:
+        errors.append("PAPER_TRADING_ONLY_MUST_BE_TRUE")
 
-        result = evaluate_for_main(
-            raw,
-            timeframe=timeframe,
+    return errors
+
+
+def _print_data_summary(results):
+    print("📡 DATA / ENGINE")
+    print("-" * 72)
+
+    for state in results:
+
+        if state.data_age_seconds is not None:
+            age = f"{state.data_age_seconds:.1f}s"
+        else:
+            age = "N/A"
+
+        status = state.metadata.get(
+            "data_status",
+            "UNKNOWN"
         )
 
-        if result["entry_authorized"]:
-            operational.append(result)
-
-    operational.sort(
-        key=lambda x: (
-            float(x.get("probability") or 0),
-            float(x.get("quality") or 0),
-            float(x.get("confidence") or 0),
-            float(x.get("rr") or 0),
-        ),
-        reverse=True,
-    )
-
-    return operational
-
-
-def build_soyuz_summary(
-    results: List[Dict[str, Any]],
-    timeframe: str = "M5",
-) -> Dict[str, Any]:
-    """
-    Produce il riepilogo che main.py può utilizzare.
-    """
-
-    evaluated = []
-
-    for raw in results:
-
-        result = evaluate_for_main(
-            raw,
-            timeframe=timeframe,
+        provider = (
+            state.data_source
+            if state.data_source
+            else "N/A"
         )
 
-        evaluated.append(result)
+        print(
+            f"{state.commodity:<18} "
+            f"{status:<7} "
+            f"age={age:<9} "
+            f"provider={provider}"
+        )
+
+    print()
+
+
+def _print_ranking(results):
+    print("📊 CLASSIFICA GAGARIN")
+    print("-" * 72)
+
+    if not results:
+        print("Nessun risultato.")
+        print()
+        return
+
+    for index, state in enumerate(results, start=1):
+
+        if state.setup_direction in {"LONG", "SHORT"}:
+            direction = state.setup_direction
+        else:
+            direction = "—"
+
+        print(
+            f"{index:>2}. "
+            f"{state.commodity:<18} "
+            f"{direction:<5} "
+            f"Prob {state.probability:>5.1f} "
+            f"Q {state.quality:>5.1f} "
+            f"C {state.confidence:>5.1f} "
+            f"{state.final_decision}"
+        )
+
+    print()
+
+
+def _print_operational(results):
 
     entries = [
-        r for r in evaluated
-        if r["state"] == "ENTRY"
+        state
+        for state in results
+        if state.final_decision == "ENTRY"
     ]
 
-    watch = [
-        r for r in evaluated
-        if r["state"] == "WATCH"
-    ]
-
-    blocked = [
-        r for r in evaluated
-        if r["state"] == "BLOCKED"
-    ]
-
-    entries.sort(
-        key=lambda x: (
-            float(x.get("probability") or 0),
-            float(x.get("quality") or 0),
-            float(x.get("confidence") or 0),
-            float(x.get("rr") or 0),
-        ),
-        reverse=True,
-    )
-
-    return {
-        "all": evaluated,
-        "entries": entries,
-        "watch": watch,
-        "blocked": blocked,
-        "entry_count": len(entries),
-        "watch_count": len(watch),
-        "blocked_count": len(blocked),
-        "no_entry": len(entries) == 0,
-    }
-
-
-def format_soyuz_operational(
-    summary: Dict[str, Any],
-) -> str:
-    """
-    Formato Telegram/console.
-    """
-
-    entries = summary["entries"]
-
-    lines = [
-        "🚀 SOYUZ GAGARIN",
-        "━━━━━━━━━━━━━━━━━━━━",
-    ]
+    print("🎯 OPERATIVITÀ")
+    print("-" * 72)
 
     if not entries:
+        print("🟡 NESSUNA ENTRATA AUTORIZZATA")
+        print()
+        return
 
-        lines.append(
-            "🟡 NESSUNA ENTRATA AUTORIZZATA"
+    print(f"🟢 {len(entries)} ENTRATA/E AUTORIZZATA/E")
+
+    for state in entries[:3]:
+
+        print()
+        print(
+            f"🟢 {state.commodity} "
+            f"{state.setup_direction}"
         )
 
-        return "\n".join(lines)
+        if state.entry is not None:
+            print(f"Entry: {state.entry:.6g}")
 
-    lines.append("🟢 OPPORTUNITÀ AUTORIZZATE")
+        if state.stop is not None:
+            print(f"SL:    {state.stop:.6g}")
 
-    for index, result in enumerate(entries, 1):
+        if state.tp1 is not None:
+            print(f"TP1:   {state.tp1:.6g}")
 
-        lines.extend([
-            "",
-            f"{index}. {result['symbol']} "
-            f"{result['direction']}",
-            f"Prob: {result['probability']:.1f}%",
-            f"Quality: {result['quality']:.1f}",
-            f"Confidence: {result['confidence']:.1f}",
-            f"RR: {result['rr']:.2f}",
-        ])
+        if state.tp2 is not None:
+            print(f"TP2:   {state.tp2:.6g}")
 
-        if result.get("entry") is not None:
-            lines.append(
-                f"Entry: {result['entry']}"
-            )
+        if state.tp3 is not None:
+            print(f"TP3:   {state.tp3:.6g}")
 
-        if result.get("stop") is not None:
-            lines.append(
-                f"SL: {result['stop']}"
-            )
+        if state.rr3 is not None:
+            print(f"RR3:   {state.rr3:.2f}")
 
-        if result.get("tp1") is not None:
-            lines.append(
-                f"TP1: {result['tp1']}"
-            )
+        if state.stop_atr is not None:
+            print(f"SL ATR:{state.stop_atr:.2f}")
 
-        if result.get("tp2") is not None:
-            lines.append(
-                f"TP2: {result['tp2']}"
-            )
-
-        if result.get("tp3") is not None:
-            lines.append(
-                f"TP3: {result['tp3']}"
-            )
-
-    return "\n".join(lines)
+    print()
 
 
-# ============================================================
-# SELF TEST
-# ============================================================
+def run():
+
+    _print_header()
+
+    # =========================================================
+    # 1. CONFIGURATION
+    # =========================================================
+
+    errors = _validate()
+
+    if errors:
+
+        print("❌ CONFIGURAZIONE BLOCCATA")
+
+        for error in errors:
+            print(f" - {error}")
+
+        return 1
+
+    # =========================================================
+    # 2. UNIVERSE
+    # =========================================================
+
+    commodities = enabled_commodities()
+
+    if not commodities:
+
+        print("❌ Nessuna commodity abilitata.")
+
+        return 1
+
+    print(
+        f"Universe: {len(commodities)} "
+        "commodity abilitate"
+    )
+
+    print()
+
+    # =========================================================
+    # 3. GAGARIN ENGINE
+    # =========================================================
+
+    try:
+
+        results = analyze_universe(
+            commodities
+        )
+
+    except Exception as exc:
+
+        print()
+        print("❌ GAGARIN ENGINE ERROR")
+        print(
+            f"{type(exc).__name__}: {exc}"
+        )
+
+        return 1
+
+    # =========================================================
+    # 4. DATA STATUS
+    # =========================================================
+
+    _print_data_summary(results)
+
+    # =========================================================
+    # 5. RANKING
+    # =========================================================
+
+    _print_ranking(results)
+
+    # =========================================================
+    # 6. FINAL OPERATIONAL GATE
+    # =========================================================
+
+    _print_operational(results)
+
+    # =========================================================
+    # 7. TELEGRAM
+    # =========================================================
+
+    report = format_report(results)
+
+    if TELEGRAM_ENABLED:
+
+        print("📨 TELEGRAM")
+
+        delivered = send_telegram(report)
+
+        if delivered:
+            print("Telegram API: OK")
+        else:
+            print("Telegram API: FAILED")
+
+    else:
+
+        print("📨 TELEGRAM: DISABLED")
+
+    # =========================================================
+    # 8. END
+    # =========================================================
+
+    print()
+    print("=" * 72)
+    print("✅ SOYUZ GAGARIN RUN COMPLETED")
+    print("=" * 72)
+
+    return 0
+
 
 if __name__ == "__main__":
-
-    valid = {
-        "symbol": "BRENT",
-        "direction": "SHORT",
-        "data_status": "LIVE",
-
-        "mtf_confirmed": True,
-
-        "setup_valid": True,
-
-        "trigger_confirmed": True,
-        "trigger_direction": "SHORT",
-
-        "entry": 98.20,
-        "stop": 98.50,
-
-        "tp1": 97.80,
-        "tp2": 97.65,
-        "tp3": 97.50,
-
-        "stop_atr": 1.5,
-        "rr": 2.66,
-
-        "probability": 72,
-        "quality": 70,
-        "confidence": 75,
-    }
-
-    blocked = {
-        "symbol": "COCOA",
-        "direction": "SHORT",
-        "data_status": "STALE",
-
-        "mtf_confirmed": True,
-        "setup_valid": True,
-
-        "trigger_confirmed": True,
-        "trigger_direction": "SHORT",
-
-        "entry": 5500,
-        "stop": 5550,
-
-        "tp1": 5400,
-        "tp2": 5350,
-        "tp3": 5300,
-
-        "stop_atr": 1.5,
-        "rr": 2.0,
-
-        "probability": 80,
-        "quality": 80,
-        "confidence": 80,
-    }
-
-    results = [
-        valid,
-        blocked,
-    ]
-
-    summary = build_soyuz_summary(results)
-
-    print("\n=== SOYUZ MAIN INTEGRATION TEST ===\n")
-
-    print(format_soyuz_operational(summary))
+    raise SystemExit(run())
