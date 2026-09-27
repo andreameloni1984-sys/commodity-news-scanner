@@ -1,5 +1,5 @@
 """
-SOYUZ GAGARIN — MAIN RUNNER v2.2
+SOYUZ GAGARIN — MAIN RUNNER v2.3
 
 Pipeline:
     UNIVERSE
@@ -9,6 +9,8 @@ Pipeline:
     SAFETY
         ↓
     PAPER JOURNAL
+        ↓
+    FEEDBACK
         ↓
     TELEGRAM
 
@@ -36,6 +38,12 @@ from paper_trade_journal import (
     record_entries,
 )
 
+from engine.feedback import (
+    record_entries as record_feedback_entries,
+    summarize as summarize_feedback,
+    format_summary as format_feedback_summary,
+)
+
 from telegram.bot import (
     format_report,
     send_telegram,
@@ -56,7 +64,7 @@ def _print_header():
 
     print(
         "DATA → REGIME → STRUCTURE → SETUP → "
-        "TRIGGER → RISK → SAFETY"
+        "TRIGGER → RISK → SAFETY → FEEDBACK"
     )
 
     if PAPER_TRADING_ONLY:
@@ -348,6 +356,48 @@ def _print_paper_journal(results):
 
 
 # ============================================================
+# FEEDBACK ENGINE
+# ============================================================
+
+def _print_feedback(results):
+
+    print("🧪 SOYUZ FEEDBACK")
+    print("-" * 72)
+
+    try:
+
+        recorded = record_feedback_entries(
+            results
+        )
+
+        summary = summarize_feedback()
+
+        print(
+            f"New feedback signals: "
+            f"{recorded}"
+        )
+
+        print(
+            format_feedback_summary(
+                summary
+            )
+        )
+
+    except Exception as exc:
+
+        print(
+            "⚠️ FEEDBACK ERROR"
+        )
+
+        print(
+            f"{type(exc).__name__}: "
+            f"{exc}"
+        )
+
+    print()
+
+
+# ============================================================
 # MAIN RUN
 # ============================================================
 
@@ -444,6 +494,14 @@ def run():
     # --------------------------------------------------------
 
     _print_paper_journal(
+        results
+    )
+
+    # --------------------------------------------------------
+    # FEEDBACK
+    # --------------------------------------------------------
+
+    _print_feedback(
         results
     )
 
