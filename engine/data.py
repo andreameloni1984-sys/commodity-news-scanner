@@ -1,5 +1,5 @@
 """
-SOYUZ GAGARIN — engine/data.py v4.0
+SOYUZ GAGARIN — engine/data.py v4.1
 
 DATA ENGINE
 
@@ -20,7 +20,7 @@ LIVE is never invented.
 
 The data engine is responsible only for:
 
-DATA → OHLC → MTF → ATR → FRESHNESS
+DATA → OHLC → MTF → ATR → FRESHNESS → MARKET STATUS
 
 It does NOT make trading decisions.
 """
@@ -40,6 +40,9 @@ from config import (
     TWELVE_DATA_API_KEY,
 )
 
+from engine.market_status import classify_data_status
+
+
 BIQUOTE_BASE = "https://biquote.io/api"
 TWELVE_DATA_BASE = "https://api.twelvedata.com"
 
@@ -56,6 +59,7 @@ YAHOO_URLS = (
     "https://query2.finance.yahoo.com/v8/finance/chart/{symbol}",
 )
 
+
 BIQUOTE_SYMBOLS = {
     "XAU/USD": "XAUUSD",
     "XAG/USD": "XAGUSD",
@@ -65,12 +69,14 @@ BIQUOTE_SYMBOLS = {
     "BRENT/USD": "UKOIL",
 }
 
+
 YAHOO_SYMBOLS = {
     "RICE/USD": "ZR=F",
     "SUGAR/USD": "SB=F",
     "COCOA/USD": "CC=F",
     "COFFEE/USD": "KC=F",
 }
+
 
 AGRI_TERMS = {
     "RICE/USD": ("rice", "rough rice"),
@@ -79,17 +85,25 @@ AGRI_TERMS = {
     "COFFEE/USD": ("coffee", "arabica"),
 }
 
+
+# Never consider a market LIVE if the last bar is older
+# than this minimum effective threshold.
 EFFECTIVE_LIVE_MAX_AGE_SECONDS = max(
     float(LIVE_MAX_AGE_SECONDS),
     360.0,
 )
 
+
+# Small tolerance for providers that timestamp the latest
+# candle slightly in the future.
 FUTURE_TIMESTAMP_TOLERANCE_SECONDS = 90.0
 
+
 HEADERS = {
-    "User-Agent": "SOYUZ-GAGARIN/4.0",
+    "User-Agent": "SOYUZ-GAGARIN/4.1",
     "Accept": "application/json,text/plain,*/*",
 }
+
 
 _TWELVE_COMMODITY_CATALOG: Optional[List[Dict[str, Any]]] = None
 _TWELVE_SYMBOL_CACHE: Dict[str, str] = {}
@@ -276,11 +290,18 @@ def _find_twelve_agri_symbol(
     candidates = []
 
     for item in catalog:
-        symbol = str(item.get("symbol", "")).strip()
-        name = str(item.get("name", "")).strip()
+        symbol = str(
+            item.get("symbol", "")
+        ).strip()
+
+        name = str(
+            item.get("name", "")
+        ).strip()
+
         description = str(
             item.get("description", "")
         ).strip()
+
         category = str(
             item.get("category", "")
         ).strip()
@@ -311,7 +332,10 @@ def _find_twelve_agri_symbol(
         ):
             score += 10
 
-        if "futures" in text or "future" in text:
+        if (
+            "futures" in text
+            or "future" in text
+        ):
             score += 5
 
         candidates.append(
@@ -338,7 +362,9 @@ def _find_twelve_agri_symbol(
 
     resolved_symbol = best[1]
 
-    _TWELVE_SYMBOL_CACHE[internal_symbol] = resolved_symbol
+    _TWELVE_SYMBOL_CACHE[
+        internal_symbol
+    ] = resolved_symbol
 
     return resolved_symbol, None
 
@@ -639,6 +665,7 @@ def _atr(
                 previous,
             )
         )
+
         previous = candle["close"]
 
     values = values[-period:]
@@ -732,7 +759,10 @@ def _freshness(latest_timestamp):
 
     delta = now - latest_timestamp
 
-    if delta < -FUTURE_TIMESTAMP_TOLERANCE_SECONDS:
+    if (
+        delta
+        < -FUTURE_TIMESTAMP_TOLERANCE_SECONDS
+    ):
         return (
             False,
             0.0,
@@ -741,7 +771,10 @@ def _freshness(latest_timestamp):
 
     age = max(0.0, delta)
 
-    if age <= EFFECTIVE_LIVE_MAX_AGE_SECONDS:
+    if (
+        age
+        <= EFFECTIVE_LIVE_MAX_AGE_SECONDS
+    ):
         return (
             True,
             age,
@@ -761,6 +794,19 @@ def _finalize(
     provider,
     error=None,
 ):
+    """
+    Finalize raw provider data and classify it.
+
+    Important:
+    freshness and market status are two different concepts.
+
+    Example:
+    - Sunday + old candle = MARKET_CLOSED
+    - Weekday + old candle = STALE
+
+    MARKET_CLOSED never becomes LIVE.
+    """
+
     if not candles:
         state.data_ok = False
         state.live = False
@@ -770,10 +816,17 @@ def _finalize(
             error or "NO_DATA"
         )
 
-        state.metadata["data_status"] = "NO_DATA"
+        state.metadata["data_status"] = (
+            "DATA_ERROR"
+        )
 
-        if "DATA_MISSING" not in state.blockers:
-            state.blockers.append("DATA_MISSING")
+        if (
+            "DATA_MISSING"
+            not in state.blockers
+        ):
+            state.blockers.append(
+                "DATA_MISSING"
+            )
 
         return state
 
@@ -785,23 +838,28 @@ def _finalize(
     state.candles = candles
 
     state.opens = [
-        x["open"] for x in candles
+        x["open"]
+        for x in candles
     ]
 
     state.highs = [
-        x["high"] for x in candles
+        x["high"]
+        for x in candles
     ]
 
     state.lows = [
-        x["low"] for x in candles
+        x["low"]
+        for x in candles
     ]
 
     state.closes = [
-        x["close"] for x in candles
+        x["close"]
+        for x in candles
     ]
 
     state.volumes = [
-        x["volume"] for x in candles
+        x["volume"]
+        for x in candles
     ]
 
     state.price = candles[-1]["close"]
@@ -818,50 +876,123 @@ def _finalize(
 
     latest = candles[-1]["timestamp"]
 
-    live, age, status = _freshness(latest)
+    fresh_live, age, freshness_status = (
+        _freshness(latest)
+    )
 
     state.data_source = provider
     state.data_age_seconds = age
     state.data_ok = True
-    state.live = live
+
+    # Keep the original freshness information.
+    state.metadata[
+        "freshness_status"
+    ] = freshness_status
+
+    # -------------------------------------------------
+    # MARKET STATUS
+    # -------------------------------------------------
+    #
+    # This is the important correction.
+    #
+    # classify_data_status distinguishes:
+    #
+    # LIVE
+    # STALE
+    # MARKET_CLOSED
+    # DATA_ERROR
+    #
+    # The market status is determined independently
+    # from the age of the latest candle.
+    # -------------------------------------------------
+
+    data_status = classify_data_status(
+        state.commodity,
+        live=fresh_live,
+        data_ok=state.data_ok,
+    )
+
+    # -------------------------------------------------
+    # LIVE
+    # -------------------------------------------------
+
+    if data_status == "LIVE":
+        state.live = True
+
+    # -------------------------------------------------
+    # MARKET CLOSED
+    # -------------------------------------------------
+
+    elif data_status == "MARKET_CLOSED":
+        state.live = False
+
+        # Market is closed, so old candles are not
+        # considered a provider failure.
+        #
+        # Do NOT add DATA_NOT_LIVE here.
+        if (
+            "MARKET_CLOSED"
+            not in state.blockers
+        ):
+            state.blockers.append(
+                "MARKET_CLOSED"
+            )
+
+    # -------------------------------------------------
+    # STALE
+    # -------------------------------------------------
+
+    elif data_status == "STALE":
+        state.live = False
+
+        if (
+            "DATA_NOT_LIVE"
+            not in state.blockers
+        ):
+            state.blockers.append(
+                "DATA_NOT_LIVE"
+            )
+
+    # -------------------------------------------------
+    # DATA ERROR
+    # -------------------------------------------------
+
+    else:
+        state.live = False
+        state.data_ok = False
+
+        if (
+            "DATA_ERROR"
+            not in state.blockers
+        ):
+            state.blockers.append(
+                "DATA_ERROR"
+            )
 
     state.metadata["provider"] = provider
-    state.metadata["data_status"] = status
-    state.metadata["data_error"] = error
 
-    state.metadata["last_bar_timestamp"] = (
-        datetime.fromtimestamp(
-            latest,
-            tz=timezone.utc,
-        ).isoformat()
-    )
+    state.metadata[
+        "data_status"
+    ] = data_status
+
+    state.metadata[
+        "data_error"
+    ] = error
+
+    state.metadata[
+        "last_bar_timestamp"
+    ] = datetime.fromtimestamp(
+        latest,
+        tz=timezone.utc,
+    ).isoformat()
 
     state.metadata[
         "effective_live_max_age_seconds"
     ] = EFFECTIVE_LIVE_MAX_AGE_SECONDS
 
-    if status == "FUTURE_TIMESTAMP":
-        state.data_ok = False
-        state.live = False
-
-        state.metadata["data_error"] = (
-            "Latest market timestamp "
-            "is in the future."
-        )
-
-        if (
-            "DATA_TIMESTAMP_INVALID"
-            not in state.blockers
-        ):
-            state.blockers.append(
-                "DATA_TIMESTAMP_INVALID"
-            )
-
-    elif not live:
-        if "DATA_NOT_LIVE" not in state.blockers:
-            state.blockers.append(
-                "DATA_NOT_LIVE"
-            )
+    state.metadata[
+        "fresh_live"
+    ] = fresh_live
 
     return state
 
@@ -875,6 +1006,10 @@ def load_data(
     state.commodity = commodity.name
     state.symbol = symbol
 
+    # -------------------------------------------------
+    # GOLD
+    # -------------------------------------------------
+
     if symbol == "XAU/USD":
         candles, error = _fetch_twelve(symbol)
 
@@ -885,6 +1020,10 @@ def load_data(
                 "TWELVE_DATA",
                 error,
             )
+
+    # -------------------------------------------------
+    # METALS / ENERGY
+    # -------------------------------------------------
 
     if symbol in BIQUOTE_SYMBOLS:
         candles, error = _fetch_biquote(symbol)
@@ -897,12 +1036,20 @@ def load_data(
                 error,
             )
 
+    # -------------------------------------------------
+    # AGRICULTURE
+    # -------------------------------------------------
+
     if symbol in AGRI_TERMS:
-        candles, error = _fetch_twelve_agriculture(symbol)
+        candles, error = (
+            _fetch_twelve_agriculture(symbol)
+        )
 
         if candles:
             provider_symbol = (
-                _TWELVE_SYMBOL_CACHE.get(symbol)
+                _TWELVE_SYMBOL_CACHE.get(
+                    symbol
+                )
             )
 
             state.metadata[
@@ -918,7 +1065,9 @@ def load_data(
 
         twelve_error = error
 
-        yahoo_candles, yahoo_error = _fetch_yahoo(symbol)
+        yahoo_candles, yahoo_error = (
+            _fetch_yahoo(symbol)
+        )
 
         if yahoo_candles:
             return _finalize(
@@ -941,6 +1090,10 @@ def load_data(
                 f"YAHOO: {yahoo_error}"
             ),
         )
+
+    # -------------------------------------------------
+    # GENERIC YAHOO FALLBACK
+    # -------------------------------------------------
 
     candles, error = _fetch_yahoo(symbol)
 
