@@ -1,0 +1,1384 @@
+"""
+SOYUZ GAGARIN — FEEDBACK ENGINE v1.0
+
+Obiettivo:
+    trasformare i segnali PAPER di Gagarin in dati misurabili.
+
+Pipeline:
+
+    SIGNAL
+       ↓
+    TRACK
+       ↓
+    OUTCOME
+       ↓
+    STATISTICS
+       ↓
+    FEEDBACK
+
+Il modulo NON:
+
+    - modifica la decisione Gagarin;
+    - apre ordini reali;
+    - modifica automaticamente le soglie;
+    - ricalcola il segnale originale.
+
+Registra invece:
+
+    - snapshot del segnale;
+    - Entry / SL / TP1 / TP2 / TP3;
+    - Probability / Quality / Confidence;
+    - Regime / Structure / Setup / Trigger;
+    - MTF;
+    - fonte e stato dati;
+    - risultato;
+    - MFE / MAE;
+    - R multiple;
+    - durata del trade.
+
+PAPER ONLY.
+"""
+
+from __future__ import annotations
+
+import csv
+import hashlib
+
+from collections import Counter, defaultdict
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Iterable, Optional
+
+
+# ============================================================
+# FILE
+# ============================================================
+
+FEEDBACK_FILE = Path(
+    "gagarin_feedback.csv"
+)
+
+
+# ============================================================
+# OUTCOME
+# ============================================================
+
+OUTCOME_SL = "SL"
+OUTCOME_TP1 = "TP1"
+OUTCOME_TP2 = "TP2"
+OUTCOME_TP3 = "TP3"
+OUTCOME_TIMEOUT = "TIMEOUT"
+OUTCOME_OPEN = "OPEN"
+OUTCOME_INVALID = "INVALID"
+
+
+# ============================================================
+# CSV FIELDS
+# ============================================================
+
+FIELDS = [
+    "signal_id",
+    "timestamp_utc",
+
+    "commodity",
+    "symbol",
+    "direction",
+
+    "entry",
+    "stop",
+    "tp1",
+    "tp2",
+    "tp3",
+
+    "probability",
+    "quality",
+    "confidence",
+
+    "rr1",
+    "rr2",
+    "rr3",
+    "stop_atr",
+
+    "regime",
+
+    "structure",
+    "structure_direction",
+
+    "setup",
+    "setup_direction",
+    "setup_quality",
+
+    "trigger",
+    "trigger_direction",
+    "trigger_confirmed",
+
+    "mtf_structure",
+    "mtf_direction",
+    "mtf_alignment",
+
+    "data_source",
+    "data_status",
+
+    "outcome",
+    "outcome_price",
+
+    "mfe",
+    "mae",
+
+    "bars_held",
+
+    "r_multiple",
+]
+
+
+# ============================================================
+# SIGNAL RECORD
+# ============================================================
+
+@dataclass
+class SignalRecord:
+
+    signal_id: str
+    timestamp_utc: str
+
+    commodity: str
+    symbol: str
+    direction: str
+
+    entry: Optional[float]
+    stop: Optional[float]
+    tp1: Optional[float]
+    tp2: Optional[float]
+    tp3: Optional[float]
+
+    probability: float
+    quality: float
+    confidence: float
+
+    rr1: Optional[float]
+    rr2: Optional[float]
+    rr3: Optional[float]
+    stop_atr: Optional[float]
+
+    regime: str
+
+    structure: str
+    structure_direction: str
+
+    setup: str
+    setup_direction: str
+    setup_quality: Optional[float]
+
+    trigger: str
+    trigger_direction: str
+    trigger_confirmed: bool
+
+    mtf_structure: str
+    mtf_direction: str
+    mtf_alignment: bool
+
+    data_source: str
+    data_status: str
+
+    outcome: str = OUTCOME_OPEN
+    outcome_price: Optional[float] = None
+
+    mfe: Optional[float] = None
+    mae: Optional[float] = None
+
+    bars_held: int = 0
+
+    r_multiple: Optional[float] = None
+
+
+# ============================================================
+# HELPERS
+# ============================================================
+
+def _value(
+    value,
+    default="",
+):
+    if value is None:
+        return default
+
+    return value
+
+
+def _float(
+    value,
+):
+    if value in (
+        None,
+        "",
+        "None",
+    ):
+        return None
+
+    try:
+        return float(value)
+
+    except (
+        TypeError,
+        ValueError,
+    ):
+        return None
+
+
+def _bool(
+    value,
+):
+    if isinstance(
+        value,
+        bool,
+    ):
+        return value
+
+    return str(
+        value
+    ).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "y",
+    }
+
+
+def _text(
+    value,
+):
+    if value is None:
+        return ""
+
+    return str(value)
+
+
+# ============================================================
+# SIGNAL ID
+# ============================================================
+
+def make_signal_id(
+    state,
+    timestamp: Optional[str] = None,
+):
+    """
+    Crea un ID stabile per il segnale.
+    """
+
+    if timestamp is None:
+
+        timestamp = (
+            datetime.now(
+                timezone.utc
+            ).isoformat()
+        )
+
+    raw = (
+        f"{timestamp}|"
+        f"{state.commodity}|"
+        f"{state.symbol}|"
+        f"{state.setup_direction}|"
+        f"{state.entry}"
+    )
+
+    return hashlib.sha256(
+        raw.encode(
+            "utf-8"
+        )
+    ).hexdigest()[:16]
+
+
+# ============================================================
+# BUILD SIGNAL
+# ============================================================
+
+def build_signal_record(
+    state,
+    timestamp: Optional[str] = None,
+):
+    """
+    Converte uno State Gagarin
+    in uno snapshot del segnale.
+    """
+
+    if timestamp is None:
+
+        timestamp = (
+            datetime.now(
+                timezone.utc
+            ).isoformat()
+        )
+
+    metadata = (
+        state.metadata
+        if isinstance(
+            state.metadata,
+            dict,
+        )
+        else {}
+    )
+
+    return SignalRecord(
+
+        signal_id=make_signal_id(
+            state,
+            timestamp,
+        ),
+
+        timestamp_utc=timestamp,
+
+        commodity=_text(
+            state.commodity
+        ),
+
+        symbol=_text(
+            state.symbol
+        ),
+
+        direction=_text(
+            state.setup_direction
+        ),
+
+        entry=_float(
+            state.entry
+        ),
+
+        stop=_float(
+            state.stop
+        ),
+
+        tp1=_float(
+            state.tp1
+        ),
+
+        tp2=_float(
+            state.tp2
+        ),
+
+        tp3=_float(
+            state.tp3
+        ),
+
+        probability=float(
+            _value(
+                state.probability,
+                0,
+            )
+        ),
+
+        quality=float(
+            _value(
+                state.quality,
+                0,
+            )
+        ),
+
+        confidence=float(
+            _value(
+                state.confidence,
+                0,
+            )
+        ),
+
+        rr1=_float(
+            state.rr1
+        ),
+
+        rr2=_float(
+            state.rr2
+        ),
+
+        rr3=_float(
+            state.rr3
+        ),
+
+        stop_atr=_float(
+            state.stop_atr
+        ),
+
+        regime=_text(
+            state.regime
+        ),
+
+        structure=_text(
+            state.structure
+        ),
+
+        structure_direction=_text(
+            state.structure_direction
+        ),
+
+        setup=_text(
+            state.setup
+        ),
+
+        setup_direction=_text(
+            state.setup_direction
+        ),
+
+        setup_quality=_float(
+            state.setup_quality
+        ),
+
+        trigger=_text(
+            state.trigger
+        ),
+
+        trigger_direction=_text(
+            state.trigger_direction
+        ),
+
+        trigger_confirmed=bool(
+            state.trigger_confirmed
+        ),
+
+        mtf_structure=_text(
+            state.mtf_structure
+        ),
+
+        mtf_direction=_text(
+            state.mtf_direction
+        ),
+
+        mtf_alignment=bool(
+            state.mtf_alignment
+        ),
+
+        data_source=_text(
+            state.data_source
+        ),
+
+        data_status=_text(
+            metadata.get(
+                "data_status",
+                "UNKNOWN",
+            )
+        ),
+    )
+
+
+# ============================================================
+# SAVE SIGNAL
+# ============================================================
+
+def append_signal(
+    record: SignalRecord,
+):
+    """
+    Salva uno snapshot nel journal.
+    """
+
+    file_exists = (
+        FEEDBACK_FILE.exists()
+    )
+
+    with FEEDBACK_FILE.open(
+        "a",
+        newline="",
+        encoding="utf-8",
+    ) as file:
+
+        writer = csv.DictWriter(
+            file,
+            fieldnames=FIELDS,
+        )
+
+        if not file_exists:
+
+            writer.writeheader()
+
+        writer.writerow(
+            asdict(record)
+        )
+
+
+# ============================================================
+# VALID GEOMETRY
+# ============================================================
+
+def _valid_geometry(
+    record: SignalRecord,
+):
+
+    if record.entry is None:
+        return False
+
+    if record.stop is None:
+        return False
+
+    if record.direction not in {
+        "LONG",
+        "SHORT",
+    }:
+        return False
+
+    return True
+
+
+# ============================================================
+# R MULTIPLE
+# ============================================================
+
+def _r_multiple(
+    record: SignalRecord,
+    price: float,
+):
+
+    if (
+        record.entry is None
+        or record.stop is None
+    ):
+        return None
+
+    risk = abs(
+        record.entry
+        - record.stop
+    )
+
+    if risk <= 0:
+        return None
+
+    if record.direction == "LONG":
+
+        return (
+            price
+            - record.entry
+        ) / risk
+
+    if record.direction == "SHORT":
+
+        return (
+            record.entry
+            - price
+        ) / risk
+
+    return None
+
+
+# ============================================================
+# EVALUATE PRICE PATH
+# ============================================================
+
+def evaluate_path(
+    record: SignalRecord,
+    bars: Iterable[dict],
+    timeout_bars: int = 288,
+):
+    """
+    Valuta il percorso successivo
+    al segnale.
+
+    Ogni barra deve contenere:
+
+        high
+        low
+        close
+
+    Regola conservativa:
+
+    se nello stesso candle vengono
+    toccati SL e TP, consideriamo SL.
+
+    Questo evita di attribuire un TP
+    che il timeframe non consente
+    di dimostrare con certezza.
+    """
+
+    if not _valid_geometry(
+        record
+    ):
+
+        record.outcome = (
+            OUTCOME_INVALID
+        )
+
+        return record
+
+    bars = list(
+        bars
+    )
+
+    if not bars:
+
+        record.outcome = (
+            OUTCOME_OPEN
+        )
+
+        return record
+
+    entry = record.entry
+    stop = record.stop
+
+    mfe_price = entry
+    mae_price = entry
+
+    for index, bar in enumerate(
+        bars[:timeout_bars],
+        start=1,
+    ):
+
+        high = _float(
+            bar.get("high")
+        )
+
+        low = _float(
+            bar.get("low")
+        )
+
+        close = _float(
+            bar.get("close")
+        )
+
+        if (
+            high is None
+            or low is None
+        ):
+            continue
+
+        record.bars_held = index
+
+        # ----------------------------------------------------
+        # LONG
+        # ----------------------------------------------------
+
+        if record.direction == "LONG":
+
+            mfe_price = max(
+                mfe_price,
+                high,
+            )
+
+            mae_price = min(
+                mae_price,
+                low,
+            )
+
+            hit_sl = (
+                low <= stop
+            )
+
+            hit_tp3 = (
+                record.tp3 is not None
+                and high >= record.tp3
+            )
+
+            hit_tp2 = (
+                record.tp2 is not None
+                and high >= record.tp2
+            )
+
+            hit_tp1 = (
+                record.tp1 is not None
+                and high >= record.tp1
+            )
+
+        # ----------------------------------------------------
+        # SHORT
+        # ----------------------------------------------------
+
+        else:
+
+            mfe_price = min(
+                mfe_price,
+                low,
+            )
+
+            mae_price = max(
+                mae_price,
+                high,
+            )
+
+            hit_sl = (
+                high >= stop
+            )
+
+            hit_tp3 = (
+                record.tp3 is not None
+                and low <= record.tp3
+            )
+
+            hit_tp2 = (
+                record.tp2 is not None
+                and low <= record.tp2
+            )
+
+            hit_tp1 = (
+                record.tp1 is not None
+                and low <= record.tp1
+            )
+
+        # ----------------------------------------------------
+        # CONSERVATIVE PRIORITY
+        # ----------------------------------------------------
+
+        if hit_sl:
+
+            record.outcome = (
+                OUTCOME_SL
+            )
+
+            record.outcome_price = (
+                stop
+            )
+
+            break
+
+        if hit_tp3:
+
+            record.outcome = (
+                OUTCOME_TP3
+            )
+
+            record.outcome_price = (
+                record.tp3
+            )
+
+            break
+
+        if hit_tp2:
+
+            record.outcome = (
+                OUTCOME_TP2
+            )
+
+            record.outcome_price = (
+                record.tp2
+            )
+
+            break
+
+        if hit_tp1:
+
+            record.outcome = (
+                OUTCOME_TP1
+            )
+
+            record.outcome_price = (
+                record.tp1
+            )
+
+            break
+
+        # ----------------------------------------------------
+        # TIMEOUT
+        # ----------------------------------------------------
+
+        if (
+            index >= timeout_bars
+            and close is not None
+        ):
+
+            record.outcome = (
+                OUTCOME_TIMEOUT
+            )
+
+            record.outcome_price = (
+                close
+            )
+
+    # --------------------------------------------------------
+    # STILL OPEN AFTER PATH
+    # --------------------------------------------------------
+
+    if (
+        record.outcome
+        == OUTCOME_OPEN
+    ):
+
+        limit = min(
+            len(bars),
+            timeout_bars,
+        )
+
+        if limit > 0:
+
+            last_close = _float(
+                bars[
+                    limit - 1
+                ].get("close")
+            )
+
+            if last_close is not None:
+
+                record.outcome = (
+                    OUTCOME_TIMEOUT
+                )
+
+                record.outcome_price = (
+                    last_close
+                )
+
+    # --------------------------------------------------------
+    # MFE / MAE
+    # --------------------------------------------------------
+
+    record.mfe = _r_multiple(
+        record,
+        mfe_price,
+    )
+
+    record.mae = _r_multiple(
+        record,
+        mae_price,
+    )
+
+    # --------------------------------------------------------
+    # FINAL R
+    # --------------------------------------------------------
+
+    if (
+        record.outcome_price
+        is not None
+    ):
+
+        record.r_multiple = (
+            _r_multiple(
+                record,
+                record.outcome_price,
+            )
+        )
+
+    return record
+
+
+# ============================================================
+# LOAD FEEDBACK
+# ============================================================
+
+def load_feedback(
+    path: Path = FEEDBACK_FILE,
+):
+
+    if not path.exists():
+
+        return []
+
+    records = []
+
+    with path.open(
+        "r",
+        newline="",
+        encoding="utf-8",
+    ) as file:
+
+        reader = csv.DictReader(
+            file
+        )
+
+        for row in reader:
+
+            records.append(
+                SignalRecord(
+
+                    signal_id=_text(
+                        row.get(
+                            "signal_id"
+                        )
+                    ),
+
+                    timestamp_utc=_text(
+                        row.get(
+                            "timestamp_utc"
+                        )
+                    ),
+
+                    commodity=_text(
+                        row.get(
+                            "commodity"
+                        )
+                    ),
+
+                    symbol=_text(
+                        row.get(
+                            "symbol"
+                        )
+                    ),
+
+                    direction=_text(
+                        row.get(
+                            "direction"
+                        )
+                    ),
+
+                    entry=_float(
+                        row.get(
+                            "entry"
+                        )
+                    ),
+
+                    stop=_float(
+                        row.get(
+                            "stop"
+                        )
+                    ),
+
+                    tp1=_float(
+                        row.get(
+                            "tp1"
+                        )
+                    ),
+
+                    tp2=_float(
+                        row.get(
+                            "tp2"
+                        )
+                    ),
+
+                    tp3=_float(
+                        row.get(
+                            "tp3"
+                        )
+                    ),
+
+                    probability=float(
+                        _value(
+                            _float(
+                                row.get(
+                                    "probability"
+                                )
+                            ),
+                            0,
+                        )
+                    ),
+
+                    quality=float(
+                        _value(
+                            _float(
+                                row.get(
+                                    "quality"
+                                )
+                            ),
+                            0,
+                        )
+                    ),
+
+                    confidence=float(
+                        _value(
+                            _float(
+                                row.get(
+                                    "confidence"
+                                )
+                            ),
+                            0,
+                        )
+                    ),
+
+                    rr1=_float(
+                        row.get(
+                            "rr1"
+                        )
+                    ),
+
+                    rr2=_float(
+                        row.get(
+                            "rr2"
+                        )
+                    ),
+
+                    rr3=_float(
+                        row.get(
+                            "rr3"
+                        )
+                    ),
+
+                    stop_atr=_float(
+                        row.get(
+                            "stop_atr"
+                        )
+                    ),
+
+                    regime=_text(
+                        row.get(
+                            "regime"
+                        )
+                    ),
+
+                    structure=_text(
+                        row.get(
+                            "structure"
+                        )
+                    ),
+
+                    structure_direction=_text(
+                        row.get(
+                            "structure_direction"
+                        )
+                    ),
+
+                    setup=_text(
+                        row.get(
+                            "setup"
+                        )
+                    ),
+
+                    setup_direction=_text(
+                        row.get(
+                            "setup_direction"
+                        )
+                    ),
+
+                    setup_quality=_float(
+                        row.get(
+                            "setup_quality"
+                        )
+                    ),
+
+                    trigger=_text(
+                        row.get(
+                            "trigger"
+                        )
+                    ),
+
+                    trigger_direction=_text(
+                        row.get(
+                            "trigger_direction"
+                        )
+                    ),
+
+                    trigger_confirmed=_bool(
+                        row.get(
+                            "trigger_confirmed"
+                        )
+                    ),
+
+                    mtf_structure=_text(
+                        row.get(
+                            "mtf_structure"
+                        )
+                    ),
+
+                    mtf_direction=_text(
+                        row.get(
+                            "mtf_direction"
+                        )
+                    ),
+
+                    mtf_alignment=_bool(
+                        row.get(
+                            "mtf_alignment"
+                        )
+                    ),
+
+                    data_source=_text(
+                        row.get(
+                            "data_source"
+                        )
+                    ),
+
+                    data_status=_text(
+                        row.get(
+                            "data_status"
+                        )
+                    ),
+
+                    outcome=_text(
+                        row.get(
+                            "outcome",
+                            OUTCOME_OPEN,
+                        )
+                    ),
+
+                    outcome_price=_float(
+                        row.get(
+                            "outcome_price"
+                        )
+                    ),
+
+                    mfe=_float(
+                        row.get(
+                            "mfe"
+                        )
+                    ),
+
+                    mae=_float(
+                        row.get(
+                            "mae"
+                        )
+                    ),
+
+                    bars_held=int(
+                        _value(
+                            row.get(
+                                "bars_held"
+                            ),
+                            0,
+                        )
+                    ),
+
+                    r_multiple=_float(
+                        row.get(
+                            "r_multiple"
+                        )
+                    ),
+                )
+            )
+
+    return records
+
+
+# ============================================================
+# STATISTICS
+# ============================================================
+
+def summarize(
+    records: Iterable[
+        SignalRecord
+    ],
+):
+
+    records = list(
+        records
+    )
+
+    closed = [
+        record
+        for record in records
+        if record.outcome
+        not in {
+            OUTCOME_OPEN,
+            OUTCOME_INVALID,
+        }
+    ]
+
+    wins = [
+        record
+        for record in closed
+        if record.outcome
+        in {
+            OUTCOME_TP1,
+            OUTCOME_TP2,
+            OUTCOME_TP3,
+        }
+    ]
+
+    losses = [
+        record
+        for record in closed
+        if record.outcome
+        == OUTCOME_SL
+    ]
+
+    r_values = [
+        record.r_multiple
+        for record in closed
+        if record.r_multiple
+        is not None
+    ]
+
+    avg_r = (
+        sum(r_values)
+        / len(r_values)
+        if r_values
+        else None
+    )
+
+    win_rate = (
+        len(wins)
+        / len(closed)
+        * 100
+        if closed
+        else None
+    )
+
+    # --------------------------------------------------------
+    # PER COMMODITY
+    # --------------------------------------------------------
+
+    by_commodity = defaultdict(
+        lambda: {
+            "signals": 0,
+            "closed": 0,
+            "wins": 0,
+            "losses": 0,
+            "r_values": [],
+        }
+    )
+
+    for record in records:
+
+        bucket = (
+            by_commodity[
+                record.commodity
+            ]
+        )
+
+        bucket[
+            "signals"
+        ] += 1
+
+        if record.outcome not in {
+            OUTCOME_OPEN,
+            OUTCOME_INVALID,
+        }:
+
+            bucket[
+                "closed"
+            ] += 1
+
+        if record.outcome in {
+            OUTCOME_TP1,
+            OUTCOME_TP2,
+            OUTCOME_TP3,
+        }:
+
+            bucket[
+                "wins"
+            ] += 1
+
+        if (
+            record.outcome
+            == OUTCOME_SL
+        ):
+
+            bucket[
+                "losses"
+            ] += 1
+
+        if record.r_multiple is not None:
+
+            bucket[
+                "r_values"
+            ].append(
+                record.r_multiple
+            )
+
+    commodity_stats = {}
+
+    for (
+        commodity,
+        bucket,
+    ) in by_commodity.items():
+
+        values = bucket.pop(
+            "r_values"
+        )
+
+        bucket[
+            "avg_r"
+        ] = (
+            sum(values)
+            / len(values)
+            if values
+            else None
+        )
+
+        bucket[
+            "win_rate"
+        ] = (
+            bucket["wins"]
+            / bucket["closed"]
+            * 100
+            if bucket["closed"]
+            else None
+        )
+
+        commodity_stats[
+            commodity
+        ] = bucket
+
+    return {
+        "signals": len(
+            records
+        ),
+
+        "closed": len(
+            closed
+        ),
+
+        "open": sum(
+            1
+            for record in records
+            if record.outcome
+            == OUTCOME_OPEN
+        ),
+
+        "invalid": sum(
+            1
+            for record in records
+            if record.outcome
+            == OUTCOME_INVALID
+        ),
+
+        "wins": len(
+            wins
+        ),
+
+        "losses": len(
+            losses
+        ),
+
+        "win_rate": win_rate,
+
+        "avg_r": avg_r,
+
+        "outcomes": dict(
+            Counter(
+                record.outcome
+                for record in records
+            )
+        ),
+
+        "by_commodity":
+            commodity_stats,
+    }
+
+
+# ============================================================
+# COMPACT REPORT
+# ============================================================
+
+def format_summary(
+    summary: dict,
+):
+
+    def fmt(
+        value,
+    ):
+
+        if value is None:
+
+            return "N/A"
+
+        return f"{value:.2f}"
+
+    lines = [
+
+        "🧪 SOYUZ FEEDBACK",
+
+        "━━━━━━━━━━━━━━━━━━━━",
+
+        (
+            f"Signals: "
+            f"{summary['signals']}"
+        ),
+
+        (
+            f"Closed: "
+            f"{summary['closed']}"
+        ),
+
+        (
+            f"Wins: "
+            f"{summary['wins']}"
+        ),
+
+        (
+            f"Losses: "
+            f"{summary['losses']}"
+        ),
+
+        (
+            f"Win rate: "
+            f"{fmt(summary['win_rate'])}%"
+        ),
+
+        (
+            f"Avg R: "
+            f"{fmt(summary['avg_r'])}"
+        ),
+    ]
+
+    return "\n".join(
+        lines
+    )
