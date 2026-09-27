@@ -1,458 +1,1470 @@
 """
-SOYUZ GAGARIN — MAIN RUNNER v2.2
+SOYUZ GAGARIN — engine/data.py v4.1
 
-Pipeline:
-    UNIVERSE
-        ↓
-    GAGARIN ENGINE
-        ↓
-    SAFETY
-        ↓
-    PAPER JOURNAL
-        ↓
-    TELEGRAM
+DATA ENGINE
 
-PAPER ONLY:
-nessun ordine reale viene eseguito.
+Provider strategy
+-----------------
+
+PRIMARY
+- Twelve Data → Gold
+- Twelve Data → Agriculture
+- Biquote    → Metals / Energy
+
+FALLBACK
+- Yahoo      → Agriculture / generic
+
+MARKET STATUS
+-------------
+- LIVE
+- STALE
+- MARKET_CLOSED
+- DATA_ERROR
+
+IMPORTANT
+---------
+LIVE is never invented.
+
+The data engine is responsible only for:
+
+DATA → OHLC → MTF → ATR → FRESHNESS → MARKET STATUS
+
+It does NOT make trading decisions.
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+import time
 
-from commodities.universe import (
-    enabled_commodities,
-    validate_universe,
-)
+import requests
 
 from config import (
-    PAPER_TRADING_ONLY,
-    TELEGRAM_ENABLED,
+    LOOKBACK,
+    LIVE_MAX_AGE_SECONDS,
+    TIMEOUT_SECONDS,
+    TWELVE_DATA_API_KEY,
 )
 
-from engine.gagarin import analyze_universe
+from engine.market_status import classify_data_status
 
-from paper_trade_journal import (
-    record_entries,
+
+BIQUOTE_BASE = "https://biquote.io/api"
+TWELVE_DATA_BASE = "https://api.twelvedata.com"
+
+TWELVE_DATA_TIME_SERIES = (
+    f"{TWELVE_DATA_BASE}/time_series"
 )
 
-from telegram.bot import (
-    format_report,
-    send_telegram,
+TWELVE_DATA_COMMODITIES = (
+    f"{TWELVE_DATA_BASE}/commodities"
+)
+
+YAHOO_URLS = (
+    "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
+    "https://query2.finance.yahoo.com/v8/finance/chart/{symbol}",
 )
 
 
+BIQUOTE_SYMBOLS = {
+    "XAU/USD": "XAUUSD",
+    "XAG/USD": "XAGUSD",
+    "XPT/USD": "XPTUSD",
+    "XPD/USD": "XPDUSD",
+    "WTI/USD": "USOIL",
+    "BRENT/USD": "UKOIL",
+}
+
+
+YAHOO_SYMBOLS = {
+    "RICE/USD": "ZR=F",
+    "SUGAR/USD": "SB=F",
+    "COCOA/USD": "CC=F",
+    "COFFEE/USD": "KC=F",
+}
+
+
+AGRI_TERMS = {
+    "RICE/USD": ("rice", "rough rice"),
+    "SUGAR/USD": ("sugar",),
+    "COCOA/USD": ("cocoa",),
+    "COFFEE/USD": ("coffee", "arabica"),
+}
+
+
+EFFECTIVE_LIVE_MAX_AGE_SECONDS = max(
+    float(LIVE_MAX_AGE_SECONDS),
+    360.0,
+)
+
+
+FUTURE_TIMESTAMP_TOLERANCE_SECONDS = 90.0
+
+
+HEADERS = {
+    "User-Agent": "SOYUZ-GAGARIN/4.1",
+    "Accept": "application/json,text/plain,*/*",
+}
+
+
+_TWELVE_COMMODITY_CATALOG: Optional[List[Dict[str, Any]]] = None
+
+_TWELVE_SYMBOL_CACHE: Dict[str, str] = {}
+
+
 # ============================================================
-# HEADER
+# TIME PARSING
 # ============================================================
 
-def _print_header():
-    print()
-    print("=" * 72)
-    print("🚀 SOYUZ GAGARIN")
-    print("=" * 72)
+def _parse_time(value: Any) -> Optional[float]:
+    try:
+        if value is None:
+            return None
 
-    print(
-        "DATA → REGIME → STRUCTURE → SETUP → "
-        "TRIGGER → RISK → SAFETY"
-    )
+        if isinstance(value, (int, float)):
+            return float(value)
 
-    if PAPER_TRADING_ONLY:
-        print("MODE: PAPER ONLY")
-    else:
-        print("MODE: UNSAFE CONFIGURATION")
+        text = str(value).strip()
 
-    print(
-        "UTC:",
-        datetime.now(timezone.utc).isoformat(),
-    )
+        if not text:
+            return None
 
-    print()
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+
+        dt = datetime.fromisoformat(text)
+
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+
+        return dt.astimezone(
+            timezone.utc
+        ).timestamp()
+
+    except Exception:
+        return None
 
 
 # ============================================================
-# CONFIGURATION VALIDATION
+# CANDLE NORMALIZATION
 # ============================================================
 
-def _validate():
-    errors = validate_universe()
+def _normalize(
+    timestamp,
+    open_price,
+    high,
+    low,
+    close,
+    volume=0,
+):
+    try:
+        ts = _parse_time(timestamp)
 
-    if not PAPER_TRADING_ONLY:
-        errors.append(
-            "PAPER_TRADING_ONLY_MUST_BE_TRUE"
+        o, h, l, c = map(
+            float,
+            (
+                open_price,
+                high,
+                low,
+                close,
+            ),
         )
 
-    return errors
+        v = float(volume or 0)
+
+        if ts is None:
+            return None
+
+        if h < l:
+            return None
+
+        if min(o, h, l, c) <= 0:
+            return None
+
+        return {
+            "timestamp": ts,
+            "open": o,
+            "high": h,
+            "low": l,
+            "close": c,
+            "volume": v,
+        }
+
+    except (TypeError, ValueError):
+        return None
 
 
 # ============================================================
-# DATA SUMMARY
+# HTTP
 # ============================================================
 
-def _print_data_summary(results):
+def _request_json(
+    url: str,
+    params: Optional[Dict[str, Any]] = None,
+    retries: int = 0,
+):
+    last_error = None
 
-    print("📡 DATA / ENGINE")
-    print("-" * 72)
+    for attempt in range(retries + 1):
 
-    for state in results:
-
-        if state.data_age_seconds is not None:
-            age = f"{state.data_age_seconds:.1f}s"
-        else:
-            age = "N/A"
-
-        status = state.metadata.get(
-            "data_status",
-            "UNKNOWN",
-        )
-
-        provider = (
-            state.data_source
-            if state.data_source
-            else "N/A"
-        )
-
-        print(
-            f"{state.commodity:<18} "
-            f"{status:<7} "
-            f"age={age:<9} "
-            f"provider={provider}"
-        )
-
-    print()
-
-
-# ============================================================
-# GAGARIN RANKING
-# ============================================================
-
-def _print_ranking(results):
-
-    print("📊 CLASSIFICA GAGARIN")
-    print("-" * 72)
-
-    if not results:
-        print("Nessun risultato.")
-        print()
-        return
-
-    for index, state in enumerate(
-        results,
-        start=1,
-    ):
-
-        direction = (
-            state.setup_direction
-            if state.setup_direction
-            in {"LONG", "SHORT"}
-            else "—"
-        )
-
-        print(
-            f"{index:>2}. "
-            f"{state.commodity:<18} "
-            f"{direction:<5} "
-            f"Prob {state.probability:>5.1f} "
-            f"Q {state.quality:>5.1f} "
-            f"C {state.confidence:>5.1f} "
-            f"{state.final_decision}"
-        )
-
-        if (
-            state.final_decision != "ENTRY"
-            and state.blockers
-        ):
-            print(
-                "    └─ BLOCK: "
-                + ", ".join(state.blockers)
+        try:
+            response = requests.get(
+                url,
+                params=params,
+                headers=HEADERS,
+                timeout=TIMEOUT_SECONDS,
             )
 
-    print()
+            if response.status_code == 429:
+
+                last_error = (
+                    "HTTP_429: Too Many Requests"
+                )
+
+                if attempt < retries:
+                    time.sleep(2 ** attempt)
+                    continue
+
+                return None, last_error
+
+            if response.status_code != 200:
+
+                return (
+                    None,
+                    (
+                        f"HTTP_{response.status_code}: "
+                        f"{response.text[:300]}"
+                    ),
+                )
+
+            return response.json(), None
+
+        except requests.RequestException as exc:
+
+            last_error = (
+                f"REQUEST_ERROR: {exc}"
+            )
+
+            if attempt < retries:
+                time.sleep(2 ** attempt)
+                continue
+
+            return None, last_error
+
+        except ValueError as exc:
+
+            return (
+                None,
+                f"JSON_ERROR: {exc}",
+            )
+
+    return (
+        None,
+        last_error or "REQUEST_FAILED",
+    )
 
 
 # ============================================================
-# OPERATIONAL SECTION
+# TWELVE DATA COMMODITY CATALOG
 # ============================================================
 
-def _print_operational(results):
+def _load_twelve_commodity_catalog():
 
-    entries = [
-        state
-        for state in results
-        if state.final_decision == "ENTRY"
+    global _TWELVE_COMMODITY_CATALOG
+
+    if _TWELVE_COMMODITY_CATALOG is not None:
+        return (
+            _TWELVE_COMMODITY_CATALOG,
+            None,
+        )
+
+    if not TWELVE_DATA_API_KEY:
+        return (
+            [],
+            "TWELVE_DATA_API_KEY_MISSING",
+        )
+
+    payload, error = _request_json(
+        TWELVE_DATA_COMMODITIES,
+        {
+            "apikey": TWELVE_DATA_API_KEY,
+            "outputsize": 500,
+        },
+        retries=1,
+    )
+
+    if error:
+        return [], error
+
+    if not isinstance(payload, dict):
+        return (
+            [],
+            "TWELVE_DATA_INVALID_CATALOG",
+        )
+
+    if payload.get("status") == "error":
+
+        return (
+            [],
+            str(
+                payload.get("message")
+                or "TWELVE_DATA_CATALOG_ERROR"
+            ),
+        )
+
+    data = payload.get("data", [])
+
+    if not isinstance(data, list):
+        return (
+            [],
+            "TWELVE_DATA_CATALOG_EMPTY",
+        )
+
+    _TWELVE_COMMODITY_CATALOG = [
+        item
+        for item in data
+        if isinstance(item, dict)
     ]
 
-    print("🎯 OPERATIVITÀ")
-    print("-" * 72)
-
-    if not entries:
-
-        print(
-            "🟡 NESSUNA ENTRATA AUTORIZZATA"
-        )
-
-        print()
-        return
-
-    print(
-        f"🟢 {len(entries)} ENTRATA/E "
-        f"AUTORIZZATA/E"
+    return (
+        _TWELVE_COMMODITY_CATALOG,
+        None,
     )
 
-    for state in entries[:3]:
-
-        print()
-
-        print(
-            f"🟢 {state.commodity} "
-            f"{state.setup_direction}"
-        )
-
-        print(
-            f"Prob:       "
-            f"{state.probability:.1f}%"
-        )
-
-        print(
-            f"Quality:    "
-            f"{state.quality:.1f}"
-        )
-
-        print(
-            f"Confidence: "
-            f"{state.confidence:.1f}"
-        )
-
-        if state.entry is not None:
-            print(
-                f"Entry:      "
-                f"{state.entry:.6g}"
-            )
-
-        if state.stop is not None:
-            print(
-                f"SL:         "
-                f"{state.stop:.6g}"
-            )
-
-        if state.tp1 is not None:
-            print(
-                f"TP1:        "
-                f"{state.tp1:.6g}"
-            )
-
-        if state.tp2 is not None:
-            print(
-                f"TP2:        "
-                f"{state.tp2:.6g}"
-            )
-
-        if state.tp3 is not None:
-            print(
-                f"TP3:        "
-                f"{state.tp3:.6g}"
-            )
-
-        if state.rr3 is not None:
-            print(
-                f"RR3:        "
-                f"{state.rr3:.2f}"
-            )
-
-        if state.stop_atr is not None:
-            print(
-                f"SL ATR:     "
-                f"{state.stop_atr:.2f}"
-            )
-
-    print()
-
 
 # ============================================================
-# PAPER TRADE JOURNAL
+# AGRICULTURE SYMBOL RESOLUTION
 # ============================================================
 
-def _print_paper_journal(results):
+def _find_twelve_agri_symbol(
+    internal_symbol: str,
+):
 
-    print("🧪 PAPER JOURNAL")
-    print("-" * 72)
-
-    try:
-
-        recorded = record_entries(results)
-
-        print(
-            f"Recorded entries: {recorded}"
+    if internal_symbol in _TWELVE_SYMBOL_CACHE:
+        return (
+            _TWELVE_SYMBOL_CACHE[
+                internal_symbol
+            ],
+            None,
         )
 
-        if recorded:
-
-            for state in results:
-
-                if (
-                    state.final_decision
-                    == "ENTRY"
-                ):
-
-                    print(
-                        f"  • "
-                        f"{state.commodity} "
-                        f"{state.setup_direction} "
-                        f"Entry={state.entry} "
-                        f"SL={state.stop} "
-                        f"TP3={state.tp3}"
-                    )
-
-    except Exception as exc:
-
-        print(
-            "⚠️ PAPER JOURNAL ERROR"
-        )
-
-        print(
-            f"{type(exc).__name__}: {exc}"
-        )
-
-    print()
-
-
-# ============================================================
-# MAIN RUN
-# ============================================================
-
-def run():
-
-    _print_header()
-
-    # --------------------------------------------------------
-    # CONFIGURATION
-    # --------------------------------------------------------
-
-    errors = _validate()
-
-    if errors:
-
-        print(
-            "❌ CONFIGURAZIONE BLOCCATA"
-        )
-
-        for error in errors:
-            print(
-                f" - {error}"
-            )
-
-        return 1
-
-    # --------------------------------------------------------
-    # UNIVERSE
-    # --------------------------------------------------------
-
-    commodities = enabled_commodities()
-
-    if not commodities:
-
-        print(
-            "❌ Nessuna commodity abilitata."
-        )
-
-        return 1
-
-    print(
-        f"Universe: "
-        f"{len(commodities)} commodity abilitate"
+    terms = AGRI_TERMS.get(
+        internal_symbol
     )
 
-    print()
-
-    # --------------------------------------------------------
-    # GAGARIN ENGINE
-    # --------------------------------------------------------
-
-    try:
-
-        results = analyze_universe(
-            commodities
+    if not terms:
+        return (
+            None,
+            "AGRI_TERMS_NOT_FOUND",
         )
 
-    except Exception as exc:
+    catalog, error = (
+        _load_twelve_commodity_catalog()
+    )
 
-        print()
-        print(
-            "❌ GAGARIN ENGINE ERROR"
+    if error:
+        return None, error
+
+    candidates = []
+
+    for item in catalog:
+
+        symbol = str(
+            item.get("symbol", "")
+        ).strip()
+
+        name = str(
+            item.get("name", "")
+        ).strip()
+
+        description = str(
+            item.get("description", "")
+        ).strip()
+
+        category = str(
+            item.get("category", "")
+        ).strip()
+
+        if not symbol:
+            continue
+
+        text = (
+            f"{symbol} "
+            f"{name} "
+            f"{description} "
+            f"{category}"
+        ).lower()
+
+        score = 0
+
+        for term in terms:
+
+            if term.lower() in text:
+                score += 20
+
+        if any(
+            word in text
+            for word in (
+                "agriculture",
+                "agricultural",
+                "grain",
+                "soft",
+                "softs",
+            )
+        ):
+            score += 10
+
+        if (
+            "futures" in text
+            or "future" in text
+        ):
+            score += 5
+
+        candidates.append(
+            (
+                score,
+                symbol,
+                name,
+                category,
+            )
         )
 
-        print(
-            f"{type(exc).__name__}: {exc}"
+    candidates.sort(
+        key=lambda x: (
+            x[0],
+            x[1],
+        ),
+        reverse=True,
+    )
+
+    if not candidates:
+        return (
+            None,
+            "TWELVE_DATA_AGRI_NOT_FOUND",
         )
 
-        return 1
+    best = candidates[0]
 
-    # --------------------------------------------------------
-    # REPORT
-    # --------------------------------------------------------
+    if best[0] <= 0:
+        return (
+            None,
+            "TWELVE_DATA_AGRI_UNCERTAIN",
+        )
 
-    _print_data_summary(results)
+    resolved_symbol = best[1]
 
-    _print_ranking(results)
+    _TWELVE_SYMBOL_CACHE[
+        internal_symbol
+    ] = resolved_symbol
 
-    _print_operational(results)
+    return (
+        resolved_symbol,
+        None,
+    )
 
-    # --------------------------------------------------------
-    # PAPER JOURNAL
-    # --------------------------------------------------------
 
-    _print_paper_journal(results)
+# ============================================================
+# TWELVE DATA
+# ============================================================
 
-    # --------------------------------------------------------
-    # TELEGRAM
-    # --------------------------------------------------------
+def _fetch_twelve_symbol(
+    provider_symbol: str,
+):
 
-    report = format_report(results)
+    if not TWELVE_DATA_API_KEY:
+        return (
+            [],
+            "TWELVE_DATA_API_KEY_MISSING",
+        )
 
-    if TELEGRAM_ENABLED:
+    payload, error = _request_json(
+        TWELVE_DATA_TIME_SERIES,
+        {
+            "symbol": provider_symbol,
+            "interval": "5min",
+            "outputsize": LOOKBACK,
+            "apikey": TWELVE_DATA_API_KEY,
+            "timezone": "UTC",
+        },
+        retries=1,
+    )
 
-        print("📨 TELEGRAM")
+    if error:
+        return [], error
+
+    if (
+        isinstance(payload, dict)
+        and payload.get("status") == "error"
+    ):
+
+        return (
+            [],
+            str(
+                payload.get("message")
+                or "TWELVE_DATA_ERROR"
+            ),
+        )
+
+    values = (
+        payload.get("values", [])
+        if isinstance(payload, dict)
+        else []
+    )
+
+    candles = []
+
+    for row in reversed(values):
+
+        candle = _normalize(
+            row.get("datetime"),
+            row.get("open"),
+            row.get("high"),
+            row.get("low"),
+            row.get("close"),
+            row.get("volume", 0),
+        )
+
+        if candle:
+            candles.append(candle)
+
+    return (
+        candles[-LOOKBACK:],
+        None,
+    )
+
+
+def _fetch_twelve(symbol: str):
+    return _fetch_twelve_symbol(
+        symbol
+    )
+
+
+def _fetch_twelve_agriculture(
+    symbol: str,
+):
+
+    provider_symbol, resolve_error = (
+        _find_twelve_agri_symbol(symbol)
+    )
+
+    if not provider_symbol:
+
+        return (
+            [],
+            resolve_error
+            or "TWELVE_DATA_AGRI_SYMBOL_MISSING",
+        )
+
+    candles, error = (
+        _fetch_twelve_symbol(
+            provider_symbol
+        )
+    )
+
+    if error:
+
+        return (
+            [],
+            (
+                f"SYMBOL={provider_symbol} | "
+                f"{error}"
+            ),
+        )
+
+    return candles, None
+
+
+# ============================================================
+# BIQUOTE
+# ============================================================
+
+def _parse_biquote(payload):
+
+    if not isinstance(payload, dict):
+
+        return (
+            [],
+            "BIQUOTE_INVALID_RESPONSE",
+        )
+
+    bars = payload.get("bars")
+
+    if not isinstance(bars, list):
+
+        return (
+            [],
+            (
+                payload.get("message")
+                or payload.get("error")
+                or "BIQUOTE_NO_BARS"
+            ),
+        )
+
+    candles = []
+
+    for row in bars:
+
+        if not isinstance(row, dict):
+            continue
+
+        timestamp = (
+            row.get("openTime")
+            or row.get("timestamp")
+            or row.get("time")
+        )
+
+        candle = _normalize(
+            timestamp,
+            row.get("open"),
+            row.get("high"),
+            row.get("low"),
+            row.get("close"),
+            row.get("volume", 0),
+        )
+
+        if candle:
+            candles.append(candle)
+
+    candles.sort(
+        key=lambda x: x["timestamp"]
+    )
+
+    return (
+        candles[-LOOKBACK:],
+        None,
+    )
+
+
+def _fetch_biquote(symbol: str):
+
+    biquote_symbol = (
+        BIQUOTE_SYMBOLS.get(symbol)
+    )
+
+    if not biquote_symbol:
+
+        return (
+            [],
+            "BIQUOTE_SYMBOL_NOT_MAPPED",
+        )
+
+    payload, error = _request_json(
+        (
+            f"{BIQUOTE_BASE}/"
+            f"{biquote_symbol}/ohlc"
+        ),
+        {
+            "interval": "5m",
+            "limit": min(
+                max(LOOKBACK, 120),
+                1000,
+            ),
+        },
+        retries=1,
+    )
+
+    if error:
+        return [], error
+
+    return _parse_biquote(
+        payload
+    )
+
+
+# ============================================================
+# YAHOO
+# ============================================================
+
+def _parse_yahoo(payload):
+
+    chart = (
+        payload.get("chart", {})
+        if payload
+        else {}
+    )
+
+    result = (
+        chart.get("result")
+        or []
+    )
+
+    if not result:
+
+        return (
+            [],
+            "YAHOO_EMPTY_RESULT",
+        )
+
+    item = result[0]
+
+    timestamps = (
+        item.get("timestamp")
+        or []
+    )
+
+    quote = (
+        (
+            item.get("indicators")
+            or {}
+        ).get("quote")
+        or [{}]
+    )[0]
+
+    opens = quote.get("open") or []
+    highs = quote.get("high") or []
+    lows = quote.get("low") or []
+    closes = quote.get("close") or []
+    volumes = quote.get("volume") or []
+
+    candles = []
+
+    for i, timestamp in enumerate(
+        timestamps
+    ):
 
         try:
 
-            send_telegram(report)
-
-        except Exception as exc:
-
-            print(
-                "⚠️ TELEGRAM ERROR"
+            candle = _normalize(
+                timestamp,
+                opens[i],
+                highs[i],
+                lows[i],
+                closes[i],
+                (
+                    volumes[i]
+                    if i < len(volumes)
+                    else 0
+                ),
             )
 
-            print(
-                f"{type(exc).__name__}: {exc}"
+            if candle:
+                candles.append(candle)
+
+        except (
+            IndexError,
+            TypeError,
+        ):
+            continue
+
+    candles.sort(
+        key=lambda x: x["timestamp"]
+    )
+
+    return (
+        candles[-LOOKBACK:],
+        None,
+    )
+
+
+def _fetch_yahoo(symbol: str):
+
+    yahoo_symbol = (
+        YAHOO_SYMBOLS.get(symbol)
+    )
+
+    if not yahoo_symbol:
+
+        return (
+            [],
+            "YAHOO_SYMBOL_NOT_MAPPED",
+        )
+
+    now = int(time.time())
+
+    params = {
+        "period1": (
+            now
+            - LOOKBACK * 15 * 60
+        ),
+        "period2": now,
+        "interval": "5m",
+        "events": "history",
+        "includePrePost": "true",
+        "range": "5d",
+    }
+
+    errors = []
+
+    for url_template in YAHOO_URLS:
+
+        payload, error = _request_json(
+            url_template.format(
+                symbol=yahoo_symbol
+            ),
+            params,
+            retries=0,
+        )
+
+        if error:
+
+            errors.append(error)
+            continue
+
+        candles, parse_error = (
+            _parse_yahoo(payload)
+        )
+
+        if candles:
+            return candles, None
+
+        errors.append(
+            parse_error
+            or "YAHOO_NO_CANDLES"
+        )
+
+    return (
+        [],
+        " | ".join(errors),
+    )
+
+
+# ============================================================
+# ATR
+# ============================================================
+
+def _true_range(
+    candle,
+    previous_close,
+):
+
+    if previous_close is None:
+
+        return (
+            candle["high"]
+            - candle["low"]
+        )
+
+    return max(
+        (
+            candle["high"]
+            - candle["low"]
+        ),
+        abs(
+            candle["high"]
+            - previous_close
+        ),
+        abs(
+            candle["low"]
+            - previous_close
+        ),
+    )
+
+
+def _atr(
+    candles: List[Dict[str, float]],
+    period: int = 14,
+):
+
+    if not candles:
+        return 0.0
+
+    values = []
+    previous = None
+
+    for candle in candles:
+
+        values.append(
+            _true_range(
+                candle,
+                previous,
             )
+        )
+
+        previous = candle["close"]
+
+    values = values[-period:]
+
+    if not values:
+        return 0.0
+
+    return (
+        sum(values)
+        / len(values)
+    )
+
+
+# ============================================================
+# MTF AGGREGATION
+# ============================================================
+
+def _aggregate(
+    candles,
+    minutes,
+):
+
+    if not candles:
+        return []
+
+    bucket_seconds = (
+        minutes * 60
+    )
+
+    buckets = {}
+
+    for candle in candles:
+
+        bucket = (
+            int(
+                candle["timestamp"]
+                // bucket_seconds
+            )
+            * bucket_seconds
+        )
+
+        if bucket not in buckets:
+
+            buckets[bucket] = {
+                "timestamp":
+                    float(bucket),
+
+                "open":
+                    candle["open"],
+
+                "high":
+                    candle["high"],
+
+                "low":
+                    candle["low"],
+
+                "close":
+                    candle["close"],
+
+                "volume":
+                    candle.get(
+                        "volume",
+                        0.0,
+                    ),
+            }
+
+        else:
+
+            current = buckets[bucket]
+
+            current["high"] = max(
+                current["high"],
+                candle["high"],
+            )
+
+            current["low"] = min(
+                current["low"],
+                candle["low"],
+            )
+
+            current["close"] = (
+                candle["close"]
+            )
+
+            current["volume"] += (
+                candle.get(
+                    "volume",
+                    0.0,
+                )
+            )
+
+    return [
+        buckets[key]
+        for key in sorted(buckets)
+    ]
+
+
+def _build_mtf(candles):
+
+    m5 = list(candles)
+
+    m15 = _aggregate(
+        candles,
+        15,
+    )
+
+    m30 = _aggregate(
+        candles,
+        30,
+    )
+
+    h1 = _aggregate(
+        candles,
+        60,
+    )
+
+    return {
+        "M5": m5,
+        "M15": m15,
+        "M30": m30,
+        "H1": h1,
+        "5min": m5,
+        "15min": m15,
+        "30min": m30,
+        "1h": h1,
+    }
+
+
+# ============================================================
+# FRESHNESS
+# ============================================================
+
+def _freshness(
+    latest_timestamp,
+):
+
+    now = datetime.now(
+        timezone.utc
+    ).timestamp()
+
+    delta = (
+        now
+        - latest_timestamp
+    )
+
+    if (
+        delta
+        < -FUTURE_TIMESTAMP_TOLERANCE_SECONDS
+    ):
+
+        return (
+            False,
+            0.0,
+            "FUTURE_TIMESTAMP",
+        )
+
+    age = max(
+        0.0,
+        delta,
+    )
+
+    if (
+        age
+        <= EFFECTIVE_LIVE_MAX_AGE_SECONDS
+    ):
+
+        return (
+            True,
+            age,
+            "LIVE",
+        )
+
+    return (
+        False,
+        age,
+        "STALE",
+    )
+
+
+# ============================================================
+# FINALIZE DATA
+# ============================================================
+
+def _finalize(
+    state,
+    candles,
+    provider,
+    error=None,
+):
+
+    # --------------------------------------------------------
+    # NO DATA
+    # --------------------------------------------------------
+
+    if not candles:
+
+        state.data_ok = False
+        state.live = False
+        state.data_source = provider
+
+        state.metadata[
+            "data_error"
+        ] = (
+            error
+            or "NO_DATA"
+        )
+
+        state.metadata[
+            "data_status"
+        ] = "DATA_ERROR"
+
+        state.metadata[
+            "market_status"
+        ] = "DATA_ERROR"
+
+        if (
+            "DATA_MISSING"
+            not in state.blockers
+        ):
+
+            state.blockers.append(
+                "DATA_MISSING"
+            )
+
+        return state
+
+    # --------------------------------------------------------
+    # SORT CANDLES
+    # --------------------------------------------------------
+
+    candles = sorted(
+        candles,
+        key=lambda x:
+            x["timestamp"],
+    )
+
+    state.candles = candles
+
+    # --------------------------------------------------------
+    # OHLC
+    # --------------------------------------------------------
+
+    state.opens = [
+        x["open"]
+        for x in candles
+    ]
+
+    state.highs = [
+        x["high"]
+        for x in candles
+    ]
+
+    state.lows = [
+        x["low"]
+        for x in candles
+    ]
+
+    state.closes = [
+        x["close"]
+        for x in candles
+    ]
+
+    state.volumes = [
+        x["volume"]
+        for x in candles
+    ]
+
+    # --------------------------------------------------------
+    # PRICE
+    # --------------------------------------------------------
+
+    state.price = (
+        candles[-1]["close"]
+    )
+
+    state.previous_price = (
+        candles[-2]["close"]
+        if len(candles) > 1
+        else state.price
+    )
+
+    # --------------------------------------------------------
+    # ATR
+    # --------------------------------------------------------
+
+    state.atr = _atr(
+        candles
+    )
+
+    # --------------------------------------------------------
+    # MTF
+    # --------------------------------------------------------
+
+    state.mtf_data = _build_mtf(
+        candles
+    )
+
+    # --------------------------------------------------------
+    # FRESHNESS
+    # --------------------------------------------------------
+
+    latest = candles[-1][
+        "timestamp"
+    ]
+
+    (
+        fresh_live,
+        age,
+        freshness_status,
+    ) = _freshness(
+        latest
+    )
+
+    state.data_source = provider
+    state.data_age_seconds = age
+    state.data_ok = True
+
+    # --------------------------------------------------------
+    # MARKET STATUS
+    # --------------------------------------------------------
+
+    market_status = (
+        classify_data_status(
+            state.commodity,
+            live=fresh_live,
+            data_ok=state.data_ok,
+        )
+    )
+
+    # IMPORTANT:
+    # MARKET_CLOSED NON È LIVE.
+    #
+    # In questo modo Gagarin non può
+    # generare ENTRY durante il weekend.
+
+    if market_status == "MARKET_CLOSED":
+
+        state.live = False
+
+    elif market_status == "LIVE":
+
+        state.live = True
+
+    elif market_status == "STALE":
+
+        state.live = False
+
+    elif market_status == "DATA_ERROR":
+
+        state.live = False
+        state.data_ok = False
 
     else:
 
-        print(
-            "📨 TELEGRAM: DISABLED"
-        )
+        state.live = fresh_live
 
     # --------------------------------------------------------
-    # COMPLETED
+    # METADATA
     # --------------------------------------------------------
 
-    print()
+    state.metadata[
+        "provider"
+    ] = provider
 
-    print("=" * 72)
+    state.metadata[
+        "freshness_status"
+    ] = freshness_status
 
-    print(
-        "✅ SOYUZ GAGARIN RUN COMPLETED"
+    state.metadata[
+        "market_status"
+    ] = market_status
+
+    state.metadata[
+        "data_status"
+    ] = market_status
+
+    state.metadata[
+        "data_error"
+    ] = error
+
+    state.metadata[
+        "last_bar_timestamp"
+    ] = (
+        datetime.fromtimestamp(
+            latest,
+            tz=timezone.utc,
+        ).isoformat()
     )
 
-    print("=" * 72)
+    state.metadata[
+        "effective_live_max_age_seconds"
+    ] = (
+        EFFECTIVE_LIVE_MAX_AGE_SECONDS
+    )
 
-    return 0
+    # --------------------------------------------------------
+    # FUTURE TIMESTAMP
+    # --------------------------------------------------------
+
+    if (
+        freshness_status
+        == "FUTURE_TIMESTAMP"
+    ):
+
+        state.data_ok = False
+        state.live = False
+
+        state.metadata[
+            "data_status"
+        ] = "DATA_ERROR"
+
+        state.metadata[
+            "market_status"
+        ] = "DATA_ERROR"
+
+        state.metadata[
+            "data_error"
+        ] = (
+            "Latest market timestamp "
+            "is in the future."
+        )
+
+        if (
+            "DATA_TIMESTAMP_INVALID"
+            not in state.blockers
+        ):
+
+            state.blockers.append(
+                "DATA_TIMESTAMP_INVALID"
+            )
+
+        return state
+
+    # --------------------------------------------------------
+    # STALE DATA
+    # --------------------------------------------------------
+
+    # IMPORTANTE:
+    #
+    # MARKET_CLOSED NON viene
+    # classificato come STALE.
+    #
+    # STALE significa:
+    # mercato aperto ma provider
+    # non aggiornato.
+
+    if market_status == "STALE":
+
+        if (
+            "DATA_NOT_LIVE"
+            not in state.blockers
+        ):
+
+            state.blockers.append(
+                "DATA_NOT_LIVE"
+            )
+
+    return state
 
 
 # ============================================================
-# ENTRY POINT
+# MAIN DATA LOADER
 # ============================================================
 
-if __name__ == "__main__":
-    raise SystemExit(run())
+def load_data(
+    state: Any,
+    commodity: Any,
+):
+
+    symbol = commodity.symbol
+
+    state.commodity = (
+        commodity.name
+    )
+
+    state.symbol = symbol
+
+    # ========================================================
+    # GOLD
+    # ========================================================
+
+    if symbol == "XAU/USD":
+
+        candles, error = (
+            _fetch_twelve(symbol)
+        )
+
+        if candles:
+
+            return _finalize(
+                state,
+                candles,
+                "TWELVE_DATA",
+                error,
+            )
+
+    # ========================================================
+    # METALS / ENERGY
+    # ========================================================
+
+    if symbol in BIQUOTE_SYMBOLS:
+
+        candles, error = (
+            _fetch_biquote(symbol)
+        )
+
+        if candles:
+
+            return _finalize(
+                state,
+                candles,
+                "BIQUOTE",
+                error,
+            )
+
+    # ========================================================
+    # AGRICULTURE
+    # ========================================================
+
+    if symbol in AGRI_TERMS:
+
+        # ----------------------------------------------------
+        # Twelve Data primary
+        # ----------------------------------------------------
+
+        candles, error = (
+            _fetch_twelve_agriculture(
+                symbol
+            )
+        )
+
+        if candles:
+
+            provider_symbol = (
+                _TWELVE_SYMBOL_CACHE.get(
+                    symbol
+                )
+            )
+
+            state.metadata[
+                "resolved_symbol"
+            ] = provider_symbol
+
+            return _finalize(
+                state,
+                candles,
+                "TWELVE_DATA",
+                error,
+            )
+
+        twelve_error = error
+
+        # ----------------------------------------------------
+        # Yahoo fallback
+        # ----------------------------------------------------
+
+        yahoo_candles, yahoo_error = (
+            _fetch_yahoo(symbol)
+        )
+
+        if yahoo_candles:
+
+            return _finalize(
+                state,
+                yahoo_candles,
+                "YAHOO",
+                (
+                    "TWELVE_DATA_FALLBACK: "
+                    f"{twelve_error}"
+                ),
+            )
+
+        return _finalize(
+            state,
+            [],
+            "YAHOO",
+            (
+                "TWELVE_DATA: "
+                f"{twelve_error} | "
+                f"YAHOO: {yahoo_error}"
+            ),
+        )
+
+    # ========================================================
+    # GENERIC YAHOO FALLBACK
+    # ========================================================
+
+    candles, error = (
+        _fetch_yahoo(symbol)
+    )
+
+    return _finalize(
+        state,
+        candles,
+        "YAHOO",
+        error,
+    )
