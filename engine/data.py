@@ -43,3 +43,4 @@
                 f"{yahoo_error}"
             ),
         )
+ 
