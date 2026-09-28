@@ -17,8 +17,38 @@ Uso:
 from __future__ import annotations
 
 import os
+import sys
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
+
+
+# ============================================================
+# PROJECT ROOT
+# ============================================================
+
+# Render esegue:
+#
+#     python telegram/render_runner.py
+#
+# In questo caso Python può mettere la cartella "telegram"
+# nel sys.path invece della root del progetto.
+#
+# Aggiungiamo esplicitamente la root del repository così
+# l'import "telegram.bot" viene risolto correttamente.
+
+ROOT_DIR = os.path.dirname(
+    os.path.dirname(
+        os.path.abspath(__file__)
+    )
+)
+
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
+
+
+# ============================================================
+# TELEGRAM IMPORT
+# ============================================================
 
 from telegram.bot import run_polling
 
@@ -36,8 +66,8 @@ DEFAULT_PORT = 10000
 
 class HealthHandler(BaseHTTPRequestHandler):
     """
-    Endpoint HTTP minimale per mantenere il Web Service
-    compatibile con Render.
+    Endpoint HTTP minimale richiesto da Render
+    per il Web Service.
     """
 
     def do_GET(self) -> None:
@@ -74,19 +104,19 @@ class HealthHandler(BaseHTTPRequestHandler):
 
     def log_message(
         self,
-        format: str,
+        format,
         *args,
     ) -> None:
         """
-        Evita di riempire i log di Render con richieste HTTP
-        normali.
+        Evita di riempire i log Render
+        con le normali richieste HTTP.
         """
 
         return
 
 
 # ============================================================
-# START HEALTH SERVER
+# HEALTH SERVER
 # ============================================================
 
 def run_health_server() -> None:
@@ -138,8 +168,10 @@ def run_health_server() -> None:
 
 def main() -> None:
     """
-    Avvia il server HTTP in background e successivamente
-    il listener Telegram permanente.
+    Avvia:
+
+    1. HTTP health server in background
+    2. Telegram long polling permanente
     """
 
     print(
@@ -158,6 +190,10 @@ def main() -> None:
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     )
 
+    # --------------------------------------------------------
+    # HEALTH SERVER
+    # --------------------------------------------------------
+
     health_thread = threading.Thread(
         target=run_health_server,
         name="render-health-server",
@@ -169,6 +205,10 @@ def main() -> None:
     print(
         "🟢 Health server thread started"
     )
+
+    # --------------------------------------------------------
+    # TELEGRAM
+    # --------------------------------------------------------
 
     print(
         "📡 Starting Telegram polling..."
