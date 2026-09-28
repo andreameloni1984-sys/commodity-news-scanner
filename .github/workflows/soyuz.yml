@@ -31,7 +31,8 @@ jobs:
 
       TELEGRAM_ENABLED: "1"
 
-
+      SIFTING_API_KEY: ${{ secrets.SIFTING_API_KEY }} 
+      
       # ==================================================
       # TRADING MODE
       # ==================================================
