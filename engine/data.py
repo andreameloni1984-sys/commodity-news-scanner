@@ -1,45 +1,25 @@
 """
-SOYUZ GAGARIN — engine/data.py v5.1
+SOYUZ GAGARIN — engine/data.py v5.0
 
-DATA ENGINE
-===========
+DATA ENGINE DEFINITIVO
 
 ARCHITECTURE
+------------
+DATA → VALIDATION → FALLBACK → FRESHNESS → MTF → ENGINE
 
-DATA
-  ↓
-VALIDATION
-  ↓
-PROVIDER ROUTING
-  ↓
-FALLBACK
-  ↓
-FRESHNESS
-  ↓
-MTF
-  ↓
-ATR
-  ↓
-GAGARIN
-
-OBIETTIVI v5.1
---------------
-
+PRINCIPI
+--------
 1. Mai fidarsi di un solo provider.
 2. Mai dichiarare LIVE un dato non verificato.
-3. Mai accettare simboli ambigui.
-4. Se il provider primario è invalido → fallback.
-5. Se il provider primario è stale → fallback.
-6. Se il provider primario ha storico insufficiente → fallback.
-7. Verificare l'identità del simbolo Twelve Data.
-8. L'agricoltura Twelve Data viene risolta SOLO dal catalogo
-   /commodities.
-9. Mai usare una ricerca generica per trovare una commodity.
-10. ETF, ADR, azioni, warrant e fondi non devono entrare
-    accidentalmente nell'universo commodity.
-11. Se tutti i provider falliscono → DATA_ERROR.
-12. Il DATA ENGINE non prende decisioni di trading.
-13. PAPER TRADING ONLY resta responsabilità del motore superiore.
+3. Mai usare un simbolo ambiguo.
+4. Se un provider fallisce, passare automaticamente al successivo.
+5. Se tutti i provider falliscono, DATA_ERROR.
+6. Un dato STALE non diventa LIVE.
+7. MARKET_CLOSED non significa DATA_ERROR.
+8. L'agricoltura usa mapping espliciti / catalogo commodity filtrato.
+9. Nessuna azione, ETF, ADR o warrant deve entrare accidentalmente
+   nell'universo commodity.
+10. Il DATA ENGINE non prende decisioni di trading.
 
 PROVIDER ROUTING
 ----------------
@@ -49,62 +29,88 @@ GOLD
         ↓
     Biquote
         ↓
-    Yahoo GC=F
+    Yahoo Futures GC=F
 
 SILVER
     Biquote
         ↓
     Twelve Data
         ↓
-    Yahoo SI=F
+    Yahoo Futures SI=F
 
 PLATINUM
     Biquote
         ↓
     Twelve Data
         ↓
-    Yahoo PL=F
+    Yahoo Futures PL=F
 
 PALLADIUM
     Biquote
         ↓
     Twelve Data
         ↓
-    Yahoo PA=F
+    Yahoo Futures PA=F
 
 WTI
     Biquote
         ↓
     Twelve Data
         ↓
-    Yahoo CL=F
+    Yahoo Futures CL=F
 
 BRENT
     Biquote
         ↓
     Twelve Data
         ↓
-    Yahoo BZ=F
+    Yahoo Futures BZ=F
 
 RICE
-    Yahoo ZR=F
+    Yahoo Futures ZR=F
         ↓
     Twelve Data commodity catalog
 
 SUGAR
-    Yahoo SB=F
+    Yahoo Futures SB=F
         ↓
     Twelve Data commodity catalog
 
 COCOA
-    Yahoo CC=F
+    Yahoo Futures CC=F
         ↓
     Twelve Data commodity catalog
 
 COFFEE
-    Yahoo KC=F
+    Yahoo Futures KC=F
         ↓
     Twelve Data commodity catalog
+
+
+DATA FLOW
+---------
+
+Provider
+    ↓
+Raw candles
+    ↓
+Normalization
+    ↓
+OHLC validation
+    ↓
+Timestamp validation
+    ↓
+Minimum history validation
+    ↓
+Freshness
+    ↓
+Market status
+    ↓
+MTF
+    ↓
+ATR
+    ↓
+GAGARIN
 """
 
 from __future__ import annotations
@@ -126,14 +132,7 @@ from engine.market_status import classify_data_status
 
 
 # ============================================================
-# VERSION
-# ============================================================
-
-DATA_ENGINE_VERSION = "SOYUZ-GAGARIN-DATA-5.1"
-
-
-# ============================================================
-# PROVIDER ENDPOINTS
+# PROVIDERS
 # ============================================================
 
 BIQUOTE_BASE = "https://biquote.io/api"
@@ -168,6 +167,11 @@ BIQUOTE_SYMBOLS = {
 }
 
 
+# Yahoo futures are used as explicit fallback instruments.
+#
+# IMPORTANT:
+# These mappings are explicit.
+# We never search Yahoo by commodity name.
 YAHOO_SYMBOLS = {
     "XAU/USD": "GC=F",
     "XAG/USD": "SI=F",
@@ -214,7 +218,7 @@ AGRI_TERMS = {
 
 
 # ============================================================
-# PROVIDER ROUTING
+# PROVIDER ORDER
 # ============================================================
 
 PROVIDER_ORDER = {
@@ -280,22 +284,10 @@ PROVIDER_ORDER = {
 # DATA QUALITY
 # ============================================================
 
-# Gagarin works primarily from 5-minute data.
-#
-# 576 x 5 minutes ≈ 48 hours of bars.
-# This gives enough material to build M15/M30/H1 structures.
-#
-# Twelve Data supports substantially more than this, up to
-# 5000 points per request.
-DEFAULT_DATA_POINTS = 576
-
-MAX_DATA_POINTS = 5000
-
 MIN_CANDLES_REQUIRED = 30
 
 MIN_MTF_CANDLES = 3
 
-# We do not allow an unrealistically tiny LIVE threshold.
 EFFECTIVE_LIVE_MAX_AGE_SECONDS = max(
     float(LIVE_MAX_AGE_SECONDS),
     360.0,
@@ -311,7 +303,7 @@ MAX_CANDLE_FUTURE_SECONDS = 90.0
 # ============================================================
 
 HEADERS = {
-    "User-Agent": "SOYUZ-GAGARIN/5.1",
+    "User-Agent": "SOYUZ-GAGARIN/5.0",
     "Accept": "application/json,text/plain,*/*",
 }
 
@@ -333,7 +325,7 @@ _TWELVE_SYMBOL_CACHE: Dict[str, str] = {}
 
 def _parse_time(value: Any) -> Optional[float]:
     """
-    Convert provider timestamps to UTC epoch seconds.
+    Convert provider timestamp into UTC epoch seconds.
     """
 
     try:
@@ -379,7 +371,7 @@ def _normalize(
     volume: Any = 0,
 ) -> Optional[Dict[str, float]]:
     """
-    Normalize a single OHLCV candle.
+    Normalize one provider candle.
     """
 
     try:
@@ -392,6 +384,7 @@ def _normalize(
         h = float(high)
         l = float(low)
         c = float(close)
+
         v = float(volume or 0)
 
         if min(o, h, l, c) <= 0:
@@ -423,7 +416,7 @@ def _normalize(
 
 
 # ============================================================
-# HTTP JSON
+# HTTP REQUEST
 # ============================================================
 
 def _request_json(
@@ -435,13 +428,13 @@ def _request_json(
     Optional[str],
 ]:
     """
-    Safe GET JSON request.
+    Safe HTTP JSON request.
 
     Handles:
     - timeout
     - connection errors
-    - HTTP errors
     - HTTP 429
+    - HTTP errors
     - malformed JSON
     """
 
@@ -538,13 +531,13 @@ def _validate_candles(
     Optional[str],
 ]:
     """
-    Validate and clean candles.
+    Validate and clean provider candles.
 
-    Reject:
+    Rejects:
     - malformed candles
-    - duplicates
-    - impossible OHLC
+    - duplicate timestamps
     - future candles
+    - impossible OHLC
     """
 
     if not candles:
@@ -570,6 +563,9 @@ def _validate_candles(
             "timestamp"
         )
 
+        if ts is None:
+            continue
+
         try:
             ts = float(ts)
         except (
@@ -588,10 +584,18 @@ def _validate_candles(
             continue
 
         try:
-            o = float(candle["open"])
-            h = float(candle["high"])
-            l = float(candle["low"])
-            c = float(candle["close"])
+            o = float(
+                candle["open"]
+            )
+            h = float(
+                candle["high"]
+            )
+            l = float(
+                candle["low"]
+            )
+            c = float(
+                candle["close"]
+            )
             v = float(
                 candle.get(
                     "volume",
@@ -607,7 +611,12 @@ def _validate_candles(
         ):
             continue
 
-        if min(o, h, l, c) <= 0:
+        if min(
+            o,
+            h,
+            l,
+            c,
+        ) <= 0:
             continue
 
         if h < l:
@@ -647,22 +656,33 @@ def _validate_candles(
         )
 
     return cleaned, None
-
-
-# ============================================================
+    # ============================================================
 # TWELVE DATA CATALOG
 # ============================================================
 
 def _load_twelve_commodity_catalog():
     """
-    Load the official Twelve Data commodity catalog.
+    Load Twelve Data commodity catalog.
 
-    Agriculture is resolved only through /commodities.
+    IMPORTANT:
+    We only use the commodity catalog for agriculture fallback.
+
+    We do NOT perform unrestricted symbol matching.
+
+    This prevents:
+        COFFEE
+        SUGAR
+        COCOA
+        RICE
+
+    from accidentally resolving to equities,
+    ETFs, ADRs or warrants.
     """
 
     global _TWELVE_COMMODITY_CATALOG
 
     if _TWELVE_COMMODITY_CATALOG is not None:
+
         return (
             _TWELVE_COMMODITY_CATALOG,
             None,
@@ -679,7 +699,7 @@ def _load_twelve_commodity_catalog():
         TWELVE_DATA_COMMODITIES,
         {
             "apikey": TWELVE_DATA_API_KEY,
-            "outputsize": 1000,
+            "outputsize": 500,
         },
         retries=1,
     )
@@ -708,6 +728,7 @@ def _load_twelve_commodity_catalog():
         data,
         list,
     ):
+
         return (
             [],
             "TWELVE_DATA_CATALOG_INVALID",
@@ -729,17 +750,22 @@ def _load_twelve_commodity_catalog():
 
 
 # ============================================================
-# AGRICULTURE SYMBOL RESOLUTION
+# SAFE AGRICULTURE SYMBOL RESOLUTION
 # ============================================================
 
 def _find_twelve_agri_symbol(
     internal_symbol: str,
 ):
     """
-    Resolve an agricultural commodity only inside
-    Twelve Data's official commodity catalog.
+    Resolve an agriculture commodity only inside
+    Twelve Data's commodity catalog.
 
-    No generic symbol search.
+    We deliberately DO NOT search the general symbol universe.
+
+    Selection requires:
+    - commodity/agriculture context
+    - matching commodity terms
+    - no equity-like classification
     """
 
     if internal_symbol in _TWELVE_SYMBOL_CACHE:
@@ -769,6 +795,8 @@ def _find_twelve_agri_symbol(
     if error:
         return None, error
 
+    candidates = []
+
     forbidden_words = (
         "stock",
         "equity",
@@ -780,10 +808,7 @@ def _find_twelve_agri_symbol(
         "fund",
         "company",
         "corporation",
-        "trust",
     )
-
-    candidates = []
 
     for item in catalog:
 
@@ -831,51 +856,49 @@ def _find_twelve_agri_symbol(
         ):
             continue
 
-        matched_terms = [
-            term.lower()
+        if not any(
+            term.lower() in text
             for term in terms
-            if term.lower() in text
-        ]
-
-        if not matched_terms:
+        ):
             continue
 
         score = 0
 
-        name_lower = name.lower()
-        desc_lower = description.lower()
-        symbol_lower = symbol.lower()
-        category_lower = category.lower()
-
         for term in terms:
 
-            term_lower = term.lower()
-
-            if term_lower in name_lower:
+            if term.lower() in name.lower():
                 score += 50
 
-            if term_lower in desc_lower:
-                score += 25
-
-            if term_lower in symbol_lower:
+            if term.lower() in description.lower():
                 score += 20
 
-        if "agriculture" in category_lower:
+            if term.lower() in symbol.lower():
+                score += 20
+
+        if (
+            "agriculture"
+            in category.lower()
+        ):
             score += 40
 
-        if "agricultural" in category_lower:
+        if (
+            "agricultural"
+            in category.lower()
+        ):
             score += 40
 
-        if "commodity" in category_lower:
+        if (
+            "commodity"
+            in category.lower()
+        ):
             score += 20
 
-        if "soft" in category_lower:
-            score += 15
-
-        if "grain" in category_lower:
-            score += 15
-
-        if "future" in text:
+        if (
+            "future"
+            in text
+            or "futures"
+            in text
+        ):
             score += 10
 
         candidates.append(
@@ -904,6 +927,7 @@ def _find_twelve_agri_symbol(
 
     best = candidates[0]
 
+    # Require a meaningful match.
     if best[0] < 40:
 
         return (
@@ -924,60 +948,6 @@ def _find_twelve_agri_symbol(
 
 
 # ============================================================
-# SYMBOL IDENTITY NORMALIZATION
-# ============================================================
-
-def _normalize_symbol(
-    value: Any,
-) -> str:
-    """
-    Normalize symbols for safe identity comparison.
-    """
-
-    if value is None:
-        return ""
-
-    return (
-        str(value)
-        .strip()
-        .upper()
-        .replace(" ", "")
-    )
-
-
-def _symbol_identity_matches(
-    requested: str,
-    returned: str,
-) -> bool:
-    """
-    Verify that a Twelve Data response belongs to
-    the instrument we requested.
-
-    Exact normalized comparison is preferred.
-
-    For commodity aliases we also accept the internal
-    symbol when the returned symbol is explicitly cached
-    from the official commodity catalog.
-    """
-
-    a = _normalize_symbol(
-        requested
-    )
-
-    b = _normalize_symbol(
-        returned
-    )
-
-    if not a or not b:
-        return False
-
-    if a == b:
-        return True
-
-    return False
-
-
-# ============================================================
 # TWELVE DATA FETCH
 # ============================================================
 
@@ -986,9 +956,6 @@ def _fetch_twelve_symbol(
 ):
     """
     Fetch 5-minute OHLCV from Twelve Data.
-
-    IMPORTANT:
-    meta.symbol must match the requested symbol.
     """
 
     if not TWELVE_DATA_API_KEY:
@@ -998,20 +965,18 @@ def _fetch_twelve_symbol(
             "TWELVE_DATA_API_KEY_MISSING",
         )
 
-    outputsize = min(
-        max(
-            int(LOOKBACK),
-            DEFAULT_DATA_POINTS,
-        ),
-        MAX_DATA_POINTS,
-    )
-
     payload, error = _request_json(
         TWELVE_DATA_TIME_SERIES,
         {
             "symbol": provider_symbol,
             "interval": "5min",
-            "outputsize": outputsize,
+            "outputsize": min(
+                max(
+                    LOOKBACK,
+                    120,
+                ),
+                5000,
+            ),
             "apikey": TWELVE_DATA_API_KEY,
             "timezone": "UTC",
         },
@@ -1021,7 +986,10 @@ def _fetch_twelve_symbol(
     if error:
         return [], error
 
-    if payload.get("status") == "error":
+    if (
+        payload.get("status")
+        == "error"
+    ):
 
         return (
             [],
@@ -1033,50 +1001,18 @@ def _fetch_twelve_symbol(
             ),
         )
 
-    meta = payload.get(
-        "meta",
-        {},
-    )
-
-    if not isinstance(
-        meta,
-        dict,
-    ):
-        return (
-            [],
-            "TWELVE_DATA_META_MISSING",
-        )
-
-    returned_symbol = meta.get(
-        "symbol"
-    )
-
-    if not _symbol_identity_matches(
-        provider_symbol,
-        returned_symbol,
-    ):
-
-        return (
-            [],
-            (
-                "SYMBOL_IDENTITY_MISMATCH:"
-                f"requested={provider_symbol}:"
-                f"returned={returned_symbol}"
-            ),
-        )
-
     values = payload.get(
-        "values",
-        [],
+        "values"
     )
 
     if not isinstance(
         values,
         list,
     ):
+
         return (
             [],
-            "TWELVE_DATA_VALUES_INVALID",
+            "TWELVE_DATA_VALUES_MISSING",
         )
 
     candles = []
@@ -1090,150 +1026,83 @@ def _fetch_twelve_symbol(
             continue
 
         candle = _normalize(
-            row.get("datetime"),
-            row.get("open"),
-            row.get("high"),
-            row.get("low"),
-            row.get("close"),
-            row.get("volume", 0),
+            row.get(
+                "datetime"
+            ),
+            row.get(
+                "open"
+            ),
+            row.get(
+                "high"
+            ),
+            row.get(
+                "low"
+            ),
+            row.get(
+                "close"
+            ),
+            row.get(
+                "volume",
+                0,
+            ),
         )
 
         if candle:
-            candles.append(candle)
+            candles.append(
+                candle
+            )
+
+    candles, validation_error = (
+        _validate_candles(
+            candles
+        )
+    )
+
+    if validation_error:
+        return (
+            candles,
+            validation_error,
+        )
 
     return (
-        candles,
+        candles[-LOOKBACK:],
         None,
     )
 
 
-# ============================================================
-# TWELVE DATA INTERNAL COMMODITY FETCH
-# ============================================================
-
 def _fetch_twelve(
-    internal_symbol: str,
+    symbol: str,
 ):
     """
-    Fetch non-agriculture commodity directly using
-    the internal Twelve Data commodity symbol.
+    Fetch a normal non-agriculture symbol
+    from Twelve Data.
     """
 
     return _fetch_twelve_symbol(
-        internal_symbol
+        symbol
     )
 
 
-# ============================================================
-# TWELVE DATA AGRICULTURE FETCH
-# ============================================================
-
 def _fetch_twelve_agriculture(
-    internal_symbol: str,
+    symbol: str,
 ):
     """
-    Resolve agriculture through the official commodity catalog,
-    then fetch the resolved symbol.
+    Resolve agriculture symbol safely,
+    then fetch its data.
     """
 
-    resolved_symbol, error = (
+    provider_symbol, error = (
         _find_twelve_agri_symbol(
-            internal_symbol
+            symbol
         )
     )
 
     if error:
         return [], error
 
-    if not resolved_symbol:
-        return (
-            [],
-            "AGRI_SYMBOL_EMPTY",
-        )
-
-    candles, fetch_error = (
-        _fetch_twelve_symbol(
-            resolved_symbol
-        )
+    return _fetch_twelve_symbol(
+        provider_symbol
     )
-
-    if fetch_error:
-        return (
-            [],
-            fetch_error,
-        )
-
-    return (
-        candles,
-        None,
-    )
-
-
-# ============================================================
-# BIQUOTE PARSER
-# ============================================================
-
-def _extract_biquote_rows(
-    payload: Any,
-):
-    """
-    Extract possible candle arrays from different
-    Biquote response shapes.
-    """
-
-    if not isinstance(
-        payload,
-        dict,
-    ):
-        return []
-
-    candidates = []
-
-    for key in (
-        "data",
-        "candles",
-        "values",
-        "result",
-        "prices",
-        "history",
-        "bars",
-    ):
-
-        value = payload.get(key)
-
-        if isinstance(
-            value,
-            list,
-        ):
-            candidates.append(value)
-
-        elif isinstance(
-            value,
-            dict,
-        ):
-
-            for nested_key in (
-                "data",
-                "candles",
-                "values",
-                "prices",
-                "history",
-                "bars",
-            ):
-
-                nested = value.get(
-                    nested_key
-                )
-
-                if isinstance(
-                    nested,
-                    list,
-                ):
-                    candidates.append(
-                        nested
-                    )
-
-    return candidates
 
 
 # ============================================================
@@ -1241,18 +1110,15 @@ def _extract_biquote_rows(
 # ============================================================
 
 def _fetch_biquote(
-    internal_symbol: str,
+    symbol: str,
 ):
     """
-    Fetch 5-minute data from Biquote.
-
-    Biquote response formats may vary, so the parser accepts
-    common OHLCV structures without guessing instrument identity.
+    Fetch OHLC data from Biquote.
     """
 
     provider_symbol = (
         BIQUOTE_SYMBOLS.get(
-            internal_symbol
+            symbol
         )
     )
 
@@ -1263,155 +1129,316 @@ def _fetch_biquote(
             "BIQUOTE_SYMBOL_NOT_MAPPED",
         )
 
-    endpoint_candidates = (
-        f"{BIQUOTE_BASE}/history",
+    urls = (
         f"{BIQUOTE_BASE}/candles",
-        f"{BIQUOTE_BASE}/ohlcv",
+        f"{BIQUOTE_BASE}/history",
+        f"{BIQUOTE_BASE}/timeseries",
     )
 
-    params_candidates = (
+    params_variants = (
         {
             "symbol": provider_symbol,
             "interval": "5m",
-            "limit": min(
-                max(
-                    int(LOOKBACK),
-                    DEFAULT_DATA_POINTS,
-                ),
-                MAX_DATA_POINTS,
+            "limit": max(
+                LOOKBACK,
+                120,
             ),
         },
         {
             "symbol": provider_symbol,
             "timeframe": "5m",
-            "limit": min(
-                max(
-                    int(LOOKBACK),
-                    DEFAULT_DATA_POINTS,
-                ),
-                MAX_DATA_POINTS,
+            "limit": max(
+                LOOKBACK,
+                120,
             ),
         },
     )
 
-    last_error = None
+    errors = []
 
-    for endpoint in endpoint_candidates:
+    for url in urls:
 
-        for params in params_candidates:
+        for params in params_variants:
 
             payload, error = (
                 _request_json(
-                    endpoint,
+                    url,
                     params,
                     retries=0,
                 )
             )
 
             if error:
-                last_error = error
+
+                errors.append(
+                    error
+                )
+
                 continue
 
-            rows_groups = (
-                _extract_biquote_rows(
-                    payload
+            if (
+                payload.get(
+                    "status"
+                )
+                == "error"
+            ):
+
+                errors.append(
+                    str(
+                        payload.get(
+                            "message"
+                        )
+                        or "BIQUOTE_ERROR"
+                    )
+                )
+
+                continue
+
+            raw_values = (
+                payload.get(
+                    "data"
+                )
+                or payload.get(
+                    "values"
+                )
+                or payload.get(
+                    "candles"
+                )
+                or payload.get(
+                    "result"
                 )
             )
 
-            for rows in rows_groups:
+            if isinstance(
+                raw_values,
+                dict,
+            ):
 
-                candles = []
-
-                for row in rows:
-
-                    if isinstance(
-                        row,
-                        dict,
-                    ):
-
-                        timestamp = (
-                            row.get("timestamp")
-                            or row.get("time")
-                            or row.get("datetime")
-                            or row.get("date")
-                        )
-
-                        o = (
-                            row.get("open")
-                            or row.get("o")
-                        )
-
-                        h = (
-                            row.get("high")
-                            or row.get("h")
-                        )
-
-                        l = (
-                            row.get("low")
-                            or row.get("l")
-                        )
-
-                        c = (
-                            row.get("close")
-                            or row.get("c")
-                        )
-
-                        v = (
-                            row.get("volume")
-                            or row.get("v")
-                            or 0
-                        )
-
-                        candle = _normalize(
-                            timestamp,
-                            o,
-                            h,
-                            l,
-                            c,
-                            v,
-                        )
-
-                        if candle:
-                            candles.append(
-                                candle
-                            )
-
-                    elif isinstance(
-                        row,
-                        (list, tuple),
-                    ):
-
-                        if len(row) < 5:
-                            continue
-
-                        candle = _normalize(
-                            row[0],
-                            row[1],
-                            row[2],
-                            row[3],
-                            row[4],
-                            row[5]
-                            if len(row) > 5
-                            else 0,
-                        )
-
-                        if candle:
-                            candles.append(
-                                candle
-                            )
-
-                if candles:
-
-                    return (
-                        candles,
-                        None,
+                raw_values = (
+                    raw_values.get(
+                        "data"
                     )
+                    or raw_values.get(
+                        "values"
+                    )
+                    or raw_values.get(
+                        "candles"
+                    )
+                    or []
+                )
+
+            if not isinstance(
+                raw_values,
+                list,
+            ):
+                continue
+
+            candles = []
+
+            for row in raw_values:
+
+                if not isinstance(
+                    row,
+                    dict,
+                ):
+                    continue
+
+                timestamp = (
+                    row.get(
+                        "timestamp"
+                    )
+                    or row.get(
+                        "time"
+                    )
+                    or row.get(
+                        "datetime"
+                    )
+                    or row.get(
+                        "date"
+                    )
+                )
+
+                candle = _normalize(
+                    timestamp,
+                    row.get(
+                        "open"
+                    ),
+                    row.get(
+                        "high"
+                    ),
+                    row.get(
+                        "low"
+                    ),
+                    row.get(
+                        "close"
+                    ),
+                    row.get(
+                        "volume",
+                        0,
+                    ),
+                )
+
+                if candle:
+                    candles.append(
+                        candle
+                    )
+
+            candles, validation_error = (
+                _validate_candles(
+                    candles
+                )
+            )
+
+            if not validation_error:
+
+                return (
+                    candles[-LOOKBACK:],
+                    None,
+                )
+
+            errors.append(
+                validation_error
+            )
 
     return (
         [],
-        last_error
-        or "BIQUOTE_NO_VALID_CANDLES",
+        (
+            "BIQUOTE_FAILED: "
+            + " | ".join(
+                errors[-10:]
+            )
+        ),
     )
+    # ============================================================
+# YAHOO PARSER
+# ============================================================
+
+def _parse_yahoo(
+    payload: Dict[str, Any],
+):
+    """
+    Parse Yahoo Finance chart response.
+    """
+
+    try:
+        chart = payload.get(
+            "chart",
+            {},
+        )
+
+        result = chart.get(
+            "result"
+        )
+
+        if not result:
+            return (
+                [],
+                "YAHOO_RESULT_MISSING",
+            )
+
+        item = result[0]
+
+        timestamps = (
+            item.get(
+                "timestamp"
+            )
+            or []
+        )
+
+        indicators = (
+            item.get(
+                "indicators"
+            )
+            or {}
+        )
+
+        quote = (
+            indicators.get(
+                "quote"
+            )
+            or [{}]
+        )[0]
+
+        opens = (
+            quote.get("open")
+            or []
+        )
+
+        highs = (
+            quote.get("high")
+            or []
+        )
+
+        lows = (
+            quote.get("low")
+            or []
+        )
+
+        closes = (
+            quote.get("close")
+            or []
+        )
+
+        volumes = (
+            quote.get("volume")
+            or []
+        )
+
+        candles = []
+
+        for i, timestamp in enumerate(
+            timestamps
+        ):
+
+            try:
+
+                candle = _normalize(
+                    timestamp,
+                    opens[i],
+                    highs[i],
+                    lows[i],
+                    closes[i],
+                    (
+                        volumes[i]
+                        if i < len(volumes)
+                        else 0
+                    ),
+                )
+
+                if candle:
+                    candles.append(
+                        candle
+                    )
+
+            except (
+                IndexError,
+                TypeError,
+            ):
+                continue
+
+        candles, validation_error = (
+            _validate_candles(
+                candles
+            )
+        )
+
+        if validation_error:
+            return (
+                candles,
+                validation_error,
+            )
+
+        return (
+            candles[-LOOKBACK:],
+            None,
+        )
+
+    except Exception as exc:
+
+        return (
+            [],
+            f"YAHOO_PARSE_ERROR: {exc}",
+        )
 
 
 # ============================================================
@@ -1419,17 +1446,15 @@ def _fetch_biquote(
 # ============================================================
 
 def _fetch_yahoo(
-    internal_symbol: str,
+    symbol: str,
 ):
     """
-    Fetch explicit Yahoo futures symbol.
-
-    No generic Yahoo symbol search is performed.
+    Fetch Yahoo explicit mapped instrument.
     """
 
     yahoo_symbol = (
         YAHOO_SYMBOLS.get(
-            internal_symbol
+            symbol
         )
     )
 
@@ -1440,166 +1465,59 @@ def _fetch_yahoo(
             "YAHOO_SYMBOL_NOT_MAPPED",
         )
 
-    period_seconds = max(
-        DEFAULT_DATA_POINTS * 5 * 60,
-        3 * 24 * 60 * 60,
+    now = int(
+        time.time()
     )
 
-    period2 = int(
-        datetime.now(
-            timezone.utc
-        ).timestamp()
-    )
-
-    period1 = (
-        period2
-        - period_seconds
-    )
-
-    last_error = None
-
-    for template in YAHOO_URLS:
-
-        url = template.format(
-            symbol=yahoo_symbol
+    # Ask for a larger time window than
+    # the final LOOKBACK so that gaps/closed
+    # periods do not immediately destroy MTF.
+    period_seconds = (
+        max(
+            LOOKBACK * 15 * 60,
+            3 * 24 * 60 * 60,
         )
+    )
+
+    params = {
+        "period1": (
+            now
+            - period_seconds
+        ),
+        "period2": now,
+        "interval": "5m",
+        "events": "history",
+        "includePrePost": "true",
+        "range": "5d",
+    }
+
+    errors = []
+
+    for url_template in YAHOO_URLS:
 
         payload, error = (
             _request_json(
-                url,
-                {
-                    "period1": period1,
-                    "period2": period2,
-                    "interval": "5m",
-                    "events": "history",
-                    "includeAdjustedClose": "true",
-                },
+                url_template.format(
+                    symbol=yahoo_symbol
+                ),
+                params,
                 retries=0,
             )
         )
 
         if error:
-            last_error = error
+
+            errors.append(
+                error
+            )
+
             continue
 
-        chart = payload.get(
-            "chart",
-            {},
-        )
-
-        if not isinstance(
-            chart,
-            dict,
-        ):
-            last_error = (
-                "YAHOO_CHART_INVALID"
+        candles, parse_error = (
+            _parse_yahoo(
+                payload
             )
-            continue
-
-        if chart.get("error"):
-            last_error = str(
-                chart.get("error")
-            )
-            continue
-
-        results = chart.get(
-            "result",
-            [],
         )
-
-        if not results:
-            last_error = (
-                "YAHOO_NO_RESULT"
-            )
-            continue
-
-        result = results[0]
-
-        timestamps = result.get(
-            "timestamp",
-            [],
-        )
-
-        indicators = result.get(
-            "indicators",
-            {},
-        )
-
-        quote_list = indicators.get(
-            "quote",
-            [],
-        )
-
-        if not timestamps or not quote_list:
-            last_error = (
-                "YAHOO_NO_OHLC"
-            )
-            continue
-
-        quote = quote_list[0]
-
-        opens = quote.get(
-            "open",
-            [],
-        )
-
-        highs = quote.get(
-            "high",
-            [],
-        )
-
-        lows = quote.get(
-            "low",
-            [],
-        )
-
-        closes = quote.get(
-            "close",
-            [],
-        )
-
-        volumes = quote.get(
-            "volume",
-            [],
-        )
-
-        candles = []
-
-        for i, ts in enumerate(
-            timestamps
-        ):
-
-            try:
-                o = opens[i]
-                h = highs[i]
-                l = lows[i]
-                c = closes[i]
-
-            except (
-                IndexError,
-                TypeError,
-            ):
-                continue
-
-            v = (
-                volumes[i]
-                if i < len(volumes)
-                else 0
-            )
-
-            candle = _normalize(
-                ts,
-                o,
-                h,
-                l,
-                c,
-                v,
-            )
-
-            if candle:
-                candles.append(
-                    candle
-                )
 
         if candles:
 
@@ -1608,10 +1526,48 @@ def _fetch_yahoo(
                 None,
             )
 
+        errors.append(
+            parse_error
+            or "YAHOO_NO_CANDLES"
+        )
+
     return (
         [],
-        last_error
-        or "YAHOO_NO_VALID_CANDLES",
+        (
+            f"YAHOO_SYMBOL={yahoo_symbol} | "
+            + " | ".join(errors)
+        ),
+    )
+
+
+# ============================================================
+# TRUE RANGE
+# ============================================================
+
+def _true_range(
+    candle,
+    previous_close,
+):
+    if previous_close is None:
+
+        return (
+            candle["high"]
+            - candle["low"]
+        )
+
+    return max(
+        (
+            candle["high"]
+            - candle["low"]
+        ),
+        abs(
+            candle["high"]
+            - previous_close
+        ),
+        abs(
+            candle["low"]
+            - previous_close
+        ),
     )
 
 
@@ -1620,79 +1576,57 @@ def _fetch_yahoo(
 # ============================================================
 
 def _atr(
-    candles: List[Dict[str, float]],
+    candles: List[
+        Dict[str, float]
+    ],
     period: int = 14,
-) -> Optional[float]:
-    """
-    Calculate ATR using True Range.
-    """
+):
+    if not candles:
+        return 0.0
 
-    if len(candles) < 2:
-        return None
+    values = []
 
-    true_ranges = []
-
-    previous_close = None
+    previous = None
 
     for candle in candles:
 
-        high = candle["high"]
-        low = candle["low"]
-        close = candle["close"]
-
-        if previous_close is None:
-
-            tr = high - low
-
-        else:
-
-            tr = max(
-                high - low,
-                abs(
-                    high
-                    - previous_close
-                ),
-                abs(
-                    low
-                    - previous_close
-                ),
+        values.append(
+            _true_range(
+                candle,
+                previous,
             )
+        )
 
-        true_ranges.append(tr)
+        previous = candle[
+            "close"
+        ]
 
-        previous_close = close
-
-    if not true_ranges:
-        return None
-
-    sample = true_ranges[
+    values = values[
         -period:
     ]
 
-    if not sample:
-        return None
+    if not values:
+        return 0.0
 
-    value = sum(sample) / len(sample)
-
-    if value <= 0:
-        return None
-
-    return float(value)
+    return (
+        sum(values)
+        / len(values)
+    )
 
 
 # ============================================================
-# TIMEFRAME AGGREGATION
+# AGGREGATION
 # ============================================================
 
 def _aggregate(
-    candles: List[Dict[str, float]],
-    minutes: int,
-) -> List[Dict[str, float]]:
+    candles,
+    minutes,
+):
     """
-    Aggregate 5-minute candles into:
-        15m
-        30m
-        60m
+    Aggregate 5m candles into:
+    15m
+    30m
+    60m
     """
 
     if not candles:
@@ -1706,65 +1640,79 @@ def _aggregate(
 
     for candle in candles:
 
-        ts = int(
-            candle["timestamp"]
-        )
-
         bucket = (
-            ts // bucket_seconds
-        ) * bucket_seconds
-
-        buckets.setdefault(
-            bucket,
-            [],
-        ).append(
-            candle
+            int(
+                candle[
+                    "timestamp"
+                ]
+                // bucket_seconds
+            )
+            * bucket_seconds
         )
 
-    output = []
+        if bucket not in buckets:
 
-    for bucket in sorted(
-        buckets.keys()
-    ):
-
-        rows = buckets[
-            bucket
-        ]
-
-        rows.sort(
-            key=lambda x: x[
-                "timestamp"
-            ]
-        )
-
-        if not rows:
-            continue
-
-        output.append(
-            {
-                "timestamp": bucket,
-                "open": rows[0]["open"],
-                "high": max(
-                    x["high"]
-                    for x in rows
+            buckets[
+                bucket
+            ] = {
+                "timestamp": float(
+                    bucket
                 ),
-                "low": min(
-                    x["low"]
-                    for x in rows
-                ),
-                "close": rows[-1]["close"],
-                "volume": sum(
-                    x.get(
-                        "volume",
-                        0,
-                    )
-                    or 0
-                    for x in rows
+                "open": candle[
+                    "open"
+                ],
+                "high": candle[
+                    "high"
+                ],
+                "low": candle[
+                    "low"
+                ],
+                "close": candle[
+                    "close"
+                ],
+                "volume": candle.get(
+                    "volume",
+                    0.0,
                 ),
             }
-        )
 
-    return output
+        else:
+
+            current = buckets[
+                bucket
+            ]
+
+            current[
+                "high"
+            ] = max(
+                current["high"],
+                candle["high"],
+            )
+
+            current[
+                "low"
+            ] = min(
+                current["low"],
+                candle["low"],
+            )
+
+            current[
+                "close"
+            ] = candle["close"]
+
+            current[
+                "volume"
+            ] += candle.get(
+                "volume",
+                0.0,
+            )
+
+    return [
+        buckets[key]
+        for key in sorted(
+            buckets
+        )
+    ]
 
 
 # ============================================================
@@ -1772,10 +1720,18 @@ def _aggregate(
 # ============================================================
 
 def _build_mtf(
-    candles: List[Dict[str, float]],
-) -> Dict[str, List[Dict[str, float]]]:
+    candles,
+):
     """
-    Build MTF datasets.
+    Build multi-timeframe structure.
+
+    Base:
+        M5
+
+    Derived:
+        M15
+        M30
+        H1
     """
 
     m5 = list(candles)
@@ -1813,10 +1769,15 @@ def _build_mtf(
 # ============================================================
 
 def _freshness(
-    latest_timestamp: float,
+    latest_timestamp,
 ):
     """
-    Determine whether the latest candle is live.
+    Determine freshness.
+
+    Returns:
+        fresh_live
+        age_seconds
+        status
     """
 
     now = datetime.now(
@@ -1863,72 +1824,6 @@ def _freshness(
 
 
 # ============================================================
-# PROVIDER QUALITY
-# ============================================================
-
-def _provider_quality(
-    candles: List[Dict[str, float]],
-):
-    """
-    Determine whether a provider response is good enough
-    to become the active provider.
-
-    Returns:
-        accepted
-        quality_status
-        age
-    """
-
-    validated, error = (
-        _validate_candles(
-            candles
-        )
-    )
-
-    if error:
-
-        return (
-            False,
-            error,
-            None,
-        )
-
-    latest = validated[
-        -1
-    ]["timestamp"]
-
-    fresh, age, status = (
-        _freshness(
-            latest
-        )
-    )
-
-    if status == "FUTURE_TIMESTAMP":
-
-        return (
-            False,
-            status,
-            age,
-        )
-
-    # A stale response is NOT accepted as the active
-    # provider while other providers remain available.
-    if not fresh:
-
-        return (
-            False,
-            "STALE",
-            age,
-        )
-
-    return (
-        True,
-        "LIVE",
-        age,
-    )
-
-
-# ============================================================
 # FINALIZE
 # ============================================================
 
@@ -1939,7 +1834,10 @@ def _finalize(
     error=None,
 ):
     """
-    Move validated provider data into canonical SoyuzState.
+    Final provider-independent finalization.
+
+    This function is the only place where
+    provider data enters Gagarin state.
     """
 
     if not candles:
@@ -1963,6 +1861,7 @@ def _finalize(
             "DATA_MISSING"
             not in state.blockers
         ):
+
             state.blockers.append(
                 "DATA_MISSING"
             )
@@ -1993,16 +1892,18 @@ def _finalize(
             "DATA_INVALID"
             not in state.blockers
         ):
+
             state.blockers.append(
                 "DATA_INVALID"
             )
 
         return state
 
-    candles.sort(
+    candles = sorted(
+        candles,
         key=lambda x: x[
             "timestamp"
-        ]
+        ],
     )
 
     state.candles = candles
@@ -2029,11 +1930,6 @@ def _finalize(
 
     state.volumes = [
         x["volume"]
-        for x in candles
-    ]
-
-    state.timestamps = [
-        x["timestamp"]
         for x in candles
     ]
 
@@ -2069,9 +1965,15 @@ def _finalize(
 
     state.data_source = provider
 
-    state.data_age_seconds = age
+    state.data_age_seconds = (
+        age
+    )
 
     state.data_ok = True
+
+    # --------------------------------------------------------
+    # METADATA
+    # --------------------------------------------------------
 
     state.metadata[
         "provider"
@@ -2088,10 +1990,6 @@ def _finalize(
     state.metadata[
         "data_error"
     ] = error
-
-    state.metadata[
-        "data_engine_version"
-    ] = DATA_ENGINE_VERSION
 
     state.metadata[
         "last_bar_timestamp"
@@ -2152,6 +2050,7 @@ def _finalize(
             "MARKET_CLOSED"
             not in state.blockers
         ):
+
             state.blockers.append(
                 "MARKET_CLOSED"
             )
@@ -2164,6 +2063,7 @@ def _finalize(
             "DATA_NOT_LIVE"
             not in state.blockers
         ):
+
             state.blockers.append(
                 "DATA_NOT_LIVE"
             )
@@ -2177,14 +2077,13 @@ def _finalize(
             "DATA_ERROR"
             not in state.blockers
         ):
+
             state.blockers.append(
                 "DATA_ERROR"
             )
 
     return state
-
-
-# ============================================================
+    # ============================================================
 # PROVIDER ATTEMPT
 # ============================================================
 
@@ -2194,7 +2093,12 @@ def _try_provider(
     provider: str,
 ):
     """
-    Execute one provider attempt.
+    Try one provider.
+
+    Returns:
+        candles
+        error
+        provider_symbol
     """
 
     provider_symbol = None
@@ -2289,32 +2193,25 @@ def load_data(
     """
     MAIN DATA ENTRY POINT.
 
-    v5.1 IMPORTANT CHANGE:
+    Provider chain:
 
-    A provider is accepted only if its data is:
+        PRIMARY
+            ↓
+        VALIDATE
+            ↓
+        if failed
+            ↓
+        FALLBACK
+            ↓
+        VALIDATE
+            ↓
+        if failed
+            ↓
+        NEXT FALLBACK
+            ↓
+        DATA_ERROR
 
-        VALID
-        +
-        SUFFICIENT
-        +
-        FRESH
-
-    Therefore:
-
-        Provider A
-             ↓
-        stale
-             ↓
-        REJECT
-             ↓
-        Provider B
-             ↓
-        live
-             ↓
-        ACCEPT
-
-    This fixes the old behaviour where a stale primary
-    provider could prevent the fallback chain from executing.
+    No provider is trusted blindly.
     """
 
     symbol = commodity.symbol
@@ -2324,14 +2221,6 @@ def load_data(
     )
 
     state.symbol = symbol
-
-    state.engine_version = (
-        getattr(
-            state,
-            "engine_version",
-            DATA_ENGINE_VERSION,
-        )
-    )
 
     providers = (
         PROVIDER_ORDER.get(
@@ -2359,22 +2248,16 @@ def load_data(
             )
         )
 
-        accepted, quality_status, age = (
-            _provider_quality(
-                candles
-            )
-        )
-
         attempt = {
             "provider": provider,
             "symbol": provider_symbol,
-            "success": accepted,
-            "raw_candles": len(
+            "success": bool(
                 candles
             ),
             "error": error,
-            "quality_status": quality_status,
-            "age_seconds": age,
+            "candles": len(
+                candles
+            ),
         }
 
         attempts.append(
@@ -2382,11 +2265,12 @@ def load_data(
         )
 
         # ----------------------------------------------------
-        # PROVIDER ACCEPTED
+        # SUCCESS
         # ----------------------------------------------------
 
-        if accepted:
+        if candles:
 
+            # Resolve symbol metadata.
             state.metadata[
                 "resolved_symbol"
             ] = provider_symbol
@@ -2396,46 +2280,52 @@ def load_data(
             ] = attempts
 
             state.metadata[
-                "provider_chain"
-            ] = list(
-                providers
-            )
-
-            state.metadata[
                 "fallback_used"
             ] = (
                 len(attempts) > 1
             )
 
             state.metadata[
-                "selected_provider_attempt"
-            ] = len(attempts)
+                "provider_chain"
+            ] = list(
+                providers
+            )
+
+            # -----------------------------------------------
+            # FINAL VALIDATION
+            # -----------------------------------------------
+
+            validated, validation_error = (
+                _validate_candles(
+                    candles
+                )
+            )
+
+            if (
+                validation_error
+                or len(validated)
+                < MIN_CANDLES_REQUIRED
+            ):
+
+                attempts[-1][
+                    "success"
+                ] = False
+
+                attempts[-1][
+                    "error"
+                ] = (
+                    validation_error
+                    or "INSUFFICIENT_CANDLES"
+                )
+
+                continue
 
             return _finalize(
                 state,
-                candles,
+                validated,
                 provider,
                 error,
             )
-
-        # ----------------------------------------------------
-        # PROVIDER REJECTED
-        # ----------------------------------------------------
-
-        # We deliberately continue to the next provider.
-        #
-        # Reasons include:
-        #
-        # - HTTP error
-        # - timeout
-        # - rate limit
-        # - symbol mismatch
-        # - no candles
-        # - insufficient history
-        # - stale data
-        # - future timestamp
-        #
-        # No rejected provider can block the chain.
 
     # --------------------------------------------------------
     # ALL PROVIDERS FAILED
@@ -2443,17 +2333,13 @@ def load_data(
 
     state.data_ok = False
     state.live = False
-    state.data_source = "NONE"
+    state.data_source = (
+        "NONE"
+    )
 
     state.metadata[
         "provider_attempts"
     ] = attempts
-
-    state.metadata[
-        "provider_chain"
-    ] = list(
-        providers
-    )
 
     state.metadata[
         "fallback_used"
@@ -2462,12 +2348,14 @@ def load_data(
     )
 
     state.metadata[
-        "data_status"
-    ] = "DATA_ERROR"
+        "provider_chain"
+    ] = list(
+        providers
+    )
 
     state.metadata[
-        "data_engine_version"
-    ] = DATA_ENGINE_VERSION
+        "data_status"
+    ] = "DATA_ERROR"
 
     errors = []
 
@@ -2481,14 +2369,10 @@ def load_data(
             "error"
         )
 
-        status = attempt.get(
-            "quality_status"
-        )
-
         errors.append(
             (
                 f"{provider}: "
-                f"{error or status or 'NO_DATA'}"
+                f"{error or 'NO_DATA'}"
             )
         )
 
@@ -2502,6 +2386,7 @@ def load_data(
         "DATA_MISSING"
         not in state.blockers
     ):
+
         state.blockers.append(
             "DATA_MISSING"
         )
@@ -2510,8 +2395,10 @@ def load_data(
         "ALL_PROVIDERS_FAILED"
         not in state.blockers
     ):
+
         state.blockers.append(
             "ALL_PROVIDERS_FAILED"
         )
 
-    return state 
+    return state
+    
