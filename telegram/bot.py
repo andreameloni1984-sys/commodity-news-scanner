@@ -1,16 +1,22 @@
 """
-SOYUZ GAGARIN — Telegram interface v2.0
+SOYUZ GAGARIN — Telegram interface v3.0
 
-Gestisce:
-- invio report
-- diagnostica Bot API
-- ricezione comandi via long polling
-- risposta a /start, /help, /ping, /status, /id
+Comandi:
+    /start
+    /help
+    /ping
+    /status
+    /id
+    /classifica
+    /setup
+    /analisi
+    /prezzo
 
-IMPORTANTE:
-GitHub Actions può eseguire il motore periodicamente, ma non è un
-processo Telegram permanente. Per risposte in tempo reale bisogna
-eseguire run_polling() su un processo sempre attivo.
+PAPER ONLY:
+nessun ordine reale viene eseguito.
+
+NOTA:
+Il polling Telegram deve essere eseguito da un processo sempre attivo.
 """
 
 from __future__ import annotations
@@ -25,10 +31,37 @@ from config import (
     TELEGRAM_CHAT_ID,
 )
 
+from engine.gagarin import analyze_universe
+from commodities.universe import enabled_commodities
+
 
 API_BASE = "https://api.telegram.org"
 REQUEST_TIMEOUT = 30
 POLL_TIMEOUT = 25
+
+
+# ============================================================
+# CACHE ULTIMA ANALISI
+# ============================================================
+
+_LAST_RESULTS = None
+_LAST_ANALYSIS_TIME = None
+
+
+def set_last_results(results):
+    """
+    Salva l'ultima analisi Gagarin in memoria.
+    """
+
+    global _LAST_RESULTS
+    global _LAST_ANALYSIS_TIME
+
+    _LAST_RESULTS = results
+    _LAST_ANALYSIS_TIME = time.time()
+
+
+def get_last_results():
+    return _LAST_RESULTS
 
 
 # ============================================================
@@ -97,10 +130,6 @@ def _api(
 # ============================================================
 
 def telegram_diagnostic() -> bool:
-    """
-    Verifica token e configurazione.
-    Non stampa mai il token.
-    """
 
     ok, data = _api("getMe")
 
@@ -144,12 +173,6 @@ def telegram_diagnostic() -> bool:
 # ============================================================
 
 def prepare_long_polling() -> bool:
-    """
-    Rimuove un eventuale webhook.
-
-    getUpdates non funziona mentre è attivo
-    un outgoing webhook.
-    """
 
     ok, data = _api(
         "deleteWebhook",
@@ -181,12 +204,6 @@ def prepare_long_polling() -> bool:
 def send_telegram(
     message: str,
 ) -> bool:
-    """
-    Invia un messaggio Telegram.
-
-    Telegram limita sendMessage a 4096 caratteri.
-    Il report viene quindi spezzato automaticamente.
-    """
 
     if (
         not TELEGRAM_BOT_TOKEN
@@ -275,7 +292,209 @@ def _reply(
 
 
 # ============================================================
-# COMMANDS
+# FORMAT CLASSIFICA
+# ============================================================
+
+def _format_classifica(results):
+
+    if not results:
+
+        return (
+            "📊 CLASSIFICA GAGARIN\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "Nessun risultato disponibile."
+        )
+
+    lines = [
+        "🚀 SOYUZ GAGARIN",
+        "📊 CLASSIFICA",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "🧪 PAPER ONLY",
+        "",
+    ]
+
+    for index, state in enumerate(
+        results,
+        start=1,
+    ):
+
+        direction = (
+            state.setup_direction
+            if state.setup_direction
+            in {"LONG", "SHORT"}
+            else "—"
+        )
+
+        lines.append(
+            f"{index}. {state.commodity} | "
+            f"{direction} | "
+            f"Prob {state.probability:.1f}% | "
+            f"Q {state.quality:.1f} | "
+            f"C {state.confidence:.1f} | "
+            f"{state.final_decision}"
+        )
+
+    entries = [
+        state
+        for state in results
+        if state.final_decision == "ENTRY"
+    ]
+
+    lines.extend([
+        "",
+        "🎯 OPERATIVITÀ",
+    ])
+
+    if not entries:
+
+        lines.append(
+            "🟡 NESSUNA ENTRATA AUTORIZZATA"
+        )
+
+    else:
+
+        lines.append(
+            f"🟢 {len(entries)} ENTRATA/E AUTORIZZATA/E"
+        )
+
+    return "\n".join(lines)
+
+
+# ============================================================
+# FORMAT SETUP
+# ============================================================
+
+def _format_setup(results):
+
+    if not results:
+
+        return (
+            "🎯 SETUP\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "Nessun risultato disponibile."
+        )
+
+    lines = [
+        "🎯 SETUP GAGARIN",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "",
+    ]
+
+    found = False
+
+    for state in results:
+
+        if state.setup_direction not in {
+            "LONG",
+            "SHORT",
+        }:
+
+            continue
+
+        found = True
+
+        trigger = (
+            "✅ CONFERMATO"
+            if state.trigger_confirmed
+            else "⏳ IN ATTESA"
+        )
+
+        lines.extend([
+            f"• {state.commodity}",
+            f"  Direzione: {state.setup_direction}",
+            f"  Setup Q: {state.setup_quality:.1f}",
+            f"  Trigger: {trigger}",
+            f"  Prob: {state.probability:.1f}%",
+            f"  Quality: {state.quality:.1f}",
+            f"  Confidence: {state.confidence:.1f}",
+            "",
+        ])
+
+    if not found:
+
+        lines.append(
+            "Nessun setup LONG/SHORT attivo."
+        )
+
+    return "\n".join(lines)
+
+
+# ============================================================
+# FORMAT PREZZI
+# ============================================================
+
+def _format_prezzi(results):
+
+    if not results:
+
+        return (
+            "💰 PREZZI\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "Nessun dato disponibile."
+        )
+
+    lines = [
+        "💰 PREZZI GAGARIN",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "",
+    ]
+
+    for state in results:
+
+        if state.price is None:
+
+            price = "N/D"
+
+        else:
+
+            price = f"{state.price:.6g}"
+
+        status = state.metadata.get(
+            "data_status",
+            "UNKNOWN",
+        )
+
+        provider = (
+            state.data_source
+            if state.data_source
+            else "N/D"
+        )
+
+        lines.append(
+            f"{state.commodity}: "
+            f"{price} | "
+            f"{status} | "
+            f"{provider}"
+        )
+
+    return "\n".join(lines)
+
+
+# ============================================================
+# ANALISI
+# ============================================================
+
+def _run_analysis():
+
+    commodities = enabled_commodities()
+
+    if not commodities:
+
+        return None
+
+    results = analyze_universe(
+        commodities
+    )
+
+    set_last_results(
+        results
+    )
+
+    return results
+
+
+# ============================================================
+# COMMAND RESPONSE
 # ============================================================
 
 def _command_response(
@@ -296,6 +515,10 @@ def _command_response(
             1,
         )[0]
 
+    # --------------------------------------------------------
+    # HELP
+    # --------------------------------------------------------
+
     if command in {
         "/start",
         "/help",
@@ -305,27 +528,161 @@ def _command_response(
             "🚀 SOYUZ GAGARIN\n"
             "━━━━━━━━━━━━━━━━━━━━\n"
             "🧪 PAPER ONLY\n\n"
-            "/ping — verifica collegamento\n"
+            "/classifica — classifica Gagarin\n"
+            "/setup — setup e trigger\n"
+            "/analisi — nuova analisi\n"
+            "/prezzo — prezzi e provider\n"
             "/status — stato bot\n"
+            "/ping — verifica collegamento\n"
             "/id — mostra chat ID\n"
             "/help — comandi"
         )
+
+    # --------------------------------------------------------
+    # PING
+    # --------------------------------------------------------
 
     if command == "/ping":
 
         return (
             "🟢 SOYUZ ONLINE\n"
-            "Telegram OK"
+            "Telegram OK\n"
+            "Trading: PAPER ONLY"
         )
 
+    # --------------------------------------------------------
+    # STATUS
+    # --------------------------------------------------------
+
     if command == "/status":
+
+        results = get_last_results()
+
+        if results:
+
+            return (
+                "🚀 SOYUZ GAGARIN\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "🟢 Telegram: ONLINE\n"
+                "🟢 Engine: DISPONIBILE\n"
+                "🧪 Trading: PAPER ONLY\n"
+                f"📊 Commodities: {len(results)}"
+            )
 
         return (
             "🚀 SOYUZ GAGARIN\n"
             "━━━━━━━━━━━━━━━━━━━━\n"
             "🟢 Telegram: ONLINE\n"
-            "🧪 Trading: PAPER ONLY"
+            "🟢 Engine: DISPONIBILE\n"
+            "🧪 Trading: PAPER ONLY\n"
+            "📊 Nessuna analisi in memoria"
         )
+
+    # --------------------------------------------------------
+    # CLASSIFICA
+    # --------------------------------------------------------
+
+    if command == "/classifica":
+
+        results = get_last_results()
+
+        if not results:
+
+            try:
+
+                results = _run_analysis()
+
+            except Exception as exc:
+
+                return (
+                    "❌ ERRORE ANALISI\n"
+                    f"{type(exc).__name__}: {exc}"
+                )
+
+        return _format_classifica(
+            results
+        )
+
+    # --------------------------------------------------------
+    # SETUP
+    # --------------------------------------------------------
+
+    if command == "/setup":
+
+        results = get_last_results()
+
+        if not results:
+
+            try:
+
+                results = _run_analysis()
+
+            except Exception as exc:
+
+                return (
+                    "❌ ERRORE ANALISI\n"
+                    f"{type(exc).__name__}: {exc}"
+                )
+
+        return _format_setup(
+            results
+        )
+
+    # --------------------------------------------------------
+    # PREZZO
+    # --------------------------------------------------------
+
+    if command == "/prezzo":
+
+        results = get_last_results()
+
+        if not results:
+
+            try:
+
+                results = _run_analysis()
+
+            except Exception as exc:
+
+                return (
+                    "❌ ERRORE ANALISI\n"
+                    f"{type(exc).__name__}: {exc}"
+                )
+
+        return _format_prezzi(
+            results
+        )
+
+    # --------------------------------------------------------
+    # ANALISI
+    # --------------------------------------------------------
+
+    if command == "/analisi":
+
+        try:
+
+            results = _run_analysis()
+
+            if not results:
+
+                return (
+                    "⚠️ Nessuna commodity disponibile."
+                )
+
+            return (
+                "🔄 NUOVA ANALISI COMPLETATA\n"
+                "━━━━━━━━━━━━━━━━━━━━\n\n"
+                + _format_classifica(
+                    results
+                )
+            )
+
+        except Exception as exc:
+
+            return (
+                "❌ GAGARIN ENGINE ERROR\n"
+                f"{type(exc).__name__}: {exc}"
+            )
 
     return None
 
@@ -340,11 +697,6 @@ def poll_once(
         Callable[[dict], None]
     ] = None,
 ) -> Optional[int]:
-    """
-    Legge gli aggiornamenti Telegram una volta.
-
-    Restituisce il prossimo offset.
-    """
 
     payload = {
         "timeout":
@@ -444,10 +796,8 @@ def poll_once(
 
         if text.startswith("/"):
 
-            response = (
-                _command_response(
-                    text
-                )
+            response = _command_response(
+                text
             )
 
             if response:
@@ -478,11 +828,6 @@ def run_polling(
         Callable[[dict], None]
     ] = None,
 ) -> None:
-    """
-    Listener Telegram permanente.
-
-    Deve essere eseguito su un processo sempre attivo.
-    """
 
     if not telegram_diagnostic():
 
@@ -519,7 +864,7 @@ def format_report(
 ):
 
     lines = [
-        "🚀 SOYUZ GAGARIN v2.0",
+        "🚀 SOYUZ GAGARIN v3.0",
         "━━━━━━━━━━━━━━━━━━━━",
         "🧪 PAPER ONLY",
         "",
@@ -558,12 +903,10 @@ def format_report(
         == "ENTRY"
     ]
 
-    lines.extend(
-        [
-            "",
-            "🎯 OPERATIVITÀ",
-        ]
-    )
+    lines.extend([
+        "",
+        "🎯 OPERATIVITÀ",
+    ])
 
     if not entries:
 
