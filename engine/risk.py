@@ -1,15 +1,16 @@
-"""SOYUZ GAGARIN — engine/risk.py v1.3
+"""SOYUZ GAGARIN — engine/risk.py v1.4
 
 Risk engine:
 - entry = current market price
 - stop = structural swing +/- ATR buffer
-- fallback = ATR stop only when structural swing is unavailable
+- fallback = ATR stop when structural stop is unavailable
+- fallback = ATR stop when structural stop exceeds MAX_STOP_ATR
 - TP1/TP2/TP3 use fixed RR
-- never silently compress a structural stop to satisfy MAX_STOP_ATR
-- exposes detailed diagnostics so Safety can explain why a setup is blocked
+- detailed diagnostics for Safety
 """
 
 from engine.state import SoyuzState
+
 
 STRUCTURE_BUFFER_ATR = 0.15
 MIN_STOP_ATR = 0.80
@@ -131,40 +132,55 @@ def apply_risk(state: SoyuzState) -> SoyuzState:
         }
         return state
 
+    # ENTRY
     state.entry = state.price
 
+    # INITIAL STOP
     if state.setup_direction == "LONG":
         state.stop, source = _calculate_long_stop(state)
     else:
         state.stop, source = _calculate_short_stop(state)
 
     if state.stop is None:
-        _risk_diag(state, source, None, None, None)
+        _risk_diag(
+            state,
+            source,
+            None,
+            None,
+            None,
+        )
         return state
 
+    # STOP DISTANCE
     if state.setup_direction == "LONG":
         distance = state.entry - state.stop
     else:
         distance = state.stop - state.entry
 
     if distance <= 0:
+        raw_stop = state.stop
+
         _risk_diag(
             state,
             source,
-            state.stop,
+            raw_stop,
             distance,
             None,
         )
+
         _reset_risk(state)
+
         state.metadata["risk_diagnostics"] = {
             "status": "INVALID_STOP_SIDE",
             "direction": state.setup_direction,
             "entry": state.entry,
-            "raw_stop": state.stop,
+            "raw_stop": raw_stop,
             "stop_source": source,
         }
+
         return state
 
+    # STOP ATR
     state.stop_atr = distance / state.atr
 
     _risk_diag(
@@ -175,28 +191,111 @@ def apply_risk(state: SoyuzState) -> SoyuzState:
         state.stop_atr,
     )
 
-    # Minimum stop check.
+    # MINIMUM STOP
     if state.stop_atr < MIN_STOP_ATR:
         state.metadata["risk_diagnostics"]["status"] = (
             "STOP_LT_MIN_ATR"
         )
         return state
 
-    # IMPORTANT:
-    # Do NOT artificially move a structural stop closer just to pass
-    # MAX_STOP_ATR. That would invalidate the market structure.
-    if state.stop_atr > MAX_STOP_ATR:
-        state.metadata["risk_diagnostics"]["status"] = (
-            "STOP_GT_MAX_ATR"
+    # ---------------------------------------------------------
+    # WIDE STRUCTURAL STOP
+    # ---------------------------------------------------------
+    #
+    # Previously the engine simply stopped here:
+    #
+    #     STOP_GT_MAX_ATR
+    #
+    # That caused TP1/TP2/TP3 to remain empty.
+    #
+    # Now we preserve the structural stop for diagnostics and
+    # try an independent ATR fallback.
+    #
+    if state.stop_atr > MAX_STOP_ATR and source == "STRUCTURE":
+
+        structural_stop = state.stop
+
+        fallback_distance = (
+            state.atr * max(1.20, MIN_STOP_ATR)
         )
+
+        # Safety: fallback must itself respect MAX_STOP_ATR.
+        if fallback_distance <= state.atr * MAX_STOP_ATR:
+
+            if state.setup_direction == "LONG":
+                state.stop = (
+                    state.entry - fallback_distance
+                )
+
+            else:
+                state.stop = (
+                    state.entry + fallback_distance
+                )
+
+            distance = fallback_distance
+
+            state.stop_atr = (
+                distance / state.atr
+            )
+
+            state.metadata["risk_diagnostics"][
+                "structural_stop"
+            ] = structural_stop
+
+            state.metadata["risk_diagnostics"][
+                "stop_source"
+            ] = "ATR_FALLBACK_WIDE_STRUCTURE"
+
+            state.metadata["risk_diagnostics"][
+                "raw_stop"
+            ] = state.stop
+
+            state.metadata["risk_diagnostics"][
+                "stop_distance"
+            ] = distance
+
+            state.metadata["risk_diagnostics"][
+                "stop_atr"
+            ] = state.stop_atr
+
+        else:
+            state.metadata["risk_diagnostics"][
+                "status"
+            ] = "STOP_GT_MAX_ATR"
+
+            return state
+
+    # Final maximum-stop check
+    if state.stop_atr > MAX_STOP_ATR:
+        state.metadata["risk_diagnostics"][
+            "status"
+        ] = "STOP_GT_MAX_ATR"
+
         return state
 
-    _build_targets(state, distance)
+    # ---------------------------------------------------------
+    # TARGETS
+    # ---------------------------------------------------------
+
+    _build_targets(
+        state,
+        distance,
+    )
+
+    # ---------------------------------------------------------
+    # RR
+    # ---------------------------------------------------------
 
     state.rr1 = TP1_RR
     state.rr2 = TP2_RR
     state.rr3 = TP3_RR
 
-    state.metadata["risk_diagnostics"]["status"] = "RISK_VALID"
+    # ---------------------------------------------------------
+    # VALID
+    # ---------------------------------------------------------
+
+    state.metadata["risk_diagnostics"][
+        "status"
+    ] = "RISK_VALID"
 
     return state
