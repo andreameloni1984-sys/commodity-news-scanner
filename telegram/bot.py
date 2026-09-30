@@ -517,67 +517,36 @@ def _resolve_commodity(
 
     aliases = {
 
-        "oro":
-            "Oro",
+        "oro": "Oro",
+        "gold": "Oro",
 
-        "gold":
-            "Oro",
+        "argento": "Argento",
+        "silver": "Argento",
 
-        "argento":
-            "Argento",
+        "platino": "Platino",
+        "platinum": "Platino",
 
-        "silver":
-            "Argento",
+        "palladio": "Palladio",
+        "palladium": "Palladio",
 
-        "platino":
-            "Platino",
+        "wti": "Petrolio WTI",
+        "petrolio": "Petrolio WTI",
+        "petrolio wti": "Petrolio WTI",
 
-        "platinum":
-            "Platino",
-
-        "palladio":
-            "Palladio",
-
-        "palladium":
-            "Palladio",
-
-        "wti":
-            "Petrolio WTI",
-
-        "petrolio":
-            "Petrolio WTI",
-
-        "petrolio wti":
-            "Petrolio WTI",
-
-        "brent":
-            "Petrolio Brent",
-
-        "petrolio brent":
-            "Petrolio Brent",
+        "brent": "Petrolio Brent",
+        "petrolio brent": "Petrolio Brent",
     }
 
-    key = (
-        name
-        .strip()
-        .lower()
-    )
+    key = name.strip().lower()
 
-    canonical = aliases.get(
-        key
-    )
+    canonical = aliases.get(key)
 
     if canonical is None:
-
         return None
 
     for commodity in enabled_commodities():
 
-        if (
-            commodity.name.lower()
-            == canonical.lower()
-        ):
-
+        if commodity.name.lower() == canonical.lower():
             return commodity
 
     return None
@@ -648,60 +617,28 @@ def _format_single_analysis(
     ]
 
     if state.entry is not None:
-
-        lines.append(
-            f"ENTRY: "
-            f"{state.entry:.6g}"
-        )
+        lines.append(f"ENTRY: {state.entry:.6g}")
 
     if state.stop is not None:
-
-        lines.append(
-            f"SL: "
-            f"{state.stop:.6g}"
-        )
+        lines.append(f"SL: {state.stop:.6g}")
 
     if state.tp1 is not None:
-
-        lines.append(
-            f"TP1: "
-            f"{state.tp1:.6g}"
-        )
+        lines.append(f"TP1: {state.tp1:.6g}")
 
     if state.tp2 is not None:
-
-        lines.append(
-            f"TP2: "
-            f"{state.tp2:.6g}"
-        )
+        lines.append(f"TP2: {state.tp2:.6g}")
 
     if state.tp3 is not None:
-
-        lines.append(
-            f"TP3: "
-            f"{state.tp3:.6g}"
-        )
+        lines.append(f"TP3: {state.tp3:.6g}")
 
     if state.rr1 is not None:
-
-        lines.append(
-            f"R/R TP1: "
-            f"{state.rr1:.2f}"
-        )
+        lines.append(f"R/R TP1: {state.rr1:.2f}")
 
     if state.rr2 is not None:
-
-        lines.append(
-            f"R/R TP2: "
-            f"{state.rr2:.2f}"
-        )
+        lines.append(f"R/R TP2: {state.rr2:.2f}")
 
     if state.rr3 is not None:
-
-        lines.append(
-            f"R/R TP3: "
-            f"{state.rr3:.2f}"
-        )
+        lines.append(f"R/R TP3: {state.rr3:.2f}")
 
     lines.extend([
         "",
@@ -712,20 +649,12 @@ def _format_single_analysis(
     if state.blockers:
 
         lines.append("")
-
-        lines.append(
-            "⚠️ BLOCKERS:"
-        )
+        lines.append("⚠️ BLOCKERS:")
 
         for blocker in state.blockers[:8]:
+            lines.append(f"• {blocker}")
 
-            lines.append(
-                f"• {blocker}"
-            )
-
-    return "\n".join(
-        lines
-    )
+    return "\n".join(lines)
 
 
 # ============================================================
@@ -737,29 +666,17 @@ def _command_response(
 ) -> Optional[str]:
 
     raw = command.strip()
-
     parts = raw.split()
 
     if not parts:
-
         return None
 
-    command_name = (
-        parts[0].lower()
-    )
+    command_name = parts[0].lower()
 
     if "@" in command_name:
+        command_name = command_name.split("@", 1)[0]
 
-        command_name = (
-            command_name.split(
-                "@",
-                1,
-            )[0]
-        )
-
-    argument = " ".join(
-        parts[1:]
-    ).strip()
+    argument = " ".join(parts[1:]).strip()
 
     # --------------------------------------------------------
     # HELP
@@ -774,36 +691,19 @@ def _command_response(
             "🚀 SOYUZ GAGARIN\n"
             "━━━━━━━━━━━━━━━━━━━━\n"
             "🧪 PAPER ONLY\n\n"
-
-            "/classifica — "
-            "classifica completa\n"
-
-            "/setup — "
-            "setup e trigger\n"
-
-            "/analisi — "
-            "analisi completa\n"
-
-            "/analisi oro — "
-            "analisi singola commodity\n"
-
+            "/classifica — classifica completa\n"
+            "/setup — setup e trigger\n"
+            "/analisi — analisi completa\n"
+            "/analisi oro — analisi singola\n"
             "/analisi argento\n"
             "/analisi platino\n"
             "/analisi palladio\n"
             "/analisi wti\n"
             "/analisi brent\n"
-
-            "/prezzo — "
-            "prezzi e provider\n"
-
-            "/status — "
-            "stato bot\n"
-
-            "/ping — "
-            "verifica collegamento\n"
-
-            "/id — "
-            "chat ID"
+            "/prezzo — prezzi e provider\n"
+            "/status — stato bot\n"
+            "/ping — verifica collegamento\n"
+            "/id — chat ID"
         )
 
     # --------------------------------------------------------
@@ -824,9 +724,7 @@ def _command_response(
 
     if command_name == "/status":
 
-        results = (
-            get_last_results()
-        )
+        results = get_last_results()
 
         if results:
 
@@ -943,8 +841,8 @@ def _command_response(
 
         try:
 
-            # Nessun parametro:
-            # analisi completa
+            # /analisi
+            # = analisi completa
 
             if not argument:
 
@@ -965,9 +863,8 @@ def _command_response(
                     )
                 )
 
-            # -----------------------------------------------
-            # Analisi singola
-            # -----------------------------------------------
+            # /analisi <commodity>
+            # = analisi singola
 
             commodity = _resolve_commodity(
                 argument
@@ -1024,15 +921,11 @@ def poll_once(
 ) -> Optional[int]:
 
     payload = {
-        "timeout":
-        POLL_TIMEOUT,
-
-        "allowed_updates":
-        ["message"],
+        "timeout": POLL_TIMEOUT,
+        "allowed_updates": ["message"],
     }
 
     if offset is not None:
-
         payload["offset"] = offset
 
     ok, data = _api(
@@ -1094,12 +987,7 @@ def poll_once(
         )
 
         if chat_id is None:
-
             continue
-
-        # ----------------------------------------------------
-        # CUSTOM HANDLER
-        # ----------------------------------------------------
 
         if handler is not None:
 
@@ -1117,10 +1005,6 @@ def poll_once(
 
             continue
 
-        # ----------------------------------------------------
-        # COMMAND
-        # ----------------------------------------------------
-
         if text.startswith("/"):
 
             if text.lower().startswith(
@@ -1134,10 +1018,8 @@ def poll_once(
 
             else:
 
-                response = (
-                    _command_response(
-                        text
-                    )
+                response = _command_response(
+                    text
                 )
 
                 if response:
