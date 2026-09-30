@@ -24,11 +24,21 @@ WEBHOOK_PATH = "/telegram/webhook"
 
 def prepare_webhook() -> bool:
     external_url = os.getenv("RENDER_EXTERNAL_URL", "").strip().rstrip("/")
+
     if not external_url:
-        print("Telegram WEBHOOK FAILED | RENDER_EXTERNAL_URL_MISSING")
+        print(
+            "Telegram WEBHOOK FAILED | RENDER_EXTERNAL_URL_MISSING",
+            flush=True,
+        )
         return False
 
     webhook_url = external_url + WEBHOOK_PATH
+
+    print(
+        "Telegram WEBHOOK | registering...",
+        flush=True,
+    )
+
     ok, data = _api(
         "setWebhook",
         {
@@ -41,11 +51,62 @@ def prepare_webhook() -> bool:
     if not ok:
         print(
             "Telegram WEBHOOK FAILED | "
-            f"{data.get('description', 'unknown error')}"
+            f"{data.get('description', 'unknown error')}",
+            flush=True,
         )
         return False
 
-    print(f"Telegram WEBHOOK OK | {webhook_url}")
+    print(
+        f"Telegram WEBHOOK OK | {webhook_url}",
+        flush=True,
+    )
+
+    # ---------------------------------------------------------
+    # DIAGNOSTICA WEBHOOK
+    # Non stampa mai il token Telegram.
+    # ---------------------------------------------------------
+
+    info_ok, info = _api("getWebhookInfo")
+
+    if info_ok:
+        result = info.get("result", {})
+
+        safe_url = result.get("url", "")
+        pending = result.get("pending_update_count", 0)
+
+        last_error = result.get("last_error_message")
+        last_error_date = result.get("last_error_date")
+
+        print(
+            "Telegram WEBHOOK INFO | "
+            f"url={safe_url} | "
+            f"pending={pending} | "
+            f"last_error={last_error or 'NONE'} | "
+            f"last_error_date={last_error_date or 'NONE'}",
+            flush=True,
+        )
+
+        if result.get("ip_address"):
+            print(
+                "Telegram WEBHOOK INFO | "
+                f"ip_address={result.get('ip_address')}",
+                flush=True,
+            )
+
+        if result.get("max_connections"):
+            print(
+                "Telegram WEBHOOK INFO | "
+                f"max_connections={result.get('max_connections')}",
+                flush=True,
+            )
+
+    else:
+        print(
+            "Telegram WEBHOOK INFO FAILED | "
+            f"{info.get('description', 'unknown error')}",
+            flush=True,
+        )
+
     return True
 
 
@@ -53,6 +114,7 @@ def handle_update(update: dict) -> None:
     try:
         message = update.get("message") or {}
         chat = message.get("chat") or {}
+
         chat_id = chat.get("id")
         text = message.get("text", "")
 
@@ -61,22 +123,32 @@ def handle_update(update: dict) -> None:
 
         print(
             "Telegram webhook command | "
-            f"chat_id={chat_id} | text={text}"
+            f"chat_id={chat_id} | text={text}",
+            flush=True,
         )
 
         response = _command_response(text)
 
         if response:
             _reply(chat_id, response)
+
         elif text.lower().startswith("/id"):
-            _reply(chat_id, f"🆔 CHAT ID: {chat_id}")
+            _reply(
+                chat_id,
+                f"🆔 CHAT ID: {chat_id}",
+            )
+
         else:
-            print(f"Telegram webhook | unknown command: {text}")
+            print(
+                f"Telegram webhook | unknown command: {text}",
+                flush=True,
+            )
 
     except Exception as exc:
         print(
             "Telegram webhook handler error | "
-            f"{type(exc).__name__}: {exc}"
+            f"{type(exc).__name__}: {exc}",
+            flush=True,
         )
 
 
@@ -93,64 +165,119 @@ class HealthHandler(BaseHTTPRequestHandler):
 
     def _send_text(self, status: int, body: str) -> None:
         data = body.encode("utf-8")
+
         self.send_response(status)
-        self.send_header("Content-Type", "text/plain; charset=utf-8")
-        self.send_header("Content-Length", str(len(data)))
+        self.send_header(
+            "Content-Type",
+            "text/plain; charset=utf-8",
+        )
+        self.send_header(
+            "Content-Length",
+            str(len(data)),
+        )
         self.end_headers()
+
         self.wfile.write(data)
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
 
         if path == "/health":
-            self._send_text(200, "OK")
+            self._send_text(
+                200,
+                "OK",
+            )
+
         elif path == "/":
             self._send_text(
                 200,
-                "🚀 SOYUZ GAGARIN TELEGRAM ONLINE\nWebhook: ACTIVE\n",
+                "🚀 SOYUZ GAGARIN TELEGRAM ONLINE\n"
+                "Webhook: ACTIVE\n",
             )
+
         else:
-            self._send_text(404, "NOT FOUND")
+            self._send_text(
+                404,
+                "NOT FOUND",
+            )
 
     def do_HEAD(self) -> None:
         path = urlparse(self.path).path
-        self.send_response(200 if path in {"/", "/health"} else 404)
-        self.send_header("Content-Type", "text/plain; charset=utf-8")
+
+        self.send_response(
+            200 if path in {"/", "/health"} else 404
+        )
+
+        self.send_header(
+            "Content-Type",
+            "text/plain; charset=utf-8",
+        )
+
         self.end_headers()
 
     def do_POST(self) -> None:
+
         if urlparse(self.path).path != WEBHOOK_PATH:
-            self._send_text(404, "NOT FOUND")
+            self._send_text(
+                404,
+                "NOT FOUND",
+            )
             return
 
         try:
-            length = int(self.headers.get("Content-Length", "0"))
+            length = int(
+                self.headers.get(
+                    "Content-Length",
+                    "0",
+                )
+            )
+
             if length <= 0:
-                self._send_text(400, "EMPTY BODY")
+                self._send_text(
+                    400,
+                    "EMPTY BODY",
+                )
                 return
 
             raw = self.rfile.read(length)
-            update = json.loads(raw.decode("utf-8"))
+
+            update = json.loads(
+                raw.decode("utf-8")
+            )
 
             if not isinstance(update, dict):
-                self._send_text(400, "INVALID UPDATE")
+                self._send_text(
+                    400,
+                    "INVALID UPDATE",
+                )
                 return
 
             print(
                 "Telegram webhook received | "
-                f"update_id={update.get('update_id')}"
+                f"update_id={update.get('update_id')}",
+                flush=True,
             )
 
             dispatch_update(update)
-            self._send_text(200, "OK")
+
+            self._send_text(
+                200,
+                "OK",
+            )
 
         except Exception as exc:
+
             print(
                 "Telegram webhook POST error | "
-                f"{type(exc).__name__}: {exc}"
+                f"{type(exc).__name__}: {exc}",
+                flush=True,
             )
+
             try:
-                self._send_text(400, "BAD REQUEST")
+                self._send_text(
+                    400,
+                    "BAD REQUEST",
+                )
             except Exception:
                 pass
 
@@ -159,34 +286,92 @@ class HealthHandler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    print("🚀 SOYUZ GAGARIN TELEGRAM")
-    print("🧪 PAPER ONLY")
-    print("📡 MODE: TELEGRAM WEBHOOK")
-    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+    print(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        flush=True,
+    )
+
+    print(
+        "🚀 SOYUZ GAGARIN TELEGRAM",
+        flush=True,
+    )
+
+    print(
+        "🧪 PAPER ONLY",
+        flush=True,
+    )
+
+    print(
+        "📡 MODE: TELEGRAM WEBHOOK",
+        flush=True,
+    )
+
+    print(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        flush=True,
+    )
+
+    # ---------------------------------------------------------
+    # TELEGRAM DIAGNOSTIC
+    # ---------------------------------------------------------
 
     if not telegram_diagnostic():
-        raise RuntimeError("Telegram configuration invalid")
+        raise RuntimeError(
+            "Telegram configuration invalid"
+        )
 
-    port = int(os.getenv("PORT", str(DEFAULT_PORT)))
+    port = int(
+        os.getenv(
+            "PORT",
+            str(DEFAULT_PORT),
+        )
+    )
+
+    # ---------------------------------------------------------
+    # HTTP SERVER
+    # ---------------------------------------------------------
 
     server = ThreadingHTTPServer(
         ("0.0.0.0", port),
         HealthHandler,
     )
 
-    print(f"🌐 HTTP server: 0.0.0.0:{port}")
-    print("🟢 Render HTTP: ONLINE")
+    print(
+        f"🌐 HTTP server: 0.0.0.0:{port}",
+        flush=True,
+    )
+
+    print(
+        "🟢 Render HTTP: ONLINE",
+        flush=True,
+    )
+
+    # ---------------------------------------------------------
+    # TELEGRAM WEBHOOK
+    # ---------------------------------------------------------
 
     if not prepare_webhook():
-        server.server_close()
-        raise RuntimeError("Telegram webhook registration failed")
 
-    print("🟢 Telegram webhook: ACTIVE")
-    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        server.server_close()
+
+        raise RuntimeError(
+            "Telegram webhook registration failed"
+        )
+
+    print(
+        "🟢 Telegram webhook: ACTIVE",
+        flush=True,
+    )
+
+    print(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        flush=True,
+    )
 
     try:
         server.serve_forever()
+
     finally:
         server.server_close()
 
