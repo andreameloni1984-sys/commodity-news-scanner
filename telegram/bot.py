@@ -1,5 +1,5 @@
 """
-SOYUZ GAGARIN — Telegram interface v3.0
+SOYUZ GAGARIN — Telegram interface v3.1
 
 Comandi:
     /start
@@ -10,13 +10,15 @@ Comandi:
     /classifica
     /setup
     /analisi
+    /analisi oro
+    /analisi argento
+    /analisi platino
+    /analisi palladio
+    /analisi wti
+    /analisi brent
     /prezzo
 
-PAPER ONLY:
-nessun ordine reale viene eseguito.
-
-NOTA:
-Il polling Telegram deve essere eseguito da un processo sempre attivo.
+PAPER ONLY.
 """
 
 from __future__ import annotations
@@ -41,7 +43,7 @@ POLL_TIMEOUT = 25
 
 
 # ============================================================
-# CACHE ULTIMA ANALISI
+# CACHE
 # ============================================================
 
 _LAST_RESULTS = None
@@ -49,10 +51,6 @@ _LAST_ANALYSIS_TIME = None
 
 
 def set_last_results(results):
-    """
-    Salva l'ultima analisi Gagarin in memoria.
-    """
-
     global _LAST_RESULTS
     global _LAST_ANALYSIS_TIME
 
@@ -74,7 +72,6 @@ def _api(
 ) -> tuple[bool, dict]:
 
     if not TELEGRAM_BOT_TOKEN:
-
         return (
             False,
             {
@@ -98,7 +95,6 @@ def _api(
         )
 
         try:
-
             data = response.json()
 
         except ValueError:
@@ -137,7 +133,8 @@ def telegram_diagnostic() -> bool:
 
         print(
             "Telegram DIAGNOSTIC FAILED | "
-            f"{data.get('description', 'unknown error')}"
+            f"{data.get('description', 'unknown error')}",
+            flush=True,
         )
 
         return False
@@ -150,20 +147,19 @@ def telegram_diagnostic() -> bool:
     print(
         "Telegram DIAGNOSTIC OK | "
         f"bot=@{result.get('username', 'unknown')} | "
-        f"id={result.get('id', 'unknown')}"
+        f"id={result.get('id', 'unknown')}",
+        flush=True,
     )
 
-    if not TELEGRAM_CHAT_ID:
-
-        print(
-            "Telegram CHAT ID: MISSING"
-        )
-
-    else:
-
-        print(
-            "Telegram CHAT ID: PRESENT"
-        )
+    print(
+        "Telegram CHAT ID: "
+        + (
+            "PRESENT"
+            if TELEGRAM_CHAT_ID
+            else "MISSING"
+        ),
+        flush=True,
+    )
 
     return True
 
@@ -185,13 +181,15 @@ def prepare_long_polling() -> bool:
 
         print(
             "Telegram WEBHOOK RESET FAILED | "
-            f"{data.get('description', 'unknown error')}"
+            f"{data.get('description', 'unknown error')}",
+            flush=True,
         )
 
         return False
 
     print(
-        "Telegram WEBHOOK RESET OK"
+        "Telegram WEBHOOK RESET OK",
+        flush=True,
     )
 
     return True
@@ -211,7 +209,8 @@ def send_telegram(
     ):
 
         print(
-            "Telegram disabled/not configured."
+            "Telegram disabled/not configured.",
+            flush=True,
         )
 
         return False
@@ -228,7 +227,6 @@ def send_telegram(
     ]
 
     if not chunks:
-
         chunks = [""]
 
     for chunk in chunks:
@@ -251,13 +249,15 @@ def send_telegram(
 
             print(
                 "Telegram API: FAILED | "
-                f"{data.get('description', 'unknown error')}"
+                f"{data.get('description', 'unknown error')}",
+                flush=True,
             )
 
             return False
 
     print(
-        "Telegram API: OK"
+        "Telegram API: OK",
+        flush=True,
     )
 
     return True
@@ -285,14 +285,15 @@ def _reply(
 
         print(
             "Telegram reply failed | "
-            f"{data.get('description', 'unknown error')}"
+            f"{data.get('description', 'unknown error')}",
+            flush=True,
         )
 
     return ok
 
 
 # ============================================================
-# FORMAT CLASSIFICA
+# CLASSIFICA
 # ============================================================
 
 def _format_classifica(results):
@@ -321,7 +322,10 @@ def _format_classifica(results):
         direction = (
             state.setup_direction
             if state.setup_direction
-            in {"LONG", "SHORT"}
+            in {
+                "LONG",
+                "SHORT",
+            }
             else "—"
         )
 
@@ -354,14 +358,15 @@ def _format_classifica(results):
     else:
 
         lines.append(
-            f"🟢 {len(entries)} ENTRATA/E AUTORIZZATA/E"
+            f"🟢 {len(entries)} "
+            f"ENTRATA/E AUTORIZZATA/E"
         )
 
     return "\n".join(lines)
 
 
 # ============================================================
-# FORMAT SETUP
+# SETUP
 # ============================================================
 
 def _format_setup(results):
@@ -420,7 +425,7 @@ def _format_setup(results):
 
 
 # ============================================================
-# FORMAT PREZZI
+# PREZZI
 # ============================================================
 
 def _format_prezzi(results):
@@ -441,13 +446,11 @@ def _format_prezzi(results):
 
     for state in results:
 
-        if state.price is None:
-
-            price = "N/D"
-
-        else:
-
-            price = f"{state.price:.6g}"
+        price = (
+            "N/D"
+            if state.price is None
+            else f"{state.price:.6g}"
+        )
 
         status = state.metadata.get(
             "data_status",
@@ -474,9 +477,20 @@ def _format_prezzi(results):
 # ANALISI
 # ============================================================
 
-def _run_analysis():
+def _run_analysis(
+    commodity=None,
+):
 
     commodities = enabled_commodities()
+
+    if commodity is not None:
+
+        commodities = [
+            c
+            for c in commodities
+            if c.name.lower()
+            == commodity.name.lower()
+        ]
 
     if not commodities:
 
@@ -494,6 +508,227 @@ def _run_analysis():
 
 
 # ============================================================
+# RISOLUZIONE COMMODITY
+# ============================================================
+
+def _resolve_commodity(
+    name: str,
+):
+
+    aliases = {
+
+        "oro":
+            "Oro",
+
+        "gold":
+            "Oro",
+
+        "argento":
+            "Argento",
+
+        "silver":
+            "Argento",
+
+        "platino":
+            "Platino",
+
+        "platinum":
+            "Platino",
+
+        "palladio":
+            "Palladio",
+
+        "palladium":
+            "Palladio",
+
+        "wti":
+            "Petrolio WTI",
+
+        "petrolio":
+            "Petrolio WTI",
+
+        "petrolio wti":
+            "Petrolio WTI",
+
+        "brent":
+            "Petrolio Brent",
+
+        "petrolio brent":
+            "Petrolio Brent",
+    }
+
+    key = (
+        name
+        .strip()
+        .lower()
+    )
+
+    canonical = aliases.get(
+        key
+    )
+
+    if canonical is None:
+
+        return None
+
+    for commodity in enabled_commodities():
+
+        if (
+            commodity.name.lower()
+            == canonical.lower()
+        ):
+
+            return commodity
+
+    return None
+
+
+# ============================================================
+# FORMAT ANALISI SINGOLA
+# ============================================================
+
+def _format_single_analysis(
+    state,
+):
+
+    direction = (
+        state.setup_direction
+        if state.setup_direction
+        in {
+            "LONG",
+            "SHORT",
+        }
+        else "—"
+    )
+
+    trigger = (
+        "✅ CONFERMATO"
+        if state.trigger_confirmed
+        else "⏳ IN ATTESA"
+    )
+
+    price = (
+        "N/D"
+        if state.price is None
+        else f"{state.price:.6g}"
+    )
+
+    lines = [
+
+        f"🛰 SOYUZ GAGARIN — "
+        f"{state.commodity.upper()}",
+
+        "━━━━━━━━━━━━━━━━━━━━",
+
+        "🧪 PAPER ONLY",
+
+        "",
+
+        f"Prezzo: {price}",
+
+        f"Direzione: {direction}",
+
+        f"Setup: "
+        f"{state.setup or 'NONE'}",
+
+        f"Trigger: {trigger}",
+
+        "",
+
+        f"Probabilità: "
+        f"{state.probability:.1f}%",
+
+        f"Quality: "
+        f"{state.quality:.1f}",
+
+        f"Confidence: "
+        f"{state.confidence:.1f}",
+
+        "",
+    ]
+
+    if state.entry is not None:
+
+        lines.append(
+            f"ENTRY: "
+            f"{state.entry:.6g}"
+        )
+
+    if state.stop is not None:
+
+        lines.append(
+            f"SL: "
+            f"{state.stop:.6g}"
+        )
+
+    if state.tp1 is not None:
+
+        lines.append(
+            f"TP1: "
+            f"{state.tp1:.6g}"
+        )
+
+    if state.tp2 is not None:
+
+        lines.append(
+            f"TP2: "
+            f"{state.tp2:.6g}"
+        )
+
+    if state.tp3 is not None:
+
+        lines.append(
+            f"TP3: "
+            f"{state.tp3:.6g}"
+        )
+
+    if state.rr1 is not None:
+
+        lines.append(
+            f"R/R TP1: "
+            f"{state.rr1:.2f}"
+        )
+
+    if state.rr2 is not None:
+
+        lines.append(
+            f"R/R TP2: "
+            f"{state.rr2:.2f}"
+        )
+
+    if state.rr3 is not None:
+
+        lines.append(
+            f"R/R TP3: "
+            f"{state.rr3:.2f}"
+        )
+
+    lines.extend([
+        "",
+        f"🎯 DECISIONE: "
+        f"{state.final_decision}",
+    ])
+
+    if state.blockers:
+
+        lines.append("")
+
+        lines.append(
+            "⚠️ BLOCKERS:"
+        )
+
+        for blocker in state.blockers[:8]:
+
+            lines.append(
+                f"• {blocker}"
+            )
+
+    return "\n".join(
+        lines
+    )
+
+
+# ============================================================
 # COMMAND RESPONSE
 # ============================================================
 
@@ -501,25 +736,36 @@ def _command_response(
     command: str,
 ) -> Optional[str]:
 
-    command = (
-        command
-        .strip()
-        .split()[0]
-        .lower()
+    raw = command.strip()
+
+    parts = raw.split()
+
+    if not parts:
+
+        return None
+
+    command_name = (
+        parts[0].lower()
     )
 
-    if "@" in command:
+    if "@" in command_name:
 
-        command = command.split(
-            "@",
-            1,
-        )[0]
+        command_name = (
+            command_name.split(
+                "@",
+                1,
+            )[0]
+        )
+
+    argument = " ".join(
+        parts[1:]
+    ).strip()
 
     # --------------------------------------------------------
     # HELP
     # --------------------------------------------------------
 
-    if command in {
+    if command_name in {
         "/start",
         "/help",
     }:
@@ -528,21 +774,43 @@ def _command_response(
             "🚀 SOYUZ GAGARIN\n"
             "━━━━━━━━━━━━━━━━━━━━\n"
             "🧪 PAPER ONLY\n\n"
-            "/classifica — classifica Gagarin\n"
-            "/setup — setup e trigger\n"
-            "/analisi — nuova analisi\n"
-            "/prezzo — prezzi e provider\n"
-            "/status — stato bot\n"
-            "/ping — verifica collegamento\n"
-            "/id — mostra chat ID\n"
-            "/help — comandi"
+
+            "/classifica — "
+            "classifica completa\n"
+
+            "/setup — "
+            "setup e trigger\n"
+
+            "/analisi — "
+            "analisi completa\n"
+
+            "/analisi oro — "
+            "analisi singola commodity\n"
+
+            "/analisi argento\n"
+            "/analisi platino\n"
+            "/analisi palladio\n"
+            "/analisi wti\n"
+            "/analisi brent\n"
+
+            "/prezzo — "
+            "prezzi e provider\n"
+
+            "/status — "
+            "stato bot\n"
+
+            "/ping — "
+            "verifica collegamento\n"
+
+            "/id — "
+            "chat ID"
         )
 
     # --------------------------------------------------------
     # PING
     # --------------------------------------------------------
 
-    if command == "/ping":
+    if command_name == "/ping":
 
         return (
             "🟢 SOYUZ ONLINE\n"
@@ -554,9 +822,11 @@ def _command_response(
     # STATUS
     # --------------------------------------------------------
 
-    if command == "/status":
+    if command_name == "/status":
 
-        results = get_last_results()
+        results = (
+            get_last_results()
+        )
 
         if results:
 
@@ -566,7 +836,8 @@ def _command_response(
                 "🟢 Telegram: ONLINE\n"
                 "🟢 Engine: DISPONIBILE\n"
                 "🧪 Trading: PAPER ONLY\n"
-                f"📊 Commodities: {len(results)}"
+                f"📊 Ultima analisi: "
+                f"{len(results)} commodity"
             )
 
         return (
@@ -579,109 +850,163 @@ def _command_response(
         )
 
     # --------------------------------------------------------
+    # ID
+    # --------------------------------------------------------
+
+    if command_name == "/id":
+
+        return (
+            "🆔 Usa il comando /id "
+            "direttamente in chat."
+        )
+
+    # --------------------------------------------------------
     # CLASSIFICA
     # --------------------------------------------------------
 
-    if command == "/classifica":
+    if command_name == "/classifica":
 
-        results = get_last_results()
+        try:
 
-        if not results:
+            results = (
+                get_last_results()
+                or _run_analysis()
+            )
 
-            try:
+            return _format_classifica(
+                results
+            )
 
-                results = _run_analysis()
+        except Exception as exc:
 
-            except Exception as exc:
-
-                return (
-                    "❌ ERRORE ANALISI\n"
-                    f"{type(exc).__name__}: {exc}"
-                )
-
-        return _format_classifica(
-            results
-        )
+            return (
+                "❌ ERRORE ANALISI\n"
+                f"{type(exc).__name__}: "
+                f"{exc}"
+            )
 
     # --------------------------------------------------------
     # SETUP
     # --------------------------------------------------------
 
-    if command == "/setup":
+    if command_name == "/setup":
 
-        results = get_last_results()
+        try:
 
-        if not results:
+            results = (
+                get_last_results()
+                or _run_analysis()
+            )
 
-            try:
+            return _format_setup(
+                results
+            )
 
-                results = _run_analysis()
+        except Exception as exc:
 
-            except Exception as exc:
-
-                return (
-                    "❌ ERRORE ANALISI\n"
-                    f"{type(exc).__name__}: {exc}"
-                )
-
-        return _format_setup(
-            results
-        )
+            return (
+                "❌ ERRORE ANALISI\n"
+                f"{type(exc).__name__}: "
+                f"{exc}"
+            )
 
     # --------------------------------------------------------
     # PREZZO
     # --------------------------------------------------------
 
-    if command == "/prezzo":
+    if command_name == "/prezzo":
 
-        results = get_last_results()
+        try:
 
-        if not results:
+            results = (
+                get_last_results()
+                or _run_analysis()
+            )
 
-            try:
+            return _format_prezzi(
+                results
+            )
 
-                results = _run_analysis()
+        except Exception as exc:
 
-            except Exception as exc:
-
-                return (
-                    "❌ ERRORE ANALISI\n"
-                    f"{type(exc).__name__}: {exc}"
-                )
-
-        return _format_prezzi(
-            results
-        )
+            return (
+                "❌ ERRORE ANALISI\n"
+                f"{type(exc).__name__}: "
+                f"{exc}"
+            )
 
     # --------------------------------------------------------
     # ANALISI
     # --------------------------------------------------------
 
-    if command == "/analisi":
+    if command_name == "/analisi":
 
         try:
 
-            results = _run_analysis()
+            # Nessun parametro:
+            # analisi completa
+
+            if not argument:
+
+                results = _run_analysis()
+
+                if not results:
+
+                    return (
+                        "⚠️ Nessuna commodity "
+                        "disponibile."
+                    )
+
+                return (
+                    "🔄 NUOVA ANALISI COMPLETATA\n"
+                    "━━━━━━━━━━━━━━━━━━━━\n\n"
+                    + _format_classifica(
+                        results
+                    )
+                )
+
+            # -----------------------------------------------
+            # Analisi singola
+            # -----------------------------------------------
+
+            commodity = _resolve_commodity(
+                argument
+            )
+
+            if commodity is None:
+
+                return (
+                    "❌ Commodity non riconosciuta.\n\n"
+                    "Disponibili:\n"
+                    "🥇 Oro\n"
+                    "🥈 Argento\n"
+                    "⚪ Platino\n"
+                    "⚫ Palladio\n"
+                    "🛢 WTI\n"
+                    "🛢 Brent"
+                )
+
+            results = _run_analysis(
+                commodity
+            )
 
             if not results:
 
                 return (
-                    "⚠️ Nessuna commodity disponibile."
+                    "⚠️ Nessun dato disponibile "
+                    f"per {commodity.name}."
                 )
 
-            return (
-                "🔄 NUOVA ANALISI COMPLETATA\n"
-                "━━━━━━━━━━━━━━━━━━━━\n\n"
-                + _format_classifica(
-                    results
-                )
+            return _format_single_analysis(
+                results[0]
             )
 
         except Exception as exc:
 
             return (
                 "❌ GAGARIN ENGINE ERROR\n"
-                f"{type(exc).__name__}: {exc}"
+                f"{type(exc).__name__}: "
+                f"{exc}"
             )
 
     return None
@@ -719,7 +1044,8 @@ def poll_once(
 
         print(
             "Telegram getUpdates FAILED | "
-            f"{data.get('description', 'unknown error')}"
+            f"{data.get('description', 'unknown error')}",
+            flush=True,
         )
 
         time.sleep(3)
@@ -785,7 +1111,8 @@ def poll_once(
 
                 print(
                     "Telegram custom handler error | "
-                    f"{type(exc).__name__}: {exc}"
+                    f"{type(exc).__name__}: {exc}",
+                    flush=True,
                 )
 
             continue
@@ -796,18 +1123,7 @@ def poll_once(
 
         if text.startswith("/"):
 
-            response = _command_response(
-                text
-            )
-
-            if response:
-
-                _reply(
-                    chat_id,
-                    response,
-                )
-
-            elif text.lower().startswith(
+            if text.lower().startswith(
                 "/id"
             ):
 
@@ -815,6 +1131,21 @@ def poll_once(
                     chat_id,
                     f"🆔 CHAT ID: {chat_id}",
                 )
+
+            else:
+
+                response = (
+                    _command_response(
+                        text
+                    )
+                )
+
+                if response:
+
+                    _reply(
+                        chat_id,
+                        response,
+                    )
 
     return next_offset
 
@@ -844,7 +1175,8 @@ def run_polling(
     offset = None
 
     print(
-        "Telegram polling started."
+        "Telegram polling started.",
+        flush=True,
     )
 
     while True:
@@ -863,92 +1195,6 @@ def format_report(
     results,
 ):
 
-    lines = [
-        "🚀 SOYUZ GAGARIN v3.0",
-        "━━━━━━━━━━━━━━━━━━━━",
-        "🧪 PAPER ONLY",
-        "",
-        "📊 CLASSIFICA",
-    ]
-
-    for index, state in enumerate(
-        results,
-        start=1,
-    ):
-
-        direction = (
-            state.setup_direction
-            if state.setup_direction
-            in {
-                "LONG",
-                "SHORT",
-            }
-            else "—"
-        )
-
-        lines.append(
-            f"{index}. "
-            f"{state.commodity} | "
-            f"{direction} | "
-            f"Prob {state.probability:.1f}% | "
-            f"Q {state.quality:.1f} | "
-            f"C {state.confidence:.1f} | "
-            f"{state.final_decision}"
-        )
-
-    entries = [
-        state
-        for state in results
-        if state.final_decision
-        == "ENTRY"
-    ]
-
-    lines.extend([
-        "",
-        "🎯 OPERATIVITÀ",
-    ])
-
-    if not entries:
-
-        lines.append(
-            "🟡 NESSUNA ENTRATA AUTORIZZATA"
-        )
-
-    else:
-
-        for state in entries[:3]:
-
-            lines.extend(
-                [
-                    "",
-                    (
-                        f"🟢 "
-                        f"{state.commodity} "
-                        f"{state.setup_direction}"
-                    ),
-                    (
-                        f"Entry: "
-                        f"{state.entry:.6g}"
-                    ),
-                    (
-                        f"SL: "
-                        f"{state.stop:.6g}"
-                    ),
-                    (
-                        f"TP1: "
-                        f"{state.tp1:.6g}"
-                    ),
-                    (
-                        f"TP2: "
-                        f"{state.tp2:.6g}"
-                    ),
-                    (
-                        f"TP3: "
-                        f"{state.tp3:.6g}"
-                    ),
-                ]
-            )
-
-    return "\n".join(
-        lines
+    return _format_classifica(
+        results
     )
