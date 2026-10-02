@@ -78,6 +78,10 @@ def test_ranking():
             "confidence": 55,
             "rr": 0,
             "data_status": "STALE",
+        "paper_only": True,
+        "data_quality_ok": True, "freshness_ok": False,
+        "contract_ok": True, "liquidity_ok": True, "volatility_ok": True,
+        "regime_ok": True, "session_ok": True, "curve_ok": True,
             "setup_valid": False,
             "trigger_confirmed": False,
             "entry_present": False,
@@ -178,6 +182,10 @@ def test_final_gate():
     watch = {
         "symbol": "WTI",
         "data_status": "LIVE",
+        "paper_only": True,
+        "data_quality_ok": True, "freshness_ok": True,
+        "contract_ok": True, "liquidity_ok": True, "volatility_ok": True,
+        "regime_ok": True, "session_ok": True, "curve_ok": True,
 
         "mtf_confirmed": True,
 
@@ -218,6 +226,10 @@ def test_final_gate():
     valid = {
         "symbol": "VALID_TEST",
         "data_status": "LIVE",
+        "paper_only": True,
+        "data_quality_ok": True, "freshness_ok": True,
+        "contract_ok": True, "liquidity_ok": True, "volatility_ok": True,
+        "regime_ok": True, "session_ok": True, "curve_ok": True,
 
         "mtf_confirmed": True,
 
