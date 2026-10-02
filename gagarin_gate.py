@@ -123,6 +123,35 @@ def flag(value: Any) -> bool:
 # DATA GATE
 # ============================================================
 
+
+
+# ============================================================
+# OPERATIONAL HARD GATES
+# ============================================================
+
+REQUIRED_OPERATIONAL_GATES = (
+    ("paper_only", "PAPER_ONLY_REQUIRED"),
+    ("data_quality_ok", "DATA_QUALITY_FAIL"),
+    ("freshness_ok", "FRESHNESS_FAIL"),
+    ("contract_ok", "CONTRACT_FAIL"),
+    ("liquidity_ok", "LIQUIDITY_FAIL"),
+    ("volatility_ok", "VOLATILITY_FAIL"),
+    ("regime_ok", "REGIME_FAIL"),
+    ("session_ok", "SESSION_FAIL"),
+    ("curve_ok", "CURVE_FAIL"),
+)
+
+
+def check_operational_gates(candidate: Dict[str, Any], blockers: List[str]) -> bool:
+    """Hard gate: missing/false prerequisite always blocks the signal."""
+    ok = True
+    for field_name, blocker in REQUIRED_OPERATIONAL_GATES:
+        if not flag(candidate.get(field_name, False)):
+            blockers.append(blocker)
+            ok = False
+    return ok
+
+
 def check_data(candidate: Dict[str, Any], blockers: List[str]) -> bool:
 
     status = text(
@@ -385,6 +414,8 @@ def evaluate(candidate: Dict[str, Any]) -> GagarinResult:
 
     blockers: List[str] = []
 
+    operational_ok = check_operational_gates(candidate, blockers)
+
     # --------------------------------------------------------
     # DATA
     # --------------------------------------------------------
@@ -483,7 +514,8 @@ def evaluate(candidate: Dict[str, Any]) -> GagarinResult:
     # --------------------------------------------------------
 
     final_confluence = (
-        data_ok
+        operational_ok
+        and data_ok
         and mtf_ok
         and setup_ok
         and trigger_ok
@@ -499,7 +531,7 @@ def evaluate(candidate: Dict[str, Any]) -> GagarinResult:
     # STATE
     # --------------------------------------------------------
 
-    if not data_ok:
+    if not operational_ok or not data_ok:
 
         state = "BLOCKED"
 
