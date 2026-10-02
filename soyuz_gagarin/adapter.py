@@ -1,4 +1,10 @@
-"""Adapter tra il motore commodity esistente e il SOYUZ GAGARIN v1."""
+"""Adapter dal motore commodity esistente al SOYUZ GAGARIN.
+
+Il vecchio motore resta una sorgente di evidenza nello stato canonico.
+IMPORTANTE: final_decision del legacy engine NON viene usato come veto.
+Gagarin ricostruisce i cancelli operativi dai campi dello stato e prende
+la decisione finale in modo indipendente.
+"""
 
 from __future__ import annotations
 
@@ -8,50 +14,99 @@ from .engine import GagarinEngine
 from .models import Candidate, MarketSnapshot
 
 
+def _float(value, default=0.0) -> float:
+    try:
+        return float(value or default)
+    except (TypeError, ValueError):
+        return float(default)
+
+
 def evaluate_states(states: Iterable[object]):
-    """Applica il nuovo Risk Governor agli stati già prodotti dal motore commodity."""
     engine = GagarinEngine()
     decisions = []
 
     for state in states:
         symbol = str(getattr(state, "symbol", "")).strip().upper()
-        price = float(getattr(state, "price", 0.0) or 0.0)
-        atr = float(getattr(state, "atr", 0.0) or 0.0)
-        side = str(getattr(state, "setup_direction", "WAIT") or "WAIT").upper()
+        price = _float(getattr(state, "price", 0.0))
+        atr = _float(getattr(state, "atr", 0.0))
 
-        stop_atr = float(getattr(state, "stop_atr", 0.0) or 0.0)
+        side = str(
+            getattr(state, "setup_direction", "NONE") or "NONE"
+        ).upper()
+
+        stop_atr = _float(getattr(state, "stop_atr", 0.0))
         if stop_atr <= 0 and price > 0 and atr > 0:
             stop = getattr(state, "stop", None)
             if stop is not None:
-                stop_atr = abs(price - float(stop)) / atr
+                stop_atr = abs(price - _float(stop)) / atr
 
-        rr = max(
-            float(getattr(state, "rr3", 0.0) or 0.0),
-            float(getattr(state, "rr2", 0.0) or 0.0),
-            float(getattr(state, "rr1", 0.0) or 0.0),
+        rr_values = (
+            _float(getattr(state, "rr1", 0.0)),
+            _float(getattr(state, "rr2", 0.0)),
+            _float(getattr(state, "rr3", 0.0)),
         )
+        rr3 = rr_values[2]
+        rr = max(rr_values)
 
-        blocked = str(getattr(state, "final_decision", "WAIT")) != "ENTRY"
+        reasons = list(getattr(state, "blockers", []) or [])
+
         candidate = Candidate(
             symbol=symbol,
             side=side,
-            probability=float(getattr(state, "probability", 0.0) or 0.0),
-            quality=float(getattr(state, "quality", 0.0) or 0.0),
-            confidence=float(getattr(state, "confidence", 0.0) or 0.0),
+            probability=_float(getattr(state, "probability", 0.0)),
+            quality=_float(getattr(state, "quality", 0.0)),
+            confidence=_float(getattr(state, "confidence", 0.0)),
             rr=rr,
             stop_distance_atr=stop_atr,
-            reasons=list(getattr(state, "blockers", []) or []),
-            blocked=blocked,
-            block_reason="LEGACY_ENGINE_WAIT" if blocked else None,
+            reasons=reasons,
+
+            # Do NOT derive blocked from final_decision.
+            blocked=False,
+            block_reason=None,
+
+            data_ok=bool(getattr(state, "data_ok", False)),
+            live=bool(getattr(state, "live", False)),
+            trigger_confirmed=bool(
+                getattr(state, "trigger_confirmed", False)
+            ),
+            structure_direction=str(
+                getattr(state, "structure_direction", "NONE")
+                or "NONE"
+            ).upper(),
+            mtf_direction=str(
+                getattr(state, "mtf_direction", "NONE")
+                or "NONE"
+            ).upper(),
+
+            entry=getattr(state, "entry", None),
+            stop=getattr(state, "stop", None),
+            tp1=getattr(state, "tp1", None),
+            tp2=getattr(state, "tp2", None),
+            tp3=getattr(state, "tp3", None),
+            rr1=rr_values[0],
+            rr2=rr_values[1],
+            rr3=rr3,
         )
 
         market = MarketSnapshot(
             symbol=symbol,
-            timestamp=str(getattr(state, "analysis_timestamp", "") or ""),
+            timestamp=str(
+                getattr(state, "analysis_timestamp", "") or ""
+            ),
             price=price,
             atr=atr,
-            regime=str(getattr(state, "regime", "UNKNOWN")),
+            regime=str(
+                getattr(state, "regime", "UNKNOWN")
+            ),
+            session=str(
+                getattr(state, "metadata", {}).get(
+                    "session", "UNKNOWN"
+                )
+            ),
         )
-        decisions.append(engine.evaluate(market, candidate))
+
+        decisions.append(
+            engine.evaluate(market, candidate)
+        )
 
     return decisions
