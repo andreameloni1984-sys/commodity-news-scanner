@@ -13,10 +13,14 @@ class GagarinConfig:
     sl_min_atr: float = 0.80
     sl_structure_buffer_atr: float = 0.15
     falsification_min_trades: int = 30
-    allowed_assets: Tuple[str, ...] = ("GOLD","SILVER","WTI","BRENT","COPPER","COCOA","COFFEE","SUGAR","RICE","PALLADIUM")
+    allowed_assets: Tuple[str, ...] = (
+        "XAU/USD", "XAG/USD", "XPT/USD", "XPD/USD",
+        "WTI/USD", "BRENT/USD", "RICE/USD", "SUGAR/USD",
+        "COCOA/USD", "COFFEE/USD",
+    )
     blocked_if_stale_seconds: int = 900
     modules: Tuple[str, ...] = field(default=(
-        "DATA","CONTRACT","LIQUIDITY","VOLATILITY","REGIME","SESSION","CURVE",
-        "STRUCTURE","SETUP","TRIGGER","EXECUTION","RISK_GOVERNOR","SAFETY",
-        "SIGNAL_FALSIFICATION","PAPER_TEST"
+        "DATA", "CONTRACT", "LIQUIDITY", "VOLATILITY", "REGIME", "SESSION", "CURVE",
+        "STRUCTURE", "SETUP", "TRIGGER", "EXECUTION", "RISK_GOVERNOR", "SAFETY",
+        "SIGNAL_FALSIFICATION", "PAPER_TEST"
     ))
