@@ -2,9 +2,14 @@ name: SOYUZ GAGARIN PAPER
 
 on:
   push:
-    branches: [ "soyuz-gagarin-v1" ]
+    branches:
+      - "soyuz-gagarin-v1"
+      - "soyuz-gagarin-v2-governor-integration"
+      - "main"
   pull_request:
-    branches: [ "soyuz-gagarin-v1" ]
+    branches:
+      - "soyuz-gagarin-v1"
+      - "main"
 
 jobs:
   test:
