@@ -35,6 +35,7 @@ from config import (
 
 from engine.gagarin import analyze_universe
 from commodities.universe import enabled_commodities
+from soyuz_gagarin.adapter import evaluate_states
 
 
 API_BASE = "https://api.telegram.org"
@@ -703,8 +704,37 @@ def _command_response(
             "/prezzo — prezzi e provider\n"
             "/status — stato bot\n"
             "/ping — verifica collegamento\n"
-            "/id — chat ID"
+            "/id — chat ID\n"
+            "/gagarin — nuovo Risk Governor PAPER"
         )
+
+    # --------------------------------------------------------
+    # GAGARIN V1 GOVERNOR
+    # --------------------------------------------------------
+
+    if command_name == "/gagarin":
+        try:
+            results = get_last_results() or _run_analysis()
+            if not results:
+                return "⚠️ Nessuna commodity disponibile."
+
+            decisions = evaluate_states(results)
+            lines = [
+                "🚀 SOYUZ GAGARIN v1",
+                "━━━━━━━━━━━━━━━━━━━━",
+                "🧪 PAPER ONLY",
+                "",
+            ]
+            for decision in decisions:
+                lines.append(
+                    f"{decision.symbol} | {decision.action} | {decision.reason}"
+                )
+            return "\n".join(lines)
+        except Exception as exc:
+            return (
+                "❌ GAGARIN GOVERNOR ERROR\n"
+                f"{type(exc).__name__}: {exc}"
+            )
 
     # --------------------------------------------------------
     # PING
