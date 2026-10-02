@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
+
 @dataclass
 class MarketSnapshot:
     symbol: str
@@ -16,6 +17,7 @@ class MarketSnapshot:
     regime: str = "UNKNOWN"
     session: str = "UNKNOWN"
 
+
 @dataclass
 class Candidate:
     symbol: str
@@ -28,6 +30,24 @@ class Candidate:
     reasons: List[str] = field(default_factory=list)
     blocked: bool = False
     block_reason: Optional[str] = None
+
+    # Evidence gates copied from the single canonical legacy state.
+    # Gagarin evaluates these fields itself; it does not inherit
+    # legacy final_decision.
+    data_ok: bool = False
+    live: bool = False
+    trigger_confirmed: bool = False
+    structure_direction: str = "NONE"
+    mtf_direction: str = "NONE"
+    entry: Optional[float] = None
+    stop: Optional[float] = None
+    tp1: Optional[float] = None
+    tp2: Optional[float] = None
+    tp3: Optional[float] = None
+    rr1: Optional[float] = None
+    rr2: Optional[float] = None
+    rr3: Optional[float] = None
+
 
 @dataclass
 class Decision:
