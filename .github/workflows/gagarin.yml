@@ -1,0 +1,22 @@
+name: SOYUZ GAGARIN PAPER
+
+on:
+  push:
+    branches: [ "soyuz-gagarin-v1" ]
+  pull_request:
+    branches: [ "soyuz-gagarin-v1" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test runner
+        run: python -m pip install pytest
+      - name: Run Gagarin tests
+        run: python -m pytest -q tests/test_gagarin_core.py
+      - name: Run paper-only smoke test
+        run: python -m soyuz_gagarin.main
