@@ -17,6 +17,9 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 from telegram.bot import _api, _command_response, _reply, telegram_diagnostic
+from soyuz_gagarin.adapter import evaluate_states
+from soyuz_gagarin.mt5_bridge import build_demo_payloads
+from telegram.bot import _run_analysis, get_last_results
 
 DEFAULT_PORT = 10000
 WEBHOOK_PATH = "/telegram/webhook"
@@ -178,6 +181,66 @@ class HealthHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
         self.wfile.write(data)
+
+    def do_GET(self) -> None:
+        path = urlparse(self.path).path
+
+        if path == "/mt5/paper":
+            bridge_key = os.getenv("MT5_BRIDGE_KEY", "").strip()
+            provided_key = self.headers.get("X-MT5-Bridge-Key", "").strip()
+            if bridge_key and provided_key != bridge_key:
+                self._send_text(401, "UNAUTHORIZED")
+                return
+
+            try:
+                results = get_last_results() or _run_analysis()
+                if not results:
+                    self._send_text(
+                        200,
+                        json.dumps({
+                            "paper_only": True,
+                            "execution": "DISABLED",
+                            "signal": False,
+                            "reason": "NO_RESULTS",
+                        }),
+                    )
+                    return
+
+                decisions = evaluate_states(results)
+                payloads = build_demo_payloads(decisions)
+
+                if not payloads:
+                    self._send_text(
+                        200,
+                        json.dumps({
+                            "paper_only": True,
+                            "execution": "DISABLED",
+                            "signal": False,
+                            "reason": "NO_PAPER_SIGNAL",
+                        }),
+                    )
+                    return
+
+                self._send_text(
+                    200,
+                    json.dumps(payloads[0]),
+                )
+            except Exception as exc:
+                print(
+                    "MT5 bridge error | "
+                    f"{type(exc).__name__}: {exc}",
+                    flush=True,
+                )
+                self._send_text(
+                    500,
+                    json.dumps({
+                        "paper_only": True,
+                        "execution": "DISABLED",
+                        "signal": False,
+                        "reason": "BRIDGE_ERROR",
+                    }),
+                )
+            return
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
