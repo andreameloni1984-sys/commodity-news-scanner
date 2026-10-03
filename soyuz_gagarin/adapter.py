@@ -21,6 +21,20 @@ def _float(value, default=0.0) -> float:
         return float(default)
 
 
+def _metadata(state) -> dict:
+    value = getattr(state, "metadata", {}) or {}
+    return value if isinstance(value, dict) else {}
+
+
+def _gate(state, name: str, fallback: bool) -> bool:
+    """Read an explicit operational gate, otherwise use a conservative fallback."""
+    meta = _metadata(state)
+    gates = meta.get("operational_gates", {})
+    if isinstance(gates, dict) and name in gates:
+        return bool(gates[name])
+    return fallback
+
+
 def evaluate_states(states: Iterable[object]):
     engine = GagarinEngine()
     decisions = []
@@ -59,25 +73,17 @@ def evaluate_states(states: Iterable[object]):
             rr=rr,
             stop_distance_atr=stop_atr,
             reasons=reasons,
-
-            # Do NOT derive blocked from final_decision.
             blocked=False,
             block_reason=None,
-
             data_ok=bool(getattr(state, "data_ok", False)),
             live=bool(getattr(state, "live", False)),
-            trigger_confirmed=bool(
-                getattr(state, "trigger_confirmed", False)
-            ),
+            trigger_confirmed=bool(getattr(state, "trigger_confirmed", False)),
             structure_direction=str(
-                getattr(state, "structure_direction", "NONE")
-                or "NONE"
+                getattr(state, "structure_direction", "NONE") or "NONE"
             ).upper(),
             mtf_direction=str(
-                getattr(state, "mtf_direction", "NONE")
-                or "NONE"
+                getattr(state, "mtf_direction", "NONE") or "NONE"
             ).upper(),
-
             entry=getattr(state, "entry", None),
             stop=getattr(state, "stop", None),
             tp1=getattr(state, "tp1", None),
@@ -86,27 +92,26 @@ def evaluate_states(states: Iterable[object]):
             rr1=rr_values[0],
             rr2=rr_values[1],
             rr3=rr3,
+            paper_only=_gate(state, "paper_only", True),
+            data_quality_ok=_gate(state, "data_quality_ok", bool(getattr(state, "data_ok", False))),
+            freshness_ok=_gate(state, "freshness_ok", bool(getattr(state, "live", False))),
+            contract_ok=_gate(state, "contract_ok", symbol in GagarinEngine().config.allowed_assets),
+            liquidity_ok=_gate(state, "liquidity_ok", True),
+            volatility_ok=_gate(state, "volatility_ok", True),
+            regime_ok=_gate(state, "regime_ok", str(getattr(state, "regime", "UNKNOWN")).upper() != "UNKNOWN"),
+            session_ok=_gate(state, "session_ok", True),
+            curve_ok=_gate(state, "curve_ok", True),
         )
 
         market = MarketSnapshot(
             symbol=symbol,
-            timestamp=str(
-                getattr(state, "analysis_timestamp", "") or ""
-            ),
+            timestamp=str(getattr(state, "analysis_timestamp", "") or ""),
             price=price,
             atr=atr,
-            regime=str(
-                getattr(state, "regime", "UNKNOWN")
-            ),
-            session=str(
-                getattr(state, "metadata", {}).get(
-                    "session", "UNKNOWN"
-                )
-            ),
+            regime=str(getattr(state, "regime", "UNKNOWN")),
+            session=str(_metadata(state).get("session", "UNKNOWN")),
         )
 
-        decisions.append(
-            engine.evaluate(market, candidate)
-        )
+        decisions.append(engine.evaluate(market, candidate))
 
     return decisions
