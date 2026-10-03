@@ -35,6 +35,15 @@ def candidate(**overrides):
         rr1=1.0,
         rr2=2.0,
         rr3=3.0,
+        paper_only=True,
+        data_quality_ok=True,
+        freshness_ok=True,
+        contract_ok=True,
+        liquidity_ok=True,
+        volatility_ok=True,
+        regime_ok=True,
+        session_ok=True,
+        curve_ok=True,
     )
     values.update(overrides)
     return Candidate(**values)
@@ -138,3 +147,30 @@ def test_missing_trigger_stays_wait():
 
     assert decisions[0].action == "WAIT"
     assert decisions[0].reason == "TRIGGER_NOT_CONFIRMED"
+
+
+def test_rejects_invalid_target_geometry():
+    d = GagarinEngine().evaluate(
+        market(),
+        candidate(tp2=1.05),
+    )
+    assert d.action == "WAIT"
+    assert d.reason == "TARGET_GEOMETRY_INVALID"
+
+
+def test_rejects_weak_rr_tiers_even_when_tp3_is_strong():
+    d = GagarinEngine().evaluate(
+        market(),
+        candidate(rr1=1.0, rr2=2.0, rr3=4.0),
+    )
+    assert d.action == "WAIT"
+    assert d.reason == "RR_TIER_BELOW_THRESHOLD"
+
+
+def test_operational_gate_is_hard_veto():
+    d = GagarinEngine().evaluate(
+        market(),
+        candidate(liquidity_ok=False),
+    )
+    assert d.action == "WAIT"
+    assert d.reason == "LIQUIDITY_FAIL"
