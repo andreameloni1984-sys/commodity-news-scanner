@@ -48,6 +48,7 @@ from telegram.bot import (
     format_report,
     send_telegram,
 )
+from telegram.signals import format_signal_board
 
 
 # ============================================================
@@ -513,15 +514,38 @@ def run():
         results
     )
 
+    signal_results = [
+        state
+        for state in results
+        if (
+            state.final_decision == "ENTRY"
+            and state.setup_direction in {"LONG", "SHORT"}
+            and state.data_ok
+            and state.live
+            and state.trigger_confirmed
+            and state.entry is not None
+            and state.stop is not None
+            and state.tp1 is not None
+        )
+    ]
+
     if TELEGRAM_ENABLED:
 
         print("📨 TELEGRAM")
 
         try:
 
-            send_telegram(
-                report
-            )
+            if signal_results:
+                send_telegram(
+                    format_signal_board(signal_results)
+                )
+                print(
+                    f"📡 SIGNAL CHANNEL: {len(signal_results)} signal(s) published"
+                )
+            else:
+                print(
+                    "📡 SIGNAL CHANNEL: no operational signal — no post"
+                )
 
         except Exception as exc:
 
