@@ -168,6 +168,25 @@ def telegram_diagnostic() -> bool:
         flush=True,
     )
 
+    # Menu comandi ufficiale del bot.
+    _api(
+        "setMyCommands",
+        {
+            "commands": [
+                {"command": "segnali", "description": "Segnali operativi PAPER"},
+                {"command": "top", "description": "Top setup"},
+                {"command": "analisi", "description": "Analisi completa"},
+                {"command": "classifica", "description": "Classifica Gagarin"},
+                {"command": "setup", "description": "Setup e trigger"},
+                {"command": "prezzo", "description": "Prezzi e provider"},
+                {"command": "guida", "description": "Guida del canale"},
+                {"command": "rischio", "description": "Regole di rischio"},
+                {"command": "status", "description": "Stato bot"},
+                {"command": "ping", "description": "Test collegamento"},
+            ]
+        },
+    )
+
     return True
 
 
