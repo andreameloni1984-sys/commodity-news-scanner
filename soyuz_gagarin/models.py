@@ -31,9 +31,6 @@ class Candidate:
     blocked: bool = False
     block_reason: Optional[str] = None
 
-    # Evidence gates copied from the single canonical legacy state.
-    # Gagarin evaluates these fields itself; it does not inherit
-    # legacy final_decision.
     data_ok: bool = False
     live: bool = False
     trigger_confirmed: bool = False
@@ -47,6 +44,18 @@ class Candidate:
     rr1: Optional[float] = None
     rr2: Optional[float] = None
     rr3: Optional[float] = None
+
+    # Operational gates. These are explicit evidence fields rather than
+    # hidden assumptions. Adapter code may populate them from metadata.
+    paper_only: bool = True
+    data_quality_ok: bool = True
+    freshness_ok: bool = True
+    contract_ok: bool = True
+    liquidity_ok: bool = True
+    volatility_ok: bool = True
+    regime_ok: bool = True
+    session_ok: bool = True
+    curve_ok: bool = True
 
 
 @dataclass
