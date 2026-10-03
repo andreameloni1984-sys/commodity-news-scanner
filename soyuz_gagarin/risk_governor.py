@@ -2,15 +2,42 @@ from .config import GagarinConfig
 from .models import Candidate
 
 
+def _target_geometry_ok(candidate: Candidate) -> bool:
+    """Require every target to be on the profitable side of entry."""
+    if candidate.entry is None:
+        return False
+    if candidate.side == "LONG":
+        return (
+            candidate.tp1 is not None and candidate.tp1 > candidate.entry
+            and candidate.tp2 is not None and candidate.tp2 > candidate.tp1
+            and candidate.tp3 is not None and candidate.tp3 > candidate.tp2
+        )
+    if candidate.side == "SHORT":
+        return (
+            candidate.tp1 is not None and candidate.tp1 < candidate.entry
+            and candidate.tp2 is not None and candidate.tp2 < candidate.tp1
+            and candidate.tp3 is not None and candidate.tp3 < candidate.tp2
+        )
+    return False
+
+
+def _rr_tiers_ok(candidate: Candidate) -> bool:
+    """Protect the staged exit plan instead of validating only TP3."""
+    return (
+        candidate.rr1 >= 1.5
+        and candidate.rr2 >= 2.0
+        and candidate.rr3 >= 2.5
+    )
+
+
 def approve(
     candidate: Candidate,
     config: GagarinConfig | None = None,
 ) -> tuple[bool, str]:
     """Final PAPER-only governor.
 
-    This is deliberately independent from the legacy engine's
-    final_decision. The legacy engine supplies evidence; Gagarin
-    decides whether that evidence is sufficient.
+    Gagarin approves a signal only when the complete technical/risk
+    evidence is internally consistent. This function never places orders.
     """
 
     cfg = config or GagarinConfig()
@@ -48,6 +75,9 @@ def approve(
     if candidate.tp1 is None or candidate.tp2 is None or candidate.tp3 is None:
         return False, "TARGETS_MISSING"
 
+    if not _target_geometry_ok(candidate):
+        return False, "TARGET_GEOMETRY_INVALID"
+
     if candidate.stop_distance_atr <= 0:
         return False, "STOP_ATR_INVALID"
 
@@ -62,6 +92,9 @@ def approve(
 
     if candidate.rr3 < cfg.min_rr:
         return False, "RR_BELOW_THRESHOLD"
+
+    if not _rr_tiers_ok(candidate):
+        return False, "RR_TIER_BELOW_THRESHOLD"
 
     if candidate.probability < cfg.min_probability:
         return False, "PROBABILITY_BELOW_THRESHOLD"
