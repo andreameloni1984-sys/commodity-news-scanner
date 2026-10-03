@@ -36,6 +36,12 @@ from config import (
 from engine.gagarin import analyze_universe
 from commodities.universe import enabled_commodities
 from soyuz_gagarin.adapter import evaluate_states
+from telegram.signals import (
+    format_signal_board,
+    format_top,
+    format_channel_guide,
+    format_risk_guide,
+)
 
 
 API_BASE = "https://api.telegram.org"
@@ -705,8 +711,36 @@ def _command_response(
             "/status — stato bot\n"
             "/ping — verifica collegamento\n"
             "/id — chat ID\n"
-            "/gagarin — nuovo Risk Governor PAPER"
+            "/segnali — signal board PAPER\n"
+            "/top — top setup\n"
+            "/guida — come leggere il canale\n"
+            "/rischio — regole di rischio\n"
+            "/gagarin — Risk Governor PAPER"
         )
+
+    # --------------------------------------------------------
+    # SIGNAL CHANNEL
+    # --------------------------------------------------------
+
+    if command_name == "/segnali":
+        try:
+            results = get_last_results() or _run_analysis()
+            return format_signal_board(results)
+        except Exception as exc:
+            return f"❌ SIGNAL ENGINE ERROR\\n{type(exc).__name__}: {exc}"
+
+    if command_name == "/top":
+        try:
+            results = get_last_results() or _run_analysis()
+            return format_top(results)
+        except Exception as exc:
+            return f"❌ TOP ENGINE ERROR\\n{type(exc).__name__}: {exc}"
+
+    if command_name == "/guida":
+        return format_channel_guide()
+
+    if command_name == "/rischio":
+        return format_risk_guide()
 
     # --------------------------------------------------------
     # GAGARIN V1 GOVERNOR
