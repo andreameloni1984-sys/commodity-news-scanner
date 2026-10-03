@@ -49,6 +49,7 @@ from telegram.bot import (
     send_telegram,
 )
 from telegram.signals import format_signal_board
+from soyuz_gagarin.adapter import evaluate_states
 
 
 # ============================================================
@@ -514,18 +515,21 @@ def run():
         results
     )
 
+    # The Telegram channel is fed by the canonical Gagarin governor,
+    # not by the legacy final_decision alone.
+    decisions = evaluate_states(results)
+    approved_symbols = {
+        decision.symbol
+        for decision in decisions
+        if decision.action == "PAPER_SIGNAL"
+    }
+
     signal_results = [
         state
         for state in results
         if (
-            state.final_decision == "ENTRY"
-            and state.setup_direction in {"LONG", "SHORT"}
-            and state.data_ok
-            and state.live
-            and state.trigger_confirmed
-            and state.entry is not None
-            and state.stop is not None
-            and state.tp1 is not None
+            str(getattr(state, "symbol", "")).upper() in approved_symbols
+            and str(getattr(state, "setup_direction", "")).upper() in {"LONG", "SHORT"}
         )
     ]
 
