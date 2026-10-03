@@ -48,6 +48,21 @@ def approve(
     if candidate.blocked:
         return False, candidate.block_reason or "BLOCKED"
 
+    operational = (
+        ("paper_only", candidate.paper_only, "PAPER_ONLY_REQUIRED"),
+        ("data_quality_ok", candidate.data_quality_ok, "DATA_QUALITY_FAIL"),
+        ("freshness_ok", candidate.freshness_ok, "FRESHNESS_FAIL"),
+        ("contract_ok", candidate.contract_ok, "CONTRACT_FAIL"),
+        ("liquidity_ok", candidate.liquidity_ok, "LIQUIDITY_FAIL"),
+        ("volatility_ok", candidate.volatility_ok, "VOLATILITY_FAIL"),
+        ("regime_ok", candidate.regime_ok, "REGIME_FAIL"),
+        ("session_ok", candidate.session_ok, "SESSION_FAIL"),
+        ("curve_ok", candidate.curve_ok, "CURVE_FAIL"),
+    )
+    for _, ok, reason in operational:
+        if not ok:
+            return False, reason
+
     if not candidate.data_ok:
         return False, "DATA_NOT_OK"
 
