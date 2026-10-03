@@ -47,6 +47,20 @@ class Candidate:
     rr1: Optional[float] = None
     rr2: Optional[float] = None
     rr3: Optional[float] = None
+    atr: float = 0.0
+    signal_timestamp: Optional[str] = None
+
+    # Explicit operational evidence. Missing/false means BLOCK/WAIT.
+    paper_only: bool = False
+    data_quality_ok: bool = False
+    freshness_ok: bool = False
+    contract_ok: bool = False
+    liquidity_ok: bool = False
+    volatility_ok: bool = False
+    regime_ok: bool = False
+    session_ok: bool = False
+    curve_ok: bool = False
+    execution_ok: bool = False
 
 
 @dataclass
