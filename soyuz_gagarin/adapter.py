@@ -27,12 +27,12 @@ def _metadata(state) -> dict:
 
 
 def _gate(state, name: str, fallback: bool) -> bool:
-    """Read an explicit operational gate, otherwise use a conservative fallback."""
+    """Read an explicit gate; missing evidence fails closed."""
     meta = _metadata(state)
     gates = meta.get("operational_gates", {})
     if isinstance(gates, dict) and name in gates:
         return bool(gates[name])
-    return fallback
+    return False
 
 
 def evaluate_states(states: Iterable[object]):
@@ -93,14 +93,14 @@ def evaluate_states(states: Iterable[object]):
             rr2=rr_values[1],
             rr3=rr3,
             paper_only=_gate(state, "paper_only", True),
-            data_quality_ok=_gate(state, "data_quality_ok", bool(getattr(state, "data_ok", False))),
-            freshness_ok=_gate(state, "freshness_ok", bool(getattr(state, "live", False))),
-            contract_ok=_gate(state, "contract_ok", symbol in GagarinEngine().config.allowed_assets),
-            liquidity_ok=_gate(state, "liquidity_ok", True),
-            volatility_ok=_gate(state, "volatility_ok", True),
-            regime_ok=_gate(state, "regime_ok", str(getattr(state, "regime", "UNKNOWN")).upper() != "UNKNOWN"),
-            session_ok=_gate(state, "session_ok", True),
-            curve_ok=_gate(state, "curve_ok", True),
+            data_quality_ok=_gate(state, "data_quality_ok", False),
+            freshness_ok=_gate(state, "freshness_ok", False),
+            contract_ok=_gate(state, "contract_ok", False),
+            liquidity_ok=_gate(state, "liquidity_ok", False),
+            volatility_ok=_gate(state, "volatility_ok", False),
+            regime_ok=_gate(state, "regime_ok", False),
+            session_ok=_gate(state, "session_ok", False),
+            curve_ok=_gate(state, "curve_ok", False),
         )
 
         market = MarketSnapshot(
