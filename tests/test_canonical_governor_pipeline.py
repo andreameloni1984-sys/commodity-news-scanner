@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 from engine.feedback import record_entries as record_feedback_entries
+import paper_trade_journal
 from paper_trade_journal import record_entries as record_journal_entries
 from telegram.signals import format_signal_board
 
@@ -40,8 +41,9 @@ def test_canonical_paper_signal_reaches_all_observers(tmp_path):
 
     journal = tmp_path / "journal.csv"
     feedback = tmp_path / "feedback.csv"
+    paper_trade_journal.JOURNAL_FILE = journal
 
-    assert record_journal_entries([state], path=journal) == 1
+    assert record_journal_entries([state]) == 1
     assert record_feedback_entries([state], path=feedback) == 1
 
     assert "Oro" in format_signal_board([state])
@@ -55,6 +57,7 @@ def test_legacy_entry_remains_compatible(tmp_path):
 
     journal = tmp_path / "journal.csv"
     feedback = tmp_path / "feedback.csv"
+    paper_trade_journal.JOURNAL_FILE = journal
 
-    assert record_journal_entries([state], path=journal) == 1
+    assert record_journal_entries([state]) == 1
     assert record_feedback_entries([state], path=feedback) == 1
