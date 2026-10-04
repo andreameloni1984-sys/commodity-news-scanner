@@ -32,7 +32,7 @@ def candidate(**overrides):
         tp1=1.1,
         tp2=1.2,
         tp3=1.3,
-        rr1=1.0,
+        rr1=1.5,
         rr2=2.0,
         rr3=3.0,
         paper_only=True,
