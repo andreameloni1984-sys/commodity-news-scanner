@@ -52,11 +52,16 @@ def record_entries(results):
     - registra solo final_decision == ENTRY.
     """
 
-    entries = [
-        state
-        for state in results
-        if state.final_decision == "ENTRY"
-    ]
+    entries = []
+    for state in results:
+        metadata = getattr(state, "metadata", {}) or {}
+        canonical = (
+            isinstance(metadata, dict)
+            and str(metadata.get("gagarin_action", "")).upper() == "PAPER_SIGNAL"
+        )
+        legacy = str(getattr(state, "final_decision", "")).upper() == "ENTRY"
+        if canonical or legacy:
+            entries.append(state)
 
     if not entries:
         return 0
