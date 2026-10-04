@@ -53,6 +53,7 @@ MIN_ENTRY_QUALITY = _DEFAULT_CONFIG.min_quality
 MIN_ENTRY_CONFIDENCE = _DEFAULT_CONFIG.min_confidence
 MIN_ENTRY_RR = _DEFAULT_CONFIG.min_rr
 MAX_ENTRY_STOP_ATR = _DEFAULT_CONFIG.max_stop_atr
+MIN_ENTRY_STOP_ATR = _DEFAULT_CONFIG.sl_min_atr
 
 
 # ============================================================
@@ -307,6 +308,9 @@ def check_risk(
         if atr > 0:
             stop_atr = stop_distance / atr
 
+            if stop_atr < MIN_ENTRY_STOP_ATR:
+                blockers.append("STOP_LT_MIN_ATR")
+
             if stop_atr > MAX_ENTRY_STOP_ATR:
                 blockers.append("STOP_GT_MAX_ATR")
 
@@ -510,6 +514,7 @@ def evaluate(candidate: Dict[str, Any]) -> GagarinResult:
         and tp1 > 0
         and tp2 > 0
         and tp3 > 0
+        and stop_atr >= MIN_ENTRY_STOP_ATR
         and stop_atr <= MAX_ENTRY_STOP_ATR
         and rr >= MIN_ENTRY_RR
     )
@@ -529,6 +534,7 @@ def evaluate(candidate: Dict[str, Any]) -> GagarinResult:
         and quality >= MIN_ENTRY_QUALITY
         and confidence >= MIN_ENTRY_CONFIDENCE
         and rr >= MIN_ENTRY_RR
+        and stop_atr >= MIN_ENTRY_STOP_ATR
         and stop_atr <= MAX_ENTRY_STOP_ATR
     )
 
