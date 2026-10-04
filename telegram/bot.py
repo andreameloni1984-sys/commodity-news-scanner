@@ -358,7 +358,7 @@ def _format_classifica(results):
         lines.append(
             f"{index}. {state.commodity} | "
             f"{direction} | "
-            f"Prob {state.probability:.1f}% | "
+            f"Confluence {state.probability:.1f} | "
             f"Q {state.quality:.1f} | "
             f"C {state.confidence:.1f} | "
             f"{state.final_decision}"
@@ -435,7 +435,7 @@ def _format_setup(results):
             f"  Direzione: {state.setup_direction}",
             f"  Setup Q: {state.setup_quality:.1f}",
             f"  Trigger: {trigger}",
-            f"  Prob: {state.probability:.1f}%",
+            f"  Confluence: {state.probability:.1f}",
             f"  Quality: {state.quality:.1f}",
             f"  Confidence: {state.confidence:.1f}",
             "",
