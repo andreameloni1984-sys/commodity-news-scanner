@@ -57,4 +57,4 @@ jobs:
 
       - name: Start Telegram listener
         run: |
-          python -u telegram/telegram_listener.py
+          python -u -m telegram.telegram_listener
