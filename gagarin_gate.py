@@ -38,16 +38,21 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
+from soyuz_gagarin.config import GagarinConfig
+
 
 # ============================================================
 # CONFIGURAZIONE OPERATIVA
 # ============================================================
 
-MIN_ENTRY_PROBABILITY = 62.0
-MIN_ENTRY_QUALITY = 55.0
-MIN_ENTRY_CONFIDENCE = 60.0
-MIN_ENTRY_RR = 2.5
-MAX_ENTRY_STOP_ATR = 2.5
+# Canonical operational thresholds: keep the legacy gate aligned with the
+# single Gagarin configuration authority. No order execution occurs here.
+_DEFAULT_CONFIG = GagarinConfig()
+MIN_ENTRY_PROBABILITY = _DEFAULT_CONFIG.min_probability
+MIN_ENTRY_QUALITY = _DEFAULT_CONFIG.min_quality
+MIN_ENTRY_CONFIDENCE = _DEFAULT_CONFIG.min_confidence
+MIN_ENTRY_RR = _DEFAULT_CONFIG.min_rr
+MAX_ENTRY_STOP_ATR = _DEFAULT_CONFIG.max_stop_atr
 
 
 # ============================================================
