@@ -208,7 +208,11 @@ def _print_operational(results):
     entries = [
         state
         for state in results
-        if state.final_decision == "ENTRY"
+        if str(
+            (getattr(state, "metadata", {}) or {}).get(
+                "gagarin_action", ""
+            )
+        ).upper() == "PAPER_SIGNAL"
     ]
 
     print("🎯 OPERATIVITÀ")
@@ -329,10 +333,11 @@ def _print_paper_journal(results):
 
             for state in results:
 
-                if (
-                    state.final_decision
-                    == "ENTRY"
-                ):
+                if str(
+                    (getattr(state, "metadata", {}) or {}).get(
+                        "gagarin_action", ""
+                    )
+                ).upper() == "PAPER_SIGNAL":
 
                     print(
                         f"  • "
@@ -476,6 +481,32 @@ def run():
         return 1
 
     # --------------------------------------------------------
+    # CANONICAL GAGARIN GOVERNOR
+    # --------------------------------------------------------
+
+    # Evaluate once and stamp the canonical decision into metadata so
+    # Telegram, Paper Journal and Feedback consume the same decision.
+    decisions = evaluate_states(results)
+    decisions_by_symbol = {
+        decision.symbol: decision
+        for decision in decisions
+    }
+    for state in results:
+        decision = decisions_by_symbol.get(
+            str(getattr(state, "symbol", "")).upper()
+        )
+        metadata = getattr(state, "metadata", None)
+        if not isinstance(metadata, dict):
+            metadata = {}
+            state.metadata = metadata
+        metadata["gagarin_action"] = (
+            decision.action if decision is not None else "WAIT"
+        )
+        metadata["gagarin_reason"] = (
+            decision.reason if decision is not None else "NO_DECISION"
+        )
+
+    # --------------------------------------------------------
     # REPORT
     # --------------------------------------------------------
 
@@ -515,9 +546,8 @@ def run():
         results
     )
 
-    # The Telegram channel is fed by the canonical Gagarin governor,
-    # not by the legacy final_decision alone.
-    decisions = evaluate_states(results)
+    # The Telegram channel is fed by the same canonical decisions
+    # stamped above; legacy final_decision is not a second governor.
     approved_symbols = {
         decision.symbol
         for decision in decisions
