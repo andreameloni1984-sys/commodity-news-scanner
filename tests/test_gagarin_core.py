@@ -103,7 +103,11 @@ def test_legacy_wait_is_not_an_automatic_gagarin_veto():
         final_decision="WAIT",
         blockers=["FINAL_CONFLUENCE_FAIL"],
         analysis_timestamp="2026-10-02T00:00:00Z",
-        metadata={},
+        metadata={"operational_gates": {
+            "paper_only": True, "data_quality_ok": True, "freshness_ok": True,
+            "contract_ok": True, "liquidity_ok": True, "volatility_ok": True,
+            "regime_ok": True, "session_ok": True, "curve_ok": True,
+        }},
     )
 
     decisions = evaluate_states([state])
