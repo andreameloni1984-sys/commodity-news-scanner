@@ -44,6 +44,17 @@ jobs:
           echo "Telegram configuration present"
           echo "PAPER_TRADING_ONLY=$PAPER_TRADING_ONLY"
 
+      - name: Test Telegram API
+        run: |
+          echo "Testing Telegram bot token..."
+          RESPONSE=$(curl -sS --max-time 20 "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe")
+          echo "$RESPONSE"
+          echo "$RESPONSE" | grep -q '"ok":true' || {
+            echo "Telegram API authentication failed."
+            exit 1
+          }
+          echo "Telegram API authentication OK"
+
       - name: Start Telegram listener
         run: |
-          python telegram/telegram_listener.py
+          python -u telegram/telegram_listener.py
