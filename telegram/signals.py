@@ -36,8 +36,15 @@ def _direction(state) -> str:
 
 
 def _is_signal(state) -> bool:
+    """Recognize the canonical Gagarin PAPER_SIGNAL, with legacy fallback."""
+    metadata = getattr(state, "metadata", {}) or {}
+    canonical = (
+        isinstance(metadata, dict)
+        and str(metadata.get("gagarin_action", "")).upper() == "PAPER_SIGNAL"
+    )
+    legacy = str(getattr(state, "final_decision", "")).upper() == "ENTRY"
     return (
-        str(getattr(state, "final_decision", "")).upper() == "ENTRY"
+        (canonical or legacy)
         and _direction(state) in {"LONG", "SHORT"}
         and bool(getattr(state, "data_ok", False))
         and bool(getattr(state, "live", False))
@@ -159,7 +166,8 @@ def format_channel_guide() -> str:
     return (
         "📚 SOYUZ GAGARIN — GUIDA\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        "Il canale pubblica segnali e contesto, non ordini.\n\n"
+        "Il canale pubblica segnali e contesto, non ordini.\n"
+        "🧪 PAPER ONLY: nessuna esecuzione automatica.\n\n"
         "🟢 SIGNAL — setup che supera i controlli disponibili.\n"
         "🟡 WAIT — setup interessante ma non ancora confermato.\n"
         "🔴 BLOCKED — dati o condizioni operative insufficienti.\n\n"
