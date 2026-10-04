@@ -32,7 +32,7 @@ def _gate(state, name: str, fallback: bool) -> bool:
     gates = meta.get("operational_gates", {})
     if isinstance(gates, dict) and name in gates:
         return bool(gates[name])
-    return False
+    return fallback
 
 
 def evaluate_states(states: Iterable[object]):
