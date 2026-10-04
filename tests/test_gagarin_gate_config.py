@@ -67,3 +67,14 @@ def test_legacy_gate_blocks_just_below_canonical_rr():
 
     assert result.state == "WATCH"
     assert "RR_FAIL" in result.blockers
+
+
+def test_legacy_gate_blocks_below_canonical_minimum_stop_atr():
+    cfg = GagarinConfig()
+    candidate = valid_candidate()
+    candidate["stop"] = 99.5  # 0.5 ATR, below cfg.sl_min_atr=0.80
+
+    result = evaluate(candidate)
+
+    assert result.state == "WATCH"
+    assert "STOP_LT_MIN_ATR" in result.blockers
