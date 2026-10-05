@@ -76,5 +76,13 @@ def test_missing_operational_gate_stays_fail_closed():
     decision = approved_decision()
     decision.candidate.curve_ok = False
 
-    with pytest.raises(ValueError, match="DECISION_NOT_PAPER_SIGNAL"):
+    with pytest.raises(ValueError, match="RISK_GOVERNOR_REJECTED:CURVE_FAIL"):
+        build_demo_payload(decision)
+
+
+def test_paper_only_gate_is_rechecked_at_transport_boundary():
+    decision = approved_decision()
+    decision.candidate.paper_only = False
+
+    with pytest.raises(ValueError, match="RISK_GOVERNOR_REJECTED:PAPER_ONLY_REQUIRED"):
         build_demo_payload(decision)
