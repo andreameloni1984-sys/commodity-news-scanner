@@ -449,8 +449,11 @@ def _format_setup(results):
     if not found:
 
         lines.append(
-            "Nessun setup LONG/SHORT attivo."
+            "Nessun setup LONG/SHORT rilevato nel snapshot."
         )
+    else:
+
+        lines.insert(2, "🟡 I setup mostrati possono essere IN ATTESA del trigger.")
 
     return "\n".join(lines)
 
