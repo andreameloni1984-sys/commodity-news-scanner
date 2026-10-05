@@ -563,8 +563,18 @@ def _resolve_commodity(
         "brent": "Petrolio Brent",
         "petrolio brent": "Petrolio Brent",
 
+        "riso": "Riso",
+        "rice": "Riso",
+
         "zucchero": "Zucchero",
         "sugar": "Zucchero",
+
+        "cacao": "Cacao",
+        "cocoa": "Cacao",
+
+        "caffe": "Caffè",
+        "caffè": "Caffè",
+        "coffee": "Caffè",
     }
 
     key = name.strip().lower()
@@ -731,6 +741,9 @@ def _command_response(
             "/analisi wti\n"
             "/analisi brent\n"
             "/analisi zucchero\n"
+            "/analisi riso\n"
+            "/analisi cacao\n"
+            "/analisi caffe\n"
             "/prezzo — prezzi e provider\n"
             "/status — stato bot\n"
             "/ping — verifica collegamento\n"
@@ -969,7 +982,10 @@ def _command_response(
                     "⚫ Palladio\n"
                     "🛢 WTI\n"
                     "🛢 Brent\n"
-                    "🍬 Zucchero"
+                    "🍬 Zucchero\n"
+                    "🍚 Riso\n"
+                    "🍫 Cacao\n"
+                    "☕ Caffè"
                 )
 
             results = _run_analysis(
