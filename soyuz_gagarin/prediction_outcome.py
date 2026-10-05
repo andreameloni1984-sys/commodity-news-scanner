@@ -7,9 +7,8 @@ Rules:
 - Entry must be touched before an outcome can be counted.
 - After entry, the first touched risk/target level determines the outcome.
 - If SL and a TP are both inside the same OHLC bar, the result is AMBIGUOUS
-  (we do not assume an intrabar path that is not present in the data).
-- TP1/TP2/TP3 are cumulative milestones; the first terminal outcome is SL or
-  the highest target reached before SL.
+  because the intrabar path is unknown.
+- R is calculated from the prediction's actual entry/stop geometry.
 """
 
 from __future__ import annotations
@@ -57,8 +56,10 @@ def evaluate_prediction(
         if not (targets[2][1] <= targets[1][1] <= targets[0][1] < entry < stop):
             raise ValueError("invalid SHORT geometry")
 
+    risk = abs(entry - stop)
     entry_hit = False
     bars_evaluated = 0
+
     for bar in bars:
         bars_evaluated += 1
         high = float(bar["high"])
@@ -71,55 +72,41 @@ def evaluate_prediction(
                 continue
 
         stop_hit = _touches(bar, stop)
-        touched_targets = [name for name, level in targets if _touches(bar, level)]
+        touched_targets = [
+            (name, level) for name, level in targets if _touches(bar, level)
+        ]
 
         if stop_hit and touched_targets:
             return PredictionOutcome(
-                "MATURED",
-                True,
-                "AMBIGUOUS",
-                None,
-                None,
-                bars_evaluated,
+                "MATURED", True, "AMBIGUOUS", None, None, bars_evaluated
             )
 
         if stop_hit:
             return PredictionOutcome(
-                "MATURED",
-                True,
-                "SL",
-                None,
-                -1.0,
-                bars_evaluated,
+                "MATURED", True, "SL", None, -1.0, bars_evaluated
             )
 
         if touched_targets:
-            highest = touched_targets[-1]
-            rr = {"TP1": 1.5, "TP2": 2.0, "TP3": 2.5}[highest]
+            highest_name, highest_level = touched_targets[-1]
+            r_multiple = (
+                (highest_level - entry) / risk
+                if direction == "LONG"
+                else (entry - highest_level) / risk
+            )
             return PredictionOutcome(
                 "MATURED",
                 True,
-                highest,
-                highest,
-                rr,
+                highest_name,
+                highest_name,
+                r_multiple,
                 bars_evaluated,
             )
 
     if not entry_hit:
         return PredictionOutcome(
-            "NOT_TRIGGERED",
-            False,
-            "NOT_TRIGGERED",
-            None,
-            None,
-            bars_evaluated,
+            "NOT_TRIGGERED", False, "NOT_TRIGGERED", None, None, bars_evaluated
         )
 
     return PredictionOutcome(
-        "OPEN",
-        True,
-        "OPEN",
-        None,
-        None,
-        bars_evaluated,
+        "OPEN", True, "OPEN", None, None, bars_evaluated
     )
