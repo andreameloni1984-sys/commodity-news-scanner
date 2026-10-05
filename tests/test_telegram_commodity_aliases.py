@@ -34,3 +34,26 @@ def test_all_enabled_canonical_names_are_resolvable():
 
 def test_unknown_commodity_is_not_resolved():
     assert _resolve_commodity("grano") is None
+
+
+def test_setup_formatter_distinguishes_pending_setup_from_no_setup():
+    from types import SimpleNamespace
+    from telegram.bot import _format_setup
+
+    pending = SimpleNamespace(
+        commodity="Zucchero",
+        setup_direction="LONG",
+        setup_quality=45.0,
+        trigger_confirmed=False,
+        probability=63.0,
+        quality=51.8,
+        confidence=35.0,
+    )
+
+    text = _format_setup([pending])
+    assert "Zucchero" in text
+    assert "IN ATTESA" in text
+    assert "Nessun setup LONG/SHORT rilevato" not in text
+
+    empty = _format_setup([])
+    assert "Nessun setup LONG/SHORT rilevato nel snapshot." in empty
