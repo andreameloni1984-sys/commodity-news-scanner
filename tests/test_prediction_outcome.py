@@ -63,7 +63,7 @@ def test_short_r_is_calculated_from_actual_geometry():
     }
     result = evaluate_prediction(
         prediction,
-        [{"low": 93.5, "high": 99.5}],
+        [{"low": 93.5, "high": 100.5}],
     )
     assert result.outcome == "TP1"
     assert result.r_multiple == 1.5
