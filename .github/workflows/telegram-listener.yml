@@ -2,6 +2,13 @@ name: SOYUZ Telegram Listener
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: soyuz-telegram-listener
+  cancel-in-progress: true
 
 permissions:
   contents: read
