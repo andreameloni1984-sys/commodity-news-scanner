@@ -1,5 +1,6 @@
 import pytest
 
+from commodities.universe import enabled_commodities
 from telegram.bot import _resolve_commodity
 
 
