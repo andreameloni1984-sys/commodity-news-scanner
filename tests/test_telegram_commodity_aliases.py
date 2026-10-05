@@ -56,4 +56,4 @@ def test_setup_formatter_distinguishes_pending_setup_from_no_setup():
     assert "Nessun setup LONG/SHORT rilevato" not in text
 
     empty = _format_setup([])
-    assert "Nessun setup LONG/SHORT rilevato nel snapshot." in empty
+    assert "Nessun risultato disponibile." in empty
