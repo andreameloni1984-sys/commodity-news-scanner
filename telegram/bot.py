@@ -16,6 +16,7 @@ Comandi:
     /analisi palladio
     /analisi wti
     /analisi brent
+    /analisi zucchero
     /prezzo
 
 PAPER ONLY.
@@ -561,6 +562,9 @@ def _resolve_commodity(
 
         "brent": "Petrolio Brent",
         "petrolio brent": "Petrolio Brent",
+
+        "zucchero": "Zucchero",
+        "sugar": "Zucchero",
     }
 
     key = name.strip().lower()
@@ -630,8 +634,8 @@ def _format_single_analysis(
 
         "",
 
-        f"Probabilità: "
-        f"{state.probability:.1f}%",
+        f"Confluence score: "
+        f"{state.probability:.1f} / 100",
 
         f"Quality: "
         f"{state.quality:.1f}",
@@ -726,6 +730,7 @@ def _command_response(
             "/analisi palladio\n"
             "/analisi wti\n"
             "/analisi brent\n"
+            "/analisi zucchero\n"
             "/prezzo — prezzi e provider\n"
             "/status — stato bot\n"
             "/ping — verifica collegamento\n"
@@ -963,7 +968,8 @@ def _command_response(
                     "⚪ Platino\n"
                     "⚫ Palladio\n"
                     "🛢 WTI\n"
-                    "🛢 Brent"
+                    "🛢 Brent\n"
+                    "🍬 Zucchero"
                 )
 
             results = _run_analysis(
