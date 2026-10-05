@@ -27,6 +27,14 @@ def approved_decision():
         rr1=2.0,
         rr2=3.0,
         rr3=5.0,
+        data_quality_ok=True,
+        freshness_ok=True,
+        contract_ok=True,
+        liquidity_ok=True,
+        volatility_ok=True,
+        regime_ok=True,
+        session_ok=True,
+        curve_ok=True,
     )
     return GagarinEngine().evaluate(
         MarketSnapshot("XPT/USD", "2026-10-02T00:00:00Z", 100.0),
@@ -61,4 +69,12 @@ def test_invalid_geometry_is_blocked():
     decision.candidate.tp3 = 97.0
 
     with pytest.raises(ValueError, match="INVALID_LONG_GEOMETRY"):
+        build_demo_payload(decision)
+
+
+def test_missing_operational_gate_stays_fail_closed():
+    decision = approved_decision()
+    decision.candidate.curve_ok = False
+
+    with pytest.raises(ValueError, match="DECISION_NOT_PAPER_SIGNAL"):
         build_demo_payload(decision)
