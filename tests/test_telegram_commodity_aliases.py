@@ -25,5 +25,11 @@ def test_all_enabled_commodities_are_resolvable(alias, expected):
     assert commodity.name == expected
 
 
+def test_all_enabled_canonical_names_are_resolvable():
+    for commodity in enabled_commodities():
+        assert _resolve_commodity(commodity.name) is commodity
+        assert _resolve_commodity(commodity.symbol) is commodity
+
+
 def test_unknown_commodity_is_not_resolved():
     assert _resolve_commodity("grano") is None
