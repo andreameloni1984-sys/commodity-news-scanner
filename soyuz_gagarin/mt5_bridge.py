@@ -45,7 +45,7 @@ def build_demo_payload(decision: Decision) -> dict[str, Any]:
     # PAPER_SIGNAL must never cross this boundary.
     approved, reason = approve(candidate)
     if not approved:
-        raise ValueError("DECISION_NOT_PAPER_SIGNAL")
+        raise ValueError(f"RISK_GOVERNOR_REJECTED:{reason}")
 
     if candidate.side not in {"LONG", "SHORT"}:
         raise ValueError("INVALID_SIDE")
