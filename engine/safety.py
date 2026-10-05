@@ -1,12 +1,5 @@
-from config import (
-    MAX_STOP_ATR,
-    MIN_CONFIDENCE,
-    MIN_PROBABILITY,
-    MIN_QUALITY,
-    MIN_RR,
-)
-
 from engine.state import SoyuzState
+from soyuz_gagarin.config import GagarinConfig
 
 
 # ============================================================
@@ -71,6 +64,7 @@ def apply_safety(
     sullo stato canonico.
     """
 
+    cfg = GagarinConfig()
     blockers = []
 
     # ========================================================
@@ -265,11 +259,21 @@ def apply_safety(
 
     elif (
         state.stop_atr
-        > MAX_STOP_ATR
+        > cfg.max_stop_atr
     ):
 
         blockers.append(
             "STOP_GT_MAX_ATR"
+        )
+
+    # ========================================================
+    # 11b. MINIMUM STOP / ATR
+    # ========================================================
+
+    elif state.stop_atr < cfg.sl_min_atr:
+
+        blockers.append(
+            "STOP_LT_MIN_ATR"
         )
 
     # ========================================================
@@ -396,7 +400,7 @@ def apply_safety(
 
     else:
 
-        if state.rr3 < MIN_RR:
+        if state.rr3 < cfg.min_rr:
 
             blockers.append(
                 "RR_FAIL"
@@ -408,7 +412,7 @@ def apply_safety(
 
     if (
         state.probability
-        < MIN_PROBABILITY
+        < cfg.min_probability
     ):
 
         blockers.append(
@@ -421,7 +425,7 @@ def apply_safety(
 
     if (
         state.quality
-        < MIN_QUALITY
+        < cfg.min_quality
     ):
 
         blockers.append(
@@ -434,7 +438,7 @@ def apply_safety(
 
     if (
         state.confidence
-        < MIN_CONFIDENCE
+        < cfg.min_confidence
     ):
 
         blockers.append(
@@ -483,11 +487,11 @@ def apply_safety(
         and state.stop_atr is not None
         and state.rr3 is not None
         and state.probability
-        >= MIN_PROBABILITY
+        >= cfg.min_probability
         and state.quality
-        >= MIN_QUALITY
+        >= cfg.min_quality
         and state.confidence
-        >= MIN_CONFIDENCE
+        >= cfg.min_confidence
     ):
 
         pass
