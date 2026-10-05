@@ -35,7 +35,11 @@ from config import (
 )
 
 from engine.gagarin import analyze_universe
-from commodities.universe import enabled_commodities
+from commodities.universe import (
+    enabled_commodities,
+    get_commodity_by_name,
+    get_commodity_by_symbol,
+)
 from soyuz_gagarin.adapter import evaluate_states
 from telegram.signals import (
     format_signal_board,
@@ -538,58 +542,37 @@ def _run_analysis(
 # RISOLUZIONE COMMODITY
 # ============================================================
 
-def _resolve_commodity(
-    name: str,
-):
+def _resolve_commodity(name: str):
+    """Resolve any enabled commodity from the canonical universe.
 
-    aliases = {
-
-        "oro": "Oro",
-        "gold": "Oro",
-
-        "argento": "Argento",
-        "silver": "Argento",
-
-        "platino": "Platino",
-        "platinum": "Platino",
-
-        "palladio": "Palladio",
-        "palladium": "Palladio",
-
-        "wti": "Petrolio WTI",
-        "petrolio": "Petrolio WTI",
-        "petrolio wti": "Petrolio WTI",
-
-        "brent": "Petrolio Brent",
-        "petrolio brent": "Petrolio Brent",
-
-        "riso": "Riso",
-        "rice": "Riso",
-
-        "zucchero": "Zucchero",
-        "sugar": "Zucchero",
-
-        "cacao": "Cacao",
-        "cocoa": "Cacao",
-
-        "caffe": "Caffè",
-        "caffè": "Caffè",
-        "coffee": "Caffè",
-    }
-
-    key = name.strip().lower()
-
-    canonical = aliases.get(key)
-
-    if canonical is None:
+    Exact canonical names and symbols are accepted first; common aliases
+    remain supported for user-facing Telegram commands.
+    """
+    key = " ".join(str(name or "").strip().split()).lower()
+    if not key:
         return None
 
     for commodity in enabled_commodities():
-
-        if commodity.name.lower() == canonical.lower():
+        if commodity.name.lower() == key or commodity.symbol.lower() == key:
             return commodity
 
-    return None
+    aliases = {
+        "oro": "Oro", "gold": "Oro",
+        "argento": "Argento", "silver": "Argento",
+        "platino": "Platino", "platinum": "Platino",
+        "palladio": "Palladio", "palladium": "Palladio",
+        "wti": "Petrolio WTI", "petrolio": "Petrolio WTI",
+        "petrolio wti": "Petrolio WTI",
+        "brent": "Petrolio Brent", "petrolio brent": "Petrolio Brent",
+        "riso": "Riso", "rice": "Riso",
+        "zucchero": "Zucchero", "sugar": "Zucchero",
+        "cacao": "Cacao", "cocoa": "Cacao",
+        "caffe": "Caffè", "caffè": "Caffè", "coffee": "Caffè",
+    }
+    canonical = aliases.get(key)
+    if canonical is None:
+        return None
+    return get_commodity_by_name(canonical)
 
 
 # ============================================================
@@ -652,6 +635,11 @@ def _format_single_analysis(
 
         f"Confidence: "
         f"{state.confidence:.1f}",
+        f"ATR: {state.atr:.6g}" if state.atr is not None else "ATR: N/D",
+        f"Regime: {state.regime}",
+        f"Structure: {state.structure} | MTF: {state.mtf_direction} ({state.mtf_alignment:.0f})",
+        f"Setup: {state.setup} | Trigger: {state.trigger}",
+        f"Dati: {state.metadata.get('data_status', 'N/D')} | Age: {state.data_age_seconds:.0f}s" if state.data_age_seconds is not None else f"Dati: {state.metadata.get('data_status', 'N/D')}",
 
         "",
     ]
