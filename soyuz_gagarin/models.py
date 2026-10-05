@@ -48,14 +48,14 @@ class Candidate:
     # Operational gates. These are explicit evidence fields rather than
     # hidden assumptions. Adapter code may populate them from metadata.
     paper_only: bool = True
-    data_quality_ok: bool = True
-    freshness_ok: bool = True
-    contract_ok: bool = True
-    liquidity_ok: bool = True
-    volatility_ok: bool = True
-    regime_ok: bool = True
-    session_ok: bool = True
-    curve_ok: bool = True
+    data_quality_ok: bool = False
+    freshness_ok: bool = False
+    contract_ok: bool = False
+    liquidity_ok: bool = False
+    volatility_ok: bool = False
+    regime_ok: bool = False
+    session_ok: bool = False
+    curve_ok: bool = False
 
 
 @dataclass
