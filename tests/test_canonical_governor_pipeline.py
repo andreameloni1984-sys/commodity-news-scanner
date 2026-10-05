@@ -61,3 +61,45 @@ def test_legacy_entry_remains_compatible(tmp_path):
 
     assert record_journal_entries([state]) == 1
     assert record_feedback_entries([state], path=feedback) == 1
+
+
+def test_safety_uses_canonical_min_stop_atr_and_thresholds(monkeypatch):
+    from engine.safety import apply_safety
+    from engine.state import SoyuzState
+
+    monkeypatch.setenv("SL_MIN_ATR", "0.80")
+    monkeypatch.setenv("MAX_ENTRY_STOP_ATR", "2.50")
+    monkeypatch.setenv("MIN_ENTRY_PROBABILITY", "62")
+    monkeypatch.setenv("MIN_ENTRY_QUALITY", "55")
+    monkeypatch.setenv("MIN_ENTRY_CONFIDENCE", "60")
+    monkeypatch.setenv("MIN_ENTRY_RR", "2.5")
+
+    state = SoyuzState(
+        commodity="Test",
+        symbol="TEST",
+        data_ok=True,
+        live=True,
+        setup="BREAKOUT",
+        setup_direction="LONG",
+        trigger_confirmed=True,
+        trigger_direction="LONG",
+        structure_direction="LONG",
+        mtf_direction="LONG",
+        entry=100.0,
+        stop=99.5,
+        tp1=102.0,
+        tp2=104.0,
+        tp3=106.0,
+        stop_atr=0.5,
+        rr1=4.0,
+        rr2=8.0,
+        rr3=12.0,
+        probability=62.0,
+        quality=55.0,
+        confidence=60.0,
+    )
+
+    result = apply_safety(state)
+
+    assert result.final_decision == "WAIT"
+    assert "STOP_LT_MIN_ATR" in result.blockers
