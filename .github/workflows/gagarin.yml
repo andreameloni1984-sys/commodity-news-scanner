@@ -7,6 +7,7 @@ on:
       - "soyuz-gagarin-v2-governor-integration"
       - "gagarin-mt5-demo-bridge-v1"
       - "main"
+      - "ci/gagarin-safety-coverage"
   pull_request:
     branches:
       - "soyuz-gagarin-v1"
@@ -23,7 +24,13 @@ jobs:
           python-version: "3.12"
       - name: Install test runner
         run: python -m pip install pytest
-      - name: Run Gagarin tests
-        run: python -m pytest -q tests/test_gagarin_core.py tests/test_mt5_bridge.py
+      - name: Run Gagarin safety and pipeline tests
+        run: >
+          python -m pytest -q
+          tests/test_gagarin_core.py
+          tests/test_gagarin_gate_config.py
+          tests/test_canonical_governor_pipeline.py
+          tests/test_pipeline.py
+          tests/test_mt5_bridge.py
       - name: Run paper-only smoke test
         run: python -m soyuz_gagarin.main
