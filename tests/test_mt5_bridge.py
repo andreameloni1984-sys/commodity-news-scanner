@@ -77,4 +77,4 @@ def test_missing_operational_gate_stays_fail_closed():
     decision.candidate.curve_ok = False
 
     with pytest.raises(ValueError, match="DECISION_NOT_PAPER_SIGNAL"):
-        build_demo_payload(decision)
+    with pytest.raises(ValueError, match="CURVE_FAIL"):
