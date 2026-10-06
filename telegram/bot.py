@@ -1119,7 +1119,7 @@ def poll_once(
 
     payload = {
         "timeout": POLL_TIMEOUT,
-        "allowed_updates": ["message", "callback_query"],
+        "allowed_updates": ["message"],
     }
 
     if offset is not None:
