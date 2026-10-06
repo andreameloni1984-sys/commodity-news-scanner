@@ -144,7 +144,7 @@ def test_missing_trigger_stays_wait():
         regime="TREND_UP",
         final_decision="WAIT",
         blockers=["TRIGGER_NOT_CONFIRMED"],
-        analysis_timestamp="2026-10-02T00:00:00Z",
+        analysis_timestamp=datetime.now(timezone.utc).isoformat(),
         metadata={"operational_gates": {
             "paper_only": True, "data_quality_ok": True, "freshness_ok": True,
             "contract_ok": True, "liquidity_ok": True, "volatility_ok": True,
