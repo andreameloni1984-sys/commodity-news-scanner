@@ -803,31 +803,19 @@ def _command_response(
     }:
 
         return (
-            "🚀 SOYUZ GAGARIN\n"
+            "🚀 SOYUZ GAGARIN — COMMODITIES\n"
             "━━━━━━━━━━━━━━━━━━━━\n"
-            "🧪 PAPER ONLY\n\n"
-            "/classifica — classifica completa\n"
-            "/setup — setup e trigger\n"
-            "/analisi — analisi completa\n"
-            "/analisi oro — analisi singola\n"
-            "/analisi argento\n"
-            "/analisi platino\n"
-            "/analisi palladio\n"
-            "/analisi wti\n"
-            "/analisi brent\n"
-            "/analisi zucchero\n"
-            "/analisi riso\n"
-            "/analisi cacao\n"
-            "/analisi caffe\n"
-            "/prezzo — prezzi e provider\n"
-            "/status — stato bot\n"
-            "/ping — verifica collegamento\n"
-            "/id — chat ID\n"
-            "/segnali — signal board PAPER\n"
-            "/top — top setup\n"
-            "/guida — come leggere il canale\n"
-            "/rischio — regole di rischio\n"
-            "/gagarin — Risk Governor PAPER"
+            "📊 Analisi • News • Market Structure • Intraday\n"
+            "🧪 PAPER ONLY — nessun ordine reale\n\n"
+            "🟢 Dashboard pronta\n"
+            "🔥 Top opportunità\n"
+            "⚡ Intraday\n"
+            "💰 Cosa comprare\n"
+            "🏆 Classifica commodity\n"
+            "🎯 Setup e trigger\n"
+            "📡 Segnali\n"
+            "❓ Perché WAIT / ENTRY\n\n"
+            "👇 Usa i pulsanti qui sotto."
         )
 
     # --------------------------------------------------------
@@ -1261,56 +1249,6 @@ def telegram_menu() -> dict:
         "is_persistent": True,
         "input_field_placeholder": "Scegli una sezione GAGARIN",
     }
-
-def menu_markup() -> dict:
-    return {
-        "inline_keyboard": [
-            [{"text": "🏆 Classifica", "callback_data": "classifica"}, {"text": "🎯 Setup", "callback_data": "setup"}],
-            [{"text": "🔥 Top", "callback_data": "top"}, {"text": "📊 Analisi", "callback_data": "analisi"}],
-            [{"text": "💰 Prezzi", "callback_data": "prezzo"}, {"text": "📡 Segnali", "callback_data": "segnali"}],
-            [{"text": "📖 Guida", "callback_data": "guida"}, {"text": "⚠️ Rischio", "callback_data": "rischio"}],
-            [{"text": "🔄 Aggiorna", "callback_data": "analisi"}, {"text": "⚙️ Stato", "callback_data": "status"}],
-        ]
-    }
-
-
-def _callback_response(data: str) -> str:
-    mapping = {
-        "classifica": "/classifica",
-        "setup": "/setup",
-        "top": "/top",
-        "analisi": "/analisi",
-        "prezzo": "/prezzo",
-        "segnali": "/segnali",
-        "guida": "/guida",
-        "rischio": "/rischio",
-        "status": "/status",
-    }
-    return _command_response(mapping.get(data, "/status")) or "⚠️ Nessuna risposta disponibile."
-
-
-def telegram_callback_handler(update: dict) -> None:
-    query = update.get("callback_query") or {}
-    data = str(query.get("data") or "")
-    message = query.get("message") or {}
-    chat_id = (message.get("chat") or {}).get("id")
-    if not data or chat_id is None:
-        return
-    _api("answerCallbackQuery", {"callback_query_id": str(query.get("id"))})
-    try:
-        text = _callback_response(data)
-        _api(
-            "editMessageText",
-            {
-                "chat_id": chat_id,
-                "message_id": message.get("message_id"),
-                "text": text,
-                "reply_markup": menu_markup(),
-            },
-        )
-    except Exception as exc:
-        print(f"Telegram callback error | {type(exc).__name__}: {exc}", flush=True)
-
 
 # ============================================================
 # PERMANENT LISTENER
