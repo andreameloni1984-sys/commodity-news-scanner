@@ -39,6 +39,24 @@ def build_demo_payload(decision: Decision) -> dict[str, Any]:
     if candidate is None:
         raise ValueError("CANDIDATE_MISSING")
 
+    # Re-check every operational hard gate at the transport boundary.
+    # The Decision object can be mutated after evaluation; transport must
+    # fail closed rather than trusting a previously-approved action.
+    required_gates = (
+        ("paper_only", "PAPER_ONLY_REQUIRED"),
+        ("data_quality_ok", "DATA_QUALITY_FAIL"),
+        ("freshness_ok", "FRESHNESS_FAIL"),
+        ("contract_ok", "CONTRACT_FAIL"),
+        ("liquidity_ok", "LIQUIDITY_FAIL"),
+        ("volatility_ok", "VOLATILITY_FAIL"),
+        ("regime_ok", "REGIME_FAIL"),
+        ("session_ok", "SESSION_FAIL"),
+        ("curve_ok", "CURVE_FAIL"),
+    )
+    for field_name, error_code in required_gates:
+        if not getattr(candidate, field_name, False):
+            raise ValueError(error_code)
+
     if candidate.side not in {"LONG", "SHORT"}:
         raise ValueError("INVALID_SIDE")
 
