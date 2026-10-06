@@ -56,6 +56,10 @@ STRONG_MTF_ALIGNMENT = 75.0
 # Buffer minimo oltre il livello di breakout.
 BREAKOUT_BUFFER_ATR = 0.05
 
+# Massimo wick di rigetto sul lato opposto al breakout.
+# Serve a filtrare breakout che chiudono con forte rejection.
+MAX_BREAKOUT_REJECTION_WICK_RATIO = 0.35
+
 
 # ============================================================
 # HELPERS
@@ -201,6 +205,35 @@ def _momentum_direction(
     return "NONE"
 
 
+def _breakout_rejection_ok(state: SoyuzState) -> bool:
+    """Reject breakout candles with an excessive opposite-side wick."""
+    candles = _get_last_candles(state)
+    if not candles:
+        return False
+
+    current = candles[-1]
+    try:
+        open_price = float(current["open"])
+        close = float(current["close"])
+        high = float(current["high"])
+        low = float(current["low"])
+    except (KeyError, TypeError, ValueError):
+        return False
+
+    candle_range = high - low
+    if candle_range <= 0:
+        return False
+
+    if state.setup_direction == "LONG":
+        rejection_wick = high - max(open_price, close)
+    elif state.setup_direction == "SHORT":
+        rejection_wick = min(open_price, close) - low
+    else:
+        return False
+
+    return (rejection_wick / candle_range) <= MAX_BREAKOUT_REJECTION_WICK_RATIO
+
+
 def _price_breakout_confirmation(
     state: SoyuzState,
 ) -> bool:
@@ -228,6 +261,9 @@ def _price_breakout_confirmation(
         state.atr
         * BREAKOUT_BUFFER_ATR
     )
+
+    if not _breakout_rejection_ok(state):
+        return False
 
     if state.setup_direction == "LONG":
 
