@@ -699,7 +699,7 @@ def _format_single_analysis(
 
 def _format_intraday(results):
     if not results:
-        return "⚡ INTRADAY\\n━━━━━━━━━━━━━━━━━━━━\\nNessun dato disponibile."
+        return "⚡ INTRADAY\n━━━━━━━━━━━━━━━━━━━━\nNessun dato disponibile."
 
     lines = [
         "⚡ SOYUZ GAGARIN — INTRADAY",
@@ -716,7 +716,7 @@ def _format_intraday(results):
         lines.append(f"   {setup} → {trigger} | {decision}")
     lines.append("")
     lines.append("Regola: nessun ingresso senza confluence + trigger + rischio validato.")
-    return "\\n".join(lines)
+    return "\n".join(lines)
 
 
 def _format_buy(results):
@@ -728,7 +728,7 @@ def _format_buy(results):
         lines.append("🟡 NESSUNA ENTRATA AUTORIZZATA")
         lines.append("")
         lines.append("Gagarin preferisce WAIT quando il trigger non è sufficientemente confermato.")
-        return "\\n".join(lines)
+        return "\n".join(lines)
     for state in entries[:3]:
         lines.append(f"🟢 {state.commodity} — {state.setup_direction}")
         lines.append(f"Entry: {state.entry:.6g}" if state.entry is not None else "Entry: N/D")
@@ -737,7 +737,7 @@ def _format_buy(results):
         lines.append(f"TP2: {state.tp2:.6g}" if state.tp2 is not None else "TP2: N/D")
         lines.append(f"TP3: {state.tp3:.6g}" if state.tp3 is not None else "TP3: N/D")
         lines.append("")
-    return "\\n".join(lines)
+    return "\n".join(lines)
 
 
 def _format_why(results):
@@ -751,7 +751,7 @@ def _format_why(results):
         lines.append(f"  Regime: {state.regime} | Structure: {state.structure}")
         lines.append(f"  Setup: {state.setup} | Trigger: {state.trigger}")
         lines.append(f"  Q {state.quality:.0f} | C {state.confidence:.0f} | Decision: {state.final_decision}")
-    return "\\n".join(lines)
+    return "\n".join(lines)
 
 
 # ============================================================
@@ -1208,15 +1208,14 @@ def poll_once(
 
             continue
 
-        if text.startswith("/"):
+        if text:
 
-            if text.lower().startswith(
-                "/id"
-            ):
+            if text.lower().startswith("/id"):
 
                 _reply(
                     chat_id,
                     f"🆔 CHAT ID: {chat_id}",
+                    reply_markup=telegram_menu(),
                 )
 
             else:
@@ -1230,7 +1229,7 @@ def poll_once(
                     _reply(
                         chat_id,
                         response,
-                        reply_markup=telegram_menu() if text.lower() in {"/start", "/help"} else None,
+                        reply_markup=telegram_menu(),
                     )
 
     return next_offset
