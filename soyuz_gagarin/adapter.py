@@ -8,6 +8,7 @@ la decisione finale in modo indipendente.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Iterable
 
 from .engine import GagarinEngine
@@ -26,6 +27,23 @@ def _metadata(state) -> dict:
     return value if isinstance(value, dict) else {}
 
 
+def _freshness_ok(state, configured: bool, max_age_seconds: int) -> bool:
+    """Never trust a stale timestamp just because a producer said LIVE/fresh."""
+    if not configured:
+        return False
+    raw = str(getattr(state, "analysis_timestamp", "") or "").strip()
+    if not raw:
+        return False
+    try:
+        timestamp = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
+        age = (datetime.now(timezone.utc) - timestamp.astimezone(timezone.utc)).total_seconds()
+    except (TypeError, ValueError):
+        return False
+    return 0 <= age <= max_age_seconds
+
+
 def _gate(state, name: str, fallback: bool) -> bool:
     """Read an explicit gate; missing evidence fails closed."""
     meta = _metadata(state)
@@ -37,6 +55,7 @@ def _gate(state, name: str, fallback: bool) -> bool:
 
 def evaluate_states(states: Iterable[object]):
     engine = GagarinEngine()
+    freshness_limit = engine.config.blocked_if_stale_seconds
     decisions = []
 
     for state in states:
@@ -94,7 +113,7 @@ def evaluate_states(states: Iterable[object]):
             rr3=rr3,
             paper_only=_gate(state, "paper_only", True),
             data_quality_ok=_gate(state, "data_quality_ok", False),
-            freshness_ok=_gate(state, "freshness_ok", False),
+            freshness_ok=_freshness_ok(state, _gate(state, "freshness_ok", False), freshness_limit),
             contract_ok=_gate(state, "contract_ok", False),
             liquidity_ok=_gate(state, "liquidity_ok", False),
             volatility_ok=_gate(state, "volatility_ok", False),
