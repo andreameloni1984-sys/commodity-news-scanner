@@ -699,6 +699,19 @@ def _command_response(
 ) -> Optional[str]:
 
     raw = command.strip()
+    button_commands = {
+        "🏆 classifica": "/classifica",
+        "🎯 setup": "/setup",
+        "🔥 top": "/top",
+        "📊 analisi": "/analisi",
+        "💰 prezzi": "/prezzo",
+        "📡 segnali": "/segnali",
+        "📖 guida": "/guida",
+        "⚠️ rischio": "/rischio",
+        "🔄 aggiorna": "/analisi",
+        "⚙️ stato": "/status",
+    }
+    raw = button_commands.get(raw.lower(), raw)
     parts = raw.split()
 
     if not parts:
