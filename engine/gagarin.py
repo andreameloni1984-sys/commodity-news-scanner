@@ -7,6 +7,7 @@ from engine.setup import apply_setup
 from engine.trigger import apply_trigger
 from engine.risk import apply_risk
 from engine.safety import apply_safety
+from engine.horizons import build_horizon_scenarios
 
 
 # ============================================================
@@ -106,7 +107,7 @@ def analyze_one(commodity: Commodity) -> SoyuzState:
         commodity,
     )
 
-    # 2. REGIME
+    # Horizon scenarios are contextual only. They never authorize ENTRY.\n    state.metadata.setdefault("horizon_scenarios", build_horizon_scenarios(state))\n\n    # 2. REGIME
     state = apply_regime(state)
 
     # 3. STRUCTURE
