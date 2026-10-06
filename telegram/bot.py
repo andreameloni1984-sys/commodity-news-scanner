@@ -1164,10 +1164,6 @@ def poll_once(
                 update_id + 1
             )
 
-        if update.get("callback_query"):
-            telegram_callback_handler(update)
-            continue
-
         message = (
             update.get("message")
             or {}
@@ -1228,7 +1224,7 @@ def poll_once(
                     _reply(
                         chat_id,
                         response,
-                        reply_markup=menu_markup() if text.lower() in {"/start", "/help"} else None,
+                        reply_markup=telegram_menu() if text.lower() in {"/start", "/help"} else None,
                     )
 
     return next_offset
