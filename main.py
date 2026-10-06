@@ -49,6 +49,7 @@ from telegram.bot import (
     send_telegram,
 )
 from telegram.signals import format_signal_board
+from telegram.alert_dedup import mark_sent, select_new_signals
 from soyuz_gagarin.adapter import evaluate_states
 
 
@@ -569,12 +570,27 @@ def run():
 
         try:
 
-            if signal_results:
-                send_telegram(
-                    format_signal_board(signal_results)
+            # Event-driven publication: approved signals are published only
+            # when they are new or materially changed. WAIT/no-signal runs
+            # remain silent.
+            new_signal_results = select_new_signals(signal_results)
+
+            if new_signal_results:
+                delivered = send_telegram(
+                    format_signal_board(new_signal_results)
                 )
+                if delivered:
+                    mark_sent(new_signal_results)
+                    print(
+                        f"📡 SIGNAL CHANNEL: {len(new_signal_results)} new signal(s) published"
+                    )
+                else:
+                    print(
+                        "⚠️ SIGNAL CHANNEL: delivery failed; alert state not advanced"
+                    )
+            elif signal_results:
                 print(
-                    f"📡 SIGNAL CHANNEL: {len(signal_results)} signal(s) published"
+                    "📡 SIGNAL CHANNEL: operational signal already notified — no duplicate post"
                 )
             else:
                 print(
