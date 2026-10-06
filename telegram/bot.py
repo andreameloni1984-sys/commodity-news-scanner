@@ -764,6 +764,12 @@ def _command_response(
 
     raw = command.strip()
     button_commands = {
+        "📰 news": "/news",
+        "🥇 metalli": "/metalli",
+        "🛢 petrolio": "/petrolio",
+        "🌾 agri": "/agri",
+        "🌍 macro": "/macro",
+
         "🏆 classifica": "/classifica",
         "🎯 setup": "/setup",
         "🔥 top": "/top",
@@ -1232,19 +1238,23 @@ def poll_once(
 
 
 def telegram_menu() -> dict:
+    """Persistent two-column dashboard, styled like the Autotrasporto bot."""
     return {
         "keyboard": [
-            [{"text": "🔥 TOP OPPORTUNITÀ"}, {"text": "🏆 CLASSIFICA"}],
-            [{"text": "⚡ INTRADAY"}, {"text": "💰 COSA COMPRARE"}],
-            [{"text": "❓ PERCHÉ"}, {"text": "🎯 SETUP"}],
+            [{"text": "📰 NEWS"}, {"text": "🔥 TOP OPPORTUNITÀ"}],
+            [{"text": "🏆 CLASSIFICA"}, {"text": "⚡ INTRADAY"}],
+            [{"text": "💰 COSA COMPRARE"}, {"text": "🎯 SETUP"}],
             [{"text": "📊 ANALISI"}, {"text": "📡 SEGNALI"}],
-            [{"text": "🔄 AGGIORNA"}, {"text": "⚙️ STATO"}],
-            [{"text": "📖 GUIDA"}, {"text": "⚠️ RISCHIO"}],
+            [{"text": "🥇 METALLI"}, {"text": "🛢 PETROLIO"}],
+            [{"text": "🌾 AGRI"}, {"text": "🌍 MACRO"}],
+            [{"text": "❓ PERCHÉ"}, {"text": "🔄 AGGIORNA"}],
+            [{"text": "⚙️ STATO"}, {"text": "ℹ️ GUIDA"}],
         ],
         "resize_keyboard": True,
         "is_persistent": True,
         "input_field_placeholder": "Scegli una sezione GAGARIN",
     }
+
 
 # ============================================================
 # PERMANENT LISTENER
