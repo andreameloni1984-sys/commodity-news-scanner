@@ -26,7 +26,7 @@ class GagarinConfig:
     """
 
     paper_only: bool = True
-    timeframes: Tuple[str, ...] = ("4H", "1H", "15M", "5M", "1M")
+    timeframes: Tuple[str, ...] = ("4H", "1H", "15M", "5M")
     min_probability: float = field(default_factory=lambda: _env_float("MIN_ENTRY_PROBABILITY", 62.0))
     min_quality: float = field(default_factory=lambda: _env_float("MIN_ENTRY_QUALITY", 55.0))
     min_confidence: float = field(default_factory=lambda: _env_float("MIN_ENTRY_CONFIDENCE", 60.0))
