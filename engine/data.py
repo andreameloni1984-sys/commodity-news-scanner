@@ -1622,6 +1622,7 @@ def _aggregate(
     15m
     30m
     60m
+    240m (4H)
     """
 
     if not candles:
@@ -1746,16 +1747,23 @@ def _build_mtf(
         60,
     )
 
+    h4 = _aggregate(
+        candles,
+        240,
+    )
+
     return {
         "M5": m5,
         "M15": m15,
         "M30": m30,
         "H1": h1,
+        "H4": h4,
 
         "5min": m5,
         "15min": m15,
         "30min": m30,
         "1h": h1,
+        "4h": h4,
     }
 
 
@@ -2014,6 +2022,7 @@ def _finalize(
             "M15",
             "M30",
             "H1",
+            "H4",
         )
     }
 
