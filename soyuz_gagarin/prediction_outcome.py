@@ -75,8 +75,7 @@ def evaluate_prediction(
 
     for bar in bars:
         bars_evaluated += 1
-        high = float(bar["high"])
-        low = float(bar["low"])
+        low, high = _bar_range(bar)
 
         if not entry_hit:
             if low <= entry <= high:
