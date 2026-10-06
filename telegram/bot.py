@@ -837,6 +837,7 @@ def _command_response(
         "⚙️ stato": "/status",
         "⚡ intraday": "/intraday",
         "💰 cosa comprare": "/comprare",
+        "🛒 quale compro?": "/qualeccompro",
         "❓ perché": "/perche",
         "❓ perche": "/perche",
     }
@@ -880,6 +881,13 @@ def _command_response(
             return _format_intraday(results)
         except Exception as exc:
             return f"❌ INTRADAY ERROR\\n{type(exc).__name__}: {exc}"
+
+    if command_name in {"/qualeccompro", "/quale", "/compro"}:
+        try:
+            results = _run_analysis()
+            return _format_morning_pick(results)
+        except Exception as exc:
+            return f"❌ MORNING PICK ERROR\\n{type(exc).__name__}: {exc}"
 
     if command_name in {"/comprare", "/compra"}:
         try:
@@ -1286,7 +1294,7 @@ def telegram_menu() -> dict:
         "keyboard": [
             [{"text": "📰 NEWS"}, {"text": "🔥 TOP OPPORTUNITÀ"}],
             [{"text": "🏆 CLASSIFICA"}, {"text": "⚡ INTRADAY"}],
-            [{"text": "💰 COSA COMPRARE"}, {"text": "🎯 SETUP"}],
+            [{"text": "💰 COSA COMPRARE"}, {"text": "🛒 QUALE COMPRO?"}],
             [{"text": "📊 ANALISI"}, {"text": "📡 SEGNALI"}],
             [{"text": "🥇 METALLI"}, {"text": "🛢 PETROLIO"}],
             [{"text": "🌾 AGRI"}, {"text": "🌍 MACRO"}],
