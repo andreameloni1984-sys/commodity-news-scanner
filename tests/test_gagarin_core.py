@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from soyuz_gagarin.adapter import evaluate_states
@@ -102,7 +103,7 @@ def test_legacy_wait_is_not_an_automatic_gagarin_veto():
         regime="TREND_UP",
         final_decision="WAIT",
         blockers=["FINAL_CONFLUENCE_FAIL"],
-        analysis_timestamp="2026-10-02T00:00:00Z",
+        analysis_timestamp=datetime.now(timezone.utc).isoformat(),
         metadata={"operational_gates": {
             "paper_only": True, "data_quality_ok": True, "freshness_ok": True,
             "contract_ok": True, "liquidity_ok": True, "volatility_ok": True,
@@ -143,7 +144,7 @@ def test_missing_trigger_stays_wait():
         regime="TREND_UP",
         final_decision="WAIT",
         blockers=["TRIGGER_NOT_CONFIRMED"],
-        analysis_timestamp="2026-10-02T00:00:00Z",
+        analysis_timestamp=datetime.now(timezone.utc).isoformat(),
         metadata={"operational_gates": {
             "paper_only": True, "data_quality_ok": True, "freshness_ok": True,
             "contract_ok": True, "liquidity_ok": True, "volatility_ok": True,
@@ -182,3 +183,43 @@ def test_operational_gate_is_hard_veto():
     )
     assert d.action == "WAIT"
     assert d.reason == "LIQUIDITY_FAIL"
+
+
+def test_stale_timestamp_fails_closed_even_when_freshness_gate_is_true():
+    state = SimpleNamespace(
+        symbol="XAU/USD",
+        price=100.0,
+        atr=2.0,
+        setup_direction="LONG",
+        probability=80.0,
+        quality=70.0,
+        confidence=70.0,
+        data_ok=True,
+        live=True,
+        trigger_confirmed=True,
+        structure_direction="LONG",
+        mtf_direction="LONG",
+        entry=100.0,
+        stop=98.0,
+        tp1=104.0,
+        tp2=106.0,
+        tp3=110.0,
+        stop_atr=1.0,
+        rr1=2.0,
+        rr2=3.0,
+        rr3=5.0,
+        regime="TREND_UP",
+        final_decision="WAIT",
+        blockers=[],
+        analysis_timestamp=(datetime.now(timezone.utc) - timedelta(seconds=901)).isoformat(),
+        metadata={"operational_gates": {
+            "paper_only": True, "data_quality_ok": True, "freshness_ok": True,
+            "contract_ok": True, "liquidity_ok": True, "volatility_ok": True,
+            "regime_ok": True, "session_ok": True, "curve_ok": True,
+        }},
+    )
+
+    decisions = evaluate_states([state])
+
+    assert decisions[0].action == "WAIT"
+    assert decisions[0].reason == "FRESHNESS_FAIL"

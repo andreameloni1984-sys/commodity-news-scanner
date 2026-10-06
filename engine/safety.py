@@ -400,11 +400,14 @@ def apply_safety(
 
     else:
 
-        if state.rr3 < cfg.min_rr:
+        if state.rr1 < 1.5:
+            blockers.append("RR1_FAIL")
 
-            blockers.append(
-                "RR_FAIL"
-            )
+        if state.rr2 < 2.0:
+            blockers.append("RR2_FAIL")
+
+        if state.rr3 < cfg.min_rr:
+            blockers.append("RR_FAIL")
 
     # ========================================================
     # 17. PROBABILITY
