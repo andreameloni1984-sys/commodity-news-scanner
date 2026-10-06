@@ -781,6 +781,7 @@ def _command_response(
         "⚠️ rischio": "/rischio",
         "🔄 aggiorna": "/analisi",
         "⚙️ stato": "/status",
+        "⚠️ rischio": "/rischio",
         "⚡ intraday": "/intraday",
         "💰 cosa comprare": "/comprare",
         "❓ perché": "/perche",
@@ -809,19 +810,11 @@ def _command_response(
     }:
 
         return (
-            "🚀 SOYUZ GAGARIN — COMMODITIES\n"
+            "🚀 SOYUZ GAGARIN\n"
             "━━━━━━━━━━━━━━━━━━━━\n"
-            "📊 Analisi • News • Market Structure • Intraday\n"
+            "📊 COMMODITIES • INTRADAY • INTELLIGENCE\n"
             "🧪 PAPER ONLY — nessun ordine reale\n\n"
-            "🟢 Dashboard pronta\n"
-            "🔥 Top opportunità\n"
-            "⚡ Intraday\n"
-            "💰 Cosa comprare\n"
-            "🏆 Classifica commodity\n"
-            "🎯 Setup e trigger\n"
-            "📡 Segnali\n"
-            "❓ Perché WAIT / ENTRY\n\n"
-            "👇 Usa i pulsanti qui sotto."
+            "Seleziona una funzione dal menu qui sotto."
         )
 
     # --------------------------------------------------------
@@ -1237,22 +1230,24 @@ def poll_once(
 
 
 def telegram_menu() -> dict:
-    """Persistent two-column dashboard, styled like the Autotrasporto bot."""
+    """Main Telegram dashboard: two-column reply keyboard, Autotrasporto-style."""
     return {
         "keyboard": [
             [{"text": "📰 NEWS"}, {"text": "🔥 TOP OPPORTUNITÀ"}],
             [{"text": "🏆 CLASSIFICA"}, {"text": "⚡ INTRADAY"}],
             [{"text": "💰 COSA COMPRARE"}, {"text": "🎯 SETUP"}],
-            [{"text": "📊 ANALISI"}, {"text": "📡 SEGNALI"}],
+            [{"text": "📡 SEGNALI"}, {"text": "📊 ANALISI"}],
             [{"text": "🥇 METALLI"}, {"text": "🛢 PETROLIO"}],
-            [{"text": "🌾 AGRI"}, {"text": "🌍 MACRO"}],
-            [{"text": "❓ PERCHÉ"}, {"text": "🔄 AGGIORNA"}],
+            [{"text": "🌍 MACRO"}, {"text": "❓ PERCHÉ"}],
+            [{"text": "🔄 AGGIORNA"}, {"text": "⚠️ RISCHIO"}],
             [{"text": "⚙️ STATO"}, {"text": "ℹ️ GUIDA"}],
         ],
         "resize_keyboard": True,
+        "one_time_keyboard": False,
         "is_persistent": True,
         "input_field_placeholder": "Scegli una sezione GAGARIN",
     }
+
 
 
 # ============================================================
