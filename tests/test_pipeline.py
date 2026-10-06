@@ -530,12 +530,14 @@ def test_telegram_dashboard_menu_matches_gagarin_sections():
     labels = [button["text"] for row in menu["keyboard"] for button in row]
 
     assert labels == [
-        "🔥 TOP OPPORTUNITÀ", "🏆 CLASSIFICA",
-        "⚡ INTRADAY", "💰 COSA COMPRARE",
-        "❓ PERCHÉ", "🎯 SETUP",
+        "📰 NEWS", "🔥 TOP OPPORTUNITÀ",
+        "🏆 CLASSIFICA", "⚡ INTRADAY",
+        "💰 COSA COMPRARE", "🎯 SETUP",
         "📊 ANALISI", "📡 SEGNALI",
-        "🔄 AGGIORNA", "⚙️ STATO",
-        "📖 GUIDA", "⚠️ RISCHIO",
+        "🥇 METALLI", "🛢 PETROLIO",
+        "🌾 AGRI", "🌍 MACRO",
+        "❓ PERCHÉ", "🔄 AGGIORNA",
+        "⚙️ STATO", "ℹ️ GUIDA",
     ]
     assert menu["resize_keyboard"] is True
     assert menu["is_persistent"] is True
