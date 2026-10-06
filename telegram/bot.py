@@ -301,6 +301,7 @@ def send_telegram(
 def _reply(
     chat_id: int | str,
     text: str,
+    reply_markup: Optional[dict] = None,
 ) -> bool:
 
     ok, data = _api(
@@ -309,6 +310,7 @@ def _reply(
             "chat_id": chat_id,
             "text": text,
             "disable_web_page_preview": True,
+            **({"reply_markup": reply_markup} if reply_markup else {}),
         },
     )
 
@@ -697,6 +699,19 @@ def _command_response(
 ) -> Optional[str]:
 
     raw = command.strip()
+    button_commands = {
+        "🏆 classifica": "/classifica",
+        "🎯 setup": "/setup",
+        "🔥 top": "/top",
+        "📊 analisi": "/analisi",
+        "💰 prezzi": "/prezzo",
+        "📡 segnali": "/segnali",
+        "📖 guida": "/guida",
+        "⚠️ rischio": "/rischio",
+        "🔄 aggiorna": "/analisi",
+        "⚙️ stato": "/status",
+    }
+    raw = button_commands.get(raw.lower(), raw)
     parts = raw.split()
 
     if not parts:
@@ -750,24 +765,28 @@ def _command_response(
     # SIGNAL CHANNEL
     # --------------------------------------------------------
 
-    if command_name == "/segnali":
+
+    if command_name == "🏆":
+        return _command_response("/classifica")
+
+    if command_name in {"/segnali", "📡"}:
         try:
             results = get_last_results() or _run_analysis()
             return format_signal_board(results)
         except Exception as exc:
             return f"❌ SIGNAL ENGINE ERROR\\n{type(exc).__name__}: {exc}"
 
-    if command_name == "/top":
+    if command_name in {"/top", "🔥"}:
         try:
             results = get_last_results() or _run_analysis()
             return format_top(results)
         except Exception as exc:
             return f"❌ TOP ENGINE ERROR\\n{type(exc).__name__}: {exc}"
 
-    if command_name == "/guida":
+    if command_name in {"/guida", "📖"}:
         return format_channel_guide()
 
-    if command_name == "/rischio":
+    if command_name in {"/rischio", "⚠️"}:
         return format_risk_guide()
 
     # --------------------------------------------------------
@@ -814,7 +833,7 @@ def _command_response(
     # STATUS
     # --------------------------------------------------------
 
-    if command_name == "/status":
+    if command_name in {"/status", "⚙️"}:
 
         results = get_last_results()
 
@@ -854,7 +873,7 @@ def _command_response(
     # CLASSIFICA
     # --------------------------------------------------------
 
-    if command_name == "/classifica":
+    if command_name in {"/classifica", "🏆"}:
 
         try:
 
@@ -879,7 +898,7 @@ def _command_response(
     # SETUP
     # --------------------------------------------------------
 
-    if command_name == "/setup":
+    if command_name in {"/setup", "🎯"}:
 
         try:
 
@@ -904,7 +923,7 @@ def _command_response(
     # PREZZO
     # --------------------------------------------------------
 
-    if command_name == "/prezzo":
+    if command_name in {"/prezzo", "💰"}:
 
         try:
 
@@ -929,7 +948,7 @@ def _command_response(
     # ANALISI
     # --------------------------------------------------------
 
-    if command_name == "/analisi":
+    if command_name in {"/analisi", "📊", "🔄"}:
 
         try:
 
@@ -1123,10 +1142,26 @@ def poll_once(
                     _reply(
                         chat_id,
                         response,
+                        reply_markup=telegram_menu() if text.lower() in {"/start", "/help"} else None,
                     )
 
     return next_offset
 
+
+
+def telegram_menu() -> dict:
+    return {
+        "keyboard": [
+            [{"text": "🏆 CLASSIFICA"}, {"text": "🎯 SETUP"}],
+            [{"text": "🔥 TOP"}, {"text": "📊 ANALISI"}],
+            [{"text": "💰 PREZZI"}, {"text": "📡 SEGNALI"}],
+            [{"text": "📖 GUIDA"}, {"text": "⚠️ RISCHIO"}],
+            [{"text": "🔄 AGGIORNA"}, {"text": "⚙️ STATO"}],
+        ],
+        "resize_keyboard": True,
+        "is_persistent": True,
+        "input_field_placeholder": "Scegli una sezione GAGARIN",
+    }
 
 # ============================================================
 # PERMANENT LISTENER
