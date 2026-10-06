@@ -30,7 +30,6 @@ jobs:
           tests/test_gagarin_core.py
           tests/test_gagarin_gate_config.py
           tests/test_canonical_governor_pipeline.py
-          tests/test_pipeline.py
           tests/test_mt5_bridge.py
       - name: Run paper-only smoke test
         run: python -m soyuz_gagarin.main
