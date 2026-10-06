@@ -455,3 +455,41 @@ def test_risk_blocked_when_data_invalid():
     assert state.tp1 is None
     assert state.tp2 is None
     assert state.tp3 is None
+
+# ============================================================
+# BREAKOUT REJECTION FILTER
+# ============================================================
+
+
+def test_breakout_trigger_rejects_long_upper_wick():
+    state = _prepare_directional_state("LONG")
+    state.breakout = True
+    state.breakout_direction = "LONG"
+    state.breakout_level = state.price - 0.20
+    state.mtf_data = {
+        "5min": [
+            {"open": 100.0, "high": 100.2, "low": 99.9, "close": 100.15},
+            {"open": 100.15, "high": 100.90, "low": 100.10, "close": 100.20},
+        ]
+    }
+    apply_setup(state)
+    apply_trigger(state)
+    assert state.trigger_confirmed is False
+    assert state.trigger == "NOT_CONFIRMED"
+
+
+def test_breakout_trigger_accepts_clean_long_close():
+    state = _prepare_directional_state("LONG")
+    state.breakout = True
+    state.breakout_direction = "LONG"
+    state.breakout_level = state.price - 0.20
+    state.mtf_data = {
+        "5min": [
+            {"open": 100.0, "high": 100.2, "low": 99.9, "close": 100.15},
+            {"open": 100.15, "high": 100.40, "low": 100.10, "close": 100.38},
+        ]
+    }
+    apply_setup(state)
+    apply_trigger(state)
+    assert state.trigger == "BREAKOUT_MOMENTUM"
+    assert state.trigger_confirmed is True
