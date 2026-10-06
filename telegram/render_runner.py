@@ -16,7 +16,7 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from telegram.bot import _api, _command_response, _reply, telegram_diagnostic, _run_analysis, get_last_results
+from telegram.bot import _api, _command_response, _reply, telegram_diagnostic, _run_analysis, get_last_results, telegram_menu
 from soyuz_gagarin.adapter import evaluate_states
 from soyuz_gagarin.mt5_bridge import build_demo_payloads
 
@@ -120,7 +120,7 @@ def handle_update(update: dict) -> None:
         chat_id = chat.get("id")
         text = message.get("text", "")
 
-        if chat_id is None or not text or not text.startswith("/"):
+        if chat_id is None or not text:
             return
 
         print(
@@ -132,7 +132,7 @@ def handle_update(update: dict) -> None:
         response = _command_response(text)
 
         if response:
-            _reply(chat_id, response)
+            _reply(chat_id, response, reply_markup=telegram_menu())
 
         elif text.lower().startswith("/id"):
             _reply(
