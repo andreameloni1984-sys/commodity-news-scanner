@@ -720,12 +720,12 @@ def _format_intraday(results):
 
 
 def _format_morning_pick(results):
-    """Return the single Gagarin choice, without exposing the engine rationale."""
+    """Return only the single governor-approved Gagarin choice and trade levels."""
     if not results:
         return "🥇 GAGARIN — COSA COMPRO?\\n━━━━━━━━━━━━━━━━━━━━\\nNessun dato disponibile."
 
     decisions = evaluate_states(results)
-    approved = {d.symbol: d for d in decisions if d.action == "PAPER_SIGNAL"}
+    approved = {d.symbol for d in decisions if d.action == "PAPER_SIGNAL"}
     candidates = [
         state for state in results
         if str(getattr(state, "symbol", "")).upper() in approved
@@ -733,15 +733,10 @@ def _format_morning_pick(results):
     ]
 
     if not candidates:
-        return (
-            "🥇 GAGARIN — COSA COMPRO?\\n"
-            "━━━━━━━━━━━━━━━━━━━━\\n"
-            "🟡 NESSUNA OPPORTUNITÀ AUTORIZZATA\\n"
-            "PAPER ONLY"
-        )
+        return "🥇 GAGARIN — COSA COMPRO?\\n━━━━━━━━━━━━━━━━━━━━\\n🟡 NESSUNA OPPORTUNITÀ AUTORIZZATA\\nPAPER ONLY"
 
     state = candidates[0]
-    lines = [
+    return "\\n".join([
         "🥇 GAGARIN — COSA COMPRO?",
         "━━━━━━━━━━━━━━━━━━━━",
         "🧪 PAPER ONLY",
@@ -754,8 +749,7 @@ def _format_morning_pick(results):
         f"TP2: {state.tp2:.6g}" if state.tp2 is not None else "TP2: N/D",
         f"TP3: {state.tp3:.6g}" if state.tp3 is not None else "TP3: N/D",
         f"RR: {state.rr3:.2f}" if state.rr3 is not None else "RR: N/D",
-    ]
-    return "\n".join(lines)
+    ])
 
 
 # ============================================================
