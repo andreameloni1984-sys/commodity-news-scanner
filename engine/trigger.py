@@ -60,6 +60,10 @@ BREAKOUT_BUFFER_ATR = 0.05
 # Serve a filtrare breakout che chiudono con forte rejection.
 MAX_BREAKOUT_REJECTION_WICK_RATIO = 0.35
 
+# Massima distanza della chiusura M5 dal livello di retest.
+# Evita che un retest storico rimanga valido dopo che il prezzo si è allontanato.
+RETEST_MAX_DISTANCE_ATR = 0.15
+
 
 # ============================================================
 # HELPERS
@@ -295,13 +299,42 @@ def _retest_confirmation(
     if not state.retest:
         return False
 
-    if (
-        state.retest_direction
-        != state.setup_direction
-    ):
+    if state.retest_level is None:
         return False
 
-    return True
+    if state.atr is None or state.atr <= 0:
+        return False
+
+    if state.retest_direction != state.setup_direction:
+        return False
+
+    candles = _get_last_candles(state)
+    if not candles:
+        return False
+
+    current = candles[-1]
+    try:
+        open_price = float(current["open"])
+        close = float(current["close"])
+        high = float(current["high"])
+        low = float(current["low"])
+        level = float(state.retest_level)
+    except (KeyError, TypeError, ValueError):
+        return False
+
+    if high < level or low > level:
+        return False
+
+    if abs(close - level) > state.atr * RETEST_MAX_DISTANCE_ATR:
+        return False
+
+    if state.setup_direction == "LONG":
+        return close > level and close > open_price
+
+    if state.setup_direction == "SHORT":
+        return close < level and close < open_price
+
+    return False
 
 
 # ============================================================
