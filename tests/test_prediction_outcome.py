@@ -67,3 +67,25 @@ def test_short_r_is_calculated_from_actual_geometry():
     )
     assert result.outcome == "TP1"
     assert result.r_multiple == 1.5
+
+
+def test_invalid_nan_bar_fails_closed():
+    import math
+    import pytest
+
+    with pytest.raises(ValueError, match="INVALID_OHLC_BAR"):
+        evaluate_prediction(BASE, [{"low": 100.0, "high": math.nan}])
+
+
+def test_invalid_reversed_bar_fails_closed():
+    import pytest
+
+    with pytest.raises(ValueError, match="INVALID_OHLC_BAR"):
+        evaluate_prediction(BASE, [{"low": 108.0, "high": 100.0}])
+
+
+def test_missing_bar_field_fails_closed():
+    import pytest
+
+    with pytest.raises(ValueError, match="INVALID_OHLC_BAR"):
+        evaluate_prediction(BASE, [{"low": 100.0}])

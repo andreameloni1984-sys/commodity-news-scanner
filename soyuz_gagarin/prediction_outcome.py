@@ -14,6 +14,7 @@ Rules:
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Iterable, Mapping, Optional
 
 
@@ -27,8 +28,20 @@ class PredictionOutcome:
     bars_evaluated: int
 
 
+def _bar_range(bar: Mapping[str, float]) -> tuple[float, float]:
+    try:
+        low = float(bar["low"])
+        high = float(bar["high"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("INVALID_OHLC_BAR") from exc
+    if not (math.isfinite(low) and math.isfinite(high)) or low > high:
+        raise ValueError("INVALID_OHLC_BAR")
+    return low, high
+
+
 def _touches(bar: Mapping[str, float], level: float) -> bool:
-    return float(bar["low"]) <= level <= float(bar["high"])
+    low, high = _bar_range(bar)
+    return low <= level <= high
 
 
 def evaluate_prediction(
