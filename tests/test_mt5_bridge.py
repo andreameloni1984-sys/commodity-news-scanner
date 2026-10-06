@@ -64,11 +64,13 @@ def test_wait_cannot_become_mt5_payload():
         build_demo_payload(decision)
 
 
-def test_invalid_geometry_is_blocked():
+def test_invalid_geometry_is_blocked_at_paper_boundary():
     decision = approved_decision()
     decision.candidate.tp3 = 97.0
 
-    with pytest.raises(ValueError, match="INVALID_LONG_GEOMETRY"):
+    with pytest.raises(
+        ValueError, match="RISK_GOVERNOR_REJECTED:TARGET_GEOMETRY_INVALID"
+    ):
         build_demo_payload(decision)
 
 
@@ -76,5 +78,5 @@ def test_missing_operational_gate_stays_fail_closed():
     decision = approved_decision()
     decision.candidate.curve_ok = False
 
-    with pytest.raises(ValueError, match="DECISION_NOT_PAPER_SIGNAL"):
+    with pytest.raises(ValueError, match="RISK_GOVERNOR_REJECTED:CURVE_FAIL"):
         build_demo_payload(decision)

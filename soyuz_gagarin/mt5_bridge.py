@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .models import Decision
+from .risk_governor import approve
 
 
 def _number(value: Any) -> float:
@@ -38,6 +39,13 @@ def build_demo_payload(decision: Decision) -> dict[str, Any]:
     candidate = decision.candidate
     if candidate is None:
         raise ValueError("CANDIDATE_MISSING")
+
+    # Re-run the canonical governor immediately before transport serialization.
+    # The decision object may have been mutated after engine evaluation; a stale
+    # PAPER_SIGNAL must never cross this boundary.
+    approved, reason = approve(candidate)
+    if not approved:
+        raise ValueError(f"RISK_GOVERNOR_REJECTED:{reason}")
 
     if candidate.side not in {"LONG", "SHORT"}:
         raise ValueError("INVALID_SIDE")
