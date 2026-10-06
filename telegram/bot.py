@@ -699,7 +699,7 @@ def _format_single_analysis(
 
 def _format_intraday(results):
     if not results:
-        return "⚡ INTRADAY\\n━━━━━━━━━━━━━━━━━━━━\\nNessun dato disponibile."
+        return "⚡ INTRADAY\n━━━━━━━━━━━━━━━━━━━━\nNessun dato disponibile."
 
     lines = [
         "⚡ SOYUZ GAGARIN — INTRADAY",
@@ -716,7 +716,7 @@ def _format_intraday(results):
         lines.append(f"   {setup} → {trigger} | {decision}")
     lines.append("")
     lines.append("Regola: nessun ingresso senza confluence + trigger + rischio validato.")
-    return "\\n".join(lines)
+    return "\n".join(lines)
 
 
 def _format_buy(results):
@@ -728,7 +728,7 @@ def _format_buy(results):
         lines.append("🟡 NESSUNA ENTRATA AUTORIZZATA")
         lines.append("")
         lines.append("Gagarin preferisce WAIT quando il trigger non è sufficientemente confermato.")
-        return "\\n".join(lines)
+        return "\n".join(lines)
     for state in entries[:3]:
         lines.append(f"🟢 {state.commodity} — {state.setup_direction}")
         lines.append(f"Entry: {state.entry:.6g}" if state.entry is not None else "Entry: N/D")
@@ -737,7 +737,7 @@ def _format_buy(results):
         lines.append(f"TP2: {state.tp2:.6g}" if state.tp2 is not None else "TP2: N/D")
         lines.append(f"TP3: {state.tp3:.6g}" if state.tp3 is not None else "TP3: N/D")
         lines.append("")
-    return "\\n".join(lines)
+    return "\n".join(lines)
 
 
 def _format_why(results):
@@ -751,7 +751,7 @@ def _format_why(results):
         lines.append(f"  Regime: {state.regime} | Structure: {state.structure}")
         lines.append(f"  Setup: {state.setup} | Trigger: {state.trigger}")
         lines.append(f"  Q {state.quality:.0f} | C {state.confidence:.0f} | Decision: {state.final_decision}")
-    return "\\n".join(lines)
+    return "\n".join(lines)
 
 
 # ============================================================
@@ -781,6 +781,10 @@ def _command_response(
         "⚠️ rischio": "/rischio",
         "🔄 aggiorna": "/analisi",
         "⚙️ stato": "/status",
+        "⚠️ rischio": "/rischio",
+        "📖 guida": "/guida",
+        "ℹ️ id": "/id",
+        "🚀 gagarin": "/gagarin",
         "⚡ intraday": "/intraday",
         "💰 cosa comprare": "/comprare",
         "❓ perché": "/perche",
@@ -809,19 +813,11 @@ def _command_response(
     }:
 
         return (
-            "🚀 SOYUZ GAGARIN — COMMODITIES\n"
+            "🚀 SOYUZ GAGARIN\n"
             "━━━━━━━━━━━━━━━━━━━━\n"
-            "📊 Analisi • News • Market Structure • Intraday\n"
+            "📊 COMMODITIES • INTRADAY • INTELLIGENCE\n"
             "🧪 PAPER ONLY — nessun ordine reale\n\n"
-            "🟢 Dashboard pronta\n"
-            "🔥 Top opportunità\n"
-            "⚡ Intraday\n"
-            "💰 Cosa comprare\n"
-            "🏆 Classifica commodity\n"
-            "🎯 Setup e trigger\n"
-            "📡 Segnali\n"
-            "❓ Perché WAIT / ENTRY\n\n"
-            "👇 Usa i pulsanti qui sotto."
+            "Seleziona una funzione dal menu qui sotto."
         )
 
     # --------------------------------------------------------
@@ -1208,15 +1204,14 @@ def poll_once(
 
             continue
 
-        if text.startswith("/"):
+        if text:
 
-            if text.lower().startswith(
-                "/id"
-            ):
+            if text.lower().startswith("/id"):
 
                 _reply(
                     chat_id,
                     f"🆔 CHAT ID: {chat_id}",
+                    reply_markup=telegram_menu(),
                 )
 
             else:
@@ -1230,7 +1225,7 @@ def poll_once(
                     _reply(
                         chat_id,
                         response,
-                        reply_markup=telegram_menu() if text.lower() in {"/start", "/help"} else None,
+                        reply_markup=telegram_menu(),
                     )
 
     return next_offset
@@ -1238,22 +1233,24 @@ def poll_once(
 
 
 def telegram_menu() -> dict:
-    """Persistent two-column dashboard, styled like the Autotrasporto bot."""
+    """Main Telegram dashboard: two-column reply keyboard, Autotrasporto-style."""
     return {
         "keyboard": [
             [{"text": "📰 NEWS"}, {"text": "🔥 TOP OPPORTUNITÀ"}],
             [{"text": "🏆 CLASSIFICA"}, {"text": "⚡ INTRADAY"}],
             [{"text": "💰 COSA COMPRARE"}, {"text": "🎯 SETUP"}],
-            [{"text": "📊 ANALISI"}, {"text": "📡 SEGNALI"}],
-            [{"text": "🥇 METALLI"}, {"text": "🛢 PETROLIO"}],
-            [{"text": "🌾 AGRI"}, {"text": "🌍 MACRO"}],
-            [{"text": "❓ PERCHÉ"}, {"text": "🔄 AGGIORNA"}],
-            [{"text": "⚙️ STATO"}, {"text": "ℹ️ GUIDA"}],
+            [{"text": "📡 SEGNALI"}, {"text": "📊 ANALISI"}],
+            [{"text": "💰 PREZZI"}, {"text": "❓ PERCHÉ"}],
+            [{"text": "⚠️ RISCHIO"}, {"text": "📖 GUIDA"}],
+            [{"text": "🔄 AGGIORNA"}, {"text": "🚀 GAGARIN"}],
+            [{"text": "⚙️ STATO"}, {"text": "ℹ️ ID"}],
         ],
         "resize_keyboard": True,
+        "one_time_keyboard": False,
         "is_persistent": True,
         "input_field_placeholder": "Scegli una sezione GAGARIN",
     }
+
 
 
 # ============================================================
