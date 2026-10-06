@@ -138,6 +138,7 @@ def handle_update(update: dict) -> None:
             _reply(
                 chat_id,
                 f"🆔 CHAT ID: {chat_id}",
+                reply_markup=telegram_menu(),
             )
 
         else:
