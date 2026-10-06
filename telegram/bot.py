@@ -720,53 +720,42 @@ def _format_intraday(results):
 
 
 def _format_morning_pick(results):
-    """Fresh morning PAPER shortlist: choose only canonical governor-approved signals."""
+    """Return the single Gagarin choice, without exposing the engine rationale."""
     if not results:
-        return "🌅 GAGARIN — QUALE COMPRO?\\n━━━━━━━━━━━━━━━━━━━━\\nNessun dato disponibile."
+        return "🥇 GAGARIN — COSA COMPRO?\\n━━━━━━━━━━━━━━━━━━━━\\nNessun dato disponibile."
 
     decisions = evaluate_states(results)
     approved = {d.symbol: d for d in decisions if d.action == "PAPER_SIGNAL"}
     candidates = [
-        s for s in results
-        if str(getattr(s, "symbol", "")).upper() in approved
-        and str(getattr(s, "setup_direction", "")).upper() in {"LONG", "SHORT"}
-    ]
-
-    lines = [
-        "🌅 SOYUZ GAGARIN — QUALE COMPRO?",
-        "━━━━━━━━━━━━━━━━━━━━",
-        "🧪 PAPER ONLY",
-        "Analisi fresca dell'universo Gagarin.",
-        "",
+        state for state in results
+        if str(getattr(state, "symbol", "")).upper() in approved
+        and str(getattr(state, "setup_direction", "")).upper() in {"LONG", "SHORT"}
     ]
 
     if not candidates:
-        lines += [
-            "🟡 OGGI: NESSUNA OPPORTUNITÀ AUTORIZZATA",
-            "",
-            "Gagarin non forza una scelta: tutti i candidati sono WAIT/BLOCK.",
-        ]
-        return "\\n".join(lines)
+        return (
+            "🥇 GAGARIN — COSA COMPRO?\\n"
+            "━━━━━━━━━━━━━━━━━━━━\\n"
+            "🟡 NESSUNA OPPORTUNITÀ AUTORIZZATA\\n"
+            "PAPER ONLY"
+        )
 
     state = candidates[0]
-    lines += [
-        f"🏆 CANDIDATO #1: {state.commodity}",
-        f"Direzione: {state.setup_direction}",
-        f"Decisione: PAPER SIGNAL",
-        f"Confluence: {state.probability:.1f}/100",
-        f"Quality: {state.quality:.1f}",
-        f"Confidence: {state.confidence:.1f}",
+    lines = [
+        "🥇 GAGARIN — COSA COMPRO?",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "🧪 PAPER ONLY",
         "",
-        f"Entry: {state.entry:.6g}" if state.entry is not None else "Entry: N/D",
+        f"COMMODITY: {state.commodity}",
+        f"DIREZIONE: {state.setup_direction}",
+        f"ENTRY: {state.entry:.6g}" if state.entry is not None else "ENTRY: N/D",
         f"SL: {state.stop:.6g}" if state.stop is not None else "SL: N/D",
         f"TP1: {state.tp1:.6g}" if state.tp1 is not None else "TP1: N/D",
         f"TP2: {state.tp2:.6g}" if state.tp2 is not None else "TP2: N/D",
         f"TP3: {state.tp3:.6g}" if state.tp3 is not None else "TP3: N/D",
-        f"R/R TP3: {state.rr3:.2f}" if state.rr3 is not None else "R/R TP3: N/D",
-        "",
-        "⚠️ È una selezione PAPER del motore, non un ordine reale.",
+        f"RR: {state.rr3:.2f}" if state.rr3 is not None else "RR: N/D",
     ]
-    return "\\n".join(lines)
+    return "\n".join(lines)
 
 
 # ============================================================
