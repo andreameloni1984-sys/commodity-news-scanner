@@ -186,6 +186,9 @@ def telegram_diagnostic() -> bool:
                 {"command": "prezzo", "description": "Prezzi e provider"},
                 {"command": "guida", "description": "Guida del canale"},
                 {"command": "rischio", "description": "Regole di rischio"},
+                {"command": "intraday", "description": "Dashboard intraday"},
+                {"command": "comprare", "description": "Cosa comprare in PAPER"},
+                {"command": "perche", "description": "Perché WAIT/ENTRY"},
                 {"command": "status", "description": "Stato bot"},
                 {"command": "ping", "description": "Test collegamento"},
             ]
@@ -691,6 +694,67 @@ def _format_single_analysis(
 
 
 # ============================================================
+# AUTOTRASPORTO-STYLE DASHBOARD
+# ============================================================
+
+def _format_intraday(results):
+    if not results:
+        return "⚡ INTRADAY\\n━━━━━━━━━━━━━━━━━━━━\\nNessun dato disponibile."
+
+    lines = [
+        "⚡ SOYUZ GAGARIN — INTRADAY",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "🧪 PAPER ONLY",
+        "",
+    ]
+    for i, state in enumerate(results[:10], 1):
+        direction = state.setup_direction if state.setup_direction in {"LONG", "SHORT"} else "WAIT"
+        setup = state.setup or "NONE"
+        trigger = state.trigger or "NONE"
+        decision = state.final_decision
+        lines.append(f"{i}. {state.commodity} | {direction}")
+        lines.append(f"   {setup} → {trigger} | {decision}")
+    lines.append("")
+    lines.append("Regola: nessun ingresso senza confluence + trigger + rischio validato.")
+    return "\\n".join(lines)
+
+
+def _format_buy(results):
+    if not results:
+        return "💰 COSA COMPRARE\\n━━━━━━━━━━━━━━━━━━━━\\nNessun dato disponibile."
+    entries = [s for s in results if s.final_decision == "ENTRY"]
+    lines = ["💰 COSA COMPRARE", "━━━━━━━━━━━━━━━━━━━━", "🧪 PAPER ONLY", ""]
+    if not entries:
+        lines.append("🟡 NESSUNA ENTRATA AUTORIZZATA")
+        lines.append("")
+        lines.append("Gagarin preferisce WAIT quando il trigger non è sufficientemente confermato.")
+        return "\\n".join(lines)
+    for state in entries[:3]:
+        lines.append(f"🟢 {state.commodity} — {state.setup_direction}")
+        lines.append(f"Entry: {state.entry:.6g}" if state.entry is not None else "Entry: N/D")
+        lines.append(f"SL: {state.stop:.6g}" if state.stop is not None else "SL: N/D")
+        lines.append(f"TP1: {state.tp1:.6g}" if state.tp1 is not None else "TP1: N/D")
+        lines.append(f"TP2: {state.tp2:.6g}" if state.tp2 is not None else "TP2: N/D")
+        lines.append(f"TP3: {state.tp3:.6g}" if state.tp3 is not None else "TP3: N/D")
+        lines.append("")
+    return "\\n".join(lines)
+
+
+def _format_why(results):
+    if not results:
+        return "❓ PERCHÉ\\n━━━━━━━━━━━━━━━━━━━━\\nNessun dato disponibile."
+    ranked = results[:5]
+    lines = ["❓ PERCHÉ", "━━━━━━━━━━━━━━━━━━━━", ""]
+    for state in ranked:
+        direction = state.setup_direction if state.setup_direction in {"LONG", "SHORT"} else "WAIT"
+        lines.append(f"• {state.commodity}: {direction}")
+        lines.append(f"  Regime: {state.regime} | Structure: {state.structure}")
+        lines.append(f"  Setup: {state.setup} | Trigger: {state.trigger}")
+        lines.append(f"  Q {state.quality:.0f} | C {state.confidence:.0f} | Decision: {state.final_decision}")
+    return "\\n".join(lines)
+
+
+# ============================================================
 # COMMAND RESPONSE
 # ============================================================
 
@@ -703,6 +767,7 @@ def _command_response(
         "🏆 classifica": "/classifica",
         "🎯 setup": "/setup",
         "🔥 top": "/top",
+        "🔥 top opportunità": "/top",
         "📊 analisi": "/analisi",
         "💰 prezzi": "/prezzo",
         "📡 segnali": "/segnali",
@@ -710,6 +775,10 @@ def _command_response(
         "⚠️ rischio": "/rischio",
         "🔄 aggiorna": "/analisi",
         "⚙️ stato": "/status",
+        "⚡ intraday": "/intraday",
+        "💰 cosa comprare": "/comprare",
+        "❓ perché": "/perche",
+        "❓ perche": "/perche",
     }
     raw = button_commands.get(raw.lower(), raw)
     parts = raw.split()
@@ -762,6 +831,31 @@ def _command_response(
         )
 
     # --------------------------------------------------------
+    # INTRADAY DASHBOARD
+    # --------------------------------------------------------
+
+    if command_name == "/intraday":
+        try:
+            results = get_last_results() or _run_analysis()
+            return _format_intraday(results)
+        except Exception as exc:
+            return f"❌ INTRADAY ERROR\\n{type(exc).__name__}: {exc}"
+
+    if command_name in {"/comprare", "/compra"}:
+        try:
+            results = get_last_results() or _run_analysis()
+            return _format_buy(results)
+        except Exception as exc:
+            return f"❌ BUY BOARD ERROR\\n{type(exc).__name__}: {exc}"
+
+    if command_name in {"/perche", "/perché"}:
+        try:
+            results = get_last_results() or _run_analysis()
+            return _format_why(results)
+        except Exception as exc:
+            return f"❌ WHY BOARD ERROR\\n{type(exc).__name__}: {exc}"
+
+# --------------------------------------------------------
     # SIGNAL CHANNEL
     # --------------------------------------------------------
 
@@ -1152,11 +1246,12 @@ def poll_once(
 def telegram_menu() -> dict:
     return {
         "keyboard": [
-            [{"text": "🏆 CLASSIFICA"}, {"text": "🎯 SETUP"}],
-            [{"text": "🔥 TOP"}, {"text": "📊 ANALISI"}],
-            [{"text": "💰 PREZZI"}, {"text": "📡 SEGNALI"}],
-            [{"text": "📖 GUIDA"}, {"text": "⚠️ RISCHIO"}],
+            [{"text": "🔥 TOP OPPORTUNITÀ"}, {"text": "🏆 CLASSIFICA"}],
+            [{"text": "⚡ INTRADAY"}, {"text": "💰 COSA COMPRARE"}],
+            [{"text": "❓ PERCHÉ"}, {"text": "🎯 SETUP"}],
+            [{"text": "📊 ANALISI"}, {"text": "📡 SEGNALI"}],
             [{"text": "🔄 AGGIORNA"}, {"text": "⚙️ STATO"}],
+            [{"text": "📖 GUIDA"}, {"text": "⚠️ RISCHIO"}],
         ],
         "resize_keyboard": True,
         "is_persistent": True,
