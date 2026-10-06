@@ -521,3 +521,35 @@ def test_buy_board_never_claims_buy_when_no_entry():
     text = _format_buy([state])
     assert "NESSUNA ENTRATA AUTORIZZATA" in text
     assert "PAPER ONLY" in text
+
+
+def test_telegram_dashboard_menu_matches_gagarin_sections():
+    from telegram.bot import telegram_menu
+
+    menu = telegram_menu()
+    labels = [button["text"] for row in menu["keyboard"] for button in row]
+
+    assert labels == [
+        "🔥 TOP OPPORTUNITÀ", "🏆 CLASSIFICA",
+        "⚡ INTRADAY", "💰 COSA COMPRARE",
+        "❓ PERCHÉ", "🎯 SETUP",
+        "📊 ANALISI", "📡 SEGNALI",
+        "🔄 AGGIORNA", "⚙️ STATO",
+        "📖 GUIDA", "⚠️ RISCHIO",
+    ]
+    assert menu["resize_keyboard"] is True
+    assert menu["is_persistent"] is True
+
+
+def test_telegram_start_uses_dashboard_keyboard():
+    from telegram.bot import _command_response, telegram_menu
+
+    text = _command_response("/start")
+    menu = telegram_menu()
+
+    assert "SOYUZ GAGARIN" in text
+    assert "PAPER ONLY" in text
+    assert "Usa i pulsanti" in text
+    assert "🔥 TOP OPPORTUNITÀ" in [
+        button["text"] for row in menu["keyboard"] for button in row
+    ]
