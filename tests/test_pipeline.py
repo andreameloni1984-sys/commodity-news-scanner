@@ -493,3 +493,31 @@ def test_breakout_trigger_accepts_clean_long_close():
     apply_trigger(state)
     assert state.trigger == "BREAKOUT_MOMENTUM"
     assert state.trigger_confirmed is True
+
+
+# ============================================================
+# TELEGRAM DASHBOARD CONTRACT
+# ============================================================
+
+
+def test_intraday_dashboard_is_paper_and_compact():
+    from telegram.bot import _format_intraday
+    state = _prepare_directional_state("LONG")
+    state.setup = "TREND_CONTINUATION"
+    state.setup_direction = "LONG"
+    state.trigger = "NOT_CONFIRMED"
+    state.final_decision = "WAIT"
+    text = _format_intraday([state])
+    assert "INTRADAY" in text
+    assert "PAPER ONLY" in text
+    assert "TREND_CONTINUATION" in text
+    assert "WAIT" in text
+
+
+def test_buy_board_never_claims_buy_when_no_entry():
+    from telegram.bot import _format_buy
+    state = _prepare_directional_state("LONG")
+    state.final_decision = "WAIT"
+    text = _format_buy([state])
+    assert "NESSUNA ENTRATA AUTORIZZATA" in text
+    assert "PAPER ONLY" in text
