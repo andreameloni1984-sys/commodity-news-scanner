@@ -809,19 +809,11 @@ def _command_response(
     }:
 
         return (
-            "🚀 SOYUZ GAGARIN — COMMODITIES\n"
+            "🚀 SOYUZ GAGARIN\n"
             "━━━━━━━━━━━━━━━━━━━━\n"
-            "📊 Analisi • News • Market Structure • Intraday\n"
+            "📊 COMMODITIES • INTRADAY • INTELLIGENCE\n"
             "🧪 PAPER ONLY — nessun ordine reale\n\n"
-            "🟢 Dashboard pronta\n"
-            "🔥 Top opportunità\n"
-            "⚡ Intraday\n"
-            "💰 Cosa comprare\n"
-            "🏆 Classifica commodity\n"
-            "🎯 Setup e trigger\n"
-            "📡 Segnali\n"
-            "❓ Perché WAIT / ENTRY\n\n"
-            "👇 Usa i pulsanti qui sotto."
+            "Seleziona una funzione dal menu qui sotto."
         )
 
     # --------------------------------------------------------
@@ -1208,29 +1200,26 @@ def poll_once(
 
             continue
 
-        if text.startswith("/"):
+        if text:
 
-            if text.lower().startswith(
-                "/id"
-            ):
+            if text.lower().startswith("/id"):
 
                 _reply(
                     chat_id,
                     f"🆔 CHAT ID: {chat_id}",
+                    reply_markup=telegram_menu(),
                 )
 
             else:
 
-                response = _command_response(
-                    text
-                )
+                response = _command_response(text)
 
                 if response:
 
                     _reply(
                         chat_id,
                         response,
-                        reply_markup=telegram_menu() if text.lower() in {"/start", "/help"} else None,
+                        reply_markup=telegram_menu(),
                     )
 
     return next_offset
