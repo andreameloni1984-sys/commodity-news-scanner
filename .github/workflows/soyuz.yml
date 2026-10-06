@@ -112,6 +112,20 @@ jobs:
 
 
       # ==================================================
+      # 1A. RESTORE TELEGRAM ALERT STATE
+      # ==================================================
+
+      # GitHub-hosted runners are ephemeral. Persist the last sent signal
+      # fingerprints so the 15-minute scheduler does not spam duplicates.
+      - name: Restore Gagarin Telegram alert state
+        uses: actions/cache@v4
+        with:
+          path: .gagarin_alert_state.json
+          key: gagarin-alert-state-${{ github.run_id }}
+          restore-keys: |
+            gagarin-alert-state-
+
+      # ==================================================
       # 2. PYTHON
       # ==================================================
 
