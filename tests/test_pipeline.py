@@ -583,7 +583,7 @@ def test_telegram_dashboard_menu_matches_gagarin_sections():
     assert labels == [
         "📰 NEWS", "🔥 TOP OPPORTUNITÀ",
         "🏆 CLASSIFICA", "⚡ INTRADAY",
-        "💰 COSA COMPRARE", "🎯 SETUP",
+        "💰 COSA COMPRARE", "🛒 QUALE COMPRO?",
         "📊 ANALISI", "📡 SEGNALI",
         "🥇 METALLI", "🛢 PETROLIO",
         "🌾 AGRI", "🌍 MACRO",
@@ -602,7 +602,44 @@ def test_telegram_start_uses_dashboard_keyboard():
 
     assert "SOYUZ GAGARIN" in text
     assert "PAPER ONLY" in text
-    assert "Usa i pulsanti" in text
     assert "🔥 TOP OPPORTUNITÀ" in [
         button["text"] for row in menu["keyboard"] for button in row
     ]
+
+
+def test_morning_pick_hides_engine_rationale():
+    from telegram.bot import _format_morning_pick
+    import telegram.bot as bot
+
+    state = _prepare_directional_state("LONG")
+    state.symbol = "TEST/USD"
+    state.commodity = "Oro"
+    state.setup_direction = "LONG"
+    state.entry = 100.0
+    state.stop = 99.0
+    state.tp1 = 101.5
+    state.tp2 = 102.0
+    state.tp3 = 102.5
+    state.rr3 = 2.5
+
+    class Decision:
+        symbol = "TEST/USD"
+        action = "PAPER_SIGNAL"
+
+    original = bot.evaluate_states
+    try:
+        bot.evaluate_states = lambda results: [Decision()]
+        text = _format_morning_pick([state])
+    finally:
+        bot.evaluate_states = original
+
+    assert "COMMODITY: Oro" in text
+    assert "DIREZIONE: LONG" in text
+    assert "ENTRY: 100" in text
+    assert "SL: 99" in text
+    assert "TP3: 102.5" in text
+    assert "Confluence" not in text
+    assert "Quality" not in text
+    assert "Confidence" not in text
+    assert "Analisi fresca" not in text
+    assert "PAPER ONLY" in text
