@@ -7,7 +7,7 @@ class GagarinTelegramMenuTests(unittest.TestCase):
     def test_bot_parses_and_contains_menu(self):
         source = Path("telegram/bot.py").read_text(encoding="utf-8")
         ast.parse(source)
-        for label in ("🏆 CLASSIFICA", "🎯 SETUP", "🔥 TOP", "📊 ANALISI", "💰 PREZZI", "📡 SEGNALI"):
+        for label in ("🏆 CLASSIFICA", "🎯 SETUP", "🔥 TOP", "📊 ANALISI", "💰 PREZZI", "📡 SEGNALI", "🛒 QUALE COMPRO?"):
             self.assertIn(label, source)
         self.assertIn("def telegram_menu", source)
 
