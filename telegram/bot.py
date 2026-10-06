@@ -719,6 +719,60 @@ def _format_intraday(results):
     return "\\n".join(lines)
 
 
+def _format_morning_pick(results):
+    """Fresh morning PAPER shortlist: choose only canonical governor-approved signals."""
+    if not results:
+        return "🌅 GAGARIN — QUALE COMPRO?\\n━━━━━━━━━━━━━━━━━━━━\\nNessun dato disponibile."
+
+    decisions = evaluate_states(results)
+    approved = {d.symbol: d for d in decisions if d.action == "PAPER_SIGNAL"}
+    candidates = [
+        s for s in results
+        if str(getattr(s, "symbol", "")).upper() in approved
+        and str(getattr(s, "setup_direction", "")).upper() in {"LONG", "SHORT"}
+    ]
+
+    lines = [
+        "🌅 SOYUZ GAGARIN — QUALE COMPRO?",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "🧪 PAPER ONLY",
+        "Analisi fresca dell'universo Gagarin.",
+        "",
+    ]
+
+    if not candidates:
+        lines += [
+            "🟡 OGGI: NESSUNA OPPORTUNITÀ AUTORIZZATA",
+            "",
+            "Gagarin non forza una scelta: tutti i candidati sono WAIT/BLOCK.",
+        ]
+        return "\\n".join(lines)
+
+    state = candidates[0]
+    lines += [
+        f"🏆 CANDIDATO #1: {state.commodity}",
+        f"Direzione: {state.setup_direction}",
+        f"Decisione: PAPER SIGNAL",
+        f"Confluence: {state.probability:.1f}/100",
+        f"Quality: {state.quality:.1f}",
+        f"Confidence: {state.confidence:.1f}",
+        "",
+        f"Entry: {state.entry:.6g}" if state.entry is not None else "Entry: N/D",
+        f"SL: {state.stop:.6g}" if state.stop is not None else "SL: N/D",
+        f"TP1: {state.tp1:.6g}" if state.tp1 is not None else "TP1: N/D",
+        f"TP2: {state.tp2:.6g}" if state.tp2 is not None else "TP2: N/D",
+        f"TP3: {state.tp3:.6g}" if state.tp3 is not None else "TP3: N/D",
+        f"R/R TP3: {state.rr3:.2f}" if state.rr3 is not None else "R/R TP3: N/D",
+        "",
+        "⚠️ È una selezione PAPER del motore, non un ordine reale.",
+    ]
+    return "\\n".join(lines)
+
+
+# ============================================================
+# MORNING PICK
+# ============================================================
+
 def _format_buy(results):
     if not results:
         return "💰 COSA COMPRARE\\n━━━━━━━━━━━━━━━━━━━━\\nNessun dato disponibile."
