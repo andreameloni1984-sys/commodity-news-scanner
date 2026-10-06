@@ -496,6 +496,57 @@ def test_breakout_trigger_accepts_clean_long_close():
 
 
 # ============================================================
+# RETEST FALSIFICATION
+# ============================================================
+
+def _prepare_retest_state(direction="LONG", close=100.04):
+    state = _prepare_directional_state(direction)
+    state.retest = True
+    state.retest_direction = direction
+    state.retest_level = 100.0
+    if direction == "LONG":
+        open_price = 99.90
+        high = 100.20
+        low = 99.90
+    else:
+        open_price = 100.10
+        high = 100.10
+        low = 99.80
+        close = 99.96
+    state.mtf_data = {
+        "5min": [
+            {"open": open_price, "high": high, "low": low, "close": close},
+        ]
+    }
+    state.price = close
+    return state
+
+
+def test_retest_trigger_requires_current_level_interaction():
+    state = _prepare_retest_state("LONG", close=101.0)
+    apply_setup(state)
+    apply_trigger(state)
+    assert state.trigger == "NOT_CONFIRMED"
+    assert state.trigger_confirmed is False
+
+
+def test_retest_trigger_accepts_current_long_retest():
+    state = _prepare_retest_state("LONG", close=100.04)
+    apply_setup(state)
+    apply_trigger(state)
+    assert state.trigger == "RETEST_MOMENTUM"
+    assert state.trigger_confirmed is True
+
+
+def test_retest_trigger_rejects_wrong_side_close():
+    state = _prepare_retest_state("LONG", close=99.96)
+    apply_setup(state)
+    apply_trigger(state)
+    assert state.trigger == "NOT_CONFIRMED"
+    assert state.trigger_confirmed is False
+
+
+# ============================================================
 # TELEGRAM DASHBOARD CONTRACT
 # ============================================================
 
