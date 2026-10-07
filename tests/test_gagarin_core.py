@@ -3,10 +3,11 @@ from types import SimpleNamespace
 
 from soyuz_gagarin.adapter import evaluate_states
 from soyuz_gagarin.engine import GagarinEngine
-from soyuz_gagarin.models import Candidate, MarketSnapshot
+from soyuz_gagarin.models import Candidate
 
 
 def market(symbol="XAU/USD"):
+    from soyuz_gagarin.models import MarketSnapshot
     return MarketSnapshot(
         symbol=symbol,
         timestamp="2026-10-02T00:00:00Z",
@@ -23,6 +24,7 @@ def candidate(**overrides):
         confidence=70,
         rr=3.0,
         stop_distance_atr=1.0,
+        reasons=[],
         data_ok=True,
         live=True,
         trigger_confirmed=True,
@@ -51,28 +53,19 @@ def candidate(**overrides):
 
 
 def test_rejects_low_quality():
-    d = GagarinEngine().evaluate(
-        market(),
-        candidate(quality=40),
-    )
+    d = GagarinEngine().evaluate(market(), candidate(quality=40))
     assert d.action == "WAIT"
     assert d.reason == "QUALITY_BELOW_THRESHOLD"
 
 
 def test_allows_paper_candidate():
-    d = GagarinEngine().evaluate(
-        market(),
-        candidate(),
-    )
+    d = GagarinEngine().evaluate(market(), candidate())
     assert d.action == "PAPER_SIGNAL"
     assert d.reason == "APPROVED_FOR_PAPER"
 
 
 def test_unknown_asset_is_blocked():
-    d = GagarinEngine().evaluate(
-        market("XYZ"),
-        candidate(symbol="XYZ"),
-    )
+    d = GagarinEngine().evaluate(market("XYZ"), candidate(symbol="XYZ"))
     assert d.action == "WAIT"
     assert d.reason == "ASSET_NOT_IN_UNIVERSE"
 
@@ -110,9 +103,7 @@ def test_legacy_wait_is_not_an_automatic_gagarin_veto():
             "regime_ok": True, "session_ok": True, "curve_ok": True,
         }},
     )
-
     decisions = evaluate_states([state])
-
     assert len(decisions) == 1
     assert decisions[0].action == "PAPER_SIGNAL"
     assert decisions[0].reason == "APPROVED_FOR_PAPER"
@@ -151,36 +142,25 @@ def test_missing_trigger_stays_wait():
             "regime_ok": True, "session_ok": True, "curve_ok": True,
         }},
     )
-
     decisions = evaluate_states([state])
-
     assert decisions[0].action == "WAIT"
     assert decisions[0].reason == "TRIGGER_NOT_CONFIRMED"
 
 
 def test_rejects_invalid_target_geometry():
-    d = GagarinEngine().evaluate(
-        market(),
-        candidate(tp2=1.05),
-    )
+    d = GagarinEngine().evaluate(market(), candidate(tp2=1.05))
     assert d.action == "WAIT"
     assert d.reason == "TARGET_GEOMETRY_INVALID"
 
 
 def test_rejects_weak_rr_tiers_even_when_tp3_is_strong():
-    d = GagarinEngine().evaluate(
-        market(),
-        candidate(rr1=1.0, rr2=2.0, rr3=4.0),
-    )
+    d = GagarinEngine().evaluate(market(), candidate(rr1=1.0, rr2=2.0, rr3=4.0))
     assert d.action == "WAIT"
     assert d.reason == "RR_TIER_BELOW_THRESHOLD"
 
 
 def test_operational_gate_is_hard_veto():
-    d = GagarinEngine().evaluate(
-        market(),
-        candidate(liquidity_ok=False),
-    )
+    d = GagarinEngine().evaluate(market(), candidate(liquidity_ok=False))
     assert d.action == "WAIT"
     assert d.reason == "LIQUIDITY_FAIL"
 
@@ -218,8 +198,33 @@ def test_stale_timestamp_fails_closed_even_when_freshness_gate_is_true():
             "regime_ok": True, "session_ok": True, "curve_ok": True,
         }},
     )
-
     decisions = evaluate_states([state])
-
     assert decisions[0].action == "WAIT"
     assert decisions[0].reason == "FRESHNESS_FAIL"
+
+
+def test_rejects_long_with_stop_above_entry():
+    d = GagarinEngine().evaluate(
+        market(),
+        candidate(stop=1.01),
+    )
+    assert d.action == "WAIT"
+    assert d.reason == "STOP_GEOMETRY_INVALID"
+
+
+def test_rejects_short_with_stop_below_entry():
+    d = GagarinEngine().evaluate(
+        market(),
+        candidate(
+            side="SHORT",
+            structure_direction="SHORT",
+            mtf_direction="SHORT",
+            entry=1.0,
+            stop=0.99,
+            tp1=0.9,
+            tp2=0.8,
+            tp3=0.7,
+        ),
+    )
+    assert d.action == "WAIT"
+    assert d.reason == "STOP_GEOMETRY_INVALID"

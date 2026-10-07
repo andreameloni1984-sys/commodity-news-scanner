@@ -21,6 +21,17 @@ def _target_geometry_ok(candidate: Candidate) -> bool:
     return False
 
 
+def _stop_geometry_ok(candidate: Candidate) -> bool:
+    """Require the stop to be on the loss side of entry."""
+    if candidate.entry is None or candidate.stop is None:
+        return False
+    if candidate.side == "LONG":
+        return candidate.stop < candidate.entry
+    if candidate.side == "SHORT":
+        return candidate.stop > candidate.entry
+    return False
+
+
 def _rr_tiers_ok(candidate: Candidate) -> bool:
     """Protect the staged exit plan instead of validating only TP3."""
     return (
@@ -89,6 +100,9 @@ def approve(
 
     if candidate.tp1 is None or candidate.tp2 is None or candidate.tp3 is None:
         return False, "TARGETS_MISSING"
+
+    if not _stop_geometry_ok(candidate):
+        return False, "STOP_GEOMETRY_INVALID"
 
     if not _target_geometry_ok(candidate):
         return False, "TARGET_GEOMETRY_INVALID"
