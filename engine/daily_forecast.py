@@ -65,20 +65,28 @@ def _forecast_map() -> dict[str, dict]:
 
 
 def _context_direction(state: Any, forecast: dict | None) -> str:
-    for attr in ("setup_direction", "structure_direction", "mtf_direction"):
-        value = _direction(getattr(state, attr, "NONE"))
-        if value != "NONE":
-            return value
+    """Choose the morning forecast direction independently from entry confirmation.
 
+    Intraday setup/trigger is an alignment input, not a veto on the daily forecast.
+    """
     horizons = (forecast or {}).get("horizons", {})
     votes = {"LONG": 0.0, "SHORT": 0.0}
     for horizon in ("30", "90", "180"):
         item = horizons.get(horizon, {})
         value = _direction(item.get("direction"))
+        samples = _num(item.get("historical_samples"), 0.0) or 0.0
         confidence = _num(item.get("confidence"), 0.0) or 0.0
-        if value in votes:
-            votes[value] += max(1.0, confidence)
-    return max(votes, key=votes.get) if max(votes.values()) > 0 else "NONE"
+        if value in votes and samples >= MIN_SAMPLES:
+            votes[value] += max(1.0, samples) * max(0.25, confidence / 100.0)
+
+    if max(votes.values()) > 0:
+        return max(votes, key=votes.get)
+
+    for attr in ("structure_direction", "mtf_direction", "setup_direction"):
+        value = _direction(getattr(state, attr, "NONE"))
+        if value != "NONE":
+            return value
+    return "NONE"
 
 
 def _historical_validation(forecast: dict | None, direction: str) -> dict:
@@ -160,6 +168,9 @@ def predict_today(states: Iterable[Any]) -> dict[str, Any] | None:
     """Return the best evidence-backed forecast for today."""
     forecasts = _forecast_map()
     candidates = []
+
+    if isinstance(states, dict):
+        states = states.values()
 
     for state in states:
         name = str(getattr(state, "commodity", "")).strip()
