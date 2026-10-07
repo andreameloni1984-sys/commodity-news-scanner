@@ -1,0 +1,22 @@
+name: Gagarin Paper Monitor
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Wake and run Gagarin
+        run: |
+          curl --fail --silent --show-error \
+            --max-time 180 \
+            -X POST \
+            -H "User-Agent: Gagarin-GitHub-Monitor" \
+            "https://gagarin-cloud.onrender.com/api/monitor"
