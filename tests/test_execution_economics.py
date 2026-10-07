@@ -40,7 +40,7 @@ def test_expectancy_net_accounts_for_explicit_cost():
 def test_expectancy_and_risk_fail_closed():
     assert expectancy_net_r(None, 2, 1) is None
     assert cost_r(None, 100, 98) is None
-    assert position_size(10000, 0.01, 100, 98, 1) == 0.5
+    assert position_size(10000, 0.01, 100, 98, 1) == 50.0
 
 
 def test_basis_and_curve_are_explicit_data_only():
