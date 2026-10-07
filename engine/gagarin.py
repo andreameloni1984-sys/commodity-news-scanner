@@ -72,6 +72,10 @@ def calculate_quality(state: SoyuzState) -> SoyuzState:
         quality += 15.0
         confidence += 20.0
 
+    if state.opportunity_type in {"MEAN_REVERSION", "REVERSAL"}:
+        quality += 10.0
+        confidence += 5.0
+
     if state.trigger in {"WAIT_LIVE", "NOT_CONFIRMED"}:
         confidence -= 5.0
 
