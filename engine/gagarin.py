@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from commodities.universe import Commodity
 from engine.state import SoyuzState
 from engine.data import load_data
@@ -97,6 +99,7 @@ def analyze_one(commodity: Commodity) -> SoyuzState:
     state = SoyuzState(
         commodity=commodity.name,
         symbol=commodity.symbol,
+        analysis_timestamp=datetime.now(timezone.utc).isoformat(),
     )
 
     # 1. DATA
