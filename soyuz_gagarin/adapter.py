@@ -111,10 +111,14 @@ def evaluate_states(states: Iterable[object]):
             "volatility_ok",
             stop_atr > 0 and stop_atr <= engine.config.max_stop_atr,
         ))
-        regime_ok = bool(explicit_gates.get(
-            "regime_ok",
-            getattr(state, "regime", "UNKNOWN") in {"TREND_UP", "TREND_DOWN"},
-        ))
+        opportunity_type = str(getattr(state, "opportunity_type", "NONE") or "NONE").upper()
+        regime = getattr(state, "regime", "UNKNOWN")
+        regime_allowed = (
+            regime in {"TREND_UP", "TREND_DOWN"}
+            if opportunity_type == "TREND_CONTINUATION"
+            else regime in {"RANGE", "MIXED", "TREND_UP", "TREND_DOWN", "UNKNOWN"}
+        )
+        regime_ok = bool(explicit_gates.get("regime_ok", regime_allowed))
         session_ok = bool(explicit_gates.get(
             "session_ok",
             getattr(state, "live", False),
