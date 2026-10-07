@@ -30,6 +30,7 @@ def _state_json(state):
     return {
         "symbol": str(getattr(state, "symbol", "")).upper(),
         "commodity": getattr(state, "commodity", ""),
+        "price": getattr(state, "price", None),
         "direction": getattr(state, "setup_direction", "") or "",
         "probability": getattr(state, "probability", None),
         "quality": getattr(state, "quality", None),
@@ -71,14 +72,20 @@ def _run_gagarin():
     operational = [r for r in rows if r["action"] == "PAPER_SIGNAL"]
     rows.sort(key=lambda x: (x["action"] != "PAPER_SIGNAL", -(x["probability"] or 0)))
 
+    prices = {r["symbol"]: r["price"] for r in rows if r.get("symbol") and r.get("price") is not None}
+    closed = PORTFOLIO.evaluate_exits(prices)
+    PORTFOLIO.mark_to_market(prices)
+
     for signal in operational:
         PORTFOLIO.open_signal(signal, allocation_pct=0.25)
+    PORTFOLIO.mark_to_market(prices)
 
     return {
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "mode": "PAPER ONLY",
         "universe": len(rows),
         "signals": operational,
+        "closed": closed,
         "ranking": rows,
         "portfolio": PORTFOLIO.snapshot(),
     }
