@@ -429,20 +429,13 @@ def apply_trigger(
     # MTF GATE
     # ========================================================
 
-    if state.mtf_direction != state.setup_direction:
-
-        state.trigger = "NOT_CONFIRMED"
-
-        return state
-
-    if (
-        state.mtf_alignment
-        < MIN_MTF_ALIGNMENT
-    ):
-
-        state.trigger = "NOT_CONFIRMED"
-
-        return state
+    if state.opportunity_type == "TREND_CONTINUATION":
+        if state.mtf_direction != state.setup_direction:
+            state.trigger = "NOT_CONFIRMED"
+            return state
+        if state.mtf_alignment < MIN_MTF_ALIGNMENT:
+            state.trigger = "NOT_CONFIRMED"
+            return state
 
     # ========================================================
     # MOMENTUM
