@@ -125,7 +125,7 @@ def approve(
     if not candidate.trigger_confirmed:
         return False, "TRIGGER_NOT_CONFIRMED"
 
-    if candidate.structure_direction != candidate.side:
+    if candidate.opportunity_type == "TREND_CONTINUATION" and candidate.structure_direction != candidate.side:
         return False, "STRUCTURE_DIRECTION_MISMATCH"
 
     if candidate.mtf_direction != candidate.side:
