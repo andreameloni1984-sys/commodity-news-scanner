@@ -255,6 +255,21 @@ class SoyuzState:
     confidence: float = 0.0
 
     # ========================================================
+    # OPPORTUNITY SCANNER
+    # ========================================================
+    # Misura il movimento di mercato indipendentemente dalla
+    # decisione operativa. Un forte movimento può essere
+    # interessante anche quando Gagarin deve ancora attendere
+    # una conferma di ingresso.
+
+    move_4h_pct: Optional[float] = None
+    move_24h_pct: Optional[float] = None
+    move_atr: Optional[float] = None
+    opportunity_score: float = 0.0
+    opportunity_alert: str = "NONE"
+    opportunity_direction: str = "NONE"
+
+    # ========================================================
     # SAFETY
     # ========================================================
 
