@@ -143,27 +143,13 @@ def apply_safety(
     # 6. STRUCTURE ALIGNMENT
     # ========================================================
 
-    if state.setup_direction == "LONG":
-
-        if (
-            state.structure_direction
-            != "LONG"
-        ):
-
-            blockers.append(
-                "STRUCTURE_NOT_LONG"
-            )
-
-    elif state.setup_direction == "SHORT":
-
-        if (
-            state.structure_direction
-            != "SHORT"
-        ):
-
-            blockers.append(
-                "STRUCTURE_NOT_SHORT"
-            )
+    # Trend continuation needs directional structure. Range/reversal
+    # opportunities rely on their own setup evidence plus MTF direction.
+    if state.opportunity_type == "TREND_CONTINUATION":
+        if state.setup_direction == "LONG" and state.structure_direction != "LONG":
+            blockers.append("STRUCTURE_NOT_LONG")
+        elif state.setup_direction == "SHORT" and state.structure_direction != "SHORT":
+            blockers.append("STRUCTURE_NOT_SHORT")
 
     # ========================================================
     # 7. MTF ALIGNMENT
@@ -478,8 +464,7 @@ def apply_safety(
             "SHORT",
         }
         and state.trigger_confirmed
-        and state.structure_direction
-        == state.setup_direction
+        and (state.opportunity_type != "TREND_CONTINUATION" or state.structure_direction == state.setup_direction)
         and state.mtf_direction
         == state.setup_direction
         and state.entry is not None
