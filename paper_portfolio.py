@@ -7,6 +7,7 @@ import threading
 
 INITIAL_CAPITAL = 100.0
 
+
 @dataclass
 class Position:
     id: str
@@ -21,11 +22,20 @@ class Position:
     allocation: float
     opened_at: str
     status: str = "OPEN"
+    mark_price: float | None = None
     exit: float | None = None
     pnl: float = 0.0
+    unrealized_pnl: float = 0.0
     closed_at: str | None = None
 
+
 class PaperPortfolio:
+    """Deterministic paper portfolio for Gagarin signals.
+
+    Cash is reserved when a position opens. Equity includes the
+    marked value of open allocations plus unrealized P/L.
+    """
+
     def __init__(self, capital: float = INITIAL_CAPITAL):
         self.initial_capital = capital
         self.cash = capital
@@ -33,18 +43,36 @@ class PaperPortfolio:
         self.history: list[dict[str, Any]] = []
         self._lock = threading.Lock()
 
+    @staticmethod
+    def _move(direction: str, entry: float, price: float) -> float:
+        move = (price - entry) / entry
+        return -move if direction == "SHORT" else move
+
+    def mark_to_market(self, prices: dict[str, float]) -> None:
+        with self._lock:
+            for p in self.positions:
+                if p.status != "OPEN" or p.symbol not in prices:
+                    continue
+                price = float(prices[p.symbol])
+                p.mark_price = price
+                p.unrealized_pnl = round(p.allocation * self._move(p.direction, p.entry, price), 2)
+
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
             open_positions = [asdict(p) for p in self.positions if p.status == "OPEN"]
             closed = [asdict(p) for p in self.positions if p.status == "CLOSED"]
             realized = sum(p.pnl for p in self.positions if p.status == "CLOSED")
+            unrealized = sum(p.unrealized_pnl for p in self.positions if p.status == "OPEN")
+            open_allocations = sum(p.allocation for p in self.positions if p.status == "OPEN")
             return {
                 "initial_capital": self.initial_capital,
                 "cash": round(self.cash, 2),
                 "realized_pnl": round(realized, 2),
+                "unrealized_pnl": round(unrealized, 2),
                 "open_positions": open_positions,
                 "closed_positions": closed,
-                "equity": round(self.cash + sum(p.allocation for p in self.positions if p.status == "OPEN"), 2),
+                "equity": round(self.cash + open_allocations + unrealized, 2),
+                "total_pnl": round(realized + unrealized, 2),
             }
 
     def open_signal(self, row: dict[str, Any], allocation_pct: float = 0.25) -> dict[str, Any] | None:
@@ -85,19 +113,26 @@ class PaperPortfolio:
                 if p.status != "OPEN" or p.symbol not in prices:
                     continue
                 price = float(prices[p.symbol])
-                stop_hit = p.stop is not None and ((p.direction == "LONG" and price <= p.stop) or (p.direction == "SHORT" and price >= p.stop))
+                p.mark_price = price
+                stop_hit = p.stop is not None and (
+                    (p.direction == "LONG" and price <= p.stop)
+                    or (p.direction == "SHORT" and price >= p.stop)
+                )
                 tp_hit = p.tp3 if p.tp3 is not None else (p.tp2 if p.tp2 is not None else p.tp1)
-                tp_hit = tp_hit is not None and ((p.direction == "LONG" and price >= tp_hit) or (p.direction == "SHORT" and price <= tp_hit))
+                tp_hit = tp_hit is not None and (
+                    (p.direction == "LONG" and price >= tp_hit)
+                    or (p.direction == "SHORT" and price <= tp_hit)
+                )
                 if not (stop_hit or tp_hit):
+                    p.unrealized_pnl = round(p.allocation * self._move(p.direction, p.entry, price), 2)
                     continue
                 exit_price = float(p.stop if stop_hit else tp_hit)
-                move = (exit_price - p.entry) / p.entry
-                if p.direction == "SHORT":
-                    move = -move
-                p.pnl = round(p.allocation * move, 2)
+                p.pnl = round(p.allocation * self._move(p.direction, p.entry, exit_price), 2)
+                p.unrealized_pnl = 0.0
                 p.exit = exit_price
                 p.status = "CLOSED"
                 p.closed_at = datetime.now(timezone.utc).isoformat()
                 self.cash = round(self.cash + p.allocation + p.pnl, 2)
+                self.history.append(asdict(p))
                 closed.append(asdict(p))
         return closed
