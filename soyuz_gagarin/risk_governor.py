@@ -128,7 +128,7 @@ def approve(
     if candidate.opportunity_type == "TREND_CONTINUATION" and candidate.structure_direction != candidate.side:
         return False, "STRUCTURE_DIRECTION_MISMATCH"
 
-    if candidate.mtf_direction != candidate.side:
+    if candidate.opportunity_type == "TREND_CONTINUATION" and candidate.mtf_direction != candidate.side:
         return False, "MTF_DIRECTION_MISMATCH"
 
     if candidate.entry is None:
