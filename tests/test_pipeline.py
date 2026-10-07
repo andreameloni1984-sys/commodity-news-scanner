@@ -484,7 +484,8 @@ def test_breakout_trigger_accepts_clean_long_close():
     state = _prepare_directional_state("LONG")
     state.breakout = True
     state.breakout_direction = "LONG"
-    state.breakout_level = state.price - 0.20
+    state.price = 100.38
+    state.breakout_level = 100.20
     state.mtf_data = {
         "5min": [
             {"open": 100.0, "high": 100.2, "low": 99.9, "close": 100.15, "timestamp": "2026-01-01T01:50:00Z"},
@@ -517,6 +518,7 @@ def _prepare_retest_state(direction="LONG", close=100.04):
         close = 99.96
     state.mtf_data = {
         "5min": [
+            {"open": open_price - 0.10, "high": open_price, "low": open_price - 0.15, "close": open_price, "timestamp": "2026-01-01T01:50:00Z"},
             {"open": open_price, "high": high, "low": low, "close": close, "timestamp": "2026-01-01T01:55:00Z"},
         ]
     }
