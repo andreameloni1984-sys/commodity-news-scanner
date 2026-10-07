@@ -793,7 +793,8 @@ def _format_buy(results):
     ]
 
     if pick.get("expectancy_r") is not None:
-        lines.append(f"EXPECTANCY: {pick['expectancy_r']:+.2f}R")
+        label = "EXPECTANCY PROXY" if pick.get("expectancy_type") == "HISTORICAL_HIT_RATE_PROXY" else "EXPECTANCY"
+        lines.append(f"{label}: {pick['expectancy_r']:+.2f}R")
     if pick.get("breakeven_win_rate") is not None:
         lines.append(f"BREAK-EVEN: {pick['breakeven_win_rate'] * 100:.1f}%")
     if pick.get("edge_vs_breakeven") is not None:
