@@ -76,7 +76,16 @@ def _run_gagarin():
     closed = PORTFOLIO.evaluate_exits(prices)
     PORTFOLIO.mark_to_market(prices)
 
+    # Prevent same-cycle churn: a position closed by SL/TP is not
+    # reopened from the identical signal during this monitor pass.
+    closed_symbols = {
+        str(item.get("symbol") or "").upper()
+        for item in closed
+    }
     for signal in operational:
+        symbol = str(signal.get("symbol") or "").upper()
+        if symbol in closed_symbols:
+            continue
         PORTFOLIO.open_signal(signal, allocation_pct=0.25)
     PORTFOLIO.mark_to_market(prices)
 
