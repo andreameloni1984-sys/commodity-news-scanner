@@ -43,6 +43,14 @@ def calculate_quality(state: SoyuzState) -> SoyuzState:
         probability += 10.0
         quality += 15.0
         confidence += 10.0
+    elif state.regime == "RANGE" and state.opportunity_type == "MEAN_REVERSION":
+        probability += 8.0
+        quality += 12.0
+        confidence += 8.0
+    elif state.opportunity_type == "REVERSAL":
+        probability += 5.0
+        quality += 8.0
+        confidence += 5.0
 
     if state.regime == "HIGH_VOLATILITY":
         probability -= 10.0
@@ -75,6 +83,7 @@ def calculate_quality(state: SoyuzState) -> SoyuzState:
     chain_complete = (
         state.data_ok
         and state.live
+        and state.opportunity_type == "TREND_CONTINUATION"
         and state.regime in {"TREND_UP", "TREND_DOWN"}
         and state.structure in {"BULLISH", "BEARISH"}
         and state.setup_direction in {"LONG", "SHORT"}
