@@ -657,3 +657,18 @@ def test_morning_pick_hides_engine_rationale():
     assert "Confidence" not in text
     assert "Analisi fresca" not in text
     assert "PAPER ONLY" in text
+
+
+def test_cosa_compro_uses_daily_forecast_result(monkeypatch):
+    from telegram.bot import _format_buy
+    state = _prepare_directional_state("LONG")
+    monkeypatch.setattr("telegram.bot.predict_today", lambda results: {
+        "commodity": "Oro", "direction": "LONG", "forecast": "SALE",
+        "historical_samples": 25, "historical_hit_rate": 68.0,
+        "evidence_source": "test", "entry": 100.0, "stop": 98.0,
+        "tp1": 103.0, "tp2": 105.0, "median_forward_return_10d": 2.1,
+    })
+    text = _format_buy([state])
+    assert "GAGARIN — OGGI" in text
+    assert "Oro" in text
+    assert "PREVISIONE: SALE" in text
