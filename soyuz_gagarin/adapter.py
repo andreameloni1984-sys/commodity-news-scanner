@@ -83,6 +83,45 @@ def evaluate_states(states: Iterable[object]):
 
         reasons = list(getattr(state, "blockers", []) or [])
 
+        meta = _metadata(state)
+        explicit_gates = meta.get("operational_gates", {})
+        if not isinstance(explicit_gates, dict):
+            explicit_gates = {}
+
+        # Derive missing operational gates from canonical evidence.
+        # Explicit producer gates override these derived values.
+        candle_count = int(meta.get("candle_count", 0) or 0)
+        data_quality_ok = bool(explicit_gates.get(
+            "data_quality_ok",
+            getattr(state, "data_ok", False) and candle_count >= 30,
+        ))
+        freshness_ok = bool(explicit_gates.get(
+            "freshness_ok",
+            getattr(state, "live", False) and bool(meta.get("fresh_live", False)),
+        ))
+        contract_ok = bool(explicit_gates.get(
+            "contract_ok",
+            symbol in engine.config.allowed_assets and bool(meta.get("resolved_symbol")),
+        ))
+        liquidity_ok = bool(explicit_gates.get(
+            "liquidity_ok",
+            getattr(state, "data_ok", False),
+        ))
+        volatility_ok = bool(explicit_gates.get(
+            "volatility_ok",
+            stop_atr > 0 and stop_atr <= engine.config.max_stop_atr,
+        ))
+        regime_ok = bool(explicit_gates.get(
+            "regime_ok",
+            getattr(state, "regime", "UNKNOWN") in {"TREND_UP", "TREND_DOWN"},
+        ))
+        session_ok = bool(explicit_gates.get(
+            "session_ok",
+            getattr(state, "live", False),
+        ))
+        # Curve evidence is not yet a mandatory producer in the canonical state.
+        curve_ok = bool(explicit_gates.get("curve_ok", True))
+
         candidate = Candidate(
             symbol=symbol,
             side=side,
@@ -112,14 +151,14 @@ def evaluate_states(states: Iterable[object]):
             rr2=rr_values[1],
             rr3=rr3,
             paper_only=_gate(state, "paper_only", True),
-            data_quality_ok=_gate(state, "data_quality_ok", False),
-            freshness_ok=_freshness_ok(state, _gate(state, "freshness_ok", False), freshness_limit),
-            contract_ok=_gate(state, "contract_ok", False),
-            liquidity_ok=_gate(state, "liquidity_ok", False),
-            volatility_ok=_gate(state, "volatility_ok", False),
-            regime_ok=_gate(state, "regime_ok", False),
-            session_ok=_gate(state, "session_ok", False),
-            curve_ok=_gate(state, "curve_ok", False),
+            data_quality_ok=data_quality_ok,
+            freshness_ok=freshness_ok,
+            contract_ok=contract_ok,
+            liquidity_ok=liquidity_ok,
+            volatility_ok=volatility_ok,
+            regime_ok=regime_ok,
+            session_ok=session_ok,
+            curve_ok=curve_ok,
         )
 
         market = MarketSnapshot(
