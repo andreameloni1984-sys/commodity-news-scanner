@@ -19,6 +19,8 @@ from pathlib import Path
 from statistics import median
 from typing import Any, Iterable
 
+from engine.opportunity import expectancy_from_hit_rate, calculate_expectancy
+
 
 ROOT = Path(__file__).resolve().parent.parent
 FORECAST_FILE = ROOT / "commodities_long_term_forecasts.json"
@@ -164,6 +166,47 @@ def _explicit_analogs(name: str, direction: str) -> dict:
     return {"count": len(matched), "returns": matched}
 
 
+def _analog_expectancy(analogs: dict, direction: str) -> dict[str, Any]:
+    """Use real R-multiples when supplied; otherwise use a hit-rate proxy."""
+    raw = _load(ANALOG_FILE, {})
+    rows = raw.get("observations", []) if isinstance(raw, dict) else []
+    r_values: list[float] = []
+    if isinstance(rows, list):
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            if _direction(row.get("direction")) != direction:
+                continue
+            value = _num(row.get("r_multiple"))
+            if value is not None:
+                r_values.append(value)
+
+    if len(r_values) >= MIN_SAMPLES:
+        wins = [x for x in r_values if x > 0]
+        losses = [abs(x) for x in r_values if x < 0]
+        if wins and losses:
+            p = len(wins) / len(r_values)
+            return calculate_expectancy(
+                p,
+                sum(wins) / len(wins),
+                sum(losses) / len(losses),
+            )
+
+    returns = list(analogs.get("returns", []) or [])
+    count = int(analogs.get("count", 0) or 0)
+    if count >= MIN_SAMPLES:
+        hit_rate = (
+            sum(1 for x in returns if (x > 0 if direction == "LONG" else x < 0))
+            / count
+            * 100.0
+        )
+        result = expectancy_from_hit_rate(hit_rate)
+        result["status"] = "EXPECTANCY_PROXY_FROM_ANALOG_HIT_RATE"
+        return result
+
+    return {"expectancy_r": None, "status": "INSUFFICIENT_EVIDENCE", "positive": False}
+
+
 def predict_today(states: Iterable[Any]) -> dict[str, Any] | None:
     """Return the best evidence-backed forecast for today."""
     forecasts = _forecast_map()
@@ -191,14 +234,17 @@ def predict_today(states: Iterable[Any]) -> dict[str, Any] | None:
             evidence_samples = analogs["count"]
             evidence_return = median(analogs["returns"])
             evidence_source = "context-matched historical analogs"
-            hit_rate = sum(1 for x in analogs["returns"] if x > 0) / evidence_samples * 100
-            if direction == "SHORT":
-                hit_rate = 100.0 - hit_rate
+            hit_rate = sum(
+                1 for x in analogs["returns"]
+                if (x > 0 if direction == "LONG" else x < 0)
+            ) / evidence_samples * 100
+            expectancy = _analog_expectancy(analogs, direction)
         elif validation["samples"] >= MIN_SAMPLES:
             evidence_samples = validation["samples"]
             evidence_return = None
             evidence_source = "historical horizon validation"
             hit_rate = validation["median_hit_rate"]
+            expectancy = expectancy_from_hit_rate(hit_rate)
         else:
             continue
 
@@ -218,6 +264,16 @@ def predict_today(states: Iterable[Any]) -> dict[str, Any] | None:
             "historical_hit_rate": round(float(hit_rate), 1) if hit_rate is not None else None,
             "median_forward_return_10d": round(float(evidence_return), 3) if evidence_return is not None else None,
             "evidence_source": evidence_source,
+            "expectancy_r": expectancy.get("expectancy_r"),
+            "breakeven_win_rate": expectancy.get("breakeven_win_rate"),
+            "edge_vs_breakeven": expectancy.get("edge_vs_breakeven"),
+            "profit_factor": expectancy.get("profit_factor"),
+            "expectancy_status": expectancy.get("status"),
+            "opportunity_status": (
+                "OPPORTUNITY" if expectancy.get("positive") and evidence_samples >= 30
+                else "OPPORTUNITY_IN_FORMATION" if expectancy.get("positive")
+                else "NO_POSITIVE_EDGE"
+            ),
             "alignment_points": alignment,
             "price": getattr(state, "price", None),
             "entry": getattr(state, "entry", None),
@@ -230,7 +286,15 @@ def predict_today(states: Iterable[Any]) -> dict[str, Any] | None:
     if not candidates:
         return None
 
-    candidates.sort(key=lambda x: (x["evidence_index"], x["historical_samples"]), reverse=True)
+    candidates.sort(
+        key=lambda x: (
+            x["opportunity_status"] == "OPPORTUNITY",
+            x.get("expectancy_r") if x.get("expectancy_r") is not None else -999.0,
+            x["evidence_index"],
+            x["historical_samples"],
+        ),
+        reverse=True,
+    )
     winner = candidates[0]
     winner["alternatives"] = candidates[1:3]
     winner["paper_only"] = True
