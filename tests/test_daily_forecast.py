@@ -96,3 +96,27 @@ def test_daily_forecast_does_not_call_hit_rate_a_probability(monkeypatch):
     result = module.predict_today([_state("Test")])
     assert "probability" not in result
     assert "evidence_index" in result
+
+
+def test_daily_forecast_does_not_wait_for_intraday_entry_confirmation(monkeypatch):
+    import engine.daily_forecast as module
+
+    monkeypatch.setattr(
+        module,
+        "_forecast_map",
+        lambda: {"Test": {"horizons": {
+            "30": {"direction": "LONG", "historical_samples": 100, "historical_hit_rate": 70.0, "confidence": 50.0},
+            "90": {"direction": "LONG", "historical_samples": 80, "historical_hit_rate": 65.0, "confidence": 40.0},
+            "180": {"direction": "LONG", "historical_samples": 40, "historical_hit_rate": 75.0, "confidence": 60.0},
+        }}},
+    )
+    monkeypatch.setattr(module, "_load", lambda path, default: default)
+
+    state = _state("Test", direction="SHORT")
+    state.setup_direction = "NONE"
+    state.trigger_confirmed = False
+    result = module.predict_today([state])
+
+    assert result is not None
+    assert result["direction"] == "LONG"
+    assert result["paper_only"] is True
