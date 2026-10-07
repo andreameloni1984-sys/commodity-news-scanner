@@ -247,6 +247,7 @@ def predict_today(states: Iterable[Any]) -> dict[str, Any] | None:
             evidence_source = "historical horizon validation"
             hit_rate = validation["median_hit_rate"]
             expectancy = expectancy_from_hit_rate(hit_rate)
+            expectancy["status"] = "EXPECTANCY_PROXY_FROM_HISTORICAL_HIT_RATE"
         else:
             continue
 
@@ -271,6 +272,10 @@ def predict_today(states: Iterable[Any]) -> dict[str, Any] | None:
             "edge_vs_breakeven": expectancy.get("edge_vs_breakeven"),
             "profit_factor": expectancy.get("profit_factor"),
             "expectancy_status": expectancy.get("status"),
+            "expectancy_type": (
+                "OBSERVED_R_MULTIPLES" if expectancy.get("status") in {"POSITIVE_EXPECTANCY", "NEGATIVE_EXPECTANCY", "ZERO_EXPECTANCY"}
+                else "HISTORICAL_HIT_RATE_PROXY"
+            ),
             "opportunity_status": (
                 "OPPORTUNITY" if expectancy.get("positive") and evidence_samples >= 30
                 else "OPPORTUNITY_IN_FORMATION" if expectancy.get("positive")
