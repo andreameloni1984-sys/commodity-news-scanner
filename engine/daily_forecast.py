@@ -166,7 +166,7 @@ def _explicit_analogs(name: str, direction: str) -> dict:
     return {"count": len(matched), "returns": matched}
 
 
-def _analog_expectancy(analogs: dict, direction: str) -> dict[str, Any]:
+def _analog_expectancy(name: str, analogs: dict, direction: str) -> dict[str, Any]:
     """Use real R-multiples when supplied; otherwise use a hit-rate proxy."""
     raw = _load(ANALOG_FILE, {})
     rows = raw.get("observations", []) if isinstance(raw, dict) else []
@@ -174,6 +174,8 @@ def _analog_expectancy(analogs: dict, direction: str) -> dict[str, Any]:
     if isinstance(rows, list):
         for row in rows:
             if not isinstance(row, dict):
+                continue
+            if str(row.get("commodity", "")).strip().lower() != name.lower():
                 continue
             if _direction(row.get("direction")) != direction:
                 continue
@@ -238,7 +240,7 @@ def predict_today(states: Iterable[Any]) -> dict[str, Any] | None:
                 1 for x in analogs["returns"]
                 if (x > 0 if direction == "LONG" else x < 0)
             ) / evidence_samples * 100
-            expectancy = _analog_expectancy(analogs, direction)
+            expectancy = _analog_expectancy(name, analogs, direction)
         elif validation["samples"] >= MIN_SAMPLES:
             evidence_samples = validation["samples"]
             evidence_return = None
