@@ -41,6 +41,8 @@ from commodities.universe import (
     get_commodity_by_symbol,
 )
 from soyuz_gagarin.adapter import evaluate_states
+from engine.selector import select_anticipation
+from engine.daily_forecast import predict_today
 from telegram.signals import (
     format_signal_board,
     format_top,
@@ -735,7 +737,7 @@ def _format_morning_pick(results):
         return "🥇 GAGARIN — COSA COMPRO?\n━━━━━━━━━━━━━━━━━━━━\n🟡 NESSUNA OPPORTUNITÀ AUTORIZZATA\nPAPER ONLY"
 
     state = candidates[0]
-    return "\\n".join([
+    return "\n".join([
         "🥇 GAGARIN — COSA COMPRO?",
         "━━━━━━━━━━━━━━━━━━━━",
         "🧪 PAPER ONLY",
@@ -756,25 +758,43 @@ def _format_morning_pick(results):
 # ============================================================
 
 def _format_buy(results):
+    """Outcome-first daily forecast. Keeps engine rationale out of Telegram."""
     if not results:
-        return "💰 COSA COMPRARE\n━━━━━━━━━━━━━━━━━━━━\nNessun dato disponibile."
-    entries = [s for s in results if s.final_decision == "ENTRY"]
-    lines = ["💰 COSA COMPRARE", "━━━━━━━━━━━━━━━━━━━━", "🧪 PAPER ONLY", ""]
-    if not entries:
-        lines.append("🟡 NESSUNA ENTRATA AUTORIZZATA")
-        lines.append("")
-        lines.append("Gagarin preferisce WAIT quando il trigger non è sufficientemente confermato.")
-        return "\n".join(lines)
-    for state in entries[:3]:
-        lines.append(f"🟢 {state.commodity} — {state.setup_direction}")
-        lines.append(f"Entry: {state.entry:.6g}" if state.entry is not None else "Entry: N/D")
-        lines.append(f"SL: {state.stop:.6g}" if state.stop is not None else "SL: N/D")
-        lines.append(f"TP1: {state.tp1:.6g}" if state.tp1 is not None else "TP1: N/D")
-        lines.append(f"TP2: {state.tp2:.6g}" if state.tp2 is not None else "TP2: N/D")
-        lines.append(f"TP3: {state.tp3:.6g}" if state.tp3 is not None else "TP3: N/D")
-        lines.append("")
-    return "\n".join(lines)
+        return "🥇 GAGARIN — OGGI\\n━━━━━━━━━━━━━━━━━━━━\\nNessun dato disponibile."
 
+    forecasts = predict_today(results)
+    if not forecasts:
+        return (
+            "🥇 GAGARIN — OGGI\\n"
+            "━━━━━━━━━━━━━━━━━━━━\\n"
+            "🧪 PAPER ONLY\\n\\n"
+            "NESSUNA PREVISIONE STORICAMENTE SUPPORTATA"
+        )
+
+    pick = forecasts[0]
+    lines = [
+        "🥇 GAGARIN — OGGI",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "🧪 PAPER ONLY",
+        "",
+        f"🎯 {pick['commodity']} — {pick['direction']}",
+        f"PREVISIONE: {pick['forecast']}",
+        f"Osservazioni storiche: {pick['historical_samples']}",
+        f"Hit rate storico: {pick['historical_hit_rate']:.1f}%",
+        f"Fonte: {pick['evidence_source']}",
+    ]
+    if pick.get("median_forward_return_10d") is not None:
+        lines.append(f"Rendimento mediano 10g: {pick['median_forward_return_10d']:+.2f}%")
+    lines.extend([
+        "",
+        f"ENTRY: {pick['entry']:.6g}" if pick.get("entry") is not None else "ENTRY: N/D",
+        f"SL: {pick['stop']:.6g}" if pick.get("stop") is not None else "SL: N/D",
+        f"TP1: {pick['tp1']:.6g}" if pick.get("tp1") is not None else "TP1: N/D",
+        f"TP2: {pick['tp2']:.6g}" if pick.get("tp2") is not None else "TP2: N/D",
+        "",
+        "Stima storica, non certezza. PAPER ONLY.",
+    ])
+    return "\\n".join(lines)
 
 def _format_why(results):
     if not results:
@@ -823,6 +843,9 @@ def _command_response(
         "❓ perche": "/perche",
     }
     raw = button_commands.get(raw.lower(), raw)
+    natural = " ".join(raw.lower().replace("?", "").split())
+    if natural in {"cosa compro", "cosa comprare", "cosa compriamo", "quale commodity compro", "quale compro"}:
+        raw = "/comprare"
     parts = raw.split()
 
     if not parts:
@@ -870,7 +893,7 @@ def _command_response(
         except Exception as exc:
             return f"❌ MORNING PICK ERROR\n{type(exc).__name__}: {exc}"
 
-    if command_name in {"/comprare", "/compra"}:
+    if command_name in {"/comprare", "/compra", "/cosa", "/cosacomprare"}:
         try:
             results = get_last_results() or _run_analysis()
             return _format_buy(results)

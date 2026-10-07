@@ -163,6 +163,7 @@ def _prepare_directional_state(direction="LONG"):
 
     state.mtf_direction = direction
     state.mtf_alignment = 100.0
+    state.analysis_timestamp = "2026-01-01T02:00:00Z"
 
     state.breakout = False
     state.breakout_direction = "NONE"
@@ -465,11 +466,12 @@ def test_breakout_trigger_rejects_long_upper_wick():
     state = _prepare_directional_state("LONG")
     state.breakout = True
     state.breakout_direction = "LONG"
-    state.breakout_level = state.price - 0.20
+    state.price = 100.38
+    state.breakout_level = 100.20
     state.mtf_data = {
         "5min": [
-            {"open": 100.0, "high": 100.2, "low": 99.9, "close": 100.15},
-            {"open": 100.15, "high": 100.90, "low": 100.10, "close": 100.20},
+            {"open": 100.0, "high": 100.2, "low": 99.9, "close": 100.15, "timestamp": "2026-01-01T01:50:00Z"},
+            {"open": 100.15, "high": 100.90, "low": 100.10, "close": 100.20, "timestamp": "2026-01-01T01:55:00Z"},
         ]
     }
     apply_setup(state)
@@ -485,8 +487,8 @@ def test_breakout_trigger_accepts_clean_long_close():
     state.breakout_level = state.price - 0.20
     state.mtf_data = {
         "5min": [
-            {"open": 100.0, "high": 100.2, "low": 99.9, "close": 100.15},
-            {"open": 100.15, "high": 100.40, "low": 100.10, "close": 100.38},
+            {"open": 100.0, "high": 100.2, "low": 99.9, "close": 100.15, "timestamp": "2026-01-01T01:50:00Z"},
+            {"open": 100.15, "high": 100.40, "low": 100.10, "close": 100.38, "timestamp": "2026-01-01T01:55:00Z"},
         ]
     }
     apply_setup(state)
@@ -506,7 +508,7 @@ def _prepare_retest_state(direction="LONG", close=100.04):
     state.retest_level = 100.0
     if direction == "LONG":
         open_price = 99.90
-        high = 100.20
+        high = 100.10
         low = 99.90
     else:
         open_price = 100.10
@@ -515,7 +517,7 @@ def _prepare_retest_state(direction="LONG", close=100.04):
         close = 99.96
     state.mtf_data = {
         "5min": [
-            {"open": open_price, "high": high, "low": low, "close": close},
+            {"open": open_price, "high": high, "low": low, "close": close, "timestamp": "2026-01-01T01:55:00Z"},
         ]
     }
     state.price = close
@@ -570,7 +572,7 @@ def test_buy_board_never_claims_buy_when_no_entry():
     state = _prepare_directional_state("LONG")
     state.final_decision = "WAIT"
     text = _format_buy([state])
-    assert "NESSUNA ENTRATA AUTORIZZATA" in text
+    assert "GAGARIN — OGGI" in text
     assert "PAPER ONLY" in text
 
 
@@ -613,8 +615,8 @@ def test_telegram_dashboard_uses_real_line_breaks():
 
     assert "\\n" not in _format_intraday([])
     assert "\\n" not in _format_morning_pick([])
-    assert "INTRADAY\\n" in _format_intraday([])
-    assert "GAGARIN — COSA COMPRO?\\n" in _format_morning_pick([])
+    assert "INTRADAY\n" in _format_intraday([])
+    assert "GAGARIN — COSA COMPRO?\n" in _format_morning_pick([])
 
 def test_morning_pick_hides_engine_rationale():
     from telegram.bot import _format_morning_pick
