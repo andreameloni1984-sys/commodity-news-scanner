@@ -373,12 +373,24 @@ def select_anticipation(states: Iterable[Any]) -> list[dict[str, Any]]:
         if not getattr(state, "live", False):
             blockers.append("dato non LIVE")
 
+        if trigger_confirmed:
+            next_confirmation = "Trigger confermato: verificare solo risk/safety."
+        elif bool(getattr(state, "breakout", False)) and _norm(getattr(state, "breakout_direction", "")) == direction:
+            next_confirmation = "Aspettare chiusura M5 + conferma breakout."
+        elif bool(getattr(state, "retest", False)) and _norm(getattr(state, "retest_direction", "")) == direction:
+            next_confirmation = "Aspettare conferma del retest su M5."
+        elif _norm(getattr(state, "setup_direction", "")) == direction:
+            next_confirmation = "Aspettare trigger M5 nella stessa direzione."
+        else:
+            next_confirmation = "Aspettare struttura + MTF coerenti prima dell'ingresso."
+
         selections.append({
             "commodity": name,
             "symbol": str(getattr(state, "symbol", "")),
             "direction": direction,
             "score": round(total, 1),
             "stage": stage,
+            "next_confirmation": next_confirmation,
             "decision": final_decision,
             "price": getattr(state, "price", None),
             "entry": getattr(state, "entry", None),
