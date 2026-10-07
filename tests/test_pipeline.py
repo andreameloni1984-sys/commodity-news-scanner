@@ -528,6 +528,7 @@ def _prepare_retest_state(direction="LONG", close=100.04):
 
 def test_retest_trigger_requires_current_level_interaction():
     state = _prepare_retest_state("LONG", close=101.0)
+    state.mtf_alignment = 50.0
     apply_setup(state)
     apply_trigger(state)
     assert state.trigger == "NOT_CONFIRMED"
