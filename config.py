@@ -35,6 +35,17 @@ TELEGRAM_CHAT_ID = os.getenv(
 
 
 # ------------------------------------------------------------
+# EXECUTION LAYER
+# ------------------------------------------------------------
+# Default: completely disabled. When enabled, only canonical Gagarin
+# PAPER_SIGNAL decisions may reach the configured adapter.
+EXECUTION_ENABLED = os.getenv("EXECUTION_ENABLED", "0") == "1"
+EXECUTION_BROKER = os.getenv("EXECUTION_BROKER", "paper").strip().lower()
+EXECUTION_DEFAULT_QUANTITY = float(os.getenv("EXECUTION_DEFAULT_QUANTITY", "1"))
+IBKR_GATEWAY_URL = os.getenv("IBKR_GATEWAY_URL", "https://localhost:5000/v1/api").strip()
+IBKR_VERIFY_TLS = os.getenv("IBKR_VERIFY_TLS", "0") == "1"
+
+# ------------------------------------------------------------
 # MARKET DATA
 # ------------------------------------------------------------
 
