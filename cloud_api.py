@@ -10,9 +10,11 @@ from fastapi.responses import HTMLResponse\nfrom fastapi.staticfiles import Stat
 from commodities.universe import enabled_commodities, validate_universe
 from engine.gagarin import analyze_universe
 from soyuz_gagarin.adapter import evaluate_states
+from paper_portfolio import PaperPortfolio
 
 app = FastAPI(title="SOYUZ GAGARIN CLOUD", version="1.0")\napp.mount("/static", StaticFiles(directory="static"), name="static")
 RUN_LOCK = Lock()
+PORTFOLIO = PaperPortfolio(100.0)
 
 
 def _authorize(x_api_key: str | None) -> None:
@@ -69,18 +71,28 @@ def _run_gagarin():
     operational = [r for r in rows if r["action"] == "PAPER_SIGNAL"]
     rows.sort(key=lambda x: (x["action"] != "PAPER_SIGNAL", -(x["probability"] or 0)))
 
+    for signal in operational:
+        PORTFOLIO.open_signal(signal, allocation_pct=0.25)
+
     return {
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "mode": "PAPER ONLY",
         "universe": len(rows),
         "signals": operational,
         "ranking": rows,
+        "portfolio": PORTFOLIO.snapshot(),
     }
 
 
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "gagarin-cloud", "mode": "PAPER ONLY"}
+
+
+@app.get("/api/portfolio")
+def portfolio(x_api_key: str | None = Header(default=None)):
+    _authorize(x_api_key)
+    return {"mode": "PAPER ONLY", "portfolio": PORTFOLIO.snapshot()}
 
 
 @app.get("/api/status")
@@ -140,7 +152,7 @@ small{color:#7f8a97}
 <button onclick="run()">ANALIZZA ORA</button>
 <div id="status" class="muted" style="margin-top:12px">Pronto.</div>
 </div>
-<div id="content"></div>
+<div id="portfolio" class="card"><div class="big">💶 PORTAFOGLIO PAPER</div><div class="row"><span>Capitale iniziale</span><b>€100,00</b></div><div class="row"><span>Disponibile</span><b id="cash">—</b></div><div class="row"><span>P/L realizzato</span><b id="pnl">—</b></div><div class="row"><span>Equity</span><b id="equity">—</b></div><div id="positions" class="muted">Nessuna posizione aperta.</div></div><div id="content"></div>
 <script>
 const keyEl=document.getElementById('key');
 keyEl.value=localStorage.getItem('gagarin_key')||'';
@@ -154,6 +166,8 @@ async function run(){
   const r=await fetch('/api/run',{method:'POST',headers:{'X-API-Key':key}});
   const d=await r.json(); if(!r.ok) throw new Error(d.detail||'Errore');
   s.innerHTML='<span class="green">● ONLINE</span> · '+esc(d.timestamp_utc);
+  const p=d.portfolio||{}; document.getElementById('cash').textContent='€'+Number(p.cash||0).toFixed(2); document.getElementById('pnl').textContent='€'+Number(p.realized_pnl||0).toFixed(2); document.getElementById('equity').textContent='€'+Number(p.equity||0).toFixed(2);
+  document.getElementById('positions').innerHTML=(p.open_positions||[]).length ? p.open_positions.map(x=>'<div class="card signal"><b>🟢 '+esc(x.commodity)+' '+esc(x.direction)+'</b><div class="row"><span>Entry</span><b>'+money(x.entry)+'</b></div><div class="row"><span>Allocazione</span><b>€'+Number(x.allocation).toFixed(2)+'</b></div><div class="row"><span>SL / TP3</span><b>'+money(x.stop)+' / '+money(x.tp3)+'</b></div></div>').join('') : 'Nessuna posizione aperta.';
   let html='';
   if(!d.signals.length) html+='<div class="card"><div class="big">🟡 NESSUNA ENTRATA</div><div class="muted">Il governor Gagarin non ha autorizzato segnali.</div></div>';
   for(const x of d.signals){
