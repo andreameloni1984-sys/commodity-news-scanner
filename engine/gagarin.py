@@ -9,6 +9,7 @@ from engine.setup import apply_setup
 from engine.trigger import apply_trigger
 from engine.risk import apply_risk
 from engine.safety import apply_safety
+from engine.predictive import evaluate_pre_move
 
 
 # ============================================================
@@ -185,7 +186,7 @@ def analyze_one(commodity: Commodity) -> SoyuzState:
         commodity,
     )
 
-    # Discovery layer: surface strong market moves before entry safety.
+    # Predictive layer: estimate pre-move conditions before the market move is obvious.\n    state = evaluate_pre_move(state)\n\n    # Discovery layer: surface strong market moves before entry safety.
     state = scan_market_opportunity(state)
 
     # 2. REGIME
