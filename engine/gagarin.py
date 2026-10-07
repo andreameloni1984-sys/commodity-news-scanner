@@ -186,7 +186,10 @@ def analyze_one(commodity: Commodity) -> SoyuzState:
         commodity,
     )
 
-    # Predictive layer: estimate pre-move conditions before the market move is obvious.\n    state = evaluate_pre_move(state)\n\n    # Discovery layer: surface strong market moves before entry safety.
+    # Predictive layer: estimate pre-move conditions before the market move is obvious.
+    state = evaluate_pre_move(state)
+
+    # Discovery layer: surface strong market moves before entry safety.
     state = scan_market_opportunity(state)
 
     # 2. REGIME
