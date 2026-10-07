@@ -268,6 +268,10 @@ class SoyuzState:
     opportunity_score: float = 0.0
     opportunity_alert: str = "NONE"
     opportunity_direction: str = "NONE"
+    pre_move_score: float = 0.0
+    pre_move_direction: str = "NONE"
+    pre_move_alert: str = "NONE"
+    pre_move_components: dict = field(default_factory=dict)
 
     # ========================================================
     # SAFETY
