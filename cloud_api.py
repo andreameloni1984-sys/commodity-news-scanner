@@ -45,6 +45,12 @@ def _state_json(state):
         "rr3": getattr(state, "rr3", None),
         "data_source": getattr(state, "data_source", None),
         "data_status": meta.get("data_status", "UNKNOWN"),
+        "opportunity_alert": getattr(state, "opportunity_alert", "NONE"),
+        "opportunity_direction": getattr(state, "opportunity_direction", "NONE"),
+        "opportunity_score": getattr(state, "opportunity_score", 0.0),
+        "move_4h_pct": getattr(state, "move_4h_pct", None),
+        "move_24h_pct": getattr(state, "move_24h_pct", None),
+        "move_atr": getattr(state, "move_atr", None),
     }
 
 
@@ -70,7 +76,8 @@ def _run_gagarin():
 
     rows = [_state_json(s) for s in results]
     operational = [r for r in rows if r["action"] == "PAPER_SIGNAL"]
-    rows.sort(key=lambda x: (x["action"] != "PAPER_SIGNAL", -(x["probability"] or 0)))
+    # Operational signals first, then strong market opportunities, then normal WAITs.
+    rows.sort(key=lambda x: (x["action"] != "PAPER_SIGNAL", x.get("opportunity_alert") not in {"STRONG_MOVE", "OPPORTUNITY"}, -(x.get("opportunity_score") or 0), -(x["probability"] or 0)))
 
     prices = {r["symbol"]: r["price"] for r in rows if r.get("symbol") and r.get("price") is not None}
     closed = PORTFOLIO.evaluate_exits(prices)
@@ -167,7 +174,7 @@ button,input{width:100%;box-sizing:border-box;border-radius:14px;border:1px soli
 button{background:#1f7aff;border:0;font-weight:700;margin-top:10px}
 .card{background:#111821;border:1px solid #202a35;border-radius:18px;padding:16px;margin:12px 0}
 .status{display:flex;justify-content:space-between}.green{color:#39d98a}
-.signal{border-left:4px solid #39d98a}.wait{border-left:4px solid #6f7b88}
+.signal{border-left:4px solid #39d98a}.opportunity{border-left:4px solid #f5b942}.wait{border-left:4px solid #6f7b88}
 .row{display:flex;justify-content:space-between;gap:10px;margin:6px 0}.muted{color:#9aa5b1}.big{font-size:20px;font-weight:700}
 small{color:#7f8a97}
 </style>
@@ -206,7 +213,7 @@ async function run(){
    '<div class="row"><span>TP1 / TP2 / TP3</span><b>'+money(x.tp1)+' / '+money(x.tp2)+' / '+money(x.tp3)+'</b></div></div>';
   }
   html+='<div class="card"><div class="big">📊 CLASSIFICA</div>';
-  d.ranking.forEach((x,i)=>{html+='<div class="card '+(x.action==='PAPER_SIGNAL'?'signal':'wait')+'"><div class="row"><b>'+(i+1)+'. '+esc(x.commodity)+'</b><b>'+esc(x.action)+'</b></div><small>'+esc(x.direction)+' · Prob '+esc(x.probability)+' · Q '+esc(x.quality)+' · C '+esc(x.confidence)+'</small></div>';});
+  d.ranking.forEach((x,i)=>{const alert=x.opportunity_alert||"NONE"; const cls=x.action==='PAPER_SIGNAL'?'signal':(alert==='STRONG_MOVE'||alert==='OPPORTUNITY'?'opportunity':'wait'); html+='<div class="card '+cls+'"><div class="row"><b>'+(i+1)+'. '+esc(x.commodity)+'</b><b>'+(x.action==='PAPER_SIGNAL'?'PAPER_SIGNAL':esc(alert))+'</b></div><small>'+esc(x.direction||x.opportunity_direction)+' · 24h '+esc(x.move_24h_pct)+'% · 4h '+esc(x.move_4h_pct)+'% · Score '+esc(x.opportunity_score)+'</small><div class="muted" style="margin-top:6px">Prob '+esc(x.probability)+' · Q '+esc(x.quality)+' · C '+esc(x.confidence)+'</div></div>';});
   html+='</div>'; document.getElementById('content').innerHTML=html;
  }catch(e){s.textContent='Errore: '+e.message;}
 }
