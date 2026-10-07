@@ -41,6 +41,7 @@ from commodities.universe import (
     get_commodity_by_symbol,
 )
 from soyuz_gagarin.adapter import evaluate_states
+from engine.selector import select_anticipation
 from telegram.signals import (
     format_signal_board,
     format_top,
@@ -756,23 +757,48 @@ def _format_morning_pick(results):
 # ============================================================
 
 def _format_buy(results):
+    """Anticipation selector: choose the best commodity even when it is WAIT."""
     if not results:
-        return "💰 COSA COMPRARE\n━━━━━━━━━━━━━━━━━━━━\nNessun dato disponibile."
-    entries = [s for s in results if s.final_decision == "ENTRY"]
-    lines = ["💰 COSA COMPRARE", "━━━━━━━━━━━━━━━━━━━━", "🧪 PAPER ONLY", ""]
-    if not entries:
-        lines.append("🟡 NESSUNA ENTRATA AUTORIZZATA")
+        return "🥇 GAGARIN — COSA COMPRO?\\n━━━━━━━━━━━━━━━━━━━━\\nNessun dato disponibile."
+
+    picks = select_anticipation(results)
+    if not picks:
+        return "🥇 GAGARIN — COSA COMPRO?\\n━━━━━━━━━━━━━━━━━━━━\\nNessuna commodity selezionabile."
+
+    lines = [
+        "🥇 GAGARIN — COSA COMPRO?",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "🧪 PAPER ONLY",
+        "",
+        "🎯 SELEZIONE ANTICIPATORIA",
+        "Il selettore può scegliere anche con WAIT.",
+        "",
+    ]
+
+    for index, pick in enumerate(picks[:3], 1):
+        direction = pick["direction"]
+        arrow = "🟢" if direction == "LONG" else "🔴" if direction == "SHORT" else "⚪"
+        lines.append(f"{arrow} {index}. {pick['commodity']} — {direction}")
+        lines.append(f"   Score anticipo: {pick['score']}/100 | {pick['stage']}")
+        if pick.get("price") is not None:
+            lines.append(f"   Prezzo: {pick['price']:.6g}")
+        if pick.get("entry") is not None:
+            lines.append(f"   Entry: {pick['entry']:.6g}")
+        if pick.get("stop") is not None:
+            lines.append(f"   SL: {pick['stop']:.6g}")
+        if pick.get("tp1") is not None:
+            lines.append(f"   TP1: {pick['tp1']:.6g}")
+        if pick.get("tp2") is not None:
+            lines.append(f"   TP2: {pick['tp2']:.6g}")
+        if pick.get("trigger"):
+            lines.append(f"   Trigger: {pick['trigger']}")
+        if pick.get("reasons"):
+            lines.append("   Perché: " + " • ".join(pick["reasons"][:4]))
+        if pick.get("blockers"):
+            lines.append("   ⚠️ " + " • ".join(pick["blockers"][:2]))
         lines.append("")
-        lines.append("Gagarin preferisce WAIT quando il trigger non è sufficientemente confermato.")
-        return "\n".join(lines)
-    for state in entries[:3]:
-        lines.append(f"🟢 {state.commodity} — {state.setup_direction}")
-        lines.append(f"Entry: {state.entry:.6g}" if state.entry is not None else "Entry: N/D")
-        lines.append(f"SL: {state.stop:.6g}" if state.stop is not None else "SL: N/D")
-        lines.append(f"TP1: {state.tp1:.6g}" if state.tp1 is not None else "TP1: N/D")
-        lines.append(f"TP2: {state.tp2:.6g}" if state.tp2 is not None else "TP2: N/D")
-        lines.append(f"TP3: {state.tp3:.6g}" if state.tp3 is not None else "TP3: N/D")
-        lines.append("")
+
+    lines.append("🔔 La selezione NON autorizza l'ingresso: aspetta il trigger Gagarin.")
     return "\n".join(lines)
 
 
@@ -823,6 +849,9 @@ def _command_response(
         "❓ perche": "/perche",
     }
     raw = button_commands.get(raw.lower(), raw)
+    natural = " ".join(raw.lower().replace("?", "").split())
+    if natural in {"cosa compro", "cosa comprare", "cosa compriamo", "quale commodity compro", "quale compro"}:
+        raw = "/comprare"
     parts = raw.split()
 
     if not parts:
@@ -870,7 +899,7 @@ def _command_response(
         except Exception as exc:
             return f"❌ MORNING PICK ERROR\n{type(exc).__name__}: {exc}"
 
-    if command_name in {"/comprare", "/compra"}:
+    if command_name in {"/comprare", "/compra", "/cosa", "/cosacomprare"}:
         try:
             results = get_last_results() or _run_analysis()
             return _format_buy(results)
