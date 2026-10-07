@@ -397,7 +397,6 @@ def _format_classifica(results):
             f"🟢 {len(entries)} "
             f"ENTRATA/E AUTORIZZATA/E"
         )
-
     return "\n".join(lines)
 
 
@@ -699,7 +698,7 @@ def _format_single_analysis(
 
 def _format_intraday(results):
     if not results:
-        return "⚡ INTRADAY\\n━━━━━━━━━━━━━━━━━━━━\\nNessun dato disponibile."
+        return "⚡ INTRADAY\n━━━━━━━━━━━━━━━━━━━━\nNessun dato disponibile."
 
     lines = [
         "⚡ SOYUZ GAGARIN — INTRADAY",
@@ -716,13 +715,13 @@ def _format_intraday(results):
         lines.append(f"   {setup} → {trigger} | {decision}")
     lines.append("")
     lines.append("Regola: nessun ingresso senza confluence + trigger + rischio validato.")
-    return "\\n".join(lines)
+    return "\n".join(lines)
 
 
 def _format_morning_pick(results):
     """Return only the single governor-approved Gagarin choice and trade levels."""
     if not results:
-        return "🥇 GAGARIN — COSA COMPRO?\\n━━━━━━━━━━━━━━━━━━━━\\nNessun dato disponibile."
+        return "🥇 GAGARIN — COSA COMPRO?\n━━━━━━━━━━━━━━━━━━━━\nNessun dato disponibile."
 
     decisions = evaluate_states(results)
     approved = {d.symbol for d in decisions if d.action == "PAPER_SIGNAL"}
@@ -733,7 +732,7 @@ def _format_morning_pick(results):
     ]
 
     if not candidates:
-        return "🥇 GAGARIN — COSA COMPRO?\\n━━━━━━━━━━━━━━━━━━━━\\n🟡 NESSUNA OPPORTUNITÀ AUTORIZZATA\\nPAPER ONLY"
+        return "🥇 GAGARIN — COSA COMPRO?\n━━━━━━━━━━━━━━━━━━━━\n🟡 NESSUNA OPPORTUNITÀ AUTORIZZATA\nPAPER ONLY"
 
     state = candidates[0]
     return "\\n".join([
@@ -758,14 +757,14 @@ def _format_morning_pick(results):
 
 def _format_buy(results):
     if not results:
-        return "💰 COSA COMPRARE\\n━━━━━━━━━━━━━━━━━━━━\\nNessun dato disponibile."
+        return "💰 COSA COMPRARE\n━━━━━━━━━━━━━━━━━━━━\nNessun dato disponibile."
     entries = [s for s in results if s.final_decision == "ENTRY"]
     lines = ["💰 COSA COMPRARE", "━━━━━━━━━━━━━━━━━━━━", "🧪 PAPER ONLY", ""]
     if not entries:
         lines.append("🟡 NESSUNA ENTRATA AUTORIZZATA")
         lines.append("")
         lines.append("Gagarin preferisce WAIT quando il trigger non è sufficientemente confermato.")
-        return "\\n".join(lines)
+        return "\n".join(lines)
     for state in entries[:3]:
         lines.append(f"🟢 {state.commodity} — {state.setup_direction}")
         lines.append(f"Entry: {state.entry:.6g}" if state.entry is not None else "Entry: N/D")
@@ -774,12 +773,12 @@ def _format_buy(results):
         lines.append(f"TP2: {state.tp2:.6g}" if state.tp2 is not None else "TP2: N/D")
         lines.append(f"TP3: {state.tp3:.6g}" if state.tp3 is not None else "TP3: N/D")
         lines.append("")
-    return "\\n".join(lines)
+    return "\n".join(lines)
 
 
 def _format_why(results):
     if not results:
-        return "❓ PERCHÉ\\n━━━━━━━━━━━━━━━━━━━━\\nNessun dato disponibile."
+        return "❓ PERCHÉ\n━━━━━━━━━━━━━━━━━━━━\nNessun dato disponibile."
     ranked = results[:5]
     lines = ["❓ PERCHÉ", "━━━━━━━━━━━━━━━━━━━━", ""]
     for state in ranked:
@@ -788,7 +787,7 @@ def _format_why(results):
         lines.append(f"  Regime: {state.regime} | Structure: {state.structure}")
         lines.append(f"  Setup: {state.setup} | Trigger: {state.trigger}")
         lines.append(f"  Q {state.quality:.0f} | C {state.confidence:.0f} | Decision: {state.final_decision}")
-    return "\\n".join(lines)
+    return "\n".join(lines)
 
 
 # ============================================================
@@ -798,7 +797,6 @@ def _format_why(results):
 def _command_response(
     command: str,
 ) -> Optional[str]:
-
     raw = command.strip()
     button_commands = {
         "📰 news": "/news",
@@ -863,28 +861,28 @@ def _command_response(
             results = get_last_results() or _run_analysis()
             return _format_intraday(results)
         except Exception as exc:
-            return f"❌ INTRADAY ERROR\\n{type(exc).__name__}: {exc}"
+            return f"❌ INTRADAY ERROR\n{type(exc).__name__}: {exc}"
 
     if command_name in {"/qualeccompro", "/quale", "/compro"}:
         try:
             results = _run_analysis()
             return _format_morning_pick(results)
         except Exception as exc:
-            return f"❌ MORNING PICK ERROR\\n{type(exc).__name__}: {exc}"
+            return f"❌ MORNING PICK ERROR\n{type(exc).__name__}: {exc}"
 
     if command_name in {"/comprare", "/compra"}:
         try:
             results = get_last_results() or _run_analysis()
             return _format_buy(results)
         except Exception as exc:
-            return f"❌ BUY BOARD ERROR\\n{type(exc).__name__}: {exc}"
+            return f"❌ BUY BOARD ERROR\n{type(exc).__name__}: {exc}"
 
     if command_name in {"/perche", "/perché"}:
         try:
             results = get_last_results() or _run_analysis()
             return _format_why(results)
         except Exception as exc:
-            return f"❌ WHY BOARD ERROR\\n{type(exc).__name__}: {exc}"
+            return f"❌ WHY BOARD ERROR\n{type(exc).__name__}: {exc}"
 
 # --------------------------------------------------------
     # SIGNAL CHANNEL
@@ -899,14 +897,14 @@ def _command_response(
             results = get_last_results() or _run_analysis()
             return format_signal_board(results)
         except Exception as exc:
-            return f"❌ SIGNAL ENGINE ERROR\\n{type(exc).__name__}: {exc}"
+            return f"❌ SIGNAL ENGINE ERROR\n{type(exc).__name__}: {exc}"
 
     if command_name in {"/top", "🔥"}:
         try:
             results = get_last_results() or _run_analysis()
             return format_top(results)
         except Exception as exc:
-            return f"❌ TOP ENGINE ERROR\\n{type(exc).__name__}: {exc}"
+            return f"❌ TOP ENGINE ERROR\n{type(exc).__name__}: {exc}"
 
     if command_name in {"/guida", "📖"}:
         return format_channel_guide()
@@ -1197,7 +1195,6 @@ def poll_once(
         update_id = update.get(
             "update_id"
         )
-
         if isinstance(
             update_id,
             int,
