@@ -46,6 +46,8 @@ def test_daily_forecast_uses_recorded_historical_validation(monkeypatch):
     assert result["direction"] == "LONG"
     assert result["historical_samples"] == 90
     assert result["historical_hit_rate"] == 70.0
+    assert result["expectancy_r"] == 0.4
+    assert result["opportunity_status"] == "OPPORTUNITY"
     assert result["paper_only"] is True
 
 
