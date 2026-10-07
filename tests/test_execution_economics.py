@@ -33,8 +33,8 @@ def test_rr_and_breakeven_are_price_based():
 
 
 def test_expectancy_net_accounts_for_explicit_cost():
-    assert expectancy_net_r(0.60, 2, 1, 0.0) == 0.2
-    assert expectancy_net_r(0.60, 2, 1, 0.1) == 0.1
+    assert expectancy_net_r(0.60, 2, 1, 0.0) == 0.8
+    assert expectancy_net_r(0.60, 2, 1, 0.1) == 0.7
 
 
 def test_expectancy_and_risk_fail_closed():
