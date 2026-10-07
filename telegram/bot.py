@@ -762,8 +762,8 @@ def _format_buy(results):
     if not results:
         return "🥇 GAGARIN — OGGI\\n━━━━━━━━━━━━━━━━━━━━\\nNessun dato disponibile."
 
-    forecasts = predict_today(results)
-    if not forecasts:
+    forecast = predict_today(results)
+    if not forecast:
         return (
             "🥇 GAGARIN — OGGI\\n"
             "━━━━━━━━━━━━━━━━━━━━\\n"
@@ -771,7 +771,7 @@ def _format_buy(results):
             "NESSUNA PREVISIONE STORICAMENTE SUPPORTATA"
         )
 
-    pick = forecasts[0]
+    pick = forecast
     lines = [
         "🥇 GAGARIN — OGGI",
         "━━━━━━━━━━━━━━━━━━━━",
