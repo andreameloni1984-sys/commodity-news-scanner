@@ -763,6 +763,9 @@ def _format_buy(results):
         return "🥇 GAGARIN — OGGI\n━━━━━━━━━━━━━━━━━━━━\nNessun dato disponibile."
 
     forecast = predict_today(results)
+    # Backward-compatible test/adapter support: older selectors returned a list.
+    if isinstance(forecast, list):
+        forecast = forecast[0] if forecast else None
     if not forecast:
         return (
             "🥇 GAGARIN — OGGI\n"
