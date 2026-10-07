@@ -1,3 +1,5 @@
+from math import isclose
+
 from .config import GagarinConfig
 from .models import Candidate
 
@@ -19,6 +21,53 @@ def _target_geometry_ok(candidate: Candidate) -> bool:
             and candidate.tp3 is not None and candidate.tp3 < candidate.tp2
         )
     return False
+
+
+def _stop_geometry_ok(candidate: Candidate) -> bool:
+    """Require the stop to be on the loss side of entry."""
+    if candidate.entry is None or candidate.stop is None:
+        return False
+    if candidate.side == "LONG":
+        return candidate.stop < candidate.entry
+    if candidate.side == "SHORT":
+        return candidate.stop > candidate.entry
+    return False
+
+
+def _rr_geometry_ok(candidate: Candidate) -> bool:
+    """Require declared R/R tiers to match the actual price geometry."""
+    if candidate.entry is None or candidate.stop is None:
+        return False
+
+    if candidate.side == "LONG":
+        risk = candidate.entry - candidate.stop
+        rewards = (
+            None if candidate.tp1 is None else candidate.tp1 - candidate.entry,
+            None if candidate.tp2 is None else candidate.tp2 - candidate.entry,
+            None if candidate.tp3 is None else candidate.tp3 - candidate.entry,
+        )
+    elif candidate.side == "SHORT":
+        risk = candidate.stop - candidate.entry
+        rewards = (
+            None if candidate.tp1 is None else candidate.entry - candidate.tp1,
+            None if candidate.tp2 is None else candidate.entry - candidate.tp2,
+            None if candidate.tp3 is None else candidate.entry - candidate.tp3,
+        )
+    else:
+        return False
+
+    if risk <= 0 or any(value is None for value in rewards):
+        return False
+
+    declared = (candidate.rr1, candidate.rr2, candidate.rr3)
+    if any(value is None for value in declared):
+        return False
+
+    calculated = tuple(reward / risk for reward in rewards)
+    return all(
+        isclose(actual, expected, rel_tol=1e-3, abs_tol=1e-6)
+        for actual, expected in zip(declared, calculated)
+    )
 
 
 def _rr_tiers_ok(candidate: Candidate) -> bool:
@@ -90,8 +139,14 @@ def approve(
     if candidate.tp1 is None or candidate.tp2 is None or candidate.tp3 is None:
         return False, "TARGETS_MISSING"
 
+    if not _stop_geometry_ok(candidate):
+        return False, "STOP_GEOMETRY_INVALID"
+
     if not _target_geometry_ok(candidate):
         return False, "TARGET_GEOMETRY_INVALID"
+
+    if not _rr_geometry_ok(candidate):
+        return False, "RR_GEOMETRY_MISMATCH"
 
     if candidate.stop_distance_atr <= 0:
         return False, "STOP_ATR_INVALID"
