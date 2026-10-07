@@ -34,6 +34,7 @@ class Candidate:
     data_ok: bool = False
     live: bool = False
     trigger_confirmed: bool = False
+    opportunity_type: str = "NONE"
     structure_direction: str = "NONE"
     mtf_direction: str = "NONE"
     entry: Optional[float] = None
