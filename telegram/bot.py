@@ -758,43 +758,64 @@ def _format_morning_pick(results):
 # ============================================================
 
 def _format_buy(results):
-    """Outcome-first daily forecast. Keeps engine rationale out of Telegram."""
+    """Outcome-first daily forecast with mathematical expectancy."""
     if not results:
-        return "🥇 GAGARIN — OGGI\\n━━━━━━━━━━━━━━━━━━━━\\nNessun dato disponibile."
+        return "🥇 GAGARIN — OGGI\n━━━━━━━━━━━━━━━━━━━━\nNessun dato disponibile."
 
     forecast = predict_today(results)
     if not forecast:
         return (
-            "🥇 GAGARIN — OGGI\\n"
-            "━━━━━━━━━━━━━━━━━━━━\\n"
-            "🧪 PAPER ONLY\\n\\n"
+            "🥇 GAGARIN — OGGI\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "🧪 PAPER ONLY\n\n"
             "NESSUNA PREVISIONE STORICAMENTE SUPPORTATA"
         )
 
     pick = forecast
+    status = pick.get("opportunity_status", "NO_POSITIVE_EDGE")
+    status_label = {
+        "OPPORTUNITY": "🟢 OPPORTUNITÀ",
+        "OPPORTUNITY_IN_FORMATION": "🟡 OPPORTUNITÀ IN FORMAZIONE",
+        "NO_POSITIVE_EDGE": "🔴 NESSUN VANTAGGIO POSITIVO",
+    }.get(status, status)
+
     lines = [
         "🥇 GAGARIN — OGGI",
         "━━━━━━━━━━━━━━━━━━━━",
         "🧪 PAPER ONLY",
         "",
+        status_label,
         f"🎯 {pick['commodity']} — {pick['direction']}",
         f"PREVISIONE: {pick['forecast']}",
+    ]
+
+    if pick.get("expectancy_r") is not None:
+        lines.append(f"EXPECTANCY: {pick['expectancy_r']:+.2f}R")
+    if pick.get("breakeven_win_rate") is not None:
+        lines.append(f"BREAK-EVEN: {pick['breakeven_win_rate'] * 100:.1f}%")
+    if pick.get("edge_vs_breakeven") is not None:
+        lines.append(f"EDGE vs BREAK-EVEN: {pick['edge_vs_breakeven'] * 100:+.1f} pp")
+
+    lines.extend([
         f"Osservazioni storiche: {pick['historical_samples']}",
         f"Hit rate storico: {pick['historical_hit_rate']:.1f}%",
         f"Fonte: {pick['evidence_source']}",
-    ]
+    ])
+
     if pick.get("median_forward_return_10d") is not None:
         lines.append(f"Rendimento mediano 10g: {pick['median_forward_return_10d']:+.2f}%")
+
     lines.extend([
         "",
-        f"ENTRY: {pick['entry']:.6g}" if pick.get("entry") is not None else "ENTRY: N/D",
-        f"SL: {pick['stop']:.6g}" if pick.get("stop") is not None else "SL: N/D",
-        f"TP1: {pick['tp1']:.6g}" if pick.get("tp1") is not None else "TP1: N/D",
-        f"TP2: {pick['tp2']:.6g}" if pick.get("tp2") is not None else "TP2: N/D",
+        f"ENTRY: {pick['entry']:.6g}" if pick.get('entry') is not None else "ENTRY: N/D",
+        f"SL: {pick['stop']:.6g}" if pick.get('stop') is not None else "SL: N/D",
+        f"TP1: {pick['tp1']:.6g}" if pick.get('tp1') is not None else "TP1: N/D",
+        f"TP2: {pick['tp2']:.6g}" if pick.get('tp2') is not None else "TP2: N/D",
         "",
-        "Stima storica, non certezza. PAPER ONLY.",
+        "Expectancy = formula matematica su evidenza storica; non è una garanzia.",
+        "PAPER ONLY.",
     ])
-    return "\\n".join(lines)
+    return "\n".join(lines)
 
 def _format_why(results):
     if not results:
