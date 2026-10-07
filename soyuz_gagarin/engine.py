@@ -21,7 +21,7 @@ class GagarinEngine:
         if candidate is None:
             return Decision("WAIT", market.symbol, "NO_CANDIDATE")
 
-        ok, reason = approve(candidate, self.config)
+        ok, reason = approve(candidate, self.config, market_atr=market.atr)
 
         diagnostics = {
             "legacy_reasons": candidate.reasons[:8],
@@ -30,6 +30,7 @@ class GagarinEngine:
             "mtf_direction": candidate.mtf_direction,
             "rr3": candidate.rr3,
             "stop_distance_atr": candidate.stop_distance_atr,
+            "market_atr": market.atr,
         }
 
         return Decision(
