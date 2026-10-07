@@ -29,15 +29,25 @@ def _trend_setup(state, side):
 def _range_setup(state, side):
     if state.structure != "RANGE" or state.regime != "RANGE":
         return False
-    if side not in {"LONG", "SHORT"}:
+    if side not in {"LONG", "SHORT"} or state.price is None:
         return False
-    quality = 35.0
-    if state.mtf_direction == side: quality += 15.0
-    if state.mtf_alignment >= MIN_MTF_ALIGNMENT: quality += 10.0
+    low = state.last_swing_low
+    high = state.last_swing_high
+    if low is None or high is None or high <= low:
+        return False
+    width = high - low
+    # Only fade near a verified range edge; never trade the middle.
+    if side == "LONG":
+        edge_ok = state.price <= low + width * 0.25
+    else:
+        edge_ok = state.price >= high - width * 0.25
+    if not edge_ok:
+        return False
+    quality = 45.0
     state.setup = "MEAN_REVERSION"
     state.setup_direction = side
     state.opportunity_type = "MEAN_REVERSION"
-    state.setup_quality = min(100.0, quality)
+    state.setup_quality = quality
     return True
 
 def _transition_setup(state, side):
