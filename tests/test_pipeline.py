@@ -607,6 +607,15 @@ def test_telegram_start_uses_dashboard_keyboard():
     ]
 
 
+
+def test_telegram_dashboard_uses_real_line_breaks():
+    from telegram.bot import _format_intraday, _format_morning_pick
+
+    assert "\\\\n" not in _format_intraday([])
+    assert "\\\\n" not in _format_morning_pick([])
+    assert "INTRADAY\\n" in _format_intraday([])
+    assert "GAGARIN — COSA COMPRO?\\n" in _format_morning_pick([])
+
 def test_morning_pick_hides_engine_rationale():
     from telegram.bot import _format_morning_pick
     import telegram.bot as bot
