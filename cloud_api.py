@@ -89,6 +89,18 @@ def health():
     return {"status": "ok", "service": "gagarin-cloud", "mode": "PAPER ONLY"}
 
 
+@app.post("/api/monitor")
+def monitor():
+    if not RUN_LOCK.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="Analysis already running")
+    try:
+        return _run_gagarin()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}")
+    finally:
+        RUN_LOCK.release()
+
+
 @app.get("/api/portfolio")
 def portfolio(x_api_key: str | None = Header(default=None)):
     _authorize(x_api_key)
