@@ -506,6 +506,12 @@ def apply_trigger(
 
         return state
 
+    if state.opportunity_type != "TREND_CONTINUATION":
+        state.trigger = "MOMENTUM_CONFIRMATION"
+        state.trigger_direction = state.setup_direction
+        state.trigger_confirmed = True
+        return state
+
     # ========================================================
     # STRONG MTF MOMENTUM
     # ========================================================
