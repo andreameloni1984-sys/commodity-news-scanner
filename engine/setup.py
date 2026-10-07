@@ -1,241 +1,69 @@
 from engine.state import SoyuzState
 
-
-# ============================================================
-# SOYUZ GAGARIN v1.2
-# SETUP ENGINE
-# ============================================================
-#
-# DATA
-#   ↓
-# REGIME
-#   ↓
-# STRUCTURE
-#   ↓
-# SETUP
-#
-# SETUP != ENTRY
-#
-# Il setup identifica una configurazione potenzialmente
-# operativa.
-#
-# Il setup richiede:
-#
-# - dati validi
-# - struttura direzionale
-# - coerenza con il regime
-# - conferma MTF
-#
-# La conferma definitiva arriva solamente dopo:
-#
-# TRIGGER → RISK → SAFETY
-#
-# ============================================================
-
-
 MIN_MTF_ALIGNMENT = 50.0
-STRONG_MTF_ALIGNMENT = 75.0
-
-
-# ============================================================
-# RESET
-# ============================================================
-
 
 def _reset_setup(state: SoyuzState) -> None:
     state.setup = "NONE"
     state.setup_direction = "NONE"
     state.setup_quality = 0.0
+    state.opportunity_type = "NONE"
 
-
-# ============================================================
-# LONG SETUP
-# ============================================================
-
-
-def _build_long_setup(state: SoyuzState) -> None:
-
-    quality = 0.0
-
-    # --------------------------------------------------------
-    # STRUTTURA
-    # --------------------------------------------------------
-
-    if state.structure == "BULLISH":
-        quality += 10.0
-    else:
-        return
-
-    # --------------------------------------------------------
-    # REGIME
-    # --------------------------------------------------------
-
-    if state.regime == "TREND_UP":
-        quality += 10.0
-    else:
-        return
-
-    # --------------------------------------------------------
-    # MTF
-    # --------------------------------------------------------
-
-    if (
-        state.mtf_direction == "LONG"
-        and state.mtf_alignment >= MIN_MTF_ALIGNMENT
-    ):
-        quality += 10.0
-    else:
-        return
-
-    # --------------------------------------------------------
-    # MARKET STRUCTURE
-    # --------------------------------------------------------
-
-    if state.structure_pattern == "HH_HL":
-        quality += 10.0
-
-    # --------------------------------------------------------
-    # BREAKOUT
-    # --------------------------------------------------------
-
-    if (
-        state.breakout
-        and state.breakout_direction == "LONG"
-    ):
-        quality += 5.0
-
-    # --------------------------------------------------------
-    # RETEST
-    # --------------------------------------------------------
-
-    if (
-        state.retest
-        and state.retest_direction == "LONG"
-    ):
-        quality += 5.0
-
+def _trend_setup(state, side):
+    structure = "BULLISH" if side == "LONG" else "BEARISH"
+    regime = "TREND_UP" if side == "LONG" else "TREND_DOWN"
+    pattern = "HH_HL" if side == "LONG" else "LH_LL"
+    if state.structure != structure or state.regime != regime:
+        return False
+    if state.mtf_direction != side or state.mtf_alignment < MIN_MTF_ALIGNMENT:
+        return False
+    quality = 30.0
+    if state.structure_pattern == pattern: quality += 20.0
+    if state.breakout and state.breakout_direction == side: quality += 10.0
+    if state.retest and state.retest_direction == side: quality += 10.0
     state.setup = "TREND_CONTINUATION"
-    state.setup_direction = "LONG"
+    state.setup_direction = side
+    state.opportunity_type = "TREND_CONTINUATION"
     state.setup_quality = min(100.0, quality)
+    return True
 
-
-# ============================================================
-# SHORT SETUP
-# ============================================================
-
-
-def _build_short_setup(state: SoyuzState) -> None:
-
-    quality = 0.0
-
-    # --------------------------------------------------------
-    # STRUTTURA
-    # --------------------------------------------------------
-
-    if state.structure == "BEARISH":
-        quality += 10.0
-    else:
-        return
-
-    # --------------------------------------------------------
-    # REGIME
-    # --------------------------------------------------------
-
-    if state.regime == "TREND_DOWN":
-        quality += 10.0
-    else:
-        return
-
-    # --------------------------------------------------------
-    # MTF
-    # --------------------------------------------------------
-
-    if (
-        state.mtf_direction == "SHORT"
-        and state.mtf_alignment >= MIN_MTF_ALIGNMENT
-    ):
-        quality += 10.0
-    else:
-        return
-
-    # --------------------------------------------------------
-    # MARKET STRUCTURE
-    # --------------------------------------------------------
-
-    if state.structure_pattern == "LH_LL":
-        quality += 10.0
-
-    # --------------------------------------------------------
-    # BREAKOUT
-    # --------------------------------------------------------
-
-    if (
-        state.breakout
-        and state.breakout_direction == "SHORT"
-    ):
-        quality += 5.0
-
-    # --------------------------------------------------------
-    # RETEST
-    # --------------------------------------------------------
-
-    if (
-        state.retest
-        and state.retest_direction == "SHORT"
-    ):
-        quality += 5.0
-
-    state.setup = "TREND_CONTINUATION"
-    state.setup_direction = "SHORT"
+def _range_setup(state, side):
+    if state.structure != "RANGE" or state.regime != "RANGE":
+        return False
+    if side not in {"LONG", "SHORT"}:
+        return False
+    quality = 35.0
+    if state.mtf_direction == side: quality += 15.0
+    if state.mtf_alignment >= MIN_MTF_ALIGNMENT: quality += 10.0
+    state.setup = "MEAN_REVERSION"
+    state.setup_direction = side
+    state.opportunity_type = "MEAN_REVERSION"
     state.setup_quality = min(100.0, quality)
+    return True
 
-
-# ============================================================
-# PUBLIC API
-# ============================================================
-
+def _transition_setup(state, side):
+    if state.structure not in {"MIXED", "RANGE"}:
+        return False
+    if state.regime not in {"MIXED", "RANGE", "UNKNOWN"}:
+        return False
+    if state.mtf_direction != side or state.mtf_alignment < MIN_MTF_ALIGNMENT:
+        return False
+    state.setup = "REVERSAL"
+    state.setup_direction = side
+    state.opportunity_type = "REVERSAL"
+    state.setup_quality = min(100.0, 45.0 + state.mtf_alignment * 0.20)
+    return True
 
 def apply_setup(state: SoyuzState) -> SoyuzState:
-    """
-    Costruisce il setup operativo a partire dallo stato
-    prodotto da DATA → REGIME → STRUCTURE.
-
-    Non autorizza ancora l'ingresso.
-
-    Output principale:
-
-        state.setup
-        state.setup_direction
-        state.setup_quality
-    """
-
     _reset_setup(state)
-
-    # --------------------------------------------------------
-    # DATA GATE
-    # --------------------------------------------------------
-
     if not state.data_ok:
         return state
-
-    # --------------------------------------------------------
-    # LONG
-    # --------------------------------------------------------
-
-    if state.structure_direction == "LONG":
-        _build_long_setup(state)
-        return state
-
-    # --------------------------------------------------------
-    # SHORT
-    # --------------------------------------------------------
-
-    if state.structure_direction == "SHORT":
-        _build_short_setup(state)
-        return state
-
-    # --------------------------------------------------------
-    # NO DIRECTION
-    # --------------------------------------------------------
-
+    for side in ("LONG", "SHORT"):
+        if _trend_setup(state, side):
+            return state
+    for side in ("LONG", "SHORT"):
+        if _range_setup(state, side):
+            return state
+    for side in ("LONG", "SHORT"):
+        if _transition_setup(state, side):
+            return state
     return state
