@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from engine.state import SoyuzState
 
 
@@ -69,21 +71,58 @@ MAX_BREAKOUT_REJECTION_WICK_RATIO = 0.35
 def _get_last_candles(
     state: SoyuzState,
 ) -> list:
-    """
-    Restituisce le candele M5 disponibili.
-    """
-
+    """Restituisce le candele M5 disponibili."""
     mtf = state.mtf_data or {}
+    candles = mtf.get("5min", [])
+    return candles if isinstance(candles, list) else []
 
-    candles = mtf.get(
-        "5min",
-        [],
-    )
 
-    if not isinstance(candles, list):
-        return []
+def _timestamp_to_epoch(value):
+    """Convert numeric/ISO timestamps to UTC epoch seconds."""
+    try:
+        if value is None:
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        text = str(value).strip()
+        if not text:
+            return None
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        dt = datetime.fromisoformat(text)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc).timestamp()
+    except (TypeError, ValueError, OverflowError):
+        return None
 
-    return candles
+
+def _get_last_closed_candle(state: SoyuzState):
+    """
+    Restituisce esclusivamente l'ultima M5 sicuramente chiusa.
+
+    Fail-closed: timestamp mancante/non interpretabile o analisi senza
+    timestamp verificabile => nessun trigger.
+    """
+    analysis_ts = _timestamp_to_epoch(state.analysis_timestamp)
+    if analysis_ts is None:
+        return None
+
+    closed = []
+    for candle in _get_last_candles(state):
+        if not isinstance(candle, dict):
+            continue
+        candle_ts = _timestamp_to_epoch(candle.get("timestamp"))
+        if candle_ts is None:
+            continue
+        if analysis_ts >= candle_ts + 300.0:
+            closed.append((candle_ts, candle))
+
+    if not closed:
+        return None
+
+    closed.sort(key=lambda item: item[0])
+    return closed[-1][1]
 
 
 def _calculate_candle_body(
@@ -132,14 +171,13 @@ def _momentum_direction(
     ):
         return "NONE"
 
-    candles = _get_last_candles(
-        state
-    )
-
+    candles = _get_last_candles(state)
     if len(candles) < 2:
         return "NONE"
 
-    current = candles[-1]
+    current = _get_last_closed_candle(state)
+    if current is None:
+        return "NONE"
 
     try:
 
@@ -207,11 +245,9 @@ def _momentum_direction(
 
 def _breakout_rejection_ok(state: SoyuzState) -> bool:
     """Reject breakout candles with an excessive opposite-side wick."""
-    candles = _get_last_candles(state)
-    if not candles:
+    current = _get_last_closed_candle(state)
+    if current is None:
         return False
-
-    current = candles[-1]
     try:
         open_price = float(current["open"])
         close = float(current["close"])
@@ -248,38 +284,28 @@ def _price_breakout_confirmation(
     if state.breakout_level is None:
         return False
 
-    if state.price is None:
+    if state.atr is None or state.atr <= 0:
         return False
 
-    if (
-        state.atr is None
-        or state.atr <= 0
-    ):
+    current = _get_last_closed_candle(state)
+    if current is None:
         return False
 
-    buffer = (
-        state.atr
-        * BREAKOUT_BUFFER_ATR
-    )
+    try:
+        close = float(current["close"])
+    except (KeyError, TypeError, ValueError):
+        return False
+
+    buffer = state.atr * BREAKOUT_BUFFER_ATR
 
     if not _breakout_rejection_ok(state):
         return False
 
     if state.setup_direction == "LONG":
-
-        return (
-            state.price
-            > state.breakout_level
-            + buffer
-        )
+        return close > state.breakout_level + buffer
 
     if state.setup_direction == "SHORT":
-
-        return (
-            state.price
-            < state.breakout_level
-            - buffer
-        )
+        return close < state.breakout_level - buffer
 
     return False
 
