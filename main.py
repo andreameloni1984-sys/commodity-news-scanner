@@ -50,6 +50,7 @@ from telegram.bot import (
 )
 from telegram.signals import format_signal_board
 from soyuz_gagarin.adapter import evaluate_states
+from execution.router import execute_state
 
 
 # ============================================================
@@ -505,6 +506,25 @@ def run():
         metadata["gagarin_reason"] = (
             decision.reason if decision is not None else "NO_DECISION"
         )
+
+    # --------------------------------------------------------
+    # EXECUTION LAYER
+    # --------------------------------------------------------
+    # Independent from Telegram; disabled by default.
+    print("EXECUTION LAYER")
+    print("-" * 72)
+    execution_results = []
+    for state in results:
+        try:
+            result = execute_state(state)
+            execution_results.append(result)
+            if result.accepted:
+                print("  " + result.mode + ": " + result.symbol + " -> " + result.order_id)
+        except Exception as exc:
+            print("  EXECUTION ERROR " + str(getattr(state, "symbol", "")) + ": " + type(exc).__name__ + ": " + str(exc))
+    if not execution_results:
+        print("  No execution decisions.")
+    print()
 
     # --------------------------------------------------------
     # REPORT
