@@ -136,6 +136,7 @@ def evaluate_states(states: Iterable[object]):
             data_ok=bool(getattr(state, "data_ok", False)),
             live=bool(getattr(state, "live", False)),
             trigger_confirmed=bool(getattr(state, "trigger_confirmed", False)),
+            opportunity_type=str(getattr(state, "opportunity_type", "NONE") or "NONE").upper(),
             structure_direction=str(
                 getattr(state, "structure_direction", "NONE") or "NONE"
             ).upper(),
