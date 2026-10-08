@@ -4,7 +4,7 @@ Nota di lettura. Non è una regola. Non promuove.
 Non legge e non scrive final_decision. Non invia ordini.
 promoted = None.
 
-Riletto il 2026-10-08 22:04 UTC (tree 56b1f43).
+Riletto il 2026-10-08 23:04 UTC (tree 4c181aa).
 
 Dato letto:
 - data/registered_rule.json: ENERGY_SHOCK_AND_WEEKLY_LONG,
@@ -16,19 +16,24 @@ Dato letto:
   stop 89.37, tp1 103.11, tp2 106.55, allocation 14.0,
   pnl null. Reason solo shock: WTI +3.89, Brent +3.66,
   gasoline +3.64, heating oil +2.73. Continuazione non chiusa.
+- paper_trade_log.csv: una riga 2026-10-08T16:23:00Z, PAPER_ENTRY,
+  stessi livelli, status OPEN, pnl vuoto, nota chiusura spot
+  6 ott 2026. Nessun esito.
 - commodities_direction_state.json: Petrolio WTI, Brent,
-  Benzina RBOB e Heating Oil LONG, ma updated_at 2026-09-17.
+  Benzina RBOB e Heating Oil LONG, updated_at 2026-09-17.
   Nessun close, nessun ATR, nessuno slope_atr.
+- data/: solo paper_open.json e registered_rule.json.
+  Nessuna serie close[t], close[t-20], ATR 14.
 
 Coerenza livelli, non verifica della regola:
 ATR implicito = (96.24 - 89.37) / 2 = 3.435.
 tp1 = 96.24 + 2*3.435 = 103.11. tp2 = 96.24 + 3*3.435 = 106.545.
 Gli shock in reason sono in punti, non in ATR.
-3.89 / 3.435 = 1.13 ATR se quell'ATR fosse quello dello shock,
-ma l'ATR non è nel file.
+3.89 / 3.435 = 1.13 ATR solo se quell'ATR fosse quello dello shock.
+L'ATR non è nel file.
 
 Manca il dato misurabile: close[t], close[t-20], ATR 14.
 Senza questi non si può dire weekly long (soglia 0.5).
 Senza mark il pnl resta null. Il paper resta OPEN.
-Nessuna promozione. Nessun ordine.
+Nessuna promozione. Nessun ordine. final_decision non toccata.
 """
