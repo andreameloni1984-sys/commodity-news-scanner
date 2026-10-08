@@ -34,7 +34,7 @@ class GagarinEngine:
         }
 
         return Decision(
-            "PAPER_ENTRY" if ok else "PAPER_WATCH",
+            "PAPER_SIGNAL" if ok else "PAPER_WATCH",
             market.symbol,
             reason,
             candidate,
