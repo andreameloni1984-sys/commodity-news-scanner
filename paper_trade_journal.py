@@ -57,7 +57,7 @@ def record_entries(results):
         metadata = getattr(state, "metadata", {}) or {}
         canonical = (
             isinstance(metadata, dict)
-            and str(metadata.get("gagarin_action", "")).upper() == "PAPER_SIGNAL"
+            and str(metadata.get("gagarin_action", "")).upper() in {"PAPER_ENTRY", "PAPER_SIGNAL"}
         )
         legacy = str(getattr(state, "final_decision", "")).upper() == "ENTRY"
         if canonical or legacy:
