@@ -6,6 +6,7 @@ from typing import Any
 import threading
 
 INITIAL_CAPITAL = 100.0
+PAPER_ENTRY_ACTIONS = {"PAPER_ENTRY", "PAPER_SIGNAL"}
 
 
 @dataclass
@@ -76,7 +77,7 @@ class PaperPortfolio:
             }
 
     def open_signal(self, row: dict[str, Any], allocation_pct: float = 0.25) -> dict[str, Any] | None:
-        if row.get("action") != "PAPER_SIGNAL":
+        if str(row.get("action") or "").upper() not in PAPER_ENTRY_ACTIONS:
             return None
         entry = row.get("entry")
         if not entry or entry <= 0:
