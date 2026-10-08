@@ -39,6 +39,8 @@ class GagarinConfig:
         "XAU/USD", "XAG/USD", "XPT/USD", "XPD/USD",
         "WTI/USD", "BRENT/USD", "RICE/USD", "SUGAR/USD",
         "COCOA/USD", "COFFEE/USD",
+        "EUR/USD", "GBP/USD", "USD/JPY", "USD/CHF",
+        "AUD/USD", "USD/CAD", "NZD/USD", "EUR/JPY",
     )
     blocked_if_stale_seconds: int = field(default_factory=lambda: _env_int("LIVE_MAX_AGE_SECONDS", 900))
     modules: Tuple[str, ...] = field(default=(
