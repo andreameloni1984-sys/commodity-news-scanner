@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SOYUZ — tre segnali paper</title>
+<style>
+  :root { color-scheme: light; --ink:#1c1915; --muted:#6b645c; --line:#e4ddd4; --paper:#f7f4ef; --long:#1f6b45; }
+  body { margin:0; font:16px/1.45 Georgia, serif; color:var(--ink); background:var(--paper); }
+  main { max-width:880px; margin:0 auto; padding:32px 20px 64px; }
+  h1 { font-size:28px; font-weight:600; margin:0 0 8px; }
+  p.lead { color:var(--muted); margin:0 0 24px; }
+  .meta { display:flex; gap:16px; flex-wrap:wrap; font:14px/1.3 ui-sans-serif, system-ui, sans-serif; color:var(--muted); margin-bottom:20px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; }
+  article { background:#fff; border:1px solid var(--line); border-radius:12px; padding:16px; }
+  h2 { font:600 15px/1.2 ui-sans-serif, system-ui, sans-serif; margin:0 0 8px; }
+  .dir { display:inline-block; font:700 13px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing:.04em; padding:4px 8px; border-radius:999px; color:#fff; background:var(--long); }
+  dl { display:grid; grid-template-columns:1fr auto; gap:6px 12px; margin:14px 0 0; font:14px/1.3 ui-sans-serif, system-ui, sans-serif; }
+  dt { color:var(--muted); }
+  dd { margin:0; text-align:right; }
+  footer { margin-top:22px; color:var(--muted); font:13px/1.4 ui-sans-serif, system-ui, sans-serif; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Tre segnali, solo paper</h1>
+  <p class="lead">WTI spot, chiusura del 6 ottobre 2026 a 96,24 dollari. ATR 14 giorni: 3,44. Nessun ordine verso il broker.</p>
+  <div class="meta">
+    <span>Repo: commodity-news-scanner</span>
+    <span>Rischio ipotizzato: 100 dollari</span>
+    <span>Unità: 100 / (2 × ATR) = 14,6</span>
+  </div>
+  <div class="grid">
+    <article>
+      <h2>Filtro 20 giorni</h2>
+      <span class="dir">LONG</span>
+      <dl>
+        <dt>Pendenza / ATR</dt><dd>0,59</dd>
+        <dt>Soglia</dt><dd>0,50</dd>
+        <dt>Stop</dt><dd>89,37</dd>
+        <dt>TP1 / TP2</dt><dd>103,11 / 106,55</dd>
+        <dt>Uscita</dt><dd>quando la pendenza scende sotto 0,5</dd>
+      </dl>
+    </article>
+    <article>
+      <h2>Regola 1 mese</h2>
+      <span class="dir">LONG</span>
+      <dl>
+        <dt>Rendimento 21 sedute</dt><dd>+3,8%</dd>
+        <dt>Rendimento 3 mesi</dt><dd>+29,1%, non è un segnale</dd>
+        <dt>Stop</dt><dd>89,37</dd>
+        <dt>TP1 / TP2</dt><dd>103,11 / 106,55</dd>
+        <dt>Tenuta</dt><dd>21 sedute, poi si ricalcola</dd>
+      </dl>
+    </article>
+    <article>
+      <h2>Regola 3 e 12 mesi</h2>
+      <span class="dir">LONG</span>
+      <dl>
+        <dt>3 mesi</dt><dd>+29,1%</dd>
+        <dt>12 mesi</dt><dd>+53,8%</dd>
+        <dt>Stop</dt><dd>89,37</dd>
+        <dt>TP1 / TP2</dt><dd>103,11 / 106,55</dd>
+        <dt>Uscita</dt><dd>se uno dei due rendimenti non è più positivo</dd>
+      </dl>
+    </article>
+  </div>
+  <footer>I tre segnali sono accesi insieme su questo prezzo. Sul solo petrolio, dal 2006, non hanno lo stesso risultato: il filtro a 20 giorni ha ridotto i crolli, la regola a un mese ha un indizio, quella a 3 e 12 mesi non ha battuto il long passivo. Questa pagina non è un consiglio di acquisto.</footer>
+</main>
+</body>
+</html>
