@@ -36,11 +36,11 @@ def _direction(state) -> str:
 
 
 def _is_signal(state) -> bool:
-    """Recognize the canonical Gagarin PAPER_SIGNAL, with legacy fallback."""
+    """Recognize canonical Gagarin PAPER_ENTRY, with legacy PAPER_SIGNAL fallback."""
     metadata = getattr(state, "metadata", {}) or {}
     canonical = (
         isinstance(metadata, dict)
-        and str(metadata.get("gagarin_action", "")).upper() == "PAPER_SIGNAL"
+        and str(metadata.get("gagarin_action", "")).upper() in {"PAPER_ENTRY", "PAPER_SIGNAL"}
     )
     legacy = str(getattr(state, "final_decision", "")).upper() == "ENTRY"
     return (
