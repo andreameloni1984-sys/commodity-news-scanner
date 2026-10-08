@@ -13,13 +13,13 @@ class GagarinEngine:
         candidate: Candidate | None,
     ) -> Decision:
         if market.symbol not in self.config.allowed_assets:
-            return Decision("WAIT", market.symbol, "ASSET_NOT_IN_UNIVERSE")
+            return Decision("PAPER_WATCH", market.symbol, "ASSET_NOT_IN_UNIVERSE")
 
         if market.price <= 0:
-            return Decision("WAIT", market.symbol, "INVALID_PRICE")
+            return Decision("PAPER_WATCH", market.symbol, "INVALID_PRICE")
 
         if candidate is None:
-            return Decision("WAIT", market.symbol, "NO_CANDIDATE")
+            return Decision("PAPER_WATCH", market.symbol, "NO_CANDIDATE")
 
         ok, reason = approve(candidate, self.config, market_atr=market.atr)
 
@@ -34,7 +34,7 @@ class GagarinEngine:
         }
 
         return Decision(
-            "PAPER_SIGNAL" if ok else "WAIT",
+            "PAPER_ENTRY" if ok else "PAPER_WATCH",
             market.symbol,
             reason,
             candidate,
