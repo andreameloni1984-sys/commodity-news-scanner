@@ -1,0 +1,2 @@
+timestamp_utc,commodity,symbol,direction,action,entry,stop,tp1,tp2,allocation,status,pnl,note
+2026-10-08T16:23:00Z,Petrolio WTI,WTI,LONG,PAPER_ENTRY,96.24,89.37,103.11,106.55,14.00,OPEN,,Shock energia 14:40. Chiusura spot 6 ott 2026. Nessun esito.
