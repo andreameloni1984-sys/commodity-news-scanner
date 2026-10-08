@@ -11,6 +11,7 @@ from engine.risk import apply_risk
 from engine.safety import apply_safety
 from engine.predictive import evaluate_pre_move
 from engine.research_validation import annotate
+from engine.energy_confluence import stamp_energy
 
 STRONG_MOVE_PCT_24H = 2.0
 OPPORTUNITY_MOVE_PCT_24H = 1.0
@@ -188,7 +189,6 @@ def analyze_one(commodity: Commodity) -> SoyuzState:
     state = calculate_quality(state)
     state = apply_risk(state)
     state = apply_safety(state)
-    # Dopo la decisione. Non la cambia.
     state = annotate(state)
     return state
 
@@ -197,13 +197,11 @@ def analyze_universe(commodities):
     results = []
     for commodity in commodities:
         results.append(analyze_one(commodity))
-    # Ranking: approval remains the first gate. Among equally actionable
-    # states, prioritize independently observed market opportunity before
-    # generic confluence scores. This does not authorize an entry; it only
-    # improves ordering of the research/decision board.
+    stamp_energy(results)
     results.sort(
         key=lambda state: (
             state.final_decision == "ENTRY",
+            bool((state.metadata.get("energy") or {}).get("in_complex")),
             state.opportunity_alert == "STRONG_MOVE",
             state.opportunity_alert == "OPPORTUNITY",
             float(state.opportunity_score or 0.0),
