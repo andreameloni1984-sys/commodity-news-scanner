@@ -72,6 +72,14 @@ def _slice(rows: list[dict], commodity: str, setup: str, regime: str, weekly_bia
     ]
 
 
+def _profit_factor(nets: list[float]) -> float | None:
+    gains = sum(x for x in nets if x > 0)
+    losses = sum(-x for x in nets if x < 0)
+    if losses == 0:
+        return None
+    return gains / losses
+
+
 def describe(rows: list[dict]) -> dict:
     """Frase misurata, non uno stop imposto."""
     if len(rows) < MIN_SAMPLE:
@@ -83,6 +91,8 @@ def describe(rows: list[dict]) -> dict:
         }
     oos = [r for r in rows if r["out_of_sample"]]
     used = oos if len(oos) >= MIN_SAMPLE else rows
+    nets = [r["net"] for r in used]
+    wins = [x for x in nets if x > 0]
     return {
         "status": "OSSERVAZIONE" if used is oos else "IN_SAMPLE_NON_PROMOSSA",
         "paper_only": True,
@@ -90,7 +100,10 @@ def describe(rows: list[dict]) -> dict:
         "mfe_atr_median": statistics.median(r["mfe_atr"] for r in used),
         "mae_atr_median": statistics.median(r["mae_atr"] for r in used),
         "tp1_before_sl": sum(1 for r in used if r["hit_tp1_before_sl"]) / len(used),
-        "net_median": statistics.median(r["net"] for r in used),
+        "net_median": statistics.median(nets),
+        "net_mean": statistics.mean(nets),
+        "win_rate": len(wins) / len(nets),
+        "profit_factor": _profit_factor(nets),
     }
 
 
