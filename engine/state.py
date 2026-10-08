@@ -273,6 +273,11 @@ class SoyuzState:
     pre_move_alert: str = "NONE"
     pre_move_components: dict = field(default_factory=dict)
 
+    expected_move_pct: Optional[float] = None
+    expected_move_duration_hours: Optional[float] = None
+    continuation_score: float = 0.0
+    reversal_score: float = 0.0
+
     # ========================================================
     # SAFETY
     # ========================================================
@@ -293,7 +298,7 @@ class SoyuzState:
 
     analysis_timestamp: Optional[str] = None
 
-    engine_version: str = "SOYUZ-GAGARIN-1.2"
+    engine_version: str = "SOYUZ-GAGARIN-1.4"
 
     # ========================================================
     # EXTRA INTERNAL DATA
