@@ -1,7 +1,7 @@
 """SOYUZ GAGARIN -> MetaTrader 5 DEMO bridge.
 
 This module is deliberately transport-only:
-- accepts only PAPER_SIGNAL decisions;
+- accepts only PAPER_ENTRY/PAPER_SIGNAL decisions;
 - validates the complete trade payload;
 - emits a broker-neutral MT5-style order payload;
 - NEVER connects to MetaTrader;
@@ -32,8 +32,8 @@ def _number(value: Any) -> float:
 def build_demo_payload(decision: Decision) -> dict[str, Any]:
     """Build a safe, broker-neutral payload for a PAPER/DEMO signal."""
 
-    if decision.action != "PAPER_SIGNAL":
-        raise ValueError("DECISION_NOT_PAPER_SIGNAL")
+    if decision.action not in {"PAPER_ENTRY", "PAPER_SIGNAL"}:
+        raise ValueError("DECISION_NOT_PAPER_ENTRY")
 
     candidate = decision.candidate
     if candidate is None:
