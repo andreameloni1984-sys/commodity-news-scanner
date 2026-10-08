@@ -367,14 +367,22 @@ def _format_classifica(results):
             else "—"
         )
 
+        energy = (state.metadata.get("energy") or {})
+        shock = " | ENERGY SHOCK" if energy.get("in_complex") else ""
         lines.append(
             f"{index}. {state.commodity} | "
             f"{direction} | "
             f"Confluence {state.probability:.1f} | "
             f"Q {state.quality:.1f} | "
             f"C {state.confidence:.1f} | "
-            f"{state.final_decision}"
+            f"{state.final_decision}{shock}"
         )
+
+    energy_states = [s for s in results if (s.metadata.get("energy") or {}).get("in_complex")]
+    if energy_states:
+        event = energy_states[0].metadata.get("energy") or {}
+        legs = ", ".join(f"{row['family']} {row['pct']:+.2f}%" for row in event.get("legs", []))
+        lines.extend(["", f"ENERGY SHOCK {event.get('direction', 'NONE')} | {legs}", "Continuazione da verificare. Non e un ordine."])
 
     entries = [
         state
