@@ -343,6 +343,38 @@ def _intelligence_component(
     return _clamp(score + 10.0, 0, 20), reasons, coverage
 
 
+def _event_priority_component(state: Any) -> tuple[float, list[str]]:
+    """Prioritize material market events without authorizing an entry.
+
+    Event priority is deliberately separate from Probability/Quality/
+    Confidence/RR and from final_decision. A confirmed energy-complex shock
+    gets an additional research-priority boost so a multi-asset CFD event
+    cannot be buried behind an isolated technical score.
+    """
+    move = abs(_float(getattr(state, "move_24h_pct", 0.0), 0.0))
+    alert = _norm(getattr(state, "opportunity_alert", ""))
+    score = 0.0
+    reasons: list[str] = []
+
+    if move >= 2.0 or alert == "STRONG_MOVE":
+        score = 20.0
+        reasons.append("evento CFD molto forte >=2%")
+    elif move >= 1.0 or alert == "OPPORTUNITY":
+        score = 10.0
+        reasons.append("evento CFD >=1%")
+    elif move >= 0.5 or alert == "WATCH":
+        score = 5.0
+        reasons.append("movimento CFD >=0,5%")
+
+    metadata = getattr(state, "metadata", {}) or {}
+    energy = metadata.get("energy") if isinstance(metadata, dict) else None
+    if isinstance(energy, dict) and energy.get("event") == "STRONG_MOVE_ENERGY":
+        score += 10.0
+        reasons.append("confluenza energy WTI/Brent/refined products")
+
+    return _clamp(score, 0, 30), reasons
+
+
 def select_anticipation(states: Iterable[Any]) -> list[dict[str, Any]]:
     forecasts = _forecast_map()
     weather_data = _weather_map()
@@ -360,8 +392,9 @@ def select_anticipation(states: Iterable[Any]) -> list[dict[str, Any]]:
         intelligence, intelligence_reasons, coverage = _intelligence_component(
             state, forecast, weather, direction
         )
+        event_priority, event_reasons = _event_priority_component(state)
 
-        total = _clamp(technical + history + long_term + intelligence)
+        total = _clamp(technical + history + long_term + intelligence + event_priority)
 
         trigger_confirmed = bool(getattr(state, "trigger_confirmed", False))
         final_decision = _norm(getattr(state, "final_decision", "WAIT"))
@@ -389,6 +422,7 @@ def select_anticipation(states: Iterable[Any]) -> list[dict[str, Any]]:
             "symbol": str(getattr(state, "symbol", "")),
             "direction": direction,
             "score": round(total, 1),
+            "event_priority": round(event_priority, 1),
             "stage": stage,
             "next_confirmation": next_confirmation,
             "decision": final_decision,
@@ -399,7 +433,7 @@ def select_anticipation(states: Iterable[Any]) -> list[dict[str, Any]]:
             "tp2": getattr(state, "tp2", None),
             "tp3": getattr(state, "tp3", None),
             "trigger": getattr(state, "trigger", "NONE"),
-            "reasons": (technical_reasons + forecast_reasons + history_reasons + intelligence_reasons)[:7],
+            "reasons": (event_reasons + technical_reasons + forecast_reasons + history_reasons + intelligence_reasons)[:7],
             "coverage": coverage,
             "blockers": blockers[:4],
         })

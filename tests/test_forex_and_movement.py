@@ -9,10 +9,12 @@ def state_for_move(move_pct):
     prices = [100.0] * 25
     prices[-1] = 100.0 * (1.0 + move_pct / 100.0)
     timestamps = [i * 3600.0 for i in range(25)]
-    candles = [{"timestamp": t, "open": p, "high": p + 0.1, "low": p - 0.1, "close": p}
-               for t, p in zip(timestamps, prices)]
+    opens = list(prices)
+    highs = [p + 0.1 for p in prices]
+    lows = [p - 0.1 for p in prices]
     return SoyuzState(commodity="TEST", symbol="TEST", closes=prices,
-                      candles=candles, timestamps=timestamps, atr=1.0, metadata={})
+                      opens=opens, highs=highs, lows=lows, timestamps=timestamps,
+                      atr=1.0, metadata={})
 
 
 class GagarinExpansionTests(unittest.TestCase):

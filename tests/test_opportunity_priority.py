@@ -37,6 +37,30 @@ class OpportunityPriorityTests(unittest.TestCase):
         state = scan_market_opportunity(state_for_move(2.0))
         self.assertEqual(state.final_decision, "WAIT")
 
+    def test_strong_move_gets_event_priority_without_changing_entry_authority(self):
+        strong = state_for_move(2.0)
+        strong.commodity = "WTI"
+        strong.setup_direction = "LONG"
+        strong.regime = "TREND_UP"
+        strong.structure = "BULLISH"
+        strong.structure_direction = "LONG"
+        strong.mtf_direction = "LONG"
+        strong.move_24h_pct = 2.0
+        strong.opportunity_alert = "STRONG_MOVE"
+        strong.metadata["energy"] = {"event": "STRONG_MOVE_ENERGY"}
+
+        ordinary = state_for_move(0.0)
+        ordinary.commodity = "GOLD"
+        ordinary.setup_direction = "LONG"
+        ordinary.regime = "TREND_UP"
+        ordinary.structure = "BULLISH"
+        ordinary.structure_direction = "LONG"
+        ordinary.mtf_direction = "LONG"
+
+        ranked = select_anticipation([ordinary, strong])
+        self.assertEqual(ranked[0]["commodity"], "WTI")
+        self.assertGreater(ranked[0]["event_priority"], 0.0)
+        self.assertEqual(strong.final_decision, "WAIT")
 
 if __name__ == "__main__":
     unittest.main()
