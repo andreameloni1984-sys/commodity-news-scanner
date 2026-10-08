@@ -726,7 +726,7 @@ def _format_morning_pick(results):
         return "🥇 GAGARIN — COSA COMPRO?\n━━━━━━━━━━━━━━━━━━━━\nNessun dato disponibile."
 
     decisions = evaluate_states(results)
-    approved = {d.symbol for d in decisions if d.action == "PAPER_SIGNAL"}
+    approved = {d.symbol for d in decisions if d.action in {"PAPER_ENTRY", "PAPER_SIGNAL"}}
     candidates = [
         state for state in results
         if str(getattr(state, "symbol", "")).upper() in approved
