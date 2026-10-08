@@ -1,194 +1,160 @@
 """SOYUZ GAGARIN — engine/weekly_trend.py
 
-Weekly trend filter for commodity entries.
+Weekly trend rule (v1.0).
 
-Research (Kurth, Eisler, Rej, Bouchaud 2026; CTA literature):
-- momentum on small-tick contracts (indices, FX) died after 2008
-- momentum on large-tick contracts (many commodities) survives, but
-  only at weekly horizons, not intraday
-- the 5-minute trigger engine stays as the execution trigger;
-  this module decides the SIDE and whether a side is allowed
+Research basis: Kurth, Eisler, Rej, Bouchaud (2026) — trend-following
+Sharpe survives only on large-tick contracts (many commodities) and only
+at horizons of weeks, not days. Intraday momentum is dead post-2008.
 
-Rule (frozen, no parameters fitted on the same data):
-- compute the net move over the last N weekly bars (default 8)
-- LONG allowed only if net move > +MIN_MOVE_ATR * ATR(weekly)
-- SHORT allowed only if net move < -MIN_MOVE_ATR * ATR(weekly)
-- otherwise the side is blocked with WEEKLY_TREND_BLOCK
+This module does NOT create entries. It classifies the weekly regime
+and writes it into the canonical state so that:
+- the scanner can rank commodities by weekly trend
+- a future weekly trigger can require this regime
+- safety can block entries against the weekly trend
 
-This is a filter, not a signal. It does not create entries.
-It does not touch the intraday pipeline.
+Timeframe: daily bars (Yahoo futures GC=F, CL=F, ...).
+Lookback: 20 trading days (~1 month).
 """
 
 from __future__ import annotations
+
+from typing import Optional
 
 from engine.state import SoyuzState
 
 
 # ============================================================
-# FROZEN PARAMETERS
+# PARAMETERS
 # ============================================================
 
-LOOKBACK_WEEKS = 8          # net move window on weekly bars
-MIN_MOVE_ATR = 0.5         # minimum net move in weekly ATR
-MIN_BARS = 6               # minimum weekly bars required
-ATR_PERIOD = 14            # weekly ATR period
+LOOKBACK_DAYS = 20          # ~1 month of daily bars
+MIN_BARS = 15              # minimum bars to classify
+SLOPE_ATR_MIN = 0.5        # |net move| / ATR over lookback
+SLOPE_ATR_STRONG = 1.0     # strong weekly trend threshold
+ATR_PERIOD = 14            # ATR on daily bars
 
 
 # ============================================================
 # HELPERS
 # ============================================================
 
-
-def _safe_float(value):
+def _safe_float(value) -> Optional[float]:
     try:
         return float(value)
     except (TypeError, ValueError):
         return None
 
 
-def _weekly_bars(state: SoyuzState) -> list:
-    """Build weekly OHLC bars from the M5 series.
-
-    Each bar: dict with open/high/low/close/timestamp (epoch, UTC).
-    Weeks are Monday 00:00 UTC anchored.
-    """
-    closes = state.closes or []
-    highs = state.highs or []
-    lows = state.lows or []
-    timestamps = state.timestamps or []
-
-    if not (len(closes) == len(highs) == len(lows) == len(timestamps)):
-        return []
-
-    bars = []
-    for ts, o_src, h, l, c in zip(timestamps, closes, highs, lows, closes):
-        t = _safe_float(ts)
-        if t is None:
-            continue
-        # Monday 00:00 UTC anchor
-        week_start = t - ((t + 3 * 86400) % (7 * 86400))
-        o = _safe_float(o_src)
-        hh = _safe_float(h)
-        ll = _safe_float(l)
-        cc = _safe_float(c)
-        if None in (o, hh, ll, cc) or min(o, hh, ll, cc) <= 0:
-            continue
-        if hh < ll or hh < max(o, cc) or ll > min(o, cc):
-            continue
-        if bars and bars[-1]["week_start"] == week_start:
-            b = bars[-1]
-            b["high"] = max(b["high"], hh)
-            b["low"] = min(b["low"], ll)
-            b["close"] = cc
-            b["timestamp"] = t
-        else:
-            bars.append({
-                "week_start": week_start,
-                "open": o,
-                "high": hh,
-                "low": ll,
-                "close": cc,
-                "timestamp": t,
-            })
-    return bars
+def _daily_closes(state: SoyuzState) -> list:
+    """Prefer explicit daily series; fall back to MTF 1h if present."""
+    daily = state.metadata.get("daily_closes")
+    if isinstance(daily, list) and len(daily) >= MIN_BARS:
+        return daily
+    mtf = state.mtf_data or {}
+    h1 = mtf.get("1h", [])
+    if isinstance(h1, list) and len(h1) >= MIN_BARS * 6:
+        # compress 1h bars into pseudo-daily closes (last close per day)
+        by_day = {}
+        for bar in h1:
+            if not isinstance(bar, dict):
+                continue
+            ts = bar.get("timestamp")
+            try:
+                ts = float(ts)
+            except (TypeError, ValueError):
+                continue
+            day = int(ts // 86400)
+            by_day[day] = _safe_float(bar.get("close"))
+        return [v for _, v in sorted(by_day.items()) if v is not None]
+    return []
 
 
-def _weekly_atr(bars: list, period: int = ATR_PERIOD) -> float | None:
-    """Wilder ATR on weekly bars."""
-    if len(bars) < period + 1:
+def _atr_daily(closes: list) -> Optional[float]:
+    """Simple ATR proxy on daily closes: mean of |close-to-close| moves."""
+    if len(closes) < ATR_PERIOD + 1:
         return None
-    trs = []
-    for i in range(1, len(bars)):
-        prev_close = bars[i - 1]["close"]
-        tr = max(
-            bars[i]["high"] - bars[i]["low"],
-            abs(bars[i]["high"] - prev_close),
-            abs(bars[i]["low"] - prev_close),
-        )
-        trs.append(tr)
-    if len(trs) < period:
+    moves = [abs(closes[i] - closes[i - 1]) for i in range(1, len(closes))]
+    window = moves[-ATR_PERIOD:]
+    if not window:
         return None
-    atr = sum(trs[:period]) / period
-    for tr in trs[period:]:
-        atr = (atr * (period - 1) + tr) / period
-    return atr
-
-
-def _net_move_atr(bars: list, atr: float) -> tuple[float | None, str]:
-    if atr is None or atr <= 0 or len(bars) < 2:
-        return None, "NONE"
-    window = bars[-LOOKBACK_WEEKS:] if len(bars) >= LOOKBACK_WEEKS else bars
-    if len(window) < MIN_BARS:
-        return None, "NONE"
-    net = window[-1]["close"] - window[0]["open"]
-    norm = net / atr
-    if norm > MIN_MOVE_ATR:
-        return norm, "LONG"
-    if norm < -MIN_MOVE_ATR:
-        return norm, "SHORT"
-    return norm, "NONE"
+    return sum(window) / len(window)
 
 
 # ============================================================
 # MAIN
 # ============================================================
 
-
 def apply_weekly_trend(state: SoyuzState) -> SoyuzState:
-    """Attach weekly trend evidence to the canonical state.
+    """Classify the weekly trend and store it on the canonical state.
 
-    Sets:
-      state.metadata["weekly_trend"] = {
-        "status": CALCULATED | INSUFFICIENT_DATA | NO_DATA,
-        "net_move_atr": float | None,
-        "direction": LONG | SHORT | NONE,
-        "lookback_weeks": int,
-        "atr": float | None,
-        "bars": int,
-      }
+    Writes:
+        state.metadata["weekly_trend"] = {
+            "direction": "LONG" | "SHORT" | "NONE",
+            "slope_atr": float,
+            "strength": "STRONG" | "MODERATE" | "NONE",
+            "bars": int,
+            "status": str,
+        }
 
-    Does NOT modify setup, trigger, risk, safety or final_decision.
-    The side filter is applied by safety (gate 21) so the journal
-    records the blocker explicitly.
+    Does not touch setup, trigger, risk or safety.
     """
-    meta = getattr(state, "metadata", None)
-    if not isinstance(meta, dict):
-        meta = {}
-        state.metadata = meta
+    closes = _daily_closes(state)
 
-    bars = _weekly_bars(state)
-    atr = _weekly_atr(bars)
-    norm, direction = _net_move_atr(bars, atr)
-
-    if not bars:
-        status = "NO_DATA"
-    elif len(bars) < MIN_BARS or atr is None:
-        status = "INSUFFICIENT_DATA"
-    else:
-        status = "CALCULATED"
-
-    meta["weekly_trend"] = {
-        "status": status,
-        "net_move_atr": round(norm, 4) if norm is not None else None,
-        "direction": direction,
-        "lookback_weeks": LOOKBACK_WEEKS,
-        "min_move_atr": MIN_MOVE_ATR,
-        "atr": round(atr, 6) if atr is not None else None,
-        "bars": len(bars),
+    diag = {
+        "status": "INSUFFICIENT_DATA",
+        "direction": "NONE",
+        "slope_atr": None,
+        "strength": "NONE",
+        "bars": len(closes),
+        "lookback_days": LOOKBACK_DAYS,
+        "slope_atr_min": SLOPE_ATR_MIN,
+        "slope_atr_strong": SLOPE_ATR_STRONG,
     }
+    state.metadata["weekly_trend"] = diag
+
+    if len(closes) < MIN_BARS:
+        return state
+
+    atr = _atr_daily(closes)
+    if atr is None or atr <= 0:
+        diag["status"] = "ATR_UNAVAILABLE"
+        return state
+
+    lookback = min(LOOKBACK_DAYS, len(closes))
+    recent = closes[-lookback:]
+    net = recent[-1] - recent[0]
+    slope_atr = net / atr
+
+    diag["slope_atr"] = round(slope_atr, 3)
+    diag["bars"] = len(closes)
+
+    if abs(slope_atr) < SLOPE_ATR_MIN:
+        diag["status"] = "NO_TREND"
+        diag["direction"] = "NONE"
+        diag["strength"] = "NONE"
+        return state
+
+    direction = "LONG" if slope_atr > 0 else "SHORT"
+    strength = "STRONG" if abs(slope_atr) >= SLOPE_ATR_STRONG else "MODERATE"
+
+    diag["status"] = "CALCULATED"
+    diag["direction"] = direction
+    diag["strength"] = strength
     return state
 
 
-def weekly_side_allowed(state: SoyuzState, side: str) -> bool:
-    """True if the weekly trend permits this side.
+def weekly_trend_blocks_entry(state: SoyuzState) -> Optional[str]:
+    """Return a blocker string if the weekly trend opposes the setup.
 
-    Fail-closed: insufficient data blocks the side.
+    Used by safety as an optional gate. Fail-open when weekly data
+    is missing: a missing weekly trend must not block entries.
     """
-    meta = getattr(state, "metadata", {}) or {}
-    wt = meta.get("weekly_trend", {})
-    if not isinstance(wt, dict):
-        return False
-    if wt.get("status") != "CALCULATED":
-        return False
-    direction = wt.get("direction", "NONE")
-    return direction == side
+    wt = state.metadata.get("weekly_trend") or {}
+    direction = wt.get("direction")
+    if direction not in {"LONG", "SHORT"}:
+        return None
+    if state.setup_direction not in {"LONG", "SHORT"}:
+        return None
+    if direction != state.setup_direction:
+        return "WEEKLY_TREND_MISMATCH"
+    return None
