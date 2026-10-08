@@ -1,4 +1,5 @@
 from engine.state import SoyuzState
+from engine.weekly_trend import weekly_trend_blocks_entry
 from soyuz_gagarin.config import GagarinConfig
 
 
@@ -469,6 +470,7 @@ def apply_safety(
     # + PROBABILITY
     # + QUALITY
     # + CONFIDENCE
+    # + WEEKLY TREND (se classificato, deve coincidere)
     #
     # Il controllo MTF deve usare la stessa regola del gate 7.
     # Prima richiedeva sempre mtf_direction == setup_direction,
@@ -525,6 +527,30 @@ def apply_safety(
         blockers.append(
             "FINAL_CONFLUENCE_FAIL"
         )
+
+    # ========================================================
+    # 21. WEEKLY TREND GATE
+    # ========================================================
+    #
+    # Research basis: Kurth, Eisler, Rej, Bouchaud (2026) —
+    # trend-following Sharpe survives only on large-tick contracts
+    # (many commodities) and only at horizons of weeks, not days.
+    # Intraday momentum is dead post-2008.
+    #
+    # If the weekly trend is classified (LONG/SHORT) and it opposes
+    # the setup direction, the entry is blocked. Fail-open when the
+    # weekly trend is missing or NONE: a missing weekly trend must
+    # not block entries.
+    #
+    # This gate runs AFTER the final confluence check so that a
+    # weekly mismatch is always visible as its own blocker, even
+    # when FINAL_CONFLUENCE_FAIL is already present.
+    #
+    # ========================================================
+
+    weekly_blocker = weekly_trend_blocks_entry(state)
+    if weekly_blocker:
+        blockers.append(weekly_blocker)
 
     # ========================================================
     # NORMALIZZAZIONE BLOCKERS
