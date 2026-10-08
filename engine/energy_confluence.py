@@ -2,7 +2,8 @@
 
 Il motore vedeva un contratto. Lo shock energia è il complesso.
 Soglia singolo: 2% = STRONG_MOVE. Confluenza: almeno tre del complesso
-oltre la soglia, con WTI o Brent dentro. Paper. Non è un ordine.
+oltre la soglia, con WTI o Brent dentro. Non abbassa la soglia.
+Non cambia final_decision.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ FAMILIES = {
 }
 
 
-def _family(name: str) -> str | None:
+def family_of(name: str) -> str | None:
     text = name.lower()
     for family, keys in FAMILIES.items():
         if any(key in text for key in keys):
@@ -27,10 +28,9 @@ def _family(name: str) -> str | None:
 
 
 def energy_event(moves: list[dict]) -> dict:
-    """moves: {name, pct}. Due letture: evento e continuazione, separate."""
     grouped: dict[str, list[dict]] = {}
     for row in moves:
-        family = _family(str(row.get("name", "")))
+        family = family_of(str(row.get("name", "")))
         if family is None:
             continue
         grouped.setdefault(family, []).append(row)
@@ -54,5 +54,24 @@ def energy_event(moves: list[dict]) -> dict:
         "confluence": "MOLTO_ALTA" if confirmed else "BASSA",
         "legs": strong,
         "continuation": "DA_VERIFICARE",
-        "note": "Evento. L'ingresso resta a struttura, trigger e rischio. Se il movimento è esausto: nessun nuovo ingresso.",
+        "note": "Evento di complesso. Non è un ingresso.",
     }
+
+
+def stamp_energy(states: list) -> dict:
+    moves = []
+    for state in states:
+        pct = getattr(state, "move_24h_pct", None)
+        if pct is None:
+            pct = (getattr(state, "metadata", {}) or {}).get("market_move_24h_pct")
+        moves.append({"name": getattr(state, "commodity", ""), "pct": pct or 0})
+    event = energy_event(moves)
+    families = {row["family"] for row in event.get("legs", [])}
+    for state in states:
+        family = family_of(getattr(state, "commodity", ""))
+        in_shock = event["event"] == "STRONG_MOVE_ENERGY" and family in families
+        state.metadata["energy"] = dict(event)
+        state.metadata["energy"]["in_complex"] = in_shock
+        if in_shock and state.opportunity_alert != "STRONG_MOVE":
+            state.opportunity_alert = "STRONG_MOVE"
+    return event
