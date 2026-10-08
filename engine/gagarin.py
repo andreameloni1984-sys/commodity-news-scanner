@@ -14,7 +14,7 @@ from engine.research_validation import annotate
 from engine.energy_confluence import stamp_energy
 from engine.energy_chain import stamp_paper
 
-STRONG_MOVE_PCT_24H = 2.0
+STRONG_MOVE_ATR = 1.5
 OPPORTUNITY_MOVE_PCT_24H = 1.0
 WATCH_MOVE_PCT_24H = 0.5
 
@@ -60,11 +60,11 @@ def scan_market_opportunity(state: SoyuzState) -> SoyuzState:
         score += min(30.0, move_atr * 10.0)
     score = _clamp(score, 0.0, 100.0)
 
-    if abs_24h >= STRONG_MOVE_PCT_24H:
+    if move_atr is not None and move_atr >= STRONG_MOVE_ATR:
         alert = "STRONG_MOVE"
-    elif abs_24h >= OPPORTUNITY_MOVE_PCT_24H or score >= 35.0:
+    elif move_atr is not None and move_atr >= 1.0:
         alert = "OPPORTUNITY"
-    elif abs_24h >= WATCH_MOVE_PCT_24H or score >= 20.0:
+    elif move_atr is not None and move_atr >= 0.5:
         alert = "WATCH"
     else:
         alert = "NONE"
@@ -88,7 +88,7 @@ def scan_market_opportunity(state: SoyuzState) -> SoyuzState:
     state.metadata["opportunity_score"] = state.opportunity_score
     state.metadata["opportunity_alert"] = state.opportunity_alert
     state.metadata["opportunity_direction"] = state.opportunity_direction
-    state.metadata["strong_move_threshold_pct_24h"] = STRONG_MOVE_PCT_24H
+    state.metadata["strong_move_atr"] = STRONG_MOVE_ATR
     state.metadata["expected_move_pct"] = state.expected_move_pct
     state.metadata["expected_move_duration_hours"] = state.expected_move_duration_hours
     state.metadata["continuation_score"] = state.continuation_score

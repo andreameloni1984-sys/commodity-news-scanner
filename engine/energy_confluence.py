@@ -2,13 +2,13 @@
 
 Il motore vedeva un contratto. Lo shock energia è il complesso.
 Soglia singolo: 2% = STRONG_MOVE. Confluenza: almeno tre del complesso
-oltre la soglia, con WTI o Brent dentro. Non abbassa la soglia.
+oltre 1 ATR, con WTI o Brent dentro. Il 2% fisso non è una regola.
 Non cambia final_decision.
 """
 
 from __future__ import annotations
 
-STRONG_MOVE_PCT = 2.0
+STRONG_MOVE_ATR = 1.0
 MIN_CONFIRMATIONS = 3
 
 FAMILIES = {
@@ -37,8 +37,9 @@ def energy_event(moves: list[dict]) -> dict:
     strong = []
     for family, rows in grouped.items():
         best = max(rows, key=lambda row: abs(float(row.get("pct") or 0)))
+        atr_move = float(best.get("atr_move") or 0)
         pct = float(best.get("pct") or 0)
-        if abs(pct) >= STRONG_MOVE_PCT:
+        if abs(atr_move) >= STRONG_MOVE_ATR:
             strong.append({"family": family, "name": best.get("name"), "pct": pct})
     families = {row["family"] for row in strong}
     confirmed = len(families) >= MIN_CONFIRMATIONS and bool(families & {"WTI", "BRENT"})
@@ -64,7 +65,10 @@ def stamp_energy(states: list) -> dict:
         pct = getattr(state, "move_24h_pct", None)
         if pct is None:
             pct = (getattr(state, "metadata", {}) or {}).get("market_move_24h_pct")
-        moves.append({"name": getattr(state, "commodity", ""), "pct": pct or 0})
+        atr_move = getattr(state, "move_atr", None)
+        if atr_move is None:
+            atr_move = (getattr(state, "metadata", {}) or {}).get("market_move_atr")
+        moves.append({"name": getattr(state, "commodity", ""), "pct": pct or 0, "atr_move": atr_move or 0})
     event = energy_event(moves)
     families = {row["family"] for row in event.get("legs", [])}
     for state in states:
