@@ -1,0 +1,17 @@
+{
+  "id": "ENERGY_SHOCK_AND_WEEKLY_LONG",
+  "status": "ACTIVE_PAPER",
+  "paper_only": true,
+  "promoted": null,
+  "registered_at": "2026-10-08T19:12:00Z",
+  "rule": "PAPER_LONG solo se lo shock energia e il weekly bias sono long. Altrimenti nessun paper.",
+  "energy": "WTI o Brent, piu almeno due raffinati, stesso segno, almeno 1 ATR.",
+  "weekly": "Pendenza 20 giorni / ATR almeno 0.5.",
+  "stop_atr": 2,
+  "tp1_atr": 2,
+  "tp2_atr": 3,
+  "risk_pct": 0.01,
+  "max_allocation_pct": 0.25,
+  "short": false,
+  "fixed_percent": false
+}
