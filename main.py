@@ -578,9 +578,16 @@ def run():
         state
         for state in results
         if (
-            str(getattr(state, "symbol", "")).upper() in approved_symbols
+            (
+                str(getattr(state, "symbol", "")).upper() in approved_symbols
+                or str((getattr(state, "metadata", {}) or {}).get("gagarin_action", "")).upper() in {"PAPER_ENTRY", "PAPER_SIGNAL"}
+            )
             and str(getattr(state, "setup_direction", "")).upper() in {"LONG", "SHORT"}
         )
+    ]
+    energy_states = [
+        state for state in results
+        if (getattr(state, "metadata", {}) or {}).get("energy", {}).get("in_complex")
     ]
 
     if TELEGRAM_ENABLED:
@@ -589,6 +596,19 @@ def run():
 
         try:
 
+            if energy_states:
+                event = energy_states[0].metadata.get("energy") or {}
+                legs = ", ".join(
+                    f"{row.get('family')} {float(row.get('pct') or 0):+.2f}%"
+                    for row in event.get("legs", [])
+                )
+                send_telegram(
+                    "ENERGY SHOCK "
+                    + str(event.get("direction", "NONE"))
+                    + "\n"
+                    + legs
+                    + "\nPAPER ONLY. Continuazione da verificare."
+                )
             if signal_results:
                 send_telegram(
                     format_signal_board(signal_results)
