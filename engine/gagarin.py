@@ -11,6 +11,10 @@ from engine.risk import apply_risk
 from engine.safety import apply_safety
 from engine.predictive import evaluate_pre_move
 
+STRONG_MOVE_PCT_24H = 2.0
+OPPORTUNITY_MOVE_PCT_24H = 1.0
+WATCH_MOVE_PCT_24H = 0.5
+
 
 # ============================================================
 # SOYUZ GAGARIN v1.3
@@ -70,11 +74,11 @@ def scan_market_opportunity(state: SoyuzState) -> SoyuzState:
         score += min(30.0, move_atr * 10.0)
     score = _clamp(score, 0.0, 100.0)
 
-    if score >= 60.0:
+    if abs_24h >= STRONG_MOVE_PCT_24H:
         alert = "STRONG_MOVE"
-    elif score >= 35.0:
+    elif abs_24h >= OPPORTUNITY_MOVE_PCT_24H or score >= 35.0:
         alert = "OPPORTUNITY"
-    elif score >= 20.0:
+    elif abs_24h >= WATCH_MOVE_PCT_24H or score >= 20.0:
         alert = "WATCH"
     else:
         alert = "NONE"
@@ -85,12 +89,24 @@ def scan_market_opportunity(state: SoyuzState) -> SoyuzState:
     state.opportunity_score = round(score, 2)
     state.opportunity_alert = alert
     state.opportunity_direction = direction
+    if atr > 0 and latest > 0:
+        atr_pct = (atr / latest) * 100.0
+        energy = 1.0 + (float(getattr(state, "pre_move_score", 0.0)) / 100.0)
+        state.expected_move_pct = round(max(atr_pct, atr_pct * energy * 1.5), 4)
+        state.expected_move_duration_hours = round(2.0 + min(22.0, float(getattr(state, "pre_move_score", 0.0)) * 0.20), 2)
+        state.continuation_score = round(min(100.0, float(getattr(state, "pre_move_score", 0.0)) * 0.9 + (20.0 if direction == getattr(state, "pre_move_direction", "NONE") else 0.0)), 2)
+        state.reversal_score = round(max(0.0, 100.0 - state.continuation_score), 2)
     state.metadata["market_move_4h_pct"] = state.move_4h_pct
     state.metadata["market_move_24h_pct"] = state.move_24h_pct
     state.metadata["market_move_atr"] = state.move_atr
     state.metadata["opportunity_score"] = state.opportunity_score
     state.metadata["opportunity_alert"] = state.opportunity_alert
     state.metadata["opportunity_direction"] = state.opportunity_direction
+    state.metadata["strong_move_threshold_pct_24h"] = STRONG_MOVE_PCT_24H
+    state.metadata["expected_move_pct"] = state.expected_move_pct
+    state.metadata["expected_move_duration_hours"] = state.expected_move_duration_hours
+    state.metadata["continuation_score"] = state.continuation_score
+    state.metadata["reversal_score"] = state.reversal_score
     return state
 
 
