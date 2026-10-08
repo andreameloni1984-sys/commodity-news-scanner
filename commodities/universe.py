@@ -173,6 +173,18 @@ COMMODITIES = [
         unit="USD",
         priority=10,
     ),
+
+    # --------------------------------------------------------
+    # FOREX
+    # --------------------------------------------------------
+    Commodity(name="EUR/USD", symbol="EUR/USD", category="Forex", unit="USD", priority=11),
+    Commodity(name="GBP/USD", symbol="GBP/USD", category="Forex", unit="USD", priority=12),
+    Commodity(name="USD/JPY", symbol="USD/JPY", category="Forex", unit="JPY", priority=13),
+    Commodity(name="USD/CHF", symbol="USD/CHF", category="Forex", unit="CHF", priority=14),
+    Commodity(name="AUD/USD", symbol="AUD/USD", category="Forex", unit="USD", priority=15),
+    Commodity(name="USD/CAD", symbol="USD/CAD", category="Forex", unit="CAD", priority=16),
+    Commodity(name="NZD/USD", symbol="NZD/USD", category="Forex", unit="USD", priority=17),
+    Commodity(name="EUR/JPY", symbol="EUR/JPY", category="Forex", unit="JPY", priority=18),
 ]
 
 
