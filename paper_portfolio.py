@@ -76,17 +76,41 @@ class PaperPortfolio:
                 "total_pnl": round(realized + unrealized, 2),
             }
 
-    def open_signal(self, row: dict[str, Any], allocation_pct: float = 0.25) -> dict[str, Any] | None:
+    def open_signal(
+        self,
+        row: dict[str, Any],
+        allocation_pct: float | None = None,
+        risk_pct: float = 0.01,
+        max_allocation_pct: float = 0.25,
+    ) -> dict[str, Any] | None:
         if str(row.get("action") or "").upper() not in PAPER_ENTRY_ACTIONS:
             return None
         entry = row.get("entry")
-        if not entry or entry <= 0:
+        stop = row.get("stop")
+        if not entry or entry <= 0 or stop is None or float(stop) <= 0:
+            return None
+        direction = str(row.get("direction") or "").upper()
+        if direction not in {"LONG", "SHORT"}:
+            return None
+        entry = float(entry)
+        stop = float(stop)
+        stop_move = abs(entry - stop) / entry
+        if stop_move <= 0:
+            return None
+        if direction == "LONG" and stop >= entry:
+            return None
+        if direction == "SHORT" and stop <= entry:
+            return None
+        if risk_pct <= 0 or max_allocation_pct <= 0:
             return None
         symbol = str(row.get("symbol") or "").upper()
         with self._lock:
             if any(p.status == "OPEN" and p.symbol == symbol for p in self.positions):
                 return None
-            allocation = min(self.cash, max(0.0, self.cash * allocation_pct))
+            cap_pct = max_allocation_pct if allocation_pct is None else min(max_allocation_pct, float(allocation_pct))
+            risk_budget = self.cash * float(risk_pct)
+            risk_allocation = risk_budget / stop_move
+            allocation = min(self.cash, self.cash * cap_pct, risk_allocation)
             if allocation <= 0:
                 return None
             now = datetime.now(timezone.utc).isoformat()
@@ -94,9 +118,9 @@ class PaperPortfolio:
                 id=f"P{len(self.positions)+1:04d}",
                 symbol=symbol,
                 commodity=str(row.get("commodity") or symbol),
-                direction=str(row.get("direction") or ""),
-                entry=float(entry),
-                stop=row.get("stop"),
+                direction=direction,
+                entry=entry,
+                stop=stop,
                 tp1=row.get("tp1"),
                 tp2=row.get("tp2"),
                 tp3=row.get("tp3"),
