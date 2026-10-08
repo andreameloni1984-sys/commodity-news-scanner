@@ -10,25 +10,11 @@ from engine.trigger import apply_trigger
 from engine.risk import apply_risk
 from engine.safety import apply_safety
 from engine.predictive import evaluate_pre_move
+from engine.research_validation import annotate
 
 STRONG_MOVE_PCT_24H = 2.0
 OPPORTUNITY_MOVE_PCT_24H = 1.0
 WATCH_MOVE_PCT_24H = 0.5
-
-
-# ============================================================
-# SOYUZ GAGARIN v1.3
-# SINGLE DECISION AUTHORITY
-# ============================================================
-#
-# DATA -> REGIME -> STRUCTURE -> SETUP -> TRIGGER
-#      -> QUALITY -> RISK -> SAFETY -> FINAL DECISION
-#
-# probability / quality / confidence sono CONFLUENCE SCORES.
-# Non sono probabilità statisticamente calibrate.
-#
-# Gagarin è l'unica autorità sulla decisione finale.
-# ============================================================
 
 
 def _clamp(value: float, minimum: float = 0.0, maximum: float = 100.0) -> float:
@@ -36,7 +22,6 @@ def _clamp(value: float, minimum: float = 0.0, maximum: float = 100.0) -> float:
 
 
 def scan_market_opportunity(state: SoyuzState) -> SoyuzState:
-    """Surface meaningful market moves without overriding trade safety."""
     closes = list(getattr(state, "closes", []) or [])
     candles = list(getattr(state, "candles", []) or [])
     timestamps = [float(x.get("timestamp", 0.0)) for x in candles]
@@ -64,7 +49,6 @@ def scan_market_opportunity(state: SoyuzState) -> SoyuzState:
     abs_4h = abs(float(move_4h or 0.0))
     abs_24h = abs(float(move_24h or 0.0))
 
-    # Discovery thresholds are intentionally below entry thresholds.
     score = 0.0
     if abs_24h >= 1.0:
         score += min(40.0, abs_24h * 10.0)
@@ -194,57 +178,25 @@ def analyze_one(commodity: Commodity) -> SoyuzState:
         analysis_timestamp=datetime.now(timezone.utc).isoformat(),
     )
 
-    # 1. DATA
-    # v1.2: passiamo esplicitamente anche la commodity al data adapter.
-    # Questo corregge il TypeError introdotto con data.py v1.7.
-    state = load_data(
-        state,
-        commodity,
-    )
-
-    # Predictive layer: estimate pre-move conditions before the market move is obvious.
+    state = load_data(state, commodity)
     state = evaluate_pre_move(state)
-
-    # Discovery layer: surface strong market moves before entry safety.
     state = scan_market_opportunity(state)
-
-    # 2. REGIME
     state = apply_regime(state)
-
-    # 3. STRUCTURE
     state = apply_structure(state)
-
-    # 4. SETUP
     state = apply_setup(state)
-
-    # 5. TRIGGER
     state = apply_trigger(state)
-
-    # 6. QUALITY / CONFIDENCE
     state = calculate_quality(state)
-
-    # 7. RISK
     state = apply_risk(state)
-
-    # 8. SAFETY
-    # Safety è l'unico modulo autorizzato a stabilire ENTRY oppure WAIT.
     state = apply_safety(state)
-
+    # Dopo la decisione. Non la cambia.
+    state = annotate(state)
     return state
 
 
 def analyze_universe(commodities):
-    """
-    Analizza l'intero universo commodity.
-
-    Il ranking è solamente di presentazione.
-    Non crea una seconda autorità decisionale.
-    """
     results = []
-
     for commodity in commodities:
         results.append(analyze_one(commodity))
-
     results.sort(
         key=lambda state: (
             state.final_decision == "ENTRY",
@@ -254,5 +206,4 @@ def analyze_universe(commodities):
         ),
         reverse=True,
     )
-
     return results
