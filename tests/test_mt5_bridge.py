@@ -44,6 +44,7 @@ def approved_decision():
 
 def test_builds_demo_payload_without_execution():
     decision = approved_decision()
+    assert decision.action == "PAPER_ENTRY"
     payload = build_demo_payload(decision)
 
     assert payload["transport"] == "MT5_DEMO"
@@ -60,7 +61,7 @@ def test_wait_cannot_become_mt5_payload():
     decision = approved_decision()
     decision.action = "WAIT"
 
-    with pytest.raises(ValueError, match="DECISION_NOT_PAPER_SIGNAL"):
+    with pytest.raises(ValueError, match="DECISION_NOT_PAPER_ENTRY"):
         build_demo_payload(decision)
 
 
