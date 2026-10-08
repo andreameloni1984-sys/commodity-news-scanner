@@ -184,6 +184,14 @@ YAHOO_SYMBOLS = {
     "SUGAR/USD": "SB=F",
     "COCOA/USD": "CC=F",
     "COFFEE/USD": "KC=F",
+    "EUR/USD": "EURUSD=X",
+    "GBP/USD": "GBPUSD=X",
+    "USD/JPY": "JPY=X",
+    "USD/CHF": "CHF=X",
+    "AUD/USD": "AUDUSD=X",
+    "USD/CAD": "CAD=X",
+    "NZD/USD": "NZDUSD=X",
+    "EUR/JPY": "EURJPY=X",
 }
 
 
@@ -277,6 +285,14 @@ PROVIDER_ORDER = {
         "YAHOO",
         "TWELVE_DATA",
     ),
+    "EUR/USD": ("TWELVE_DATA", "YAHOO"),
+    "GBP/USD": ("TWELVE_DATA", "YAHOO"),
+    "USD/JPY": ("TWELVE_DATA", "YAHOO"),
+    "USD/CHF": ("TWELVE_DATA", "YAHOO"),
+    "AUD/USD": ("TWELVE_DATA", "YAHOO"),
+    "USD/CAD": ("TWELVE_DATA", "YAHOO"),
+    "NZD/USD": ("TWELVE_DATA", "YAHOO"),
+    "EUR/JPY": ("TWELVE_DATA", "YAHOO"),
 }
 
 
