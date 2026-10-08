@@ -9,6 +9,7 @@ from engine.setup import apply_setup
 from engine.trigger import apply_trigger
 from engine.risk import apply_risk
 from engine.safety import apply_safety
+from engine.contract_roll import apply_roll_block
 from engine.predictive import evaluate_pre_move
 
 STRONG_MOVE_PCT_24H = 2.0
@@ -22,7 +23,7 @@ WATCH_MOVE_PCT_24H = 0.5
 # ============================================================
 #
 # DATA -> REGIME -> STRUCTURE -> SETUP -> TRIGGER
-#      -> QUALITY -> RISK -> SAFETY -> FINAL DECISION
+#      -> QUALITY -> RISK -> SAFETY -> ROLL -> FINAL DECISION
 #
 # probability / quality / confidence sono CONFLUENCE SCORES.
 # Non sono probabilità statisticamente calibrate.
@@ -229,6 +230,10 @@ def analyze_one(commodity: Commodity) -> SoyuzState:
     # 8. SAFETY
     # Safety è l'unico modulo autorizzato a stabilire ENTRY oppure WAIT.
     state = apply_safety(state)
+
+    # 9. ROLL
+    # Finestra di liquidità del front month: non autorizza un nuovo ENTRY.
+    state = apply_roll_block(state)
 
     return state
 
