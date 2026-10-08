@@ -58,7 +58,7 @@ def test_rejects_low_quality():
 
 def test_allows_paper_candidate():
     d = GagarinEngine().evaluate(market(), candidate())
-    assert d.action == "PAPER_SIGNAL"
+    assert d.action == "PAPER_ENTRY"
     assert d.reason == "APPROVED_FOR_PAPER"
 
 
@@ -103,7 +103,7 @@ def test_legacy_wait_is_not_an_automatic_gagarin_veto():
     )
     decisions = evaluate_states([state])
     assert len(decisions) == 1
-    assert decisions[0].action == "PAPER_SIGNAL"
+    assert decisions[0].action == "PAPER_ENTRY"
     assert decisions[0].reason == "APPROVED_FOR_PAPER"
 
 
