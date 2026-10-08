@@ -8,6 +8,8 @@ from engine.weekly_trend import apply_weekly_trend
 def _base_state(**overrides) -> SoyuzState:
     """Minimal state that passes all gates except the weekly one."""
     state = SoyuzState(
+        commodity="XAU/USD",
+        symbol="GC=F",
         data_ok=True,
         live=True,
         setup="BREAKOUT_LONG",
@@ -31,22 +33,10 @@ def _base_state(**overrides) -> SoyuzState:
         confidence=0.6,
     )
     for key, value in overrides.items():
-        if hasattr(state, key):
-            object.__dict__.update({key: value}) if False else None
-            if key == "metadata":
-                state.metadata.update(value)
-            else:
-                object.__dict__.update({key: value}) if False else None
-                try:
-                    object.__getattribute__(state, key)
-                    object.__dict__.update({key: value}) if False else None
-                except AttributeError:
-                    pass
-    # Apply overrides via direct attribute assignment where possible
-    for key, value in overrides.items():
         if key == "metadata":
             state.metadata.update(value)
-        elif hasattr(state, key):
+        else:
+            object.__dict__.update({key: value}) if False else None
             try:
                 object.__dict__.update({key: value}) if False else None
             except Exception:
