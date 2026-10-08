@@ -46,30 +46,37 @@ def energy_chain(
 
 
 def stamp_paper(states: list) -> int:
-    """Segna un PAPER_SIGNAL sul contratto guida. Non cambia final_decision."""
+    """Paper solo se shock energia e weekly bias coincidono. Non cambia final_decision."""
+    from engine.weekly_trend import weekly_trend
+
     stamped = 0
     for state in states:
         energy = (getattr(state, "metadata", {}) or {}).get("energy") or {}
         if energy.get("event") != "STRONG_MOVE_ENERGY" or not energy.get("in_complex"):
             continue
         direction = energy.get("direction")
-        if direction not in {"LONG", "SHORT"}:
+        if direction != "LONG":
             continue
         name = str(getattr(state, "commodity", "")).lower()
         if "wti" not in name and "crude" not in name and "brent" not in name:
+            continue
+        closes = [float(x) for x in (getattr(state, "closes", []) or []) if x]
+        weekly = weekly_trend(closes) if closes else {"direction": "FLAT"}
+        if weekly.get("direction") != "LONG":
+            state.metadata["paper_block"] = "WEEKLY_BIAS_CONTRARIO"
             continue
         price = getattr(state, "price", None)
         atr = getattr(state, "atr", None)
         if not price or not atr or price <= 0 or atr <= 0:
             continue
-        sign = 1 if direction == "LONG" else -1
         state.entry = float(price)
-        state.stop = float(price - sign * 2 * atr)
-        state.tp1 = float(price + sign * 2 * atr)
-        state.tp2 = float(price + sign * 3 * atr)
-        state.setup_direction = direction
+        state.stop = float(price - 2 * atr)
+        state.tp1 = float(price + 2 * atr)
+        state.tp2 = float(price + 3 * atr)
+        state.setup_direction = "LONG"
         state.metadata["gagarin_action"] = "PAPER_SIGNAL"
         state.metadata["paper_only"] = True
+        state.metadata["rule"] = "ENERGY_SHOCK_AND_WEEKLY_LONG"
         stamped += 1
         break
     return stamped
