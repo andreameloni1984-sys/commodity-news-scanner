@@ -79,9 +79,9 @@ def _run_gagarin():
         metadata["gagarin_reason"] = decision.reason if decision else "NO_DECISION"
 
     rows = [_state_json(s) for s in results]
-    operational = [r for r in rows if r["action"] == "PAPER_SIGNAL"]
+    operational = [r for r in rows if r["action"] in {"PAPER_ENTRY", "PAPER_SIGNAL"}]
     # Operational signals first, then strong market opportunities, then normal WAITs.
-    rows.sort(key=lambda x: (x["action"] != "PAPER_SIGNAL", x.get("opportunity_alert") not in {"STRONG_MOVE", "OPPORTUNITY"}, -(x.get("opportunity_score") or 0), -(x["probability"] or 0)))
+    rows.sort(key=lambda x: (x["action"] not in {"PAPER_ENTRY", "PAPER_SIGNAL"}, x.get("opportunity_alert") not in {"STRONG_MOVE", "OPPORTUNITY"}, -(x.get("opportunity_score") or 0), -(x["probability"] or 0)))
 
     prices = {r["symbol"]: r["price"] for r in rows if r.get("symbol") and r.get("price") is not None}
     closed = PORTFOLIO.evaluate_exits(prices)
