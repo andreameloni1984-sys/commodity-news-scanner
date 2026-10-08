@@ -156,10 +156,12 @@ def approve(
     # is available, the governor recomputes the geometry from entry/stop and
     # fails closed on materially inconsistent declarations. This prevents a
     # producer from passing the ATR bounds with a stale or fabricated value.
-    if market_atr is not None and market_atr > 0:
-        actual_stop_atr = abs(candidate.entry - candidate.stop) / market_atr
-        if not isclose(candidate.stop_distance_atr, actual_stop_atr, rel_tol=1e-3, abs_tol=1e-6):
-            return False, "STOP_ATR_GEOMETRY_MISMATCH"
+    if market_atr is None or market_atr <= 0:
+        return False, "MARKET_ATR_MISSING"
+
+    actual_stop_atr = abs(candidate.entry - candidate.stop) / market_atr
+    if not isclose(candidate.stop_distance_atr, actual_stop_atr, rel_tol=1e-3, abs_tol=1e-6):
+        return False, "STOP_ATR_GEOMETRY_MISMATCH"
 
     if candidate.stop_distance_atr < cfg.sl_min_atr:
         return False, "STOP_TOO_TIGHT"
