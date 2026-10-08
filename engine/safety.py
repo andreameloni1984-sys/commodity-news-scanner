@@ -56,6 +56,11 @@ def _has_value(value) -> bool:
     return value is not None
 
 
+def _trend_alignment_required(state: SoyuzState) -> bool:
+    """Structure and MTF must match only on trend continuation."""
+    return state.opportunity_type == "TREND_CONTINUATION"
+
+
 def apply_safety(
     state: SoyuzState,
 ) -> SoyuzState:
@@ -145,7 +150,7 @@ def apply_safety(
 
     # Trend continuation needs directional structure. Range/reversal
     # opportunities rely on their own setup evidence plus MTF direction.
-    if state.opportunity_type == "TREND_CONTINUATION":
+    if _trend_alignment_required(state):
         if state.setup_direction == "LONG" and state.structure_direction != "LONG":
             blockers.append("STRUCTURE_NOT_LONG")
         elif state.setup_direction == "SHORT" and state.structure_direction != "SHORT":
@@ -155,11 +160,13 @@ def apply_safety(
     # 7. MTF ALIGNMENT
     # ========================================================
     #
-    # Il setup deve essere coerente con la direzione MTF.
+    # Il setup deve essere coerente con la direzione MTF
+    # solo in trend continuation. Range e reversal non
+    # vengono bocciati qui se l'MTF non coincide.
     #
     # ========================================================
 
-    if state.opportunity_type == "TREND_CONTINUATION" and state.setup_direction in {"LONG", "SHORT"}:
+    if _trend_alignment_required(state) and state.setup_direction in {"LONG", "SHORT"}:
         if state.mtf_direction != state.setup_direction:
             blockers.append("MTF_DIRECTION_MISMATCH")
 
@@ -323,6 +330,16 @@ def apply_safety(
                 "LONG_TP3_INVALID"
             )
 
+        if (
+            state.tp1 is not None
+            and state.tp2 is not None
+            and state.tp3 is not None
+            and not (state.entry < state.tp1 < state.tp2 < state.tp3)
+        ):
+            blockers.append(
+                "LONG_TARGET_LADDER_INVALID"
+            )
+
     # ========================================================
     # 15. SHORT TARGET GEOMETRY
     # ========================================================
@@ -358,6 +375,16 @@ def apply_safety(
 
             blockers.append(
                 "SHORT_TP3_INVALID"
+            )
+
+        if (
+            state.tp1 is not None
+            and state.tp2 is not None
+            and state.tp3 is not None
+            and not (state.entry > state.tp1 > state.tp2 > state.tp3)
+        ):
+            blockers.append(
+                "SHORT_TARGET_LADDER_INVALID"
             )
 
     # ========================================================
@@ -436,14 +463,33 @@ def apply_safety(
     # + LIVE
     # + SETUP
     # + TRIGGER
-    # + STRUCTURE
-    # + MTF
+    # + STRUCTURE (solo trend continuation)
+    # + MTF (solo trend continuation)
     # + RISK
     # + PROBABILITY
     # + QUALITY
     # + CONFIDENCE
     #
+    # Il controllo MTF deve usare la stessa regola del gate 7.
+    # Prima richiedeva sempre mtf_direction == setup_direction,
+    # quindi un range/reversal valido veniva marcato
+    # FINAL_CONFLUENCE_FAIL anche senza MTF_DIRECTION_MISMATCH.
+    #
     # ========================================================
+
+    structure_ok = (
+        not _trend_alignment_required(state)
+        or state.structure_direction == state.setup_direction
+    )
+    mtf_ok = (
+        not _trend_alignment_required(state)
+        or state.mtf_direction == state.setup_direction
+    )
+    ladder_ok = True
+    if state.setup_direction == "LONG" and None not in {state.entry, state.tp1, state.tp2, state.tp3}:
+        ladder_ok = state.entry < state.tp1 < state.tp2 < state.tp3
+    elif state.setup_direction == "SHORT" and None not in {state.entry, state.tp1, state.tp2, state.tp3}:
+        ladder_ok = state.entry > state.tp1 > state.tp2 > state.tp3
 
     if (
         state.data_ok
@@ -454,9 +500,9 @@ def apply_safety(
             "SHORT",
         }
         and state.trigger_confirmed
-        and (state.opportunity_type != "TREND_CONTINUATION" or state.structure_direction == state.setup_direction)
-        and state.mtf_direction
-        == state.setup_direction
+        and structure_ok
+        and mtf_ok
+        and ladder_ok
         and state.entry is not None
         and state.stop is not None
         and state.tp1 is not None
