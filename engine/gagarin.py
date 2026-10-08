@@ -12,6 +12,7 @@ from engine.safety import apply_safety
 from engine.predictive import evaluate_pre_move
 from engine.research_validation import annotate
 from engine.energy_confluence import stamp_energy
+from engine.energy_chain import stamp_paper
 
 STRONG_MOVE_PCT_24H = 2.0
 OPPORTUNITY_MOVE_PCT_24H = 1.0
@@ -198,6 +199,7 @@ def analyze_universe(commodities):
     for commodity in commodities:
         results.append(analyze_one(commodity))
     stamp_energy(results)
+    stamp_paper(results)
     results.sort(
         key=lambda state: (
             state.final_decision == "ENTRY",
