@@ -106,7 +106,32 @@ def compare(book: dict, commodity: str, setup: str, regime: str, weekly_bias: st
     if len(oos) >= 2:
         best = max(oos, key=lambda name: oos[name]["net_median"])
         others = [oos[n]["net_median"] for n in oos if n != best]
-        if oos[best]["net_median"] > max(others):
+        if others and oos[best]["net_median"] > max(others):
             report["candidate"] = best
             report["note"] = "Candidata paper. Non è una regola del motore."
     return report
+
+
+def annotate(state):
+    """Aggiunge le tre ipotesi allo stato. Non cambia final_decision."""
+    from engine.weekly_trend import weekly_trend
+
+    closes = [float(x) for x in (getattr(state, "closes", []) or []) if x]
+    weekly = weekly_trend(closes) if closes else {"direction": "FLAT", "status": "NO_CLOSES"}
+    regime = getattr(state, "regime", None)
+    trigger = bool(getattr(state, "trigger_confirmed", False))
+    setup = getattr(state, "setup_direction", None)
+    weekly_long = weekly.get("direction") == "LONG"
+    b_on = weekly_long and regime == "TREND_UP" and trigger and setup == "LONG"
+    state.metadata["research"] = {
+        "mode": "RESEARCH_PAPER_VALIDATION",
+        "paper_only": True,
+        "promoted": None,
+        "weekly_bias": "FAVOREVOLE" if weekly_long else "CONTRARIO",
+        "weekly_status": weekly.get("status"),
+        "A_GAGARIN_ATTUALE": "OSSERVA",
+        "B_WEEKLY_REGIME_INTRADAY": "CONTESTO_OK" if b_on else "CONTESTO_SPENTO",
+        "C_COMMODITY_SPECIFIC": "CAMPIONE_INSUFFICIENTE",
+        "note": "Il day trading è solo il trigger di B, e solo se settimana e regime sono long.",
+    }
+    return state
