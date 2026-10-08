@@ -197,12 +197,19 @@ def analyze_universe(commodities):
     results = []
     for commodity in commodities:
         results.append(analyze_one(commodity))
+    # Ranking: approval remains the first gate. Among equally actionable
+    # states, prioritize independently observed market opportunity before
+    # generic confluence scores. This does not authorize an entry; it only
+    # improves ordering of the research/decision board.
     results.sort(
         key=lambda state: (
             state.final_decision == "ENTRY",
-            state.probability,
-            state.quality,
-            state.confidence,
+            state.opportunity_alert == "STRONG_MOVE",
+            state.opportunity_alert == "OPPORTUNITY",
+            float(state.opportunity_score or 0.0),
+            float(state.probability or 0.0),
+            float(state.quality or 0.0),
+            float(state.confidence or 0.0),
         ),
         reverse=True,
     )
