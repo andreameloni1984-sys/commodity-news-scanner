@@ -213,7 +213,7 @@ def _print_operational(results):
             (getattr(state, "metadata", {}) or {}).get(
                 "gagarin_action", ""
             )
-        ).upper() == "PAPER_SIGNAL"
+        ).upper() in {"PAPER_ENTRY", "PAPER_SIGNAL"}
     ]
 
     print("🎯 OPERATIVITÀ")
@@ -338,7 +338,7 @@ def _print_paper_journal(results):
                     (getattr(state, "metadata", {}) or {}).get(
                         "gagarin_action", ""
                     )
-                ).upper() == "PAPER_SIGNAL":
+                ).upper() in {"PAPER_ENTRY", "PAPER_SIGNAL"}:
 
                     print(
                         f"  • "
