@@ -212,6 +212,10 @@ class SoyuzState:
 
     setup_quality: float = 0.0
 
+    # Canonical setup classification used by setup, safety, ranking and serialization.
+    # Keeping it in the canonical state prevents dynamic attributes from being lost.
+    opportunity_type: str = "NONE"
+
     # ========================================================
     # TRIGGER
     # ========================================================
