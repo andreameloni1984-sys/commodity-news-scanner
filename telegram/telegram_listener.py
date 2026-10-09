@@ -1,63 +1,26 @@
-"""
-SOYUZ GAGARIN — Telegram Listener v1.0
-
-Processo Telegram permanente.
-
-Funzioni:
-- mantiene attivo il long polling
-- riceve i comandi Telegram
-- risponde tramite telegram.bot
-- non esegue ordini reali
-- PAPER ONLY
-"""
+"""Listener Telegram. Menu corto. PAPER only. Nessun ordine."""
 
 from __future__ import annotations
 
 import time
 
-from telegram.bot import (
-    run_polling,
-)
+from telegram.short_poll import run_short_polling
 
 
 def main():
-
-    print("=" * 60)
-    print("🚀 SOYUZ GAGARIN — TELEGRAM LISTENER")
-    print("=" * 60)
+    print("SOYUZ TELEGRAM LISTENER")
     print("MODE: PAPER ONLY")
-    print("Telegram polling: STARTING")
-    print()
-
     while True:
-
         try:
-
-            run_polling()
-
+            run_short_polling()
+            time.sleep(5)
         except KeyboardInterrupt:
-
-            print()
             print("Telegram listener stopped.")
             break
-
         except Exception as exc:
-
-            print(
-                "⚠️ TELEGRAM LISTENER ERROR"
-            )
-
-            print(
-                f"{type(exc).__name__}: {exc}"
-            )
-
-            print(
-                "Retrying in 10 seconds..."
-            )
-
+            print(f"TELEGRAM LISTENER ERROR {type(exc).__name__}: {exc}")
             time.sleep(10)
 
 
 if __name__ == "__main__":
-
     main()
