@@ -1,7 +1,7 @@
 {
   "paper_only": true,
   "promoted": null,
-  "updated_at": "2026-10-09T08:50:00Z",
+  "updated_at": "2026-10-09T15:11:34Z",
   "notes": {
     "orb": {
       "description": "Opening Range Breakout: range dei primi 30 minuti USA",
@@ -15,7 +15,7 @@
       "evidence": "Zarattini et al: uscite VWAP migliori delle uscite a prezzo fisso"
     },
     "costs": {
-      "description": "Il costo è il muro: 11 su 14 famiglie di segnali falliscono",
+      "description": "Il costo \u00e8 il muro: 11 su 14 famiglie di segnali falliscono",
       "evidence": "studio 2026 micro Nasdaq: guadagno lordo sotto il costo del giro",
       "rule": "nessun segnale senza spread e slippage scritti nel conto"
     },
@@ -29,10 +29,10 @@
     },
     "instruments": {
       "SPY": "ETF S&P 500, spread 1 centesimo, volume enorme, orario 15:30-22:00 Roma",
-      "QQQ": "ETF Nasdaq 100, range di apertura più largo, stesso schema di SPY",
+      "QQQ": "ETF Nasdaq 100, range di apertura pi\u00f9 largo, stesso schema di SPY",
       "ES_NQ": "E-mini S&P e Nasdaq: leva alta, tick fisso, stop in ATR obbligatorio",
       "MES_MNQ": "Micro: stesso sottostante, capitale piccolo, costo giro 0.25$/contratto",
-      "EURUSD_GBPUSD": "Forex major: solo overlap Londra-NY 14:00-17:00 Roma, spread pesa di più",
+      "EURUSD_GBPUSD": "Forex major: solo overlap Londra-NY 14:00-17:00 Roma, spread pesa di pi\u00f9",
       "excluded_from_day": "WTI, Brent, oro, argento, gas, cereali: restano nel motore settimanale"
     },
     "candles_fibonacci": {
