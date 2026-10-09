@@ -1,0 +1,10 @@
+{
+  "paper_only": true,
+  "send_order": false,
+  "capital": 100.0,
+  "risk_per_trade": 0.01,
+  "max_position_pct": 0.25,
+  "positions": [],
+  "closed": [],
+  "updated_at": "2026-10-09T08:00:00Z"
+}
