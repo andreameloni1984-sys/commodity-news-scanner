@@ -37,7 +37,7 @@ def approved_decision():
         curve_ok=True,
     )
     return GagarinEngine().evaluate(
-        MarketSnapshot("XPT/USD", "2026-10-02T00:00:00Z", 100.0),
+        MarketSnapshot("XPT/USD", "2026-10-02T00:00:00Z", 100.0, atr=2.0),
         candidate,
     )
 
