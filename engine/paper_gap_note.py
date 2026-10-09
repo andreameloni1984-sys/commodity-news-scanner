@@ -4,7 +4,8 @@ Nota di lettura. Non è una regola. Non promuove.
 Non legge e non scrive final_decision. Non invia ordini.
 promoted = None.
 
-Riletto il 2026-10-08 23:04 UTC (tree 4c181aa).
+Riletto il 2026-10-09 00:05 UTC (tree c3a1c025).
+Lettura precedente 2026-10-08 23:04 UTC (tree 4c181aa): stesso buco.
 
 Dato letto:
 - data/registered_rule.json: ENERGY_SHOCK_AND_WEEKLY_LONG,
@@ -32,7 +33,7 @@ Gli shock in reason sono in punti, non in ATR.
 3.89 / 3.435 = 1.13 ATR solo se quell'ATR fosse quello dello shock.
 L'ATR non è nel file.
 
-Manca il dato misurabile: close[t], close[t-20], ATR 14.
+Il paper non gira: manca il dato misurabile close[t], close[t-20], ATR 14.
 Senza questi non si può dire weekly long (soglia 0.5).
 Senza mark il pnl resta null. Il paper resta OPEN.
 Nessuna promozione. Nessun ordine. final_decision non toccata.
