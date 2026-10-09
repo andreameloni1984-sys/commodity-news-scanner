@@ -4,11 +4,14 @@ Nota di lettura. Non è una regola. Non promuove.
 Non legge e non scrive final_decision. Non invia ordini.
 promoted = None.
 
-Riletto il 2026-10-09 11:06 UTC (commit 0ee50e3).
-Commit precedente: solo note in engine/. I file data non sono cambiati
-da read_at 2026-10-09T03:48:00Z (driver) e da paper_open P0001.
+Riletto il 2026-10-09 12:08 UTC (tree e87ea57, commit nota 11:09Z).
+I file data non sono cambiati da read_at 2026-10-09T03:48:00Z (driver)
+e da paper_open P0001. SHA invariati: registered_rule 1f2f82a9,
+paper_open e5385ead, driver_snapshot 5e644e4b, day_registry d35c6304,
+day_research 7a775af1, day_universe d6a6f525.
 Non aggiunge close[t], close[t-20], ATR 14, raffinati in ATR.
-Lettura precedente 2026-10-09 10:04 UTC (commit 0ee50e3, nota tree 3981848b): stesso buco di misura.
+Lettura precedente 2026-10-09 11:06 UTC (commit e87ea57): stesso buco di misura.
+Lettura 2026-10-09 10:04 UTC (commit 0ee50e3): stesso buco di misura.
 Lettura 2026-10-09 09:04 UTC (tree 122b73f9): stesso buco di misura.
 Lettura 2026-10-09 08:04 UTC (tree 343e7c75): stesso buco di misura.
 Lettura 2026-10-09 07:05 UTC (tree 8d29e71): stesso buco di misura.
