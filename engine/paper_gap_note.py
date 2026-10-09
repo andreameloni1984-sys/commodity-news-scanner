@@ -4,17 +4,17 @@ Nota di lettura. Non è una regola. Non promuove.
 Non legge e non scrive final_decision. Non invia ordini.
 promoted = None.
 
-Riletto il 2026-10-09 07:05 UTC (tree 8d29e71).
-Lettura precedente 2026-10-09 06:06 UTC (tree 92006a51): stesso buco di misura.
+Riletto il 2026-10-09 08:04 UTC (tree 343e7c75).
+Commit 07:15 UTC: solo engine/paper_orb_sample_note.py (campione ORB 5 minuti).
+Non aggiunge close[t], close[t-20], ATR 14, raffinati in ATR.
+Lettura precedente 2026-10-09 07:05 UTC (tree 8d29e71): stesso buco di misura.
+Lettura 2026-10-09 06:06 UTC (tree 92006a51): stesso buco di misura.
 Lettura 2026-10-09 05:04 UTC (tree 29db933): stesso buco di misura.
 Lettura 2026-10-09 04:04 UTC (tree f2fc4569): stesso buco di misura.
 Lettura 2026-10-09 03:04 UTC (tree 19307a2): stesso buco.
 Lettura 2026-10-09 02:04 UTC (tree c04ac70): stesso buco.
 Lettura 2026-10-09 01:05 UTC (tree f41d871): stesso buco.
 Lettura 2026-10-09 00:05 UTC (tree c3a1c025): stesso buco.
-Commit dopo la nota 04:05: menu Telegram e day_automation (decision only,
-send_order false). Non aggiungono close[t], close[t-20], ATR 14, raffinati in ATR.
-Push repo 2026-10-09T05:34:42Z: nessun file data nuovo con serie.
 
 Dato letto:
 - data/registered_rule.json: id ENERGY_SHOCK_AND_WEEKLY_SAME_SIDE,
@@ -40,15 +40,9 @@ Dato letto:
   Nessun weekly bias nel record.
 - data/day_research.json: updated_at 2026-10-09T08:50:00Z, status RESEARCH_NOTES.
   Note ORB/VWAP/costi. Nessuna serie close, nessun ATR, nessun weekly bias.
-- paper_trade_log.csv: una riga 2026-10-08T16:23:00Z, PAPER_ENTRY,
-  stessi livelli, status OPEN, pnl vuoto, nota chiusura spot
-  6 ott 2026. Nessun esito.
-- commodities_direction_state.json: Petrolio WTI, Brent,
-  Benzina RBOB e Heating Oil LONG, updated_at 2026-09-17.
-  Nessun close, nessun ATR, nessuno slope_atr.
-- data/day_universe.json: instruments vuoto, send_order false.
 - data/: driver_snapshot.json, paper_open.json, registered_rule.json,
-  day_universe.json, day_research.json. Nessuna serie close[t], close[t-20], ATR 14.
+  day_universe.json, day_research.json, day_registry.json.
+  Nessuna serie close[t], close[t-20], ATR 14.
 
 Coerenza livelli, non verifica della regola:
 ATR implicito = (96.24 - 89.37) / 2 = 3.435.
