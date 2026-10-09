@@ -95,10 +95,15 @@ def evaluate_states(states: Iterable[object]):
             "data_quality_ok",
             getattr(state, "data_ok", False) and candle_count >= 30,
         ))
-        freshness_ok = bool(explicit_gates.get(
+        freshness_gate = bool(explicit_gates.get(
             "freshness_ok",
             getattr(state, "live", False) and bool(meta.get("fresh_live", False)),
         ))
+        # An explicit producer gate is not allowed to override an absent,
+        # future-dated, or stale timestamp.
+        freshness_ok = freshness_gate and _freshness_ok(
+            state, configured=True, max_age_seconds=freshness_limit
+        )
         contract_ok = bool(explicit_gates.get(
             "contract_ok",
             symbol in engine.config.allowed_assets and bool(meta.get("resolved_symbol")),
