@@ -1,27 +1,73 @@
 {
   "paper_only": true,
-  "read_at": "2026-10-09T03:48:00Z",
+  "read_at": "2026-10-09T13:53:58Z",
   "sources": {
-    "dollar": "FRED DTWEXBGS",
-    "wti": "FRED DCOILWTICO",
-    "inventories": "EIA WCRSTUS1"
+    "us_crude_stocks": "EIA WCRSTUS1 (api -> public page)",
+    "us_natgas_storage": "EIA NW2_EPG0_SWO_R48_BCF (api -> public page)",
+    "dollar_index": "FRED DTWEXBGS (api -> csv)",
+    "real_rate_10y": "FRED DFII10 (api -> csv)",
+    "wasde": "USDA NASS public page (wheat/corn/soybeans)"
   },
   "observations": {
-    "dollar_index": {"date": "2026-10-02", "value": 121.3848, "previous": 121.7882},
-    "wti": {"date": "2026-10-06", "value": 96.24, "previous": 96.13},
-    "us_crude_stocks_kb": {"date": "2026-10-02", "value": 707117, "previous": 711087}
+    "us_crude_stocks": {
+      "series_id": "WCRSTUS1",
+      "value": null,
+      "date": null,
+      "source": null,
+      "error": "no_data"
+    },
+    "us_natgas_storage": {
+      "series_id": "NW2_EPG0_SWO_R48_BCF",
+      "value": null,
+      "date": null,
+      "source": null,
+      "error": "no_data"
+    },
+    "dollar_index": {
+      "series_id": "DTWEXBGS",
+      "value": 121.3848,
+      "date": "2026-10-02",
+      "previous": 121.7882,
+      "source": "fred_csv",
+      "error": null
+    },
+    "real_rate_10y": {
+      "series_id": "DFII10",
+      "value": 2.92,
+      "date": "2026-10-07",
+      "previous": 2.91,
+      "source": "fred_csv",
+      "error": null
+    },
+    "wheat_world_mb": {
+      "value": null,
+      "date": null,
+      "source": null
+    },
+    "corn_world_mb": {
+      "value": null,
+      "date": null,
+      "source": null
+    },
+    "soybeans_world_mb": {
+      "value": null,
+      "date": null,
+      "source": null
+    }
   },
   "variables": {
-    "inventories": "TIGHT",
+    "inventories": "UNKNOWN",
     "curve": "UNKNOWN",
     "supply_shock": "UNKNOWN",
     "refined": "UNKNOWN",
     "dollar": "DOWN",
-    "real_rates": "UNKNOWN",
+    "real_rates": "UP",
     "systematic_flow": "UNKNOWN",
     "weather": "UNKNOWN",
     "harvest": "UNKNOWN",
     "season": "UNKNOWN",
     "hedging_pressure": "UNKNOWN"
-  }
+  },
+  "divergences": [],
+  "note": "Variabili senza dato restano UNKNOWN. Nessun valore inventato."
 }
