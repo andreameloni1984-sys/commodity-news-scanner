@@ -89,6 +89,9 @@ class SoyuzState:
 
     timestamps: list = field(default_factory=list)
 
+    # Canonical OHLC candle objects used by the opportunity scanner.
+    candles: list = field(default_factory=list)
+
     # ========================================================
     # DATA — MULTI TIMEFRAME
     # ========================================================
