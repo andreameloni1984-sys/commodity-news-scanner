@@ -618,9 +618,10 @@ def run():
                 )
             else:
                 send_telegram(
-                    "SOYUZ STATO\n"
-                    "Nessun paper. Shock e settimana non sono dalla stessa parte.\n"
-                    "PAPER ONLY. Nessun ordine."
+                    "SOYUZ GIORNO\n"
+                    "Verso: piatto. Shock e settimana non coincidono.\n"
+                    "Energia: scorte, curva, offerta. Metalli: dollaro. Agri: meteo.\n"
+                    "PAPER ONLY. Nessun prezzo inventato."
                 )
                 print(
                     "📡 SIGNAL CHANNEL: status only — no entry"
