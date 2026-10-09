@@ -4,8 +4,9 @@ Nota di lettura. Non è una regola. Non promuove.
 Non legge e non scrive final_decision. Non invia ordini.
 promoted = None.
 
-Riletto il 2026-10-09 06:06 UTC (tree 92006a51).
-Lettura precedente 2026-10-09 05:04 UTC (tree 29db933): stesso buco di misura.
+Riletto il 2026-10-09 07:05 UTC (tree 8d29e71).
+Lettura precedente 2026-10-09 06:06 UTC (tree 92006a51): stesso buco di misura.
+Lettura 2026-10-09 05:04 UTC (tree 29db933): stesso buco di misura.
 Lettura 2026-10-09 04:04 UTC (tree f2fc4569): stesso buco di misura.
 Lettura 2026-10-09 03:04 UTC (tree 19307a2): stesso buco.
 Lettura 2026-10-09 02:04 UTC (tree c04ac70): stesso buco.
@@ -37,6 +38,8 @@ Dato letto:
   pnl null. Reason solo shock: WTI +3.89, Brent +3.66,
   gasoline +3.64, heating oil +2.73. Continuazione non chiusa.
   Nessun weekly bias nel record.
+- data/day_research.json: updated_at 2026-10-09T08:50:00Z, status RESEARCH_NOTES.
+  Note ORB/VWAP/costi. Nessuna serie close, nessun ATR, nessun weekly bias.
 - paper_trade_log.csv: una riga 2026-10-08T16:23:00Z, PAPER_ENTRY,
   stessi livelli, status OPEN, pnl vuoto, nota chiusura spot
   6 ott 2026. Nessun esito.
@@ -45,7 +48,7 @@ Dato letto:
   Nessun close, nessun ATR, nessuno slope_atr.
 - data/day_universe.json: instruments vuoto, send_order false.
 - data/: driver_snapshot.json, paper_open.json, registered_rule.json,
-  day_universe.json. Nessuna serie close[t], close[t-20], ATR 14.
+  day_universe.json, day_research.json. Nessuna serie close[t], close[t-20], ATR 14.
 
 Coerenza livelli, non verifica della regola:
 ATR implicito = (96.24 - 89.37) / 2 = 3.435.
