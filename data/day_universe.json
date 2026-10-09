@@ -1,0 +1,6 @@
+{
+  "paper_only": true,
+  "send_order": false,
+  "notes": "Dati vuoti di proposito. Il motore valuta SPY, QQQ, futures, forex e commodity. Senza numeri l'azione resta NONE.",
+  "instruments": {}
+}
