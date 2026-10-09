@@ -4,14 +4,16 @@ Nota di lettura. Non è una regola. Non promuove.
 Non legge e non scrive final_decision. Non invia ordini.
 promoted = None.
 
-Riletto il 2026-10-09 05:04 UTC (tree 29db933).
-Lettura precedente 2026-10-09 04:04 UTC (tree f2fc4569): stesso buco di misura.
+Riletto il 2026-10-09 06:06 UTC (tree 92006a51).
+Lettura precedente 2026-10-09 05:04 UTC (tree 29db933): stesso buco di misura.
+Lettura 2026-10-09 04:04 UTC (tree f2fc4569): stesso buco di misura.
 Lettura 2026-10-09 03:04 UTC (tree 19307a2): stesso buco.
 Lettura 2026-10-09 02:04 UTC (tree c04ac70): stesso buco.
 Lettura 2026-10-09 01:05 UTC (tree f41d871): stesso buco.
 Lettura 2026-10-09 00:05 UTC (tree c3a1c025): stesso buco.
 Commit dopo la nota 04:05: menu Telegram e day_automation (decision only,
 send_order false). Non aggiungono close[t], close[t-20], ATR 14, raffinati in ATR.
+Push repo 2026-10-09T05:34:42Z: nessun file data nuovo con serie.
 
 Dato letto:
 - data/registered_rule.json: id ENERGY_SHOCK_AND_WEEKLY_SAME_SIDE,
@@ -41,8 +43,9 @@ Dato letto:
 - commodities_direction_state.json: Petrolio WTI, Brent,
   Benzina RBOB e Heating Oil LONG, updated_at 2026-09-17.
   Nessun close, nessun ATR, nessuno slope_atr.
-- data/: driver_snapshot.json, paper_open.json, registered_rule.json.
-  Nessuna serie close[t], close[t-20], ATR 14.
+- data/day_universe.json: instruments vuoto, send_order false.
+- data/: driver_snapshot.json, paper_open.json, registered_rule.json,
+  day_universe.json. Nessuna serie close[t], close[t-20], ATR 14.
 
 Coerenza livelli, non verifica della regola:
 ATR implicito = (96.24 - 89.37) / 2 = 3.435.
