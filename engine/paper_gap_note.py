@@ -4,10 +4,12 @@ Nota di lettura. Non è una regola. Non promuove.
 Non legge e non scrive final_decision. Non invia ordini.
 promoted = None.
 
-Riletto il 2026-10-09 09:04 UTC (tree 122b73f9).
-Commit 08:05 UTC: solo engine/paper_gap_note.py (nota precedente).
+Riletto il 2026-10-09 10:04 UTC (tree 3981848b).
+Commit precedente: solo note in engine/. I file data non sono cambiati
+da read_at 2026-10-09T03:48:00Z (driver) e da paper_open P0001.
 Non aggiunge close[t], close[t-20], ATR 14, raffinati in ATR.
-Lettura precedente 2026-10-09 08:04 UTC (tree 343e7c75): stesso buco di misura.
+Lettura precedente 2026-10-09 09:04 UTC (tree 122b73f9): stesso buco di misura.
+Lettura 2026-10-09 08:04 UTC (tree 343e7c75): stesso buco di misura.
 Lettura 2026-10-09 07:05 UTC (tree 8d29e71): stesso buco di misura.
 Lettura 2026-10-09 06:06 UTC (tree 92006a51): stesso buco di misura.
 Lettura 2026-10-09 05:04 UTC (tree 29db933): stesso buco di misura.
@@ -41,6 +43,7 @@ Dato letto:
   Nessun weekly bias nel record.
 - data/day_registry.json: updated_at 2026-10-09T08:00:00Z, positions [], closed [],
   send_order false, capital 100. Nessuna serie.
+- data/day_universe.json: instruments {}, send_order false. Dati vuoti di proposito.
 - data/day_research.json: updated_at 2026-10-09T08:50:00Z, status RESEARCH_NOTES.
   Note ORB/VWAP/costi. Nessuna serie close, nessun ATR, nessun weekly bias.
 - data/: driver_snapshot.json, paper_open.json, registered_rule.json,
