@@ -1,0 +1,45 @@
+{
+  "paper_only": true,
+  "promoted": null,
+  "updated_at": "2026-10-09T08:50:00Z",
+  "notes": {
+    "orb": {
+      "description": "Opening Range Breakout: range dei primi 30 minuti USA",
+      "entry": "rottura del range con volume sopra la media",
+      "stop": "lato opposto del range, mai sotto 0.8 ATR",
+      "target": "altezza del range, poi uscita sul VWAP",
+      "evidence": "studio 2026 E-mini S&P: 75% vs 53% momentum generico"
+    },
+    "vwap_exit": {
+      "description": "Uscita al ritorno sul VWAP, non a prezzo fisso",
+      "evidence": "Zarattini et al: uscite VWAP migliori delle uscite a prezzo fisso"
+    },
+    "costs": {
+      "description": "Il costo è il muro: 11 su 14 famiglie di segnali falliscono",
+      "evidence": "studio 2026 micro Nasdaq: guadagno lordo sotto il costo del giro",
+      "rule": "nessun segnale senza spread e slippage scritti nel conto"
+    },
+    "atr_stop": {
+      "description": "Stop in ATR adattivo, non percentuale fissa",
+      "evidence": "drawdown ridotto 45-65% su 15 futures su 20 anni"
+    },
+    "daily_limit": {
+      "description": "Stop al 3% di perdita giornaliera o 3 perdite di fila",
+      "evidence": "disciplina, non segnale: protegge dal giorno in serie"
+    },
+    "instruments": {
+      "SPY": "ETF S&P 500, spread 1 centesimo, volume enorme, orario 15:30-22:00 Roma",
+      "QQQ": "ETF Nasdaq 100, range di apertura più largo, stesso schema di SPY",
+      "ES_NQ": "E-mini S&P e Nasdaq: leva alta, tick fisso, stop in ATR obbligatorio",
+      "MES_MNQ": "Micro: stesso sottostante, capitale piccolo, costo giro 0.25$/contratto",
+      "EURUSD_GBPUSD": "Forex major: solo overlap Londra-NY 14:00-17:00 Roma, spread pesa di più",
+      "excluded_from_day": "WTI, Brent, oro, argento, gas, cereali: restano nel motore settimanale"
+    },
+    "candles_fibonacci": {
+      "description": "Candele giapponesi e Fibonacci: etichette, non segnali",
+      "evidence": "studi su engulfing S&P 500: potere predittivo vicino a zero dopo i costi"
+    }
+  },
+  "status": "RESEARCH_NOTES",
+  "next_step": "accumulare casi day su paper prima di qualsiasi promozione"
+}
