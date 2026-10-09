@@ -125,12 +125,44 @@ def compare(book: dict, commodity: str, setup: str, regime: str, weekly_bias: st
     return report
 
 
+def _weekly_closes(state) -> list[float]:
+    """Return explicitly identified weekly closes; never infer weekly bars from intraday closes."""
+    metadata = getattr(state, "metadata", {}) or {}
+    raw = metadata.get("weekly_closes", []) if isinstance(metadata, dict) else []
+    if not raw:
+        mtf = getattr(state, "mtf_data", {}) or {}
+        if isinstance(mtf, dict):
+            for key in ("1week", "1w", "weekly", "week"):
+                frame = mtf.get(key)
+                if isinstance(frame, dict):
+                    raw = frame.get("closes", [])
+                    if raw:
+                        break
+    closes = []
+    for value in raw or []:
+        try:
+            number = float(value)
+            if number > 0 and number == number:
+                closes.append(number)
+        except (TypeError, ValueError):
+            continue
+    return closes
+
+
 def annotate(state):
-    """Aggiunge le tre ipotesi allo stato. Non cambia final_decision."""
+    """Aggiunge ipotesi allo stato. Non cambia final_decision.
+
+    Weekly regime is calculated only from explicit weekly bars. The primary
+    series may be 5-minute/intraday data and must never be mislabeled weekly.
+    """
     from engine.weekly_trend import weekly_trend
 
-    closes = [float(x) for x in (getattr(state, "closes", []) or []) if x]
-    weekly = weekly_trend(closes) if closes else {"direction": "FLAT", "status": "NO_CLOSES"}
+    closes = _weekly_closes(state)
+    weekly = (
+        weekly_trend(closes)
+        if closes
+        else {"direction": "UNKNOWN", "status": "WEEKLY_DATA_UNAVAILABLE"}
+    )
     regime = getattr(state, "regime", None)
     trigger = bool(getattr(state, "trigger_confirmed", False))
     setup = getattr(state, "setup_direction", None)
@@ -140,11 +172,13 @@ def annotate(state):
         "mode": "RESEARCH_PAPER_VALIDATION",
         "paper_only": True,
         "promoted": None,
-        "weekly_bias": "FAVOREVOLE" if weekly_long else "CONTRARIO",
+        "weekly_bias": "FAVOREVOLE" if weekly_long else (
+            "CONTRARIO" if weekly.get("direction") == "FLAT" else "NON_DISPONIBILE"
+        ),
         "weekly_status": weekly.get("status"),
         "A_GAGARIN_ATTUALE": "OSSERVA",
         "B_WEEKLY_REGIME_INTRADAY": "CONTESTO_OK" if b_on else "CONTESTO_SPENTO",
         "C_COMMODITY_SPECIFIC": "CAMPIONE_INSUFFICIENTE",
-        "note": "Il day trading è solo il trigger di B, e solo se settimana e regime sono long.",
+        "note": "La strategia B usa solo close weekly espliciti; il trigger intraday non sostituisce il dato weekly.",
     }
     return state
