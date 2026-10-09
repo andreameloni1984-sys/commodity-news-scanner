@@ -1,0 +1,40 @@
+name: DAY RESEARCH
+
+on:
+  schedule:
+    # ogni ora dalle 07:00 alle 20:00 ora di Roma (05:00-18:00 UTC in inverno)
+    - cron: "0 5-18 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  research:
+    name: DAY TRADING RESEARCH NOTES
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run day research
+        run: python engine/day_research.py
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/day_research.json
+          if git diff --staged --quiet; then
+            echo "No changes to day_research.json"
+          else
+            git commit -m "chore: update day research notes $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            git push
+          fi
