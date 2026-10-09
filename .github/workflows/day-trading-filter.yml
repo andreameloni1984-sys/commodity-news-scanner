@@ -1,0 +1,23 @@
+name: DAY TRADING FILTER
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  filter:
+    name: PAPER FILTER ONLY
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run filter
+        run: python engine/day_trading_filter.py
+      - name: Show result
+        run: |
+          echo "PAPER ONLY. Nessun ordine. Nessun broker."
+          cat data/day_trading_filter.json

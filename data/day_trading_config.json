@@ -1,0 +1,105 @@
+{
+  "paper_only": true,
+  "promoted": null,
+  "automation": "filter_only",
+  "broker": null,
+  "notes": "Snapshot di esempio. I valori UNKNOWN bloccano l'ingresso. Sostituire con dati veri prima di qualsiasi paper.",
+  "instruments": {
+    "SPY": {
+      "weekly_bias": "UNKNOWN",
+      "session": "UNKNOWN",
+      "opening_range": "UNKNOWN",
+      "volume": "UNKNOWN",
+      "atr": "UNKNOWN",
+      "vwap": "UNKNOWN",
+      "gap": "UNKNOWN",
+      "news_window": "UNKNOWN",
+      "spread": null,
+      "max_spread": 0.03
+    },
+    "QQQ": {
+      "weekly_bias": "UNKNOWN",
+      "session": "UNKNOWN",
+      "opening_range": "UNKNOWN",
+      "volume": "UNKNOWN",
+      "atr": "UNKNOWN",
+      "vwap": "UNKNOWN",
+      "gap": "UNKNOWN",
+      "news_window": "UNKNOWN",
+      "spread": null,
+      "max_spread": 0.04
+    },
+    "ES": {
+      "weekly_bias": "UNKNOWN",
+      "session": "UNKNOWN",
+      "opening_range": "UNKNOWN",
+      "volume": "UNKNOWN",
+      "atr": "UNKNOWN",
+      "vwap": "UNKNOWN",
+      "gap": "UNKNOWN",
+      "news_window": "UNKNOWN",
+      "spread": null,
+      "max_spread": 0.5
+    },
+    "NQ": {
+      "weekly_bias": "UNKNOWN",
+      "session": "UNKNOWN",
+      "opening_range": "UNKNOWN",
+      "volume": "UNKNOWN",
+      "atr": "UNKNOWN",
+      "vwap": "UNKNOWN",
+      "gap": "UNKNOWN",
+      "news_window": "UNKNOWN",
+      "spread": null,
+      "max_spread": 1.0
+    },
+    "MES": {
+      "weekly_bias": "UNKNOWN",
+      "session": "UNKNOWN",
+      "opening_range": "UNKNOWN",
+      "volume": "UNKNOWN",
+      "atr": "UNKNOWN",
+      "vwap": "UNKNOWN",
+      "gap": "UNKNOWN",
+      "news_window": "UNKNOWN",
+      "spread": null,
+      "max_spread": 0.5
+    },
+    "MNQ": {
+      "weekly_bias": "UNKNOWN",
+      "session": "UNKNOWN",
+      "opening_range": "UNKNOWN",
+      "volume": "UNKNOWN",
+      "atr": "UNKNOWN",
+      "vwap": "UNKNOWN",
+      "gap": "UNKNOWN",
+      "news_window": "UNKNOWN",
+      "spread": null,
+      "max_spread": 1.0
+    },
+    "EURUSD": {
+      "weekly_bias": "UNKNOWN",
+      "session": "UNKNOWN",
+      "opening_range": "UNKNOWN",
+      "volume": "UNKNOWN",
+      "atr": "UNKNOWN",
+      "vwap": "UNKNOWN",
+      "gap": "UNKNOWN",
+      "news_window": "UNKNOWN",
+      "spread": null,
+      "max_spread": 0.00012
+    },
+    "GBPUSD": {
+      "weekly_bias": "UNKNOWN",
+      "session": "UNKNOWN",
+      "opening_range": "UNKNOWN",
+      "volume": "UNKNOWN",
+      "atr": "UNKNOWN",
+      "vwap": "UNKNOWN",
+      "gap": "UNKNOWN",
+      "news_window": "UNKNOWN",
+      "spread": null,
+      "max_spread": 0.00015
+    }
+  }
+}
