@@ -99,6 +99,7 @@ def evaluate_states(states: Iterable[object]):
             "freshness_ok",
             getattr(state, "live", False) and bool(meta.get("fresh_live", False)),
         ))
+        freshness_ok = freshness_ok and _freshness_ok(state, True, freshness_limit)
         contract_ok = bool(explicit_gates.get(
             "contract_ok",
             symbol in engine.config.allowed_assets and bool(meta.get("resolved_symbol")),

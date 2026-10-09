@@ -89,6 +89,8 @@ class SoyuzState:
 
     timestamps: list = field(default_factory=list)
 
+    candles: list = field(default_factory=list)
+
     # ========================================================
     # DATA — MULTI TIMEFRAME
     # ========================================================

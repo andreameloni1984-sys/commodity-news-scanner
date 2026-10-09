@@ -11,6 +11,7 @@ def market(symbol="XAU/USD"):
         symbol=symbol,
         timestamp="2026-10-02T00:00:00Z",
         price=1.0,
+        atr=0.1,
     )
 
 
@@ -52,7 +53,7 @@ def candidate(**overrides):
 
 def test_rejects_low_quality():
     d = GagarinEngine().evaluate(market(), candidate(quality=40))
-    assert d.action == "WAIT"
+    assert d.action == "PAPER_WATCH"
     assert d.reason == "QUALITY_BELOW_THRESHOLD"
 
 
@@ -64,7 +65,7 @@ def test_allows_paper_candidate():
 
 def test_unknown_asset_is_blocked():
     d = GagarinEngine().evaluate(market("XYZ"), candidate(symbol="XYZ"))
-    assert d.action == "WAIT"
+    assert d.action == "PAPER_WATCH"
     assert d.reason == "ASSET_NOT_IN_UNIVERSE"
 
 
@@ -141,13 +142,13 @@ def test_missing_trigger_stays_wait():
         }},
     )
     decisions = evaluate_states([state])
-    assert decisions[0].action == "WAIT"
+    assert decisions[0].action == "PAPER_WATCH"
     assert decisions[0].reason == "TRIGGER_NOT_CONFIRMED"
 
 
 def test_rejects_invalid_target_geometry():
     d = GagarinEngine().evaluate(market(), candidate(tp2=1.05))
-    assert d.action == "WAIT"
+    assert d.action == "PAPER_WATCH"
     assert d.reason == "TARGET_GEOMETRY_INVALID"
 
 
@@ -156,7 +157,7 @@ def test_rejects_weak_rr_tiers_even_when_tp3_is_strong():
         market(),
         candidate(tp1=1.1, rr1=1.0),
     )
-    assert d.action == "WAIT"
+    assert d.action == "PAPER_WATCH"
     assert d.reason == "RR_TIER_BELOW_THRESHOLD"
 
 
@@ -165,13 +166,13 @@ def test_rejects_rr_that_does_not_match_prices():
         market(),
         candidate(rr2=2.5),
     )
-    assert d.action == "WAIT"
+    assert d.action == "PAPER_WATCH"
     assert d.reason == "RR_GEOMETRY_MISMATCH"
 
 
 def test_rejects_long_with_stop_above_entry():
     d = GagarinEngine().evaluate(market(), candidate(stop=1.01))
-    assert d.action == "WAIT"
+    assert d.action == "PAPER_WATCH"
     assert d.reason == "STOP_GEOMETRY_INVALID"
 
 
@@ -192,13 +193,13 @@ def test_rejects_short_with_stop_below_entry():
             rr3=3.0,
         ),
     )
-    assert d.action == "WAIT"
+    assert d.action == "PAPER_WATCH"
     assert d.reason == "STOP_GEOMETRY_INVALID"
 
 
 def test_operational_gate_is_hard_veto():
     d = GagarinEngine().evaluate(market(), candidate(liquidity_ok=False))
-    assert d.action == "WAIT"
+    assert d.action == "PAPER_WATCH"
     assert d.reason == "LIQUIDITY_FAIL"
 
 
@@ -236,5 +237,5 @@ def test_stale_timestamp_fails_closed_even_when_freshness_gate_is_true():
         }},
     )
     decisions = evaluate_states([state])
-    assert decisions[0].action == "WAIT"
+    assert decisions[0].action == "PAPER_WATCH"
     assert decisions[0].reason == "FRESHNESS_FAIL"
