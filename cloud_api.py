@@ -212,9 +212,9 @@ small{color:#7f8a97}
 <div class="card"><div class="big">💶 PORTAFOGLIO PAPER</div><div class="row"><span>Capitale iniziale</span><b id="cash-init">€100,00</b></div><div class="row"><span>Disponibile</span><b id="cash">—</b></div><div class="row"><span>P/L realizzato</span><b id="pnl">—</b></div><div class="row"><span>Equity</span><b id="equity">—</b></div><div id="positions" class="muted">Nessuna posizione aperta.</div></div>
 <div class="card"><div class="big">📈 DAY TRADING</div><div class="row"><span>Capitale</span><b id="day-capital">€100,00</b></div><div class="row"><span>Aperte</span><b id="day-open">0</b></div><div class="row"><span>Chiuse</span><b id="day-closed">0</b></div><div class="row"><span>P/L non realizzato</span><b id="day-unrealized">€0,00</b></div><div class="row"><span>P/L realizzato</span><b id="day-realized">€0,00</b></div><div class="row"><span>Equity</span><b id="day-equity">€100,00</b></div><div id="day-positions" class="muted">Nessuna posizione day aperta.</div></div><div id="content"></div>
 <script>
-const keyEl=document.getElementById('key);
+const keyEl=document.getElementById('key');
 keyEl.value=localStorage.getItem('gagarin_key')||'';
-function esc(v){return String(v??'').replace(/[&<>"]/g,c=>({'&':'&','<':'<','>':'>','"':'"'}[c]));}
+function esc(v){return String(v??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function money(v){return v==null?'—':Number(v).toLocaleString('it-IT',{maximumFractionDigits:6});}
 async function run(){
  const key=keyEl.value.trim(); if(!key){alert('Inserisci la Cloud API Key');return;}
@@ -222,7 +222,7 @@ async function run(){
  const s=document.getElementById('status'); s.textContent='Analisi in corso…';
  try{
   const r=await fetch('/api/run',{method:'POST',headers:{'X-API-Key':key}});
-  const d=await r.json(); if(!r.ok) throw new Error(d.detail||'Errore);
+  const d=await r.json(); if(!r.ok) throw new Error(d.detail||'Errore');
   s.innerHTML='<span class="green">● ONLINE</span> · '+esc(d.timestamp_utc);
   const p=d.portfolio||{}; document.getElementById('cash').textContent='€'+Number(p.cash||0).toFixed(2); document.getElementById('pnl').textContent='€'+Number(p.realized_pnl||0).toFixed(2); document.getElementById('equity').textContent='€'+Number(p.equity||0).toFixed(2);
   document.getElementById('positions').innerHTML=(p.open_positions||[]).length ? p.open_positions.map(x=>'<div class="card signal"><b>🟢 '+esc(x.commodity)+' '+esc(x.direction)+'</b><div class="row"><span>Entry</span><b>'+money(x.entry)+'</b></div><div class="row"><span>Allocazione</span><b>'+money(x.allocation)+'</b></div><div class="row"><span>SL / TP3</span><b>'+money(x.stop)+' / '+money(x.tp3)+'</b></div></div>').join('') : 'Nessuna posizione aperta.';
