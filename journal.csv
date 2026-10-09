@@ -10,3 +10,14 @@ data,mercato,direzione,ingresso,stop,TP,size,motivo,esito
 2026-10-08,zucchero SB,LONG,,,,,"trend STRONG LONG slope_atr=6.548 RSI=88.0; tocco resistenza non è supporto long; roll BLOCCATO (SUGAR/USD mese 10, giorni 8-16, contract_roll.py)",bloccato
 2026-10-08,caffe KC,SHORT,,,,,"trend STRONG SHORT slope_atr=-2.963 ma RSI=56.2 conferma LONG: momentum contrario, nessun setup",bloccato
 2026-10-08,cacao CC,SHORT,,,,,"trend STRONG SHORT slope_atr=-2.991 RSI=44.6; livello strutturale non toccato; roll softs OK (ottobre non è mese di scadenza cacao)",nessun segnale
+2026-10-09,oro XAU/USD,SHORT,,,,,"trend STRONG SHORT slope_atr=-7.420 RSI=21.8; livello strutturale non toccato (supporto 4091 / resistenza 4445, ATR 33.95); roll metalli OK (ottobre non trimestrale); eventi OK",nessun segnale
+2026-10-09,argento XAG/USD,SHORT,,,,,"trend STRONG SHORT slope_atr=-5.950 RSI=21.0; livello strutturale non toccato (supporto 59.53 / resistenza 66.94, ATR 0.923); roll OK; eventi OK",nessun segnale
+2026-10-09,rame HG,LONG,,,,,"trend MODERATE LONG slope_atr=0.955 RSI=43.4 momentum non confermato (serve >55); livello non toccato (supporto 6.281 / resistenza 6.83); eventi OK",nessun segnale
+2026-10-09,WTI CL,SHORT,,,,,"trend STRONG SHORT slope_atr=-4.356 RSI=34.0; livello non toccato (supporto 86.86 / resistenza 106.8, ATR 1.965); roll energia OK (giorno 9, finestra 15-22); eventi OK",nessun segnale
+2026-10-09,Brent BZ,SHORT,,,,,"trend NONE slope_atr=-0.173 RSI=50.8; no trend e momentum non confermato; livello non toccato; roll OK; eventi OK",nessun segnale
+2026-10-09,gas naturale NG,LONG,,,,,"trend STRONG LONG slope_atr=3.965 RSI=60.8; livello non toccato (supporto 2.773 / resistenza 3.317, ATR 0.085); roll energia OK; eventi OK",nessun segnale
+2026-10-09,grano ZW,SHORT,,,,,"trend STRONG SHORT slope_atr=-2.748 RSI=37.2; livello non toccato (supporto 670.8 / resistenza 736, ATR 8.64); eventi OK",nessun segnale
+2026-10-09,mais ZC,SHORT,,,,,"trend STRONG SHORT slope_atr=-1.662 RSI=33.8; livello non toccato (supporto 495 / resistenza 544.5, ATR 6.02); eventi OK",nessun segnale
+2026-10-09,zucchero SB,LONG,,,,,"trend STRONG LONG slope_atr=5.633 RSI=77.9; livello non toccato (supporto 17.11 / resistenza 21.24); roll BLOCCATO (SUGAR/USD mese 10, giorni 8-16, contract_roll.py); eventi OK",bloccato
+2026-10-09,caffe KC,SHORT,,,,,"trend STRONG SHORT slope_atr=-4.691 RSI=45.6 momentum non confermato (serve <45); livello non toccato; roll softs OK (ottobre non è mese di scadenza caffè); eventi OK",nessun segnale
+2026-10-09,cacao CC,SHORT,,,,,"trend STRONG SHORT slope_atr=-3.243 RSI=60.6 momentum contrario (conferma LONG); livello non toccato; roll softs OK; eventi OK",nessun segnale
