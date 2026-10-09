@@ -4,11 +4,14 @@ Nota di lettura. Non è una regola. Non promuove.
 Non legge e non scrive final_decision. Non invia ordini.
 promoted = None.
 
-Riletto il 2026-10-09 04:04 UTC (tree f2fc4569).
-Lettura precedente 2026-10-09 03:04 UTC (tree 19307a2): stesso buco di misura.
+Riletto il 2026-10-09 05:04 UTC (tree 29db933).
+Lettura precedente 2026-10-09 04:04 UTC (tree f2fc4569): stesso buco di misura.
+Lettura 2026-10-09 03:04 UTC (tree 19307a2): stesso buco.
 Lettura 2026-10-09 02:04 UTC (tree c04ac70): stesso buco.
 Lettura 2026-10-09 01:05 UTC (tree f41d871): stesso buco.
 Lettura 2026-10-09 00:05 UTC (tree c3a1c025): stesso buco.
+Commit dopo la nota 04:05: menu Telegram e day_automation (decision only,
+send_order false). Non aggiungono close[t], close[t-20], ATR 14, raffinati in ATR.
 
 Dato letto:
 - data/registered_rule.json: id ENERGY_SHOCK_AND_WEEKLY_SAME_SIDE,
