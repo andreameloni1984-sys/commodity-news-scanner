@@ -5,14 +5,16 @@ from datetime import datetime, timezone
 from threading import Lock
 
 from fastapi import FastAPI, Header, HTTPException
-from fastapi.responses import HTMLResponse\nfrom fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
 from commodities.universe import enabled_commodities, validate_universe
 from engine.gagarin import analyze_universe
 from soyuz_gagarin.adapter import evaluate_states
 from paper_portfolio import PaperPortfolio
 
-app = FastAPI(title="SOYUZ GAGARIN CLOUD", version="1.0")\napp.mount("/static", StaticFiles(directory="static"), name="static")
+app = FastAPI(title="SOYUZ GAGARIN CLOUD", version="1.0")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 RUN_LOCK = Lock()
 PORTFOLIO = PaperPortfolio(100.0)
 
@@ -168,7 +170,10 @@ DASHBOARD = r"""<!doctype html>
 <html lang="it">
 <head>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0b0f14">\n<link rel="manifest" href="/static/manifest.webmanifest">\n<link rel="icon" href="/static/icon.svg" type="image/svg+xml">\n<link rel="apple-touch-icon" href="/static/icon.svg">
+<meta name="theme-color" content="#0b0f14">
+<link rel="manifest" href="/static/manifest.webmanifest">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/icon.svg">
 <title>GAGARIN CLOUD</title>
 <style>
 :root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",sans-serif}
