@@ -4,10 +4,11 @@ Nota di lettura. Non è una regola. Non promuove.
 Non legge e non scrive final_decision. Non invia ordini.
 promoted = None.
 
-Riletto il 2026-10-09 08:04 UTC (tree 343e7c75).
-Commit 07:15 UTC: solo engine/paper_orb_sample_note.py (campione ORB 5 minuti).
+Riletto il 2026-10-09 09:04 UTC (tree 122b73f9).
+Commit 08:05 UTC: solo engine/paper_gap_note.py (nota precedente).
 Non aggiunge close[t], close[t-20], ATR 14, raffinati in ATR.
-Lettura precedente 2026-10-09 07:05 UTC (tree 8d29e71): stesso buco di misura.
+Lettura precedente 2026-10-09 08:04 UTC (tree 343e7c75): stesso buco di misura.
+Lettura 2026-10-09 07:05 UTC (tree 8d29e71): stesso buco di misura.
 Lettura 2026-10-09 06:06 UTC (tree 92006a51): stesso buco di misura.
 Lettura 2026-10-09 05:04 UTC (tree 29db933): stesso buco di misura.
 Lettura 2026-10-09 04:04 UTC (tree f2fc4569): stesso buco di misura.
@@ -38,6 +39,8 @@ Dato letto:
   pnl null. Reason solo shock: WTI +3.89, Brent +3.66,
   gasoline +3.64, heating oil +2.73. Continuazione non chiusa.
   Nessun weekly bias nel record.
+- data/day_registry.json: updated_at 2026-10-09T08:00:00Z, positions [], closed [],
+  send_order false, capital 100. Nessuna serie.
 - data/day_research.json: updated_at 2026-10-09T08:50:00Z, status RESEARCH_NOTES.
   Note ORB/VWAP/costi. Nessuna serie close, nessun ATR, nessun weekly bias.
 - data/: driver_snapshot.json, paper_open.json, registered_rule.json,
