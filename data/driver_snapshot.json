@@ -1,0 +1,27 @@
+{
+  "paper_only": true,
+  "read_at": "2026-10-09T03:48:00Z",
+  "sources": {
+    "dollar": "FRED DTWEXBGS",
+    "wti": "FRED DCOILWTICO",
+    "inventories": "EIA WCRSTUS1"
+  },
+  "observations": {
+    "dollar_index": {"date": "2026-10-02", "value": 121.3848, "previous": 121.7882},
+    "wti": {"date": "2026-10-06", "value": 96.24, "previous": 96.13},
+    "us_crude_stocks_kb": {"date": "2026-10-02", "value": 707117, "previous": 711087}
+  },
+  "variables": {
+    "inventories": "TIGHT",
+    "curve": "UNKNOWN",
+    "supply_shock": "UNKNOWN",
+    "refined": "UNKNOWN",
+    "dollar": "DOWN",
+    "real_rates": "UNKNOWN",
+    "systematic_flow": "UNKNOWN",
+    "weather": "UNKNOWN",
+    "harvest": "UNKNOWN",
+    "season": "UNKNOWN",
+    "hedging_pressure": "UNKNOWN"
+  }
+}
