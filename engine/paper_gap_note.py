@@ -4,8 +4,8 @@ Nota di lettura. Non è una regola. Non promuove.
 Non legge e non scrive final_decision. Non invia ordini.
 promoted = None.
 
-Riletto il 2026-10-09 00:05 UTC (tree c3a1c025).
-Lettura precedente 2026-10-08 23:04 UTC (tree 4c181aa): stesso buco.
+Riletto il 2026-10-09 01:05 UTC (tree f41d871).
+Lettura precedente 2026-10-09 00:05 UTC (tree c3a1c025): stesso buco.
 
 Dato letto:
 - data/registered_rule.json: ENERGY_SHOCK_AND_WEEKLY_LONG,
