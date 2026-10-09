@@ -617,8 +617,13 @@ def run():
                     f"📡 SIGNAL CHANNEL: {len(signal_results)} signal(s) published"
                 )
             else:
+                send_telegram(
+                    "SOYUZ STATO\n"
+                    "Nessun paper. Shock e settimana non sono dalla stessa parte.\n"
+                    "PAPER ONLY. Nessun ordine."
+                )
                 print(
-                    "📡 SIGNAL CHANNEL: no operational signal — no post"
+                    "📡 SIGNAL CHANNEL: status only — no entry"
                 )
 
         except Exception as exc:

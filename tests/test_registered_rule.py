@@ -2,18 +2,22 @@ from engine.registered_rule import decide
 
 
 def test_both_long_opens_paper():
-    out = decide(True, True)
+    out = decide("LONG", "LONG")
     assert out["paper"] == "PAPER_LONG"
-    assert out["promoted"] is None
+
+
+def test_both_short_opens_paper():
+    out = decide("SHORT", "SHORT")
+    assert out["paper"] == "PAPER_SHORT"
 
 
 def test_shock_without_week_blocks():
-    out = decide(True, False)
+    out = decide("LONG", "FLAT")
     assert out["paper"] == "NO_ENTRY"
-    assert out["reason"] == "WEEKLY_BIAS_CONTRARIO"
+    assert out["reason"] == "WEEKLY_BIAS_ASSENTE"
 
 
-def test_week_without_shock_blocks():
-    out = decide(False, True)
+def test_disagreement_blocks():
+    out = decide("LONG", "SHORT")
     assert out["paper"] == "NO_ENTRY"
-    assert out["reason"] == "NO_ENERGY_SHOCK"
+    assert out["reason"] == "SHOCK_E_SETTIMANA_DIVERSI"

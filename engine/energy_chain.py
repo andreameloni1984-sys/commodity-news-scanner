@@ -46,37 +46,38 @@ def energy_chain(
 
 
 def stamp_paper(states: list) -> int:
-    """Paper solo se shock energia e weekly bias coincidono. Non cambia final_decision."""
+    """Paper se shock e settimana sono dalla stessa parte. Non cambia final_decision."""
+    from engine.registered_rule import decide
     from engine.weekly_trend import weekly_trend
 
     stamped = 0
     for state in states:
         energy = (getattr(state, "metadata", {}) or {}).get("energy") or {}
-        if energy.get("event") != "STRONG_MOVE_ENERGY" or not energy.get("in_complex"):
-            continue
-        direction = energy.get("direction")
-        if direction != "LONG":
-            continue
         name = str(getattr(state, "commodity", "")).lower()
         if "wti" not in name and "crude" not in name and "brent" not in name:
             continue
+        shock = energy.get("direction") if energy.get("event") == "STRONG_MOVE_ENERGY" else "NONE"
         closes = [float(x) for x in (getattr(state, "closes", []) or []) if x]
         weekly = weekly_trend(closes) if closes else {"direction": "FLAT"}
-        if weekly.get("direction") != "LONG":
-            state.metadata["paper_block"] = "WEEKLY_BIAS_CONTRARIO"
+        decision = decide(shock, weekly.get("direction"))
+        state.metadata["paper_rule"] = decision
+        if decision["paper"] == "NO_ENTRY":
+            state.metadata["paper_block"] = decision["reason"]
             continue
         price = getattr(state, "price", None)
         atr = getattr(state, "atr", None)
         if not price or not atr or price <= 0 or atr <= 0:
+            state.metadata["paper_block"] = "PREZZO_O_ATR_MANCANTE"
             continue
+        sign = 1 if decision["paper"] == "PAPER_LONG" else -1
         state.entry = float(price)
-        state.stop = float(price - 2 * atr)
-        state.tp1 = float(price + 2 * atr)
-        state.tp2 = float(price + 3 * atr)
-        state.setup_direction = "LONG"
+        state.stop = float(price - sign * 2 * atr)
+        state.tp1 = float(price + sign * 2 * atr)
+        state.tp2 = float(price + sign * 3 * atr)
+        state.setup_direction = "LONG" if sign == 1 else "SHORT"
         state.metadata["gagarin_action"] = "PAPER_SIGNAL"
         state.metadata["paper_only"] = True
-        state.metadata["rule"] = "ENERGY_SHOCK_AND_WEEKLY_LONG"
+        state.metadata["rule"] = "ENERGY_SHOCK_AND_WEEKLY_SAME_SIDE"
         stamped += 1
         break
     return stamped
