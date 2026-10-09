@@ -4,8 +4,9 @@ Nota di lettura. Non è una regola. Non promuove.
 Non legge e non scrive final_decision. Non invia ordini.
 promoted = None.
 
-Riletto il 2026-10-09 03:04 UTC (tree 19307a2).
-Lettura precedente 2026-10-09 02:04 UTC (tree c04ac70): stesso buco di misura.
+Riletto il 2026-10-09 04:04 UTC (tree f2fc4569).
+Lettura precedente 2026-10-09 03:04 UTC (tree 19307a2): stesso buco di misura.
+Lettura 2026-10-09 02:04 UTC (tree c04ac70): stesso buco.
 Lettura 2026-10-09 01:05 UTC (tree f41d871): stesso buco.
 Lettura 2026-10-09 00:05 UTC (tree c3a1c025): stesso buco.
 
@@ -20,6 +21,12 @@ Dato letto:
   Vincolo di questa lettura (non scritto nel file, non applicato come modifica):
   PAPER_LONG solo se shock energia e weekly bias sono long.
   Il file non è stato riscritto. Nessuna promozione.
+- data/driver_snapshot.json: read_at 2026-10-09T03:48:00Z, paper_only true.
+  dollar_index 2026-10-02 121.3848 (prev 121.7882) -> dollar DOWN.
+  wti 2026-10-06 96.24 (prev 96.13). stocks 2026-10-02 707117 (prev 711087) -> TIGHT.
+  curve, supply_shock, refined, real_rates, systematic_flow, weather,
+  harvest, season, hedging_pressure = UNKNOWN.
+  Un prezzo, non una serie. Nessun close[t-20], nessun ATR, nessun refined in ATR.
 - data/paper_open.json: P0001 WTI LONG OPEN, entry 96.24,
   stop 89.37, tp1 103.11, tp2 106.55, allocation 14.0,
   pnl null. Reason solo shock: WTI +3.89, Brent +3.66,
@@ -31,7 +38,7 @@ Dato letto:
 - commodities_direction_state.json: Petrolio WTI, Brent,
   Benzina RBOB e Heating Oil LONG, updated_at 2026-09-17.
   Nessun close, nessun ATR, nessuno slope_atr.
-- data/: solo paper_open.json e registered_rule.json.
+- data/: driver_snapshot.json, paper_open.json, registered_rule.json.
   Nessuna serie close[t], close[t-20], ATR 14.
 
 Coerenza livelli, non verifica della regola:
@@ -39,10 +46,13 @@ ATR implicito = (96.24 - 89.37) / 2 = 3.435.
 tp1 = 96.24 + 2*3.435 = 103.11. tp2 = 96.24 + 3*3.435 = 106.545.
 Gli shock in reason sono in punti, non in ATR.
 3.89 / 3.435 = 1.13 ATR solo se quell'ATR fosse quello dello shock.
+Lo snapshot ha delta WTI 0.11 sul giorno 6 ott, non lo shock della reason.
 L'ATR non è nel file. Il weekly bias non è nel file.
+refined è UNKNOWN: lo shock energia della regola non è misurabile.
 
-Il paper non gira: manca il dato misurabile close[t], close[t-20], ATR 14.
-Senza questi non si può dire weekly long (soglia 0.5) né shock >= 1 ATR.
+Il paper non gira: manca il dato misurabile close[t], close[t-20], ATR 14,
+e i raffinati nello stesso segno in ATR. Senza questi non si può dire
+weekly long (soglia 0.5) né shock >= 1 ATR. PAPER_LONG non scatta.
 Senza mark il pnl resta null. Il paper resta OPEN.
 Nessuna promozione. Nessun ordine. final_decision non toccata.
 """
