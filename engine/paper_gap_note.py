@@ -4,15 +4,16 @@ Nota di lettura. Non è una regola. Non promuove.
 Non legge e non scrive final_decision. Non invia ordini.
 promoted = None.
 
-Riletto il 2026-10-10 18:04 UTC (tree 7ca49c33).
-Cambiato data/driver_snapshot.json: SHA 9ca72992, read_at 2026-10-10T13:06:58Z.
-real_rate_10y ora 2.87 (prev 2.92) -> DOWN (prima UP).
-dollar invariato DOWN. stocks/gas no_data. Nessun WTI/Brent/raffinati.
-day_research.json aggiornato 2026-10-10T17:15:11Z (note invariate di contenuto).
-SHA invariati: registered_rule 1f2f82a9, paper_open e5385ead,
-day_registry d35c6304, day_universe d6a6f525.
+Riletto il 2026-10-10 21:04 UTC (tree 195d4857).
+SHA invariati rispetto alla lettura 18:04 UTC:
+registered_rule 1f2f82a9, paper_open e5385ead, driver_snapshot 9ca72992,
+day_registry d35c6304, day_universe d6a6f525, day_research b3c47e10.
+driver_snapshot read_at 2026-10-10T13:06:58Z invariato.
+real_rate_10y 2.87 (prev 2.92) DOWN, dollar 121.3848 (prev 121.7882) DOWN.
+stocks/gas no_data. Nessun WTI/Brent/raffinati. Nessuna serie close.
+day_research updated_at 2026-10-10T17:15:11Z (note ORB invariate).
 Non aggiunge close[t], close[t-20], ATR 14, raffinati in ATR.
-Lettura precedente 2026-10-09 14:05 UTC: stesso buco di misura sul paper.
+Lettura precedente 2026-10-10 18:04 UTC: stesso buco di misura sul paper.
 
 Dato letto:
 - data/registered_rule.json: id ENERGY_SHOCK_AND_WEEKLY_SAME_SIDE,
