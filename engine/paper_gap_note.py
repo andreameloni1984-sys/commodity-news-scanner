@@ -4,14 +4,15 @@ Nota di lettura. Non è una regola. Non promuove.
 Non legge e non scrive final_decision. Non invia ordini.
 promoted = None.
 
-Riletto il 2026-10-09 14:05 UTC (tree f86059da).
-Cambiato solo data/driver_snapshot.json: SHA c8964932, read_at 2026-10-09T13:53:58Z.
-Prima (nota 13:08 UTC, tree 0a222f14) lo snapshot era 5e644e4b, read_at 2026-10-09T03:48:00Z,
-con wti 96.24 (2026-10-06) e stocks 707117 (2026-10-02). Ora wti non c'è.
-stocks e gas: error no_data. SHA invariati: registered_rule 1f2f82a9,
-paper_open e5385ead, day_registry d35c6304, day_research 7a775af1, day_universe d6a6f525.
+Riletto il 2026-10-10 18:04 UTC (tree 7ca49c33).
+Cambiato data/driver_snapshot.json: SHA 9ca72992, read_at 2026-10-10T13:06:58Z.
+real_rate_10y ora 2.87 (prev 2.92) -> DOWN (prima UP).
+dollar invariato DOWN. stocks/gas no_data. Nessun WTI/Brent/raffinati.
+day_research.json aggiornato 2026-10-10T17:15:11Z (note invariate di contenuto).
+SHA invariati: registered_rule 1f2f82a9, paper_open e5385ead,
+day_registry d35c6304, day_universe d6a6f525.
 Non aggiunge close[t], close[t-20], ATR 14, raffinati in ATR.
-Lettura precedente 2026-10-09 13:08 UTC: stesso buco di misura sul paper.
+Lettura precedente 2026-10-09 14:05 UTC: stesso buco di misura sul paper.
 
 Dato letto:
 - data/registered_rule.json: id ENERGY_SHOCK_AND_WEEKLY_SAME_SIDE,
@@ -24,9 +25,9 @@ Dato letto:
   Vincolo di questa lettura (non scritto nel file, non applicato come modifica):
   PAPER_LONG solo se shock energia e weekly bias sono long.
   Il file non è stato riscritto. Nessuna promozione.
-- data/driver_snapshot.json: read_at 2026-10-09T13:53:58Z, paper_only true.
+- data/driver_snapshot.json: read_at 2026-10-10T13:06:58Z, paper_only true.
   dollar_index 2026-10-02 121.3848 (prev 121.7882) -> dollar DOWN.
-  real_rate_10y 2026-10-07 2.92 (prev 2.91) -> real_rates UP.
+  real_rate_10y 2026-10-08 2.87 (prev 2.92) -> real_rates DOWN.
   us_crude_stocks no_data, us_natgas_storage no_data.
   wheat/corn/soybeans value null. Nessun prezzo WTI, Brent o raffinato.
   inventories, curve, supply_shock, refined, systematic_flow, weather,
@@ -40,7 +41,7 @@ Dato letto:
 - data/day_registry.json: updated_at 2026-10-09T08:00:00Z, positions [], closed [],
   send_order false, capital 100. Nessuna serie.
 - data/day_universe.json: instruments {}, send_order false. Dati vuoti di proposito.
-- data/day_research.json: updated_at 2026-10-09T08:50:00Z, status RESEARCH_NOTES.
+- data/day_research.json: updated_at 2026-10-10T17:15:11Z, status RESEARCH_NOTES.
   Note ORB/VWAP/costi. Nessuna serie close, nessun ATR, nessun weekly bias.
 - data/: driver_snapshot.json, paper_open.json, registered_rule.json,
   day_universe.json, day_research.json, day_registry.json.
