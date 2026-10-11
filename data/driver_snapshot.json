@@ -1,6 +1,6 @@
 {
   "paper_only": true,
-  "read_at": "2026-10-10T13:06:58Z",
+  "read_at": "2026-10-11T13:35:44Z",
   "sources": {
     "us_crude_stocks": "EIA WCRSTUS1 (api -> public page)",
     "us_natgas_storage": "EIA NW2_EPG0_SWO_R48_BCF (api -> public page)",
