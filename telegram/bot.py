@@ -24,8 +24,11 @@ PAPER ONLY.
 
 from __future__ import annotations
 
+import os
 import time
 from typing import Callable, Optional
+
+from soyuz_gagarin.trading_profiles import get_profile
 
 import requests
 
@@ -62,6 +65,37 @@ POLL_TIMEOUT = 25
 
 _LAST_RESULTS = None
 _LAST_ANALYSIS_TIME = None
+
+# The Telegram listener is a single bot process. Profile switching applies to
+# subsequent governor evaluations in this process; PAPER ONLY and safety gates
+# remain enforced. Explicit MIN_ENTRY_* environment overrides still win.
+_ACTIVE_PROFILE = get_profile(os.getenv("GAGARIN_TRADING_PROFILE", "SOFT")).name
+
+
+def _profile_response(name: Optional[str] = None) -> str:
+    global _ACTIVE_PROFILE
+    if name is not None:
+        _ACTIVE_PROFILE = get_profile(name).name
+        os.environ["GAGARIN_TRADING_PROFILE"] = _ACTIVE_PROFILE
+    profile = get_profile(_ACTIVE_PROFILE)
+    return "\\n".join([
+        "🎛 SOYUZ GAGARIN — PROFILO",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"ATTIVO: {profile.name}",
+        "🧪 PAPER ONLY — nessun ordine reale",
+        "",
+        f"Probabilità minima: {profile.min_probability:.0f}/100",
+        f"Quality minima: {profile.min_quality:.0f}/100",
+        f"Confidence minima: {profile.min_confidence:.0f}/100",
+        f"R/R minimo: {profile.min_rr:.1f}",
+        f"Rischio obiettivo per operazione: {profile.risk_per_trade_pct:.2f}%",
+        f"Rischio aperto obiettivo max: {profile.max_total_open_risk_pct:.2f}%",
+        f"Perdita giornaliera obiettivo max: {profile.max_daily_loss_pct:.2f}%",
+        f"Posizioni obiettivo max: {profile.max_open_positions}",
+        "",
+        "Nota: i limiti percentuali sono parametri informativi; non sono ancora applicati da un position sizer/portfolio governor.",
+        "I blocchi su dati, trigger, geometria e sicurezza restano attivi.",
+    ])
 
 
 def set_last_results(results):
@@ -188,6 +222,9 @@ def telegram_diagnostic() -> bool:
                 {"command": "prezzo", "description": "Prezzi e provider"},
                 {"command": "guida", "description": "Guida del canale"},
                 {"command": "rischio", "description": "Regole di rischio"},
+                {"command": "soft", "description": "Profilo prudente PAPER"},
+                {"command": "aggressivo", "description": "Profilo aggressivo PAPER"},
+                {"command": "profilo", "description": "Profilo attivo e soglie"},
                 {"command": "intraday", "description": "Dashboard intraday"},
                 {"command": "comprare", "description": "Cosa comprare in PAPER"},
                 {"command": "perche", "description": "Perché WAIT/ENTRY"},
@@ -867,6 +904,9 @@ def _command_response(
         "📡 segnali": "/segnali",
         "📖 guida": "/guida",
         "⚠️ rischio": "/rischio",
+        "🛡 soft": "/soft",
+        "🚀 aggressivo": "/aggressivo",
+        "🎛 profilo": "/profilo",
         "🔄 aggiorna": "/analisi",
         "⚙️ stato": "/status",
         "⚡ intraday": "/intraday",
@@ -890,6 +930,19 @@ def _command_response(
         command_name = command_name.split("@", 1)[0]
 
     argument = " ".join(parts[1:]).strip()
+
+    # --------------------------------------------------------
+    # TRADING PROFILE SELECTOR (PAPER ONLY)
+    # --------------------------------------------------------
+
+    if command_name in {"/soft", "/prudente"}:
+        return _profile_response("SOFT")
+
+    if command_name in {"/aggressivo", "/aggressive"}:
+        return _profile_response("AGGRESSIVE")
+
+    if command_name in {"/profilo", "/profile"}:
+        return _profile_response()
 
     # --------------------------------------------------------
     # HELP
@@ -1335,7 +1388,9 @@ def telegram_menu() -> dict:
             [{"text": "🥇 METALLI"}, {"text": "🛢 PETROLIO"}],
             [{"text": "🌾 AGRI"}, {"text": "🌍 MACRO"}],
             [{"text": "❓ PERCHÉ"}, {"text": "🔄 AGGIORNA"}],
-            [{"text": "⚙️ STATO"}, {"text": "ℹ️ GUIDA"}],
+            [{"text": "🛡 SOFT"}, {"text": "🚀 AGGRESSIVO"}],
+            [{"text": "🎛 PROFILO"}, {"text": "⚙️ STATO"}],
+            [{"text": "ℹ️ GUIDA"}],
         ],
         "resize_keyboard": True,
         "is_persistent": True,
