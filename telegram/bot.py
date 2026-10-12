@@ -46,6 +46,7 @@ from commodities.universe import (
 from soyuz_gagarin.adapter import evaluate_states
 from engine.selector import select_anticipation
 from engine.daily_forecast import predict_today
+from engine.prediction_ranker import format_best_prediction
 from telegram.signals import (
     format_signal_board,
     format_top,
@@ -948,7 +949,12 @@ def _command_response(
         return _profile_response("SOFT")
 
     if command_name in {"/aggressivo", "/aggressive"}:
-        return _profile_response("AGGRESSIVE")
+        try:
+            _profile_response("AGGRESSIVE")  # activate the profile before scanning
+            results = _run_analysis()  # fresh scan of the entire enabled universe
+            return format_best_prediction(results or [], profile="AGGRESSIVE")
+        except Exception as exc:
+            return f"❌ PREVISIONE AGGRESSIVA ERROR\\n{type(exc).__name__}: {exc}"
 
     if command_name in {"/profilo", "/profile"}:
         return _profile_response()
