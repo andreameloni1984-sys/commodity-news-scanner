@@ -68,7 +68,7 @@ _LAST_ANALYSIS_TIME = None
 
 # The Telegram listener is a single bot process. Profile switching applies to
 # subsequent governor evaluations in this process; PAPER ONLY and safety gates
-# remain enforced. Explicit MIN_ENTRY_* environment overrides still win.
+# remain enforced. A Telegram profile switch overrides MIN_ENTRY_* values at runtime.
 _ACTIVE_PROFILE = get_profile(os.getenv("GAGARIN_TRADING_PROFILE", "SOFT")).name
 
 
