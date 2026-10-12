@@ -46,13 +46,29 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
         if direction == "NONE":
             direction = next((d for d in (directions[0], directions[2], directions[3], directions[4]) if d != "NONE"), "NONE")
         if direction == "NONE":
+            # Always produce a directional candidate when the current market
+            # series supplies momentum; this is a lower-evidence fallback.
+            move24 = _num(getattr(state, "move_24h_pct", 0))
+            move4 = _num(getattr(state, "move_4h_pct", 0))
+            if move24 != 0:
+                direction = "LONG" if move24 > 0 else "SHORT"
+            elif move4 != 0:
+                direction = "LONG" if move4 > 0 else "SHORT"
+            else:
+                closes = getattr(state, "closes", []) or []
+                try:
+                    if len(closes) >= 2 and float(closes[-1]) != float(closes[0]):
+                        direction = "LONG" if float(closes[-1]) > float(closes[0]) else "SHORT"
+                except (TypeError, ValueError):
+                    pass
+        if direction == "NONE":
             continue
 
         live = bool(getattr(state, "live", False))
         data_ok = bool(getattr(state, "data_ok", False))
         price = _num(getattr(state, "price", 0))
         atr = _num(getattr(state, "atr", 0))
-        if price <= 0 or atr <= 0:
+        if price <= 0:
             continue
 
         pre_move = _num(getattr(state, "pre_move_score", 0))
@@ -62,9 +78,11 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
         quality = _num(getattr(state, "quality", 0))
         confidence = _num(getattr(state, "confidence", 0))
         expected_move = _num(getattr(state, "expected_move_pct", 0))
-        atr_pct = atr / price * 100
+        atr_pct = atr / price * 100 if atr > 0 else 0.0
         if expected_move <= 0:
             expected_move = atr_pct * (1.0 + pre_move / 100.0)
+        if expected_move <= 0:
+            expected_move = abs(_num(getattr(state, "move_24h_pct", 0))) or abs(_num(getattr(state, "move_4h_pct", 0)))
 
         score = 0.0
         reasons = []
