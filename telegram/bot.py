@@ -77,6 +77,15 @@ def _profile_response(name: Optional[str] = None) -> str:
     if name is not None:
         _ACTIVE_PROFILE = get_profile(name).name
         os.environ["GAGARIN_TRADING_PROFILE"] = _ACTIVE_PROFILE
+        selected = get_profile(_ACTIVE_PROFILE)
+        # Make the Telegram selection effective even if deployment-level
+        # MIN_ENTRY_* variables were set; the chosen profile becomes the
+        # active runtime configuration until process restart or next switch.
+        os.environ["MIN_ENTRY_PROBABILITY"] = str(selected.min_probability)
+        os.environ["MIN_ENTRY_QUALITY"] = str(selected.min_quality)
+        os.environ["MIN_ENTRY_CONFIDENCE"] = str(selected.min_confidence)
+        os.environ["MIN_ENTRY_RR"] = str(selected.min_rr)
+        os.environ["MAX_ENTRY_STOP_ATR"] = str(selected.max_stop_atr)
     profile = get_profile(_ACTIVE_PROFILE)
     return "\\n".join([
         "🎛 SOYUZ GAGARIN — PROFILO",
