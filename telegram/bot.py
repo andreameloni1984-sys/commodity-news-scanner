@@ -87,7 +87,7 @@ def _profile_response(name: Optional[str] = None) -> str:
         os.environ["MIN_ENTRY_RR"] = str(selected.min_rr)
         os.environ["MAX_ENTRY_STOP_ATR"] = str(selected.max_stop_atr)
     profile = get_profile(_ACTIVE_PROFILE)
-    return "\\n".join([
+    return "\n".join([
         "🎛 SOYUZ GAGARIN — PROFILO",
         "━━━━━━━━━━━━━━━━━━━━",
         f"ATTIVO: {profile.name}",
