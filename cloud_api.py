@@ -121,8 +121,6 @@ def _run_gagarin():
         symbol = str(candidate.get("symbol") or "").upper()
         if not symbol or symbol in aggressive_closed_symbols:
             continue
-        if candidate.get("data_status") not in {"LIVE", "FRESH", "OK", "CURRENT"}:
-            continue
         if float(candidate.get("probability") or 0) < 45:
             continue
         paper_candidate = dict(candidate)
