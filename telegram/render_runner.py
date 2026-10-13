@@ -16,7 +16,7 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from telegram.bot import _api, _command_response, _reply, telegram_diagnostic, _run_analysis, get_last_results
+from telegram.bot import _api, _command_response, _reply, telegram_diagnostic, _run_analysis, get_last_results, telegram_menu
 from soyuz_gagarin.adapter import evaluate_states
 from soyuz_gagarin.mt5_bridge import build_demo_payloads
 
@@ -120,12 +120,40 @@ def handle_update(update: dict) -> None:
         chat_id = chat.get("id")
         text = message.get("text", "")
 
-        if chat_id is None or not text or not text.startswith("/"):
+        if chat_id is None or not text:
+            return
+
+        # Reply-keyboard buttons send plain text, not slash commands.
+        button_commands = {
+            "📰 NEWS": "/news",
+            "🔥 TOP OPPORTUNITÀ": "/top",
+            "🏆 CLASSIFICA": "/classifica",
+            "⚡ INTRADAY": "/intraday",
+            "💰 COSA COMPRARE": "/comprare",
+            "🛒 QUALE COMPRO?": "/quale_compro",
+            "📊 ANALISI": "/analisi",
+            "📡 SEGNALI": "/segnali",
+            "🥇 METALLI": "/metalli",
+            "🛢 PETROLIO": "/petrolio",
+            "🌾 AGRI": "/agri",
+            "🌍 MACRO": "/macro",
+            "❓ PERCHÉ": "/perche",
+            "🔄 AGGIORNA": "/aggiorna",
+            "🛡 SOFT": "/soft",
+            "🚀 AGGRESSIVO": "/aggressivo",
+            "🎛 PROFILO": "/profilo",
+            "⚙️ STATO": "/stato",
+            "ℹ️ GUIDA": "/guida",
+        }
+        original_text = text.strip()
+        text = button_commands.get(original_text.upper(), original_text)
+        if not text.startswith("/"):
+            _reply(chat_id, "Scegli una voce dal menu GAGARIN oppure usa /start.", reply_markup=telegram_menu())
             return
 
         print(
             "Telegram webhook command | "
-            f"chat_id={chat_id} | text={text}",
+            f"chat_id={chat_id} | text={original_text} | routed={text}",
             flush=True,
         )
 
@@ -138,7 +166,7 @@ def handle_update(update: dict) -> None:
         if aggressive:
             _reply(
                 chat_id,
-                "🛰️ GAGARIN — RICHIESTA RICEVUTA\\n"
+                "🛰️ GAGARIN — RICHIESTA RICEVUTA\n"
                 "Sto aggiornando il mercato e preparando la migliore opportunità PAPER. "
                 "Ti invio il risultato appena termina l'analisi."
             )
