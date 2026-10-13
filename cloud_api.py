@@ -19,7 +19,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 RUN_LOCK = Lock()
 PORTFOLIO = PaperPortfolio(100.0)
 AGGRESSIVE_PORTFOLIO = PaperPortfolio(100.0)
-NONCOMMODITY_PORTFOLIO = PaperPortfolio(100.0)
+FOREX_AGGRESSIVE_PORTFOLIO = PaperPortfolio(100.0)
 
 
 def _authorize(x_api_key: str | None) -> None:
@@ -133,6 +133,23 @@ def _run_gagarin():
         # At most one fresh entry per symbol per run; portfolio itself blocks duplicates.
     AGGRESSIVE_PORTFOLIO.mark_to_market(prices)
 
+    # Separate aggressive account for Forex symbols already analyzed by Gagarin.
+    forex_symbols = {str(item.symbol).upper() for item in commodities if str(getattr(item, "category", "")).strip().lower() == "forex"}
+    forex_rows = [row for row in rows if str(row.get("symbol") or "").upper() in forex_symbols]
+    forex_prices = {str(row["symbol"]).upper(): float(row["price"]) for row in forex_rows if row.get("price") is not None and float(row["price"]) > 0}
+    forex_closed = FOREX_AGGRESSIVE_PORTFOLIO.evaluate_exits(forex_prices)
+    FOREX_AGGRESSIVE_PORTFOLIO.mark_to_market(forex_prices)
+    forex_closed_symbols = {str(item.get("symbol") or "").upper() for item in forex_closed}
+    forex_candidates = sorted(forex_rows, key=lambda x: (-(float(x.get("opportunity_score") or 0)), -(float(x.get("probability") or 0)), -(float(x.get("quality") or 0))))
+    for candidate in forex_candidates:
+        symbol = str(candidate.get("symbol") or "").upper()
+        if not symbol or symbol in forex_closed_symbols or float(candidate.get("probability") or 0) < 45:
+            continue
+        paper_candidate = dict(candidate)
+        paper_candidate["action"] = "PAPER_SIGNAL"
+        FOREX_AGGRESSIVE_PORTFOLIO.open_signal(paper_candidate, allocation_pct=0.25, risk_pct=0.015, max_allocation_pct=0.35)
+    FOREX_AGGRESSIVE_PORTFOLIO.mark_to_market(forex_prices)
+
     # Day trading registry: update open positions with any prices present.
     day_registry = load_day_registry()
     day_registry = run_day_registry(day_registry)
@@ -147,9 +164,11 @@ def _run_gagarin():
         "ranking": rows,
         "portfolio": PORTFOLIO.snapshot(),
         "aggressive_portfolio": AGGRESSIVE_PORTFOLIO.snapshot(),
-        "noncommodity_portfolio": NONCOMMODITY_PORTFOLIO.snapshot(),
-        "noncommodity_universe": ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "EURUSD", "GBPUSD", "USDJPY", "BTC-USD", "ETH-USD"],
-        "noncommodity_note": "Separato; ingressi solo quando il motore dispone di prezzo, direzione, SL e TP verificabili."
+        "forex_aggressive_portfolio": FOREX_AGGRESSIVE_PORTFOLIO.snapshot(),
+        "forex_universe": sorted(forex_symbols),
+        "forex_rows": forex_rows,
+        "forex_closed": forex_closed,
+        "forex_note": "Solo coppie Forex già presenti nell'universo operativo Gagarin; ETF e indici esclusi perché non sono analizzati dal motore attuale.",
         "aggressive_closed": aggressive_closed,
         "day_registry": day_snap,
     }
@@ -246,7 +265,7 @@ small{color:#7f8a97}
 <div id="status" class="muted" style="margin-top:12px">Pronto.</div>
 </div>
 <div class="card"><div class="big">💶 PORTAFOGLIO PAPER</div><div class="row"><span>Capitale iniziale</span><b id="cash-init">€100,00</b></div><div class="row"><span>Disponibile</span><b id="cash">—</b></div><div class="row"><span>P/L realizzato</span><b id="pnl">—</b></div><div class="row"><span>Equity</span><b id="equity">—</b></div><div id="positions" class="muted">Nessuna posizione aperta.</div></div>
-<div class="card"><div class="big">🌐 AGGRESSIVE — ALTRI STRUMENTI</div><div class="muted">Azioni · indici ETF · Forex · Crypto · conto PAPER indipendente da €100. Stessi filtri: probabilità ≥45/100, prezzo aggiornato, direzione LONG/SHORT, stop loss, take profit e rischio 1,5% per operazione.</div><div class="row"><span>Disponibile</span><b id="nc-cash">€100,00</b></div><div class="row"><span>Posizioni aperte</span><b id="nc-open">0</b></div><div class="row"><span>Operazioni chiuse</span><b id="nc-closed">0</b></div><div class="row"><span>P/L non realizzato</span><b id="nc-unrealized">€0,00</b></div><div class="row"><span>P/L realizzato</span><b id="nc-realized">€0,00</b></div><div class="row"><span>Equity</span><b id="nc-equity">€100,00</b></div><div id="nc-positions" class="muted">In attesa del motore dati dedicato per strumenti non-commodity. Nessun ordine simulato viene inventato.</div></div>
+<div class="card"><div class="big">💱 AGGRESSIVE PAPER — FOREX</div><div class="muted">Solo coppie valutarie già analizzate dal motore Gagarin. Capitale separato €100 · probabilità ≥45/100 · ingresso, SL e TP verificabili · rischio obiettivo 1,5% per operazione. ETF e indici non sono inclusi perché il motore attuale non li analizza.</div><div class="row"><span>Disponibile</span><b id="fx-cash">€100,00</b></div><div class="row"><span>Posizioni aperte</span><b id="fx-open">0</b></div><div class="row"><span>Operazioni chiuse</span><b id="fx-closed">0</b></div><div class="row"><span>P/L non realizzato</span><b id="fx-unrealized">€0,00</b></div><div class="row"><span>P/L realizzato</span><b id="fx-realized">€0,00</b></div><div class="row"><span>Equity</span><b id="fx-equity">€100,00</b></div><div id="fx-positions" class="muted">Nessuna posizione Forex aperta.</div><div id="fx-candidates" class="muted"></div></div>
 <div class="card"><div class="big">📈 DAY TRADING</div><div class="row"><span>Capitale</span><b id="day-capital">€100,00</b></div><div class="row"><span>Aperte</span><b id="day-open">0</b></div><div class="row"><span>Chiuse</span><b id="day-closed">0</b></div><div class="row"><span>P/L non realizzato</span><b id="day-unrealized">€0,00</b></div><div class="row"><span>P/L realizzato</span><b id="day-realized">€0,00</b></div><div class="row"><span>Equity</span><b id="day-equity">€100,00</b></div><div id="day-positions" class="muted">Nessuna posizione day aperta.</div></div>
 <div class="card" style="border:2px solid #f5b942"><div class="big">⚡ AGGRESSIVE PAPER</div><div class="muted">Conto separato · capitale iniziale €100 · rischio per operazione più alto. Aperture e chiusure simulate su SL/TP.</div><div class="row"><span>Disponibile</span><b id="agg-cash">€100,00</b></div><div class="row"><span>Posizioni aperte</span><b id="agg-open">0</b></div><div class="row"><span>Operazioni chiuse</span><b id="agg-closed">0</b></div><div class="row"><span>P/L non realizzato</span><b id="agg-unrealized">€0,00</b></div><div class="row"><span>P/L realizzato</span><b id="agg-realized">€0,00</b></div><div class="row"><span>Equity</span><b id="agg-equity">€100,00</b></div><div id="agg-positions" class="muted">Nessuna posizione aggressiva aperta.</div><div id="agg-history" class="muted"></div></div><div id="content"></div>
 <script>
@@ -265,7 +284,7 @@ async function run(){
   const p=d.portfolio||{}; document.getElementById('cash').textContent='€'+Number(p.cash||0).toFixed(2); document.getElementById('pnl').textContent='€'+Number(p.realized_pnl||0).toFixed(2); document.getElementById('equity').textContent='€'+Number(p.equity||0).toFixed(2);
   document.getElementById('positions').innerHTML=(p.open_positions||[]).length ? p.open_positions.map(x=>'<div class="card signal"><b>🟢 '+esc(x.commodity)+' '+esc(x.direction)+'</b><div class="row"><span>Entry</span><b>'+money(x.entry)+'</b></div><div class="row"><span>Allocazione</span><b>'+money(x.allocation)+'</b></div><div class="row"><span>SL / TP3</span><b>'+money(x.stop)+' / '+money(x.tp3)+'</b></div></div>').join('') : 'Nessuna posizione aperta.';
   const agg=d.aggressive_portfolio||{}; const aggOpen=agg.open_positions||[], aggClosed=agg.closed_positions||[]; document.getElementById('agg-cash').textContent='€'+Number(agg.cash??100).toFixed(2); document.getElementById('agg-open').textContent=aggOpen.length; document.getElementById('agg-closed').textContent=aggClosed.length; document.getElementById('agg-unrealized').textContent='€'+Number(agg.unrealized_pnl||0).toFixed(2); document.getElementById('agg-realized').textContent='€'+Number(agg.realized_pnl||0).toFixed(2); document.getElementById('agg-equity').textContent='€'+Number(agg.equity||100).toFixed(2); document.getElementById('agg-positions').innerHTML=aggOpen.length?aggOpen.map(x=>'<div class="card opportunity"><b>⚡ '+esc(x.commodity)+' '+esc(x.direction)+'</b><div class="row"><span>Apertura</span><b>'+money(x.entry)+'</b></div><div class="row"><span>Prezzo attuale</span><b>'+money(x.mark_price)+'</b></div><div class="row"><span>SL / TP1 / TP2 / TP3</span><b>'+money(x.stop)+' / '+money(x.tp1)+' / '+money(x.tp2)+' / '+money(x.tp3)+'</b></div><div class="row"><span>P/L non realizzato</span><b>€'+Number(x.unrealized_pnl||0).toFixed(2)+'</b></div></div>').join(''):'Nessuna posizione aggressiva aperta.'; document.getElementById('agg-history').innerHTML=aggClosed.length?'<b>Ultime chiuse</b>'+aggClosed.slice(-5).reverse().map(x=>'<div class="row"><span>'+esc(x.commodity)+' '+esc(x.direction)+' · '+esc(x.closed_at||'')+'</span><b>€'+Number(x.pnl||0).toFixed(2)+'</b></div>').join(''):'Nessuna operazione chiusa.';
-  const nc=d.noncommodity_portfolio||{}; document.getElementById("nc-cash").textContent="€"+Number(nc.cash??100).toFixed(2); document.getElementById("nc-open").textContent=(nc.open_positions||[]).length; document.getElementById("nc-closed").textContent=(nc.closed_positions||[]).length; document.getElementById("nc-unrealized").textContent="€"+Number(nc.unrealized_pnl||0).toFixed(2); document.getElementById("nc-realized").textContent="€"+Number(nc.realized_pnl||0).toFixed(2); document.getElementById("nc-equity").textContent="€"+Number(nc.equity||100).toFixed(2); document.getElementById("nc-positions").innerHTML=(nc.open_positions||[]).length?(nc.open_positions||[]).map(x=>"<div class=\"card opportunity\"><b>"+esc(x.commodity)+" "+esc(x.direction)+"</b><div class=\"row\"><span>Entry / SL / TP</span><b>"+money(x.entry)+" / "+money(x.stop)+" / "+money(x.tp3)+"</b></div></div>").join(""):"Nessuna posizione aperta. Motore non-commodity da collegare prima di autorizzare ingressi.";
+  const fx=d.forex_aggressive_portfolio||{}; const fxOpen=fx.open_positions||[], fxClosed=fx.closed_positions||[]; document.getElementById("fx-cash").textContent="€"+Number(fx.cash??100).toFixed(2); document.getElementById("fx-open").textContent=fxOpen.length; document.getElementById("fx-closed").textContent=fxClosed.length; document.getElementById("fx-unrealized").textContent="€"+Number(fx.unrealized_pnl||0).toFixed(2); document.getElementById("fx-realized").textContent="€"+Number(fx.realized_pnl||0).toFixed(2); document.getElementById("fx-equity").textContent="€"+Number(fx.equity||100).toFixed(2); document.getElementById("fx-positions").innerHTML=fxOpen.length?fxOpen.map(x=>"<div class='card opportunity'><b>"+esc(x.commodity)+" "+esc(x.direction)+"</b><div class='row'><span>Entry / SL / TP3</span><b>"+money(x.entry)+" / "+money(x.stop)+" / "+money(x.tp3)+"</b></div><div class='row'><span>Prezzo aggiornato</span><b>"+money(x.mark_price)+"</b></div><div class='row'><span>P/L non realizzato</span><b>€"+Number(x.unrealized_pnl||0).toFixed(2)+"</b></div></div>").join(""):"Nessuna posizione Forex aperta."; document.getElementById("fx-candidates").innerHTML="<b>Coppie analizzate in questo ciclo</b><div>"+(d.forex_universe||[]).map(esc).join(" · ")+"</div>"+(d.forex_rows||[]).map(x=>"<div class='row'><span>"+esc(x.symbol)+" · "+esc(x.direction||x.opportunity_direction||"NONE")+" · prob. "+esc(x.probability)+"</span><b>"+money(x.entry)+" / "+money(x.stop)+" / "+money(x.tp3)+"</b></div>").join("");
   const day=d.day_registry||{}; document.getElementById('day-capital').textContent='€'+Number(day.capital||100).toFixed(2); document.getElementById('day-open').textContent=day.open_count||0; document.getElementById('day-closed').textContent=day.closed_count||0; document.getElementById('day-unrealized').textContent='€'+Number(day.unrealized_pnl||0).toFixed(2); document.getElementById('day-realized').textContent='€'+Number(day.realized_pnl||0).toFixed(2); document.getElementById('day-equity').textContent='€'+Number(day.equity||100).toFixed(2);
   document.getElementById('day-positions').innerHTML=(day.positions||[]).length ? day.positions.map(x=>'<div class="card signal"><b>🟢 '+esc(x.symbol)+' '+esc(x.side)+'</b><div class="row"><span>Entry</span><b>'+money(x.entry)+'</b></div><div class="row"><span>Stop</span><b>'+money(x.stop)+'</b></div><div class="row"><span>Uscita</span><b>'+esc(x.exit_rule||'—')+'</b></div><div class="row"><span>Qty</span><b>'+money(x.qty)+'</b></div></div>').join('') : 'Nessuna posizione day aperta.';
   let html='';
