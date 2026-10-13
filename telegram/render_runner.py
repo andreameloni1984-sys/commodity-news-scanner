@@ -129,7 +129,32 @@ def handle_update(update: dict) -> None:
             flush=True,
         )
 
+        command_name = text.strip().split("@", 1)[0].lower()
+
+        # Aggressive prediction performs a full fresh market scan. Send an
+        # immediate acknowledgement so Telegram does not appear dead while
+        # providers respond, then deliver the result when analysis finishes.
+        aggressive = command_name in {"/aggressivo", "/aggressive"}
+        if aggressive:
+            _reply(
+                chat_id,
+                "🛰️ GAGARIN — RICHIESTA RICEVUTA\\n"
+                "Sto aggiornando il mercato e preparando la migliore opportunità PAPER. "
+                "Ti invio il risultato appena termina l'analisi."
+            )
+
+        print(
+            "Telegram command processing | "
+            f"command={command_name} | phase=START",
+            flush=True,
+        )
         response = _command_response(text)
+        print(
+            "Telegram command processing | "
+            f"command={command_name} | phase=END | "
+            f"response={'YES' if response else 'NO'}",
+            flush=True,
+        )
 
         if response:
             _reply(chat_id, response)
