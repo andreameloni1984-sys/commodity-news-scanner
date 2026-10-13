@@ -204,6 +204,7 @@ small{color:#7f8a97}
 <body>
 <h1>🚀 GAGARIN CLOUD</h1>
 <div class="sub">Controllo da iPhone · Paper Only</div>
+<div class="card" style="border:2px solid #f5b942;background:#171b20"><div class="big">⚡ AGGRESSIVE DESK</div><div class="muted">Top 3 candidati LONG/SHORT con entry, stop loss e take profit quando disponibili.</div><button onclick="location.href=\'/static/aggressive.html\'" style="background:#d99000;color:#111">APRI REPARTO AGGRESSIVE</button></div>
 <div class="card">
 <input id="key" type="password" placeholder="Cloud API Key">
 <button onclick="run()">ANALIZZA ORA</button>
