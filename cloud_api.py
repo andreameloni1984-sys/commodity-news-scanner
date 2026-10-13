@@ -17,7 +17,7 @@ from engine.day_registry import load as load_day_registry, run as run_day_regist
 app = FastAPI(title="SOYUZ GAGARIN CLOUD", version="1.0")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 RUN_LOCK = Lock()
-PORTFOLIO = PaperPortfolio(100.0)
+PORTFOLIO = PaperPortfolio(100.0)\nAGGRESSIVE_PORTFOLIO = PaperPortfolio(100.0)
 
 
 def _authorize(x_api_key: str | None) -> None:
@@ -103,6 +103,36 @@ def _run_gagarin():
         PORTFOLIO.open_signal(signal, allocation_pct=0.25)
     PORTFOLIO.mark_to_market(prices)
 
+    # Independent AGGRESSIVE paper account: top-ranked valid setups, separate
+    # capital and P/L. Only open when direction, price, SL and all targets form
+    # a coherent setup; never fabricate missing levels.
+    aggressive_closed = AGGRESSIVE_PORTFOLIO.evaluate_exits(prices)
+    AGGRESSIVE_PORTFOLIO.mark_to_market(prices)
+    aggressive_closed_symbols = {str(item.get("symbol") or "").upper() for item in aggressive_closed}
+    candidates = sorted(
+        rows,
+        key=lambda x: (
+            -(float(x.get("opportunity_score") or 0)),
+            -(float(x.get("probability") or 0)),
+            -(float(x.get("quality") or 0)),
+        ),
+    )
+    for candidate in candidates:
+        symbol = str(candidate.get("symbol") or "").upper()
+        if not symbol or symbol in aggressive_closed_symbols:
+            continue
+        if candidate.get("data_status") not in {"LIVE", "FRESH", "OK", "CURRENT"}:
+            continue
+        if float(candidate.get("probability") or 0) < 45:
+            continue
+        paper_candidate = dict(candidate)
+        paper_candidate["action"] = "PAPER_SIGNAL"
+        AGGRESSIVE_PORTFOLIO.open_signal(
+            paper_candidate, allocation_pct=0.25, risk_pct=0.015, max_allocation_pct=0.35
+        )
+        # At most one fresh entry per symbol per run; portfolio itself blocks duplicates.
+    AGGRESSIVE_PORTFOLIO.mark_to_market(prices)
+
     # Day trading registry: update open positions with any prices present.
     day_registry = load_day_registry()
     day_registry = run_day_registry(day_registry)
@@ -116,6 +146,8 @@ def _run_gagarin():
         "closed": closed,
         "ranking": rows,
         "portfolio": PORTFOLIO.snapshot(),
+        "aggressive_portfolio": AGGRESSIVE_PORTFOLIO.snapshot(),
+        "aggressive_closed": aggressive_closed,
         "day_registry": day_snap,
     }
 
@@ -211,7 +243,8 @@ small{color:#7f8a97}
 <div id="status" class="muted" style="margin-top:12px">Pronto.</div>
 </div>
 <div class="card"><div class="big">💶 PORTAFOGLIO PAPER</div><div class="row"><span>Capitale iniziale</span><b id="cash-init">€100,00</b></div><div class="row"><span>Disponibile</span><b id="cash">—</b></div><div class="row"><span>P/L realizzato</span><b id="pnl">—</b></div><div class="row"><span>Equity</span><b id="equity">—</b></div><div id="positions" class="muted">Nessuna posizione aperta.</div></div>
-<div class="card"><div class="big">📈 DAY TRADING</div><div class="row"><span>Capitale</span><b id="day-capital">€100,00</b></div><div class="row"><span>Aperte</span><b id="day-open">0</b></div><div class="row"><span>Chiuse</span><b id="day-closed">0</b></div><div class="row"><span>P/L non realizzato</span><b id="day-unrealized">€0,00</b></div><div class="row"><span>P/L realizzato</span><b id="day-realized">€0,00</b></div><div class="row"><span>Equity</span><b id="day-equity">€100,00</b></div><div id="day-positions" class="muted">Nessuna posizione day aperta.</div></div><div id="content"></div>
+<div class="card"><div class="big">📈 DAY TRADING</div><div class="row"><span>Capitale</span><b id="day-capital">€100,00</b></div><div class="row"><span>Aperte</span><b id="day-open">0</b></div><div class="row"><span>Chiuse</span><b id="day-closed">0</b></div><div class="row"><span>P/L non realizzato</span><b id="day-unrealized">€0,00</b></div><div class="row"><span>P/L realizzato</span><b id="day-realized">€0,00</b></div><div class="row"><span>Equity</span><b id="day-equity">€100,00</b></div><div id="day-positions" class="muted">Nessuna posizione day aperta.</div></div>
+<div class="card" style="border:2px solid #f5b942"><div class="big">⚡ AGGRESSIVE PAPER</div><div class="muted">Conto separato · capitale iniziale €100 · rischio per operazione più alto. Aperture e chiusure simulate su SL/TP.</div><div class="row"><span>Disponibile</span><b id="agg-cash">€100,00</b></div><div class="row"><span>Posizioni aperte</span><b id="agg-open">0</b></div><div class="row"><span>Operazioni chiuse</span><b id="agg-closed">0</b></div><div class="row"><span>P/L non realizzato</span><b id="agg-unrealized">€0,00</b></div><div class="row"><span>P/L realizzato</span><b id="agg-realized">€0,00</b></div><div class="row"><span>Equity</span><b id="agg-equity">€100,00</b></div><div id="agg-positions" class="muted">Nessuna posizione aggressiva aperta.</div><div id="agg-history" class="muted"></div></div><div id="content"></div>
 <script>
 const keyEl=document.getElementById('key');
 keyEl.value=localStorage.getItem('gagarin_key')||'';
@@ -227,6 +260,7 @@ async function run(){
   s.innerHTML='<span class="green">● ONLINE</span> · '+esc(d.timestamp_utc);
   const p=d.portfolio||{}; document.getElementById('cash').textContent='€'+Number(p.cash||0).toFixed(2); document.getElementById('pnl').textContent='€'+Number(p.realized_pnl||0).toFixed(2); document.getElementById('equity').textContent='€'+Number(p.equity||0).toFixed(2);
   document.getElementById('positions').innerHTML=(p.open_positions||[]).length ? p.open_positions.map(x=>'<div class="card signal"><b>🟢 '+esc(x.commodity)+' '+esc(x.direction)+'</b><div class="row"><span>Entry</span><b>'+money(x.entry)+'</b></div><div class="row"><span>Allocazione</span><b>'+money(x.allocation)+'</b></div><div class="row"><span>SL / TP3</span><b>'+money(x.stop)+' / '+money(x.tp3)+'</b></div></div>').join('') : 'Nessuna posizione aperta.';
+  const agg=d.aggressive_portfolio||{}; const aggOpen=agg.open_positions||[], aggClosed=agg.closed_positions||[]; document.getElementById('agg-cash').textContent='€'+Number(agg.cash??100).toFixed(2); document.getElementById('agg-open').textContent=aggOpen.length; document.getElementById('agg-closed').textContent=aggClosed.length; document.getElementById('agg-unrealized').textContent='€'+Number(agg.unrealized_pnl||0).toFixed(2); document.getElementById('agg-realized').textContent='€'+Number(agg.realized_pnl||0).toFixed(2); document.getElementById('agg-equity').textContent='€'+Number(agg.equity||100).toFixed(2); document.getElementById('agg-positions').innerHTML=aggOpen.length?aggOpen.map(x=>'<div class="card opportunity"><b>⚡ '+esc(x.commodity)+' '+esc(x.direction)+'</b><div class="row"><span>Apertura</span><b>'+money(x.entry)+'</b></div><div class="row"><span>Prezzo attuale</span><b>'+money(x.mark_price)+'</b></div><div class="row"><span>SL / TP1 / TP2 / TP3</span><b>'+money(x.stop)+' / '+money(x.tp1)+' / '+money(x.tp2)+' / '+money(x.tp3)+'</b></div><div class="row"><span>P/L non realizzato</span><b>€'+Number(x.unrealized_pnl||0).toFixed(2)+'</b></div></div>').join(''):'Nessuna posizione aggressiva aperta.'; document.getElementById('agg-history').innerHTML=aggClosed.length?'<b>Ultime chiuse</b>'+aggClosed.slice(-5).reverse().map(x=>'<div class="row"><span>'+esc(x.commodity)+' '+esc(x.direction)+' · '+esc(x.closed_at||'')+'</span><b>€'+Number(x.pnl||0).toFixed(2)+'</b></div>').join(''):'Nessuna operazione chiusa.';
   const day=d.day_registry||{}; document.getElementById('day-capital').textContent='€'+Number(day.capital||100).toFixed(2); document.getElementById('day-open').textContent=day.open_count||0; document.getElementById('day-closed').textContent=day.closed_count||0; document.getElementById('day-unrealized').textContent='€'+Number(day.unrealized_pnl||0).toFixed(2); document.getElementById('day-realized').textContent='€'+Number(day.realized_pnl||0).toFixed(2); document.getElementById('day-equity').textContent='€'+Number(day.equity||100).toFixed(2);
   document.getElementById('day-positions').innerHTML=(day.positions||[]).length ? day.positions.map(x=>'<div class="card signal"><b>🟢 '+esc(x.symbol)+' '+esc(x.side)+'</b><div class="row"><span>Entry</span><b>'+money(x.entry)+'</b></div><div class="row"><span>Stop</span><b>'+money(x.stop)+'</b></div><div class="row"><span>Uscita</span><b>'+esc(x.exit_rule||'—')+'</b></div><div class="row"><span>Qty</span><b>'+money(x.qty)+'</b></div></div>').join('') : 'Nessuna posizione day aperta.';
   let html='';
