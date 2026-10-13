@@ -367,10 +367,16 @@ def _reply(
     )
 
     if not ok:
-
         print(
             "Telegram reply failed | "
             f"{data.get('description', 'unknown error')}",
+            flush=True,
+        )
+    else:
+        result = data.get("result") or {}
+        print(
+            "Telegram reply delivered | "
+            f"chat_id={chat_id} | message_id={result.get('message_id', 'unknown')}",
             flush=True,
         )
 
