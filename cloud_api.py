@@ -17,7 +17,8 @@ from engine.day_registry import load as load_day_registry, run as run_day_regist
 app = FastAPI(title="SOYUZ GAGARIN CLOUD", version="1.0")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 RUN_LOCK = Lock()
-PORTFOLIO = PaperPortfolio(100.0)\nAGGRESSIVE_PORTFOLIO = PaperPortfolio(100.0)
+PORTFOLIO = PaperPortfolio(100.0)
+AGGRESSIVE_PORTFOLIO = PaperPortfolio(100.0)
 
 
 def _authorize(x_api_key: str | None) -> None:
@@ -234,7 +235,7 @@ small{color:#7f8a97}
 <body>
 <h1>🚀 GAGARIN CLOUD</h1>
 <div class="sub">Controllo da iPhone · Paper Only</div>
-<div class="card" style="border:2px solid #f5b942;background:#171b20"><div class="big">⚡ AGGRESSIVE DESK</div><div class="muted">Top 3 candidati LONG/SHORT con entry, stop loss e take profit quando disponibili.</div><button onclick="location.href=\'/static/aggressive.html\'" style="background:#d99000;color:#111">APRI REPARTO AGGRESSIVE</button></div>
+
 <div class="card">
 <input id="key" type="password" placeholder="Cloud API Key">
 <button onclick="run()">ANALIZZA ORA</button>
