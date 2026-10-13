@@ -130,7 +130,7 @@ def handle_update(update: dict) -> None:
             "🏆 CLASSIFICA": "/classifica",
             "⚡ INTRADAY": "/intraday",
             "💰 COSA COMPRARE": "/comprare",
-            "🛒 QUALE COMPRO?": "/quale_compro",
+            "🛒 QUALE COMPRO?": "/qualeccompro",
             "📊 ANALISI": "/analisi",
             "📡 SEGNALI": "/segnali",
             "🥇 METALLI": "/metalli",
@@ -138,11 +138,11 @@ def handle_update(update: dict) -> None:
             "🌾 AGRI": "/agri",
             "🌍 MACRO": "/macro",
             "❓ PERCHÉ": "/perche",
-            "🔄 AGGIORNA": "/aggiorna",
+            "🔄 AGGIORNA": "/analisi",
             "🛡 SOFT": "/soft",
             "🚀 AGGRESSIVO": "/aggressivo",
             "🎛 PROFILO": "/profilo",
-            "⚙️ STATO": "/stato",
+            "⚙️ STATO": "/status",
             "ℹ️ GUIDA": "/guida",
         }
         original_text = text.strip()
@@ -185,7 +185,15 @@ def handle_update(update: dict) -> None:
         )
 
         if response:
-            _reply(chat_id, response)
+            # This Render service uses the webhook runner, not run_polling.
+            # Attach the persistent keyboard to /start and log Telegram's API result.
+            markup = telegram_menu() if command_name in {"/start", "/help"} else None
+            delivered = _reply(chat_id, response, reply_markup=markup)
+            print(
+                "Telegram delivery | "
+                f"command={command_name} | delivered={'YES' if delivered else 'NO'}",
+                flush=True,
+            )
 
         elif text.lower().startswith("/id"):
             _reply(
