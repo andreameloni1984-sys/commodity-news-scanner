@@ -72,6 +72,33 @@ class PaperPortfolio:
                     * self._move(p.direction, p.entry, price), 2
                 )
 
+    def export_state(self) -> dict[str, Any]:
+        """Return the complete serializable state for durable persistence."""
+        with self._lock:
+            return {
+                "initial_capital": self.initial_capital,
+                "cash": self.cash,
+                "positions": [asdict(p) for p in self.positions],
+                "history": list(self.history),
+            }
+
+    def restore_state(self, state: dict[str, Any] | None) -> None:
+        """Restore a previously persisted portfolio after a process restart."""
+        if not isinstance(state, dict):
+            return
+        try:
+            initial_capital = float(state.get("initial_capital", INITIAL_CAPITAL))
+            cash = float(state.get("cash", initial_capital))
+            positions = [Position(**item) for item in state.get("positions", [])]
+            history = list(state.get("history", []))
+        except (TypeError, ValueError, KeyError):
+            return
+        with self._lock:
+            self.initial_capital = initial_capital
+            self.cash = cash
+            self.positions = positions
+            self.history = history
+
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
             open_positions = [asdict(p) for p in self.positions if p.status == "OPEN"]
