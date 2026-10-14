@@ -17,6 +17,7 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 from telegram.bot import _api, _command_response, _reply, telegram_diagnostic, _run_analysis, get_last_results, telegram_menu
+from config import TELEGRAM_CHAT_ID
 from soyuz_gagarin.adapter import evaluate_states
 from soyuz_gagarin.mt5_bridge import build_demo_payloads
 
@@ -94,7 +95,7 @@ def handle_update(update: dict) -> None:
             # Keep compatibility with older button labels.
             "🚀 TRADING 2-1-2 AGGRESSIVE": "/aggressivo212",
             "🛡 TRADING 2-1-2 SOFT": "/soft212",
-            "🚀 AGGRESSIVE": "/aggressivo",
+            "🚀 AGGRESSIVO": "/aggressivo",
             "🛡 SOFT": "/soft",
             "🏆 CLASSIFICA": "/classifica",
             "🔄 AGGIORNA": "/analisi",
@@ -445,6 +446,22 @@ def main() -> None:
         "🟢 Telegram webhook: ACTIVE",
         flush=True,
     )
+
+    # setChatMenuButton configures the commands menu, not the reply keyboard.
+    # Send the actual persistent keyboard to the configured chat on startup.
+    if TELEGRAM_CHAT_ID:
+        keyboard_sent = _reply(
+            TELEGRAM_CHAT_ID,
+            "🚀 GAGARIN ONLINE — scegli dal menu qui sotto.\n🧪 PAPER ONLY.",
+            reply_markup=telegram_menu(),
+        )
+        print(
+            "Telegram startup keyboard | "
+            f"chat_configured=YES | delivered={'YES' if keyboard_sent else 'NO'}",
+            flush=True,
+        )
+    else:
+        print("Telegram startup keyboard | chat_configured=NO", flush=True)
 
     print(
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
