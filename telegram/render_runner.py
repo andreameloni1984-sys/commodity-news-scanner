@@ -16,7 +16,7 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from telegram.bot import _api, _command_response, _reply, telegram_diagnostic, _run_analysis, get_last_results, telegram_menu
+from telegram.bot import _api, _command_response, _reply, telegram_diagnostic, _run_analysis, get_last_results
 from config import TELEGRAM_CHAT_ID
 from soyuz_gagarin.adapter import evaluate_states
 from soyuz_gagarin.mt5_bridge import build_demo_payloads
@@ -116,7 +116,7 @@ def handle_update(update: dict) -> None:
                 text = "/analisi"
 
         if not text.startswith("/"):
-            _reply(chat_id, "Scegli una voce dal menu GAGARIN oppure usa /start.", reply_markup=telegram_menu())
+            _reply(chat_id, "Comando non riconosciuto. Usa /aggressivo212, /soft212, /analisi, /classifica oppure /help.")
             return
 
         print(
@@ -157,9 +157,8 @@ def handle_update(update: dict) -> None:
 
         if response:
             # This Render service uses the webhook runner, not run_polling.
-            # Attach the persistent keyboard to /start and log Telegram's API result.
-            markup = telegram_menu()
-            delivered = _reply(chat_id, response, reply_markup=markup)
+            # Send plain text only; reply keyboard removed.
+            delivered = _reply(chat_id, response)
             print(
                 "Telegram delivery | "
                 f"command={command_name} | delivered={'YES' if delivered else 'NO'}",
@@ -179,8 +178,7 @@ def handle_update(update: dict) -> None:
             )
             _reply(
                 chat_id,
-                "⚠️ Comando non disponibile. Usa i pulsanti Trading 2-1-2 qui sotto oppure /start.",
-                reply_markup=telegram_menu(),
+                "⚠️ Comando non disponibile. Usa /aggressivo212, /soft212, /analisi, /classifica oppure /help.",
             )
 
     except Exception as exc:
@@ -460,21 +458,19 @@ def main() -> None:
         flush=True,
     )
 
-    # setChatMenuButton configures the commands menu, not the reply keyboard.
-    # Send the actual persistent keyboard to the configured chat on startup.
+    # No reply keyboard: commands are sent as plain slash commands.
     if TELEGRAM_CHAT_ID:
-        keyboard_sent = _reply(
+        welcome_sent = _reply(
             TELEGRAM_CHAT_ID,
-            "🚀 GAGARIN ONLINE — scegli dal menu qui sotto.\n🧪 PAPER ONLY.",
-            reply_markup=telegram_menu(),
+            "🚀 GAGARIN ONLINE — invia un comando.\\n🧪 PAPER ONLY.\\n\\n/aggressivo212 — Trading aggressivo\\n/soft212 — Trading prudente\\n/analisi — Analisi completa\\n/classifica — Classifica\\n/help — Aiuto",
         )
         print(
-            "Telegram startup keyboard | "
-            f"chat_configured=YES | delivered={'YES' if keyboard_sent else 'NO'}",
+            "Telegram startup welcome | "
+            f"chat_configured=YES | delivered={'YES' if welcome_sent else 'NO'}",
             flush=True,
         )
     else:
-        print("Telegram startup keyboard | chat_configured=NO", flush=True)
+        print("Telegram startup welcome | chat_configured=NO", flush=True)
 
     print(
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
