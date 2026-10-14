@@ -219,31 +219,47 @@ def telegram_diagnostic() -> bool:
         flush=True,
     )
 
-    # Menu comandi ufficiale del bot.
-    _api(
-        "setMyCommands",
-        {
-            "commands": [
-                {"command": "segnali", "description": "Segnali operativi PAPER"},
-                {"command": "top", "description": "Top setup"},
-                {"command": "analisi", "description": "Analisi completa"},
-                {"command": "classifica", "description": "Classifica Gagarin"},
-                {"command": "setup", "description": "Setup e trigger"},
-                {"command": "prezzo", "description": "Prezzi e provider"},
-                {"command": "guida", "description": "Guida del canale"},
-                {"command": "rischio", "description": "Regole di rischio"},
-                {"command": "soft", "description": "Profilo prudente PAPER"},
-                {"command": "aggressivo", "description": "Profilo aggressivo PAPER"},
-                {"command": "aggressivo212", "description": "Trading 212 CFD — profilo aggressivo"},
-                {"command": "soft212", "description": "Trading 212 CFD — profilo soft"},
-                {"command": "profilo", "description": "Profilo attivo e soglie"},
-                {"command": "intraday", "description": "Dashboard intraday"},
-                {"command": "comprare", "description": "Cosa comprare in PAPER"},
-                {"command": "perche", "description": "Perché WAIT/ENTRY"},
-                {"command": "status", "description": "Stato bot"},
-                {"command": "ping", "description": "Test collegamento"},
-            ]
-        },
+    # Pubblica i comandi e imposta il pulsante Menu di Telegram.
+    commands_payload = {
+        "commands": [
+            {"command": "start", "description": "Apri menu Gagarin"},
+            {"command": "help", "description": "Mostra il menu"},
+            {"command": "segnali", "description": "Segnali operativi PAPER"},
+            {"command": "top", "description": "Top setup"},
+            {"command": "analisi", "description": "Analisi completa"},
+            {"command": "classifica", "description": "Classifica Gagarin"},
+            {"command": "setup", "description": "Setup e trigger"},
+            {"command": "prezzo", "description": "Prezzi e provider"},
+            {"command": "guida", "description": "Guida del canale"},
+            {"command": "rischio", "description": "Regole di rischio"},
+            {"command": "soft", "description": "Profilo prudente PAPER"},
+            {"command": "aggressivo", "description": "Profilo aggressivo PAPER"},
+            {"command": "aggressivo212", "description": "Trading 212 CFD — profilo aggressivo"},
+            {"command": "soft212", "description": "Trading 212 CFD — profilo soft"},
+            {"command": "profilo", "description": "Profilo attivo e soglie"},
+            {"command": "intraday", "description": "Dashboard intraday"},
+            {"command": "comprare", "description": "Cosa comprare in PAPER"},
+            {"command": "perche", "description": "Perché WAIT/ENTRY"},
+            {"command": "status", "description": "Stato bot"},
+            {"command": "ping", "description": "Test collegamento"},
+        ]
+    }
+    commands_ok, commands_result = _api("setMyCommands", commands_payload)
+    print(
+        "Telegram setMyCommands | "
+        f"ok={commands_ok} | "
+        f"detail={commands_result.get('description', 'OK' if commands_ok else 'unknown error')}",
+        flush=True,
+    )
+    menu_ok, menu_result = _api(
+        "setChatMenuButton",
+        {"menu_button": {"type": "commands"}},
+    )
+    print(
+        "Telegram setChatMenuButton | "
+        f"ok={menu_ok} | "
+        f"detail={menu_result.get('description', 'OK' if menu_ok else 'unknown error')}",
+        flush=True,
     )
 
     return True
@@ -1426,7 +1442,8 @@ def telegram_menu() -> dict:
         ],
         "resize_keyboard": True,
         "is_persistent": True,
-        "input_field_placeholder": "Scegli profilo Gagarin o Trading 212",
+        "one_time_keyboard": False,
+        "input_field_placeholder": "Menu Gagarin: scegli una funzione",
     }
 
 
