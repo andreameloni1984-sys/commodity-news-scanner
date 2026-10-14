@@ -235,7 +235,8 @@ def telegram_diagnostic() -> bool:
             {"command": "soft", "description": "Profilo prudente PAPER"},
             {"command": "aggressivo", "description": "Profilo aggressivo PAPER"},
             {"command": "aggressivo212", "description": "Trading 212 CFD — profilo aggressivo"},
-            {"command": "soft212", "description": "Trading 212 CFD — profilo soft"},
+            {"command": "soft212", "description": "Trading 212 — profilo soft"},
+            {"command": "prezzo212", "description": "Allinea SL/TP ai prezzi Trading 212"},
             {"command": "profilo", "description": "Profilo attivo e soglie"},
             {"command": "intraday", "description": "Dashboard intraday"},
             {"command": "comprare", "description": "Cosa comprare in PAPER"},
@@ -940,7 +941,9 @@ def _command_response(
         "⚠️ rischio": "/rischio",
         "🛡 soft": "/soft",
         "🚀 aggressivo": "/aggressivo",
+        "🚀 AGGRESSIVE TRADING 2-1-2": "/aggressivo212",
         "🚀 AGGRESSIVO TRADING 212": "/aggressivo212",
+        "🛡 SOFT TRADING 2-1-2": "/soft212",
         "🛡 SOFT 212": "/soft212",
         "🎛 profilo": "/profilo",
         "🔄 aggiorna": "/analisi",
@@ -966,6 +969,61 @@ def _command_response(
         command_name = command_name.split("@", 1)[0]
 
     argument = " ".join(parts[1:]).strip()
+
+    # --------------------------------------------------------
+    # TRADING 212 QUOTE ALIGNMENT (MANUAL BID/ASK, PAPER ONLY)
+    # Usage: /prezzo212 brent BUY_PRICE SELL_PRICE
+    # --------------------------------------------------------
+    if command_name == "/prezzo212":
+        try:
+            if len(parts) != 4:
+                return ("📌 PREZZO TRADING 212 — PAPER ONLY\\n"
+                        "Uso: /prezzo212 brent PREZZO_ACQUISTO PREZZO_VENDITA\\n"
+                        "Esempio: /prezzo212 brent 105.92 105.88\\n"
+                        "Inserisci i prezzi BUY e SELL letti ora nell'app Trading 212.")
+            commodity = _resolve_commodity(parts[1])
+            if commodity is None:
+                return "❌ Commodity non riconosciuta. Usa brent, wti, oro, argento, platino, palladio, cacao, caffè, riso o zucchero."
+            buy_price, sell_price = float(parts[2]), float(parts[3])
+            if buy_price <= 0 or sell_price <= 0 or buy_price < sell_price:
+                return "❌ Prezzi non validi: BUY deve essere maggiore o uguale a SELL e entrambi positivi."
+            results = get_last_results() or _run_analysis()
+            state = next((s for s in (results or []) if s.commodity.lower() == commodity.name.lower()), None)
+            if state is None:
+                return f"❌ Nessuna analisi disponibile per {commodity.name}."
+            direction = str(state.setup_direction or "").upper()
+            if direction not in {"LONG", "SHORT"}:
+                return f"🟡 {commodity.name}: il motore non ha una direzione LONG/SHORT valida. Aggiorna con /aggressivo212."
+            if any(getattr(state, k, None) is None for k in ("entry", "stop", "tp1", "tp2", "tp3")):
+                return f"🟡 {commodity.name} {direction}: livelli SL/TP non calcolati dal motore. Nessun livello inventato; aggiorna l'analisi."
+            broker_entry = buy_price if direction == "LONG" else sell_price
+            shift = broker_entry - float(state.entry)
+            stop = float(state.stop) + shift
+            tp1 = float(state.tp1) + shift
+            tp2 = float(state.tp2) + shift
+            tp3 = float(state.tp3) + shift
+            valid = (stop < broker_entry < tp1 < tp2 < tp3) if direction == "LONG" else (tp3 < tp2 < tp1 < broker_entry < stop)
+            if not valid:
+                return "❌ Test livelli fallito: ordine SL/TP incoerente rispetto all'entry Trading 212. Nessun setup pubblicato."
+            return "\\n".join([
+                "🏦 TRADING 212 — LIVELLI ALLINEATI",
+                "━━━━━━━━━━━━━━━━━━━━",
+                f"Strumento: {commodity.name}",
+                f"Direzione: {direction}",
+                f"BUY app: {buy_price:.6g} | SELL app: {sell_price:.6g}",
+                f"ENTRY stimata: {broker_entry:.6g}",
+                f"SL: {stop:.6g}",
+                f"TP1: {tp1:.6g}",
+                f"TP2: {tp2:.6g}",
+                f"TP3: {tp3:.6g}",
+                f"Shift applicato: {shift:+.6g}",
+                "",
+                "Prezzi BUY/SELL inseriti manualmente dall'app; non è un feed live collegato.",
+                "Livelli traslati mantenendo le distanze/RR del provider Gagarin; non ricalcolati sul grafico Trading 212.",
+                "🧪 PAPER ONLY — nessun ordine inviato."
+            ])
+        except (ValueError, TypeError) as exc:
+            return "❌ Prezzi non numerici. Esempio: /prezzo212 brent 105.92 105.88"
 
     # --------------------------------------------------------
     # TRADING PROFILE SELECTOR (PAPER ONLY)
