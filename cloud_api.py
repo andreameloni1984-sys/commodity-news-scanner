@@ -165,8 +165,11 @@ def _run_gagarin():
     FOREX_AGGRESSIVE_PORTFOLIO.mark_to_market(forex_prices)
 
     # Day trading registry: update open positions with any prices present.
-    day_registry = load_day_registry()
+    # PostgreSQL is the source of truth; the JSON file is only a local fallback.
+    day_registry = (load_state("day_registry") if _DB_READY else None) or load_day_registry()
     day_registry = run_day_registry(day_registry)
+    if _DB_READY:
+        save_state("day_registry", day_registry)
     day_snap = day_summary(day_registry)
 
     # Persist before returning the completed analysis response.
