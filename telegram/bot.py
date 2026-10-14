@@ -1415,16 +1415,18 @@ def poll_once(
 
 
 def telegram_menu() -> dict:
-    """Persistent two-column dashboard, styled like the Autotrasporto bot."""
+    """Persistent dashboard with the original and Trading 212 profiles."""
     return {
         "keyboard": [
             [{"text": "🏆 CLASSIFICA"}],
             [{"text": "🚀 AGGRESSIVO"}],
             [{"text": "🛡 SOFT"}],
+            [{"text": "🚀 AGGRESSIVO TRADING 212"}],
+            [{"text": "🛡 SOFT 212"}],
         ],
         "resize_keyboard": True,
         "is_persistent": True,
-        "input_field_placeholder": "Scegli: Classifica, Aggressivo o Soft",
+        "input_field_placeholder": "Scegli profilo Gagarin o Trading 212",
     }
 
 
