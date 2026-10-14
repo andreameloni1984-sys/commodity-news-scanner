@@ -1435,8 +1435,8 @@ def telegram_menu() -> dict:
     return {
         "keyboard": [
             [
-                {"text": "🚀 AGGRESSIVE TRADING 2-1-2"},
-                {"text": "🛡 SOFT TRADING 2-1-2"},
+                {"text": "🚀 TRADING 2-1-2 AGGRESSIVE"},
+                {"text": "🛡 TRADING 2-1-2 SOFT"},
             ],
         ],
         "resize_keyboard": True,
