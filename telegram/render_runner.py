@@ -125,8 +125,16 @@ def handle_update(update: dict) -> None:
 
         # Reply-keyboard buttons send plain text, not slash commands.
         button_commands = {
+            # Match the exact labels currently shown by telegram_menu().
+            "🚀 AGGRESSIVE TRADING 2-1-2": "/aggressivo212",
+            "🛡 SOFT TRADING 2-1-2": "/soft212",
+            # Keep compatibility with older button labels.
             "🚀 TRADING 2-1-2 AGGRESSIVE": "/aggressivo212",
             "🛡 TRADING 2-1-2 SOFT": "/soft212",
+            "🚀 AGGRESSIVE": "/aggressivo",
+            "🛡 SOFT": "/soft",
+            "🏆 CLASSIFICA": "/classifica",
+            "🔄 AGGIORNA": "/aggiorna",
         }
         original_text = text.strip()
         text = button_commands.get(original_text.upper(), original_text)
