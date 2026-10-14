@@ -234,6 +234,8 @@ def telegram_diagnostic() -> bool:
                 {"command": "rischio", "description": "Regole di rischio"},
                 {"command": "soft", "description": "Profilo prudente PAPER"},
                 {"command": "aggressivo", "description": "Profilo aggressivo PAPER"},
+                {"command": "aggressivo212", "description": "Trading 212 CFD — profilo aggressivo"},
+                {"command": "soft212", "description": "Trading 212 CFD — profilo soft"},
                 {"command": "profilo", "description": "Profilo attivo e soglie"},
                 {"command": "intraday", "description": "Dashboard intraday"},
                 {"command": "comprare", "description": "Cosa comprare in PAPER"},
@@ -922,6 +924,8 @@ def _command_response(
         "⚠️ rischio": "/rischio",
         "🛡 soft": "/soft",
         "🚀 aggressivo": "/aggressivo",
+        "🚀 AGGRESSIVO TRADING 212": "/aggressivo212",
+        "🛡 SOFT 212": "/soft212",
         "🎛 profilo": "/profilo",
         "🔄 aggiorna": "/analisi",
         "⚙️ stato": "/status",
@@ -954,11 +958,23 @@ def _command_response(
     if command_name in {"/soft", "/prudente"}:
         return _profile_response("SOFT")
 
-    if command_name in {"/aggressivo", "/aggressive"}:
+    if command_name == "/soft212":
         try:
-            _profile_response("AGGRESSIVE")  # activate the profile before scanning
+            _profile_response("SOFT")
+            results = _run_analysis()
+            report = _format_classifica(results or [])
+            return "🏦 TRADING 212 CFD — PROFILO SOFT\\n" + report + "\\n\\nQuotazioni: feed Trading 212 CFD non collegato; prezzi mostrati dal provider Gagarin. Verifica il contratto e bid/ask in app prima di operare.\\n🧪 PAPER ONLY — nessun ordine inviato."
+        except Exception as exc:
+            return f"❌ TRADING 212 SOFT ERROR\\n{type(exc).__name__}: {exc}"
+
+    if command_name in {"/aggressivo", "/aggressive", "/aggressivo212"}:
+        try:
+            _profile_response("AGGRESSIVE")  # activate profile before scanning
             results = _run_analysis()  # fresh scan of the entire enabled universe
-            return format_aggressive_desk(results or [])
+            report = format_aggressive_desk(results or [])
+            if command_name == "/aggressivo212":
+                return "🏦 TRADING 212 CFD — PROFILO AGGRESSIVO\\n" + report + "\\n\\nQuotazioni: feed Trading 212 CFD non collegato; prezzi mostrati dal provider Gagarin. Verifica il contratto e bid/ask in app prima di operare.\\n🧪 PAPER ONLY — nessun ordine inviato."
+            return report
         except Exception as exc:
             return f"❌ PREVISIONE AGGRESSIVA ERROR\\n{type(exc).__name__}: {exc}"
 
