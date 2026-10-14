@@ -25,91 +25,54 @@ WEBHOOK_PATH = "/telegram/webhook"
 
 
 def prepare_webhook() -> bool:
-    external_url = os.getenv("RENDER_EXTERNAL_URL", "").strip().rstrip("/")
+    import time
 
+    external_url = os.getenv("RENDER_EXTERNAL_URL", "").strip().rstrip("/")
     if not external_url:
-        print(
-            "Telegram WEBHOOK FAILED | RENDER_EXTERNAL_URL_MISSING",
-            flush=True,
-        )
+        print("Telegram WEBHOOK FAILED | RENDER_EXTERNAL_URL_MISSING", flush=True)
         return False
 
     webhook_url = external_url + WEBHOOK_PATH
-
-    print(
-        "Telegram WEBHOOK | registering...",
-        flush=True,
-    )
-
-    ok, data = _api(
-        "setWebhook",
-        {
+    # Telegram permits only one delivery mode per bot. Register, then verify the
+    # actual URL; an API success alone is not proof that the webhook stayed set.
+    for attempt in range(1, 4):
+        print(f"Telegram WEBHOOK | registering attempt={attempt}", flush=True)
+        ok, data = _api("setWebhook", {
             "url": webhook_url,
             "allowed_updates": ["message"],
             "drop_pending_updates": False,
-        },
-    )
+        })
+        if not ok:
+            print(f"Telegram WEBHOOK FAILED | {data.get('description', 'unknown error')}", flush=True)
+            time.sleep(2)
+            continue
 
-    if not ok:
-        print(
-            "Telegram WEBHOOK FAILED | "
-            f"{data.get('description', 'unknown error')}",
-            flush=True,
-        )
-        return False
-
-    print(
-        f"Telegram WEBHOOK OK | {webhook_url}",
-        flush=True,
-    )
-
-    # ---------------------------------------------------------
-    # DIAGNOSTICA WEBHOOK
-    # Non stampa mai il token Telegram.
-    # ---------------------------------------------------------
-
-    info_ok, info = _api("getWebhookInfo")
-
-    if info_ok:
-        result = info.get("result", {})
-
-        safe_url = result.get("url", "")
-        pending = result.get("pending_update_count", 0)
-
-        last_error = result.get("last_error_message")
-        last_error_date = result.get("last_error_date")
-
-        print(
-            "Telegram WEBHOOK INFO | "
-            f"url={safe_url} | "
-            f"pending={pending} | "
-            f"last_error={last_error or 'NONE'} | "
-            f"last_error_date={last_error_date or 'NONE'}",
-            flush=True,
-        )
-
-        if result.get("ip_address"):
+        time.sleep(1)
+        info_ok, info = _api("getWebhookInfo")
+        result = info.get("result", {}) if info_ok else {}
+        actual_url = (result.get("url") or "").rstrip("/")
+        if info_ok and actual_url == webhook_url:
+            print(f"Telegram WEBHOOK VERIFIED | {webhook_url} | attempt={attempt}", flush=True)
             print(
                 "Telegram WEBHOOK INFO | "
-                f"ip_address={result.get('ip_address')}",
+                f"pending={result.get('pending_update_count', 0)} | "
+                f"last_error={result.get('last_error_message') or 'NONE'} | "
+                f"last_error_date={result.get('last_error_date') or 'NONE'}",
                 flush=True,
             )
+            return True
 
-        if result.get("max_connections"):
-            print(
-                "Telegram WEBHOOK INFO | "
-                f"max_connections={result.get('max_connections')}",
-                flush=True,
-            )
-
-    else:
         print(
-            "Telegram WEBHOOK INFO FAILED | "
-            f"{info.get('description', 'unknown error')}",
+            "Telegram WEBHOOK VERIFY FAILED | "
+            f"expected={webhook_url} | actual={actual_url or 'EMPTY'} | "
+            f"attempt={attempt} | "
+            f"detail={info.get('description', 'URL mismatch')}",
             flush=True,
         )
+        time.sleep(3)
 
-    return True
+    print("Telegram WEBHOOK FAILED | URL_NOT_PERSISTING; another process may be changing this bot's webhook", flush=True)
+    return False
 
 
 def handle_update(update: dict) -> None:
