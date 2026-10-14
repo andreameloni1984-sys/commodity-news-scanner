@@ -101,7 +101,20 @@ def handle_update(update: dict) -> None:
             "🔄 AGGIORNA": "/analisi",
         }
         original_text = text.strip()
-        text = button_commands.get(original_text.upper(), original_text)
+        normalized = " ".join(original_text.upper().split())
+        text = button_commands.get(normalized, original_text)
+
+        # Be tolerant of legacy button labels with extra strategy wording.
+        if text == original_text:
+            if normalized.startswith("🚀 AGGRESSIVO"):
+                text = "/aggressivo"
+            elif normalized.startswith("🛡 SOFT"):
+                text = "/soft"
+            elif normalized.startswith("🏆 CLASSIFICA"):
+                text = "/classifica"
+            elif normalized.startswith("🔄 AGGIORNA"):
+                text = "/analisi"
+
         if not text.startswith("/"):
             _reply(chat_id, "Scegli una voce dal menu GAGARIN oppure usa /start.", reply_markup=telegram_menu())
             return
