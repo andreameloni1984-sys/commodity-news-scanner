@@ -1435,14 +1435,14 @@ def telegram_menu() -> dict:
     return {
         "keyboard": [
             [
-                {"text": "🚀 AGGRESSIVO 3-2-1-2"},
-                {"text": "🛡 SOFT 1-2-1-2"},
+                {"text": "🚀 AGGRESSIVE TRADING 2-1-2"},
+                {"text": "🛡 AGGRESSIVE SOFT TRADING 2-1-2"},
             ],
         ],
         "resize_keyboard": True,
         "is_persistent": True,
         "one_time_keyboard": False,
-        "input_field_placeholder": "Scegli AGGRESSIVO o SOFT",
+        "input_field_placeholder": "Scegli il profilo Trading",
     }
 
 
