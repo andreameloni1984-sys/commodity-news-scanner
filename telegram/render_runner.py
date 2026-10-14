@@ -125,7 +125,7 @@ def handle_update(update: dict) -> None:
 
         # Reply-keyboard buttons send plain text, not slash commands.
         button_commands = {
-            "📰 NEWS": "/news",
+            "📰 NEWS": "/top",
             "🔥 TOP OPPORTUNITÀ": "/top",
             "🏆 CLASSIFICA": "/classifica",
             "⚡ INTRADAY": "/intraday",
@@ -133,10 +133,10 @@ def handle_update(update: dict) -> None:
             "🛒 QUALE COMPRO?": "/qualeccompro",
             "📊 ANALISI": "/analisi",
             "📡 SEGNALI": "/segnali",
-            "🥇 METALLI": "/metalli",
-            "🛢 PETROLIO": "/petrolio",
-            "🌾 AGRI": "/agri",
-            "🌍 MACRO": "/macro",
+            "🥇 METALLI": "/analisi oro",
+            "🛢 PETROLIO": "/analisi wti",
+            "🌾 AGRI": "/analisi riso",
+            "🌍 MACRO": "/comprare",
             "❓ PERCHÉ": "/perche",
             "🔄 AGGIORNA": "/analisi",
             "🛡 SOFT": "/soft",
@@ -203,8 +203,15 @@ def handle_update(update: dict) -> None:
 
         else:
             print(
-                f"Telegram webhook | unknown command: {text}",
+                f"Telegram webhook | unsupported command: {text}",
                 flush=True,
+            )
+            _reply(
+                chat_id,
+                "⚠️ Questa funzione non è ancora disponibile. "
+                "Ti mostro il menu GAGARIN: scegli Classifica, Intraday, "
+                "Cosa comprare, Analisi o Segnali.",
+                reply_markup=telegram_menu(),
             )
 
     except Exception as exc:
