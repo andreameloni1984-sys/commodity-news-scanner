@@ -159,16 +159,19 @@ def handle_update(update: dict) -> None:
 
         command_name = text.strip().split("@", 1)[0].lower()
 
-        # Aggressive prediction performs a full fresh market scan. Send an
-        # immediate acknowledgement so Telegram does not appear dead while
-        # providers respond, then deliver the result when analysis finishes.
-        aggressive = command_name in {"/aggressivo", "/aggressive"}
-        if aggressive:
+        # Acknowledge slow commands before calling market-data providers.
+        heavy_commands = {
+            "/aggressivo", "/aggressive", "/analisi", "/top", "/classifica",
+            "/setup", "/intraday", "/comprare", "/compra", "/cosa",
+            "/cosacomprare", "/qualeccompro", "/quale", "/compro",
+            "/segnali", "/perche", "/perché", "/prezzo", "/metalli",
+            "/petrolio", "/agri", "/macro",
+        }
+        if command_name in heavy_commands:
             _reply(
                 chat_id,
                 "🛰️ GAGARIN — RICHIESTA RICEVUTA\n"
-                "Sto aggiornando il mercato e preparando la migliore opportunità PAPER. "
-                "Ti invio il risultato appena termina l'analisi."
+                "Sto elaborando i dati di mercato. Ti invio il risultato appena termina l'analisi."
             )
 
         print(
@@ -220,6 +223,15 @@ def handle_update(update: dict) -> None:
             f"{type(exc).__name__}: {exc}",
             flush=True,
         )
+        try:
+            if chat_id is not None:
+                _reply(
+                    chat_id,
+                    "❌ GAGARIN non ha completato la richiesta. "
+                    f"Errore: {type(exc).__name__}. Riprova con /status o /analisi."
+                )
+        except Exception:
+            pass
 
 
 def dispatch_update(update: dict) -> None:
