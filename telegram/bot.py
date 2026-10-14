@@ -1402,20 +1402,13 @@ def telegram_menu() -> dict:
     """Persistent two-column dashboard, styled like the Autotrasporto bot."""
     return {
         "keyboard": [
-            [{"text": "📰 NEWS"}, {"text": "🔥 TOP OPPORTUNITÀ"}],
-            [{"text": "🏆 CLASSIFICA"}, {"text": "⚡ INTRADAY"}],
-            [{"text": "💰 COSA COMPRARE"}, {"text": "🛒 QUALE COMPRO?"}],
-            [{"text": "📊 ANALISI"}, {"text": "📡 SEGNALI"}],
-            [{"text": "🥇 METALLI"}, {"text": "🛢 PETROLIO"}],
-            [{"text": "🌾 AGRI"}, {"text": "🌍 MACRO"}],
-            [{"text": "❓ PERCHÉ"}, {"text": "🔄 AGGIORNA"}],
-            [{"text": "🛡 SOFT"}, {"text": "🚀 AGGRESSIVO"}],
-            [{"text": "🎛 PROFILO"}, {"text": "⚙️ STATO"}],
-            [{"text": "ℹ️ GUIDA"}],
+            [{"text": "🏆 CLASSIFICA"}],
+            [{"text": "🚀 AGGRESSIVO"}],
+            [{"text": "🛡 SOFT"}],
         ],
         "resize_keyboard": True,
         "is_persistent": True,
-        "input_field_placeholder": "Scegli una sezione GAGARIN",
+        "input_field_placeholder": "Scegli: Classifica, Aggressivo o Soft",
     }
 
 
