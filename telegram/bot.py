@@ -1434,16 +1434,15 @@ def telegram_menu() -> dict:
     """Persistent dashboard with the original and Trading 212 profiles."""
     return {
         "keyboard": [
-            [{"text": "🏆 CLASSIFICA"}],
-            [{"text": "🚀 AGGRESSIVO"}],
-            [{"text": "🛡 SOFT"}],
-            [{"text": "🚀 AGGRESSIVO TRADING 212"}],
-            [{"text": "🛡 SOFT 212"}],
+            [
+                {"text": "🚀 AGGRESSIVO 3-2-1-2"},
+                {"text": "🛡 SOFT 1-2-1-2"},
+            ],
         ],
         "resize_keyboard": True,
         "is_persistent": True,
         "one_time_keyboard": False,
-        "input_field_placeholder": "Menu Gagarin: scegli una funzione",
+        "input_field_placeholder": "Scegli AGGRESSIVO o SOFT",
     }
 
 
