@@ -125,8 +125,8 @@ def handle_update(update: dict) -> None:
 
         # Reply-keyboard buttons send plain text, not slash commands.
         button_commands = {
-            "🚀 AGGRESSIVE TRADING 2-1-2": "/aggressivo212",
-            "🛡 SOFT TRADING 2-1-2": "/soft212",
+            "🚀 TRADING 2-1-2 AGGRESSIVE": "/aggressivo212",
+            "🛡 TRADING 2-1-2 SOFT": "/soft212",
         }
         original_text = text.strip()
         text = button_commands.get(original_text.upper(), original_text)
@@ -173,7 +173,7 @@ def handle_update(update: dict) -> None:
         if response:
             # This Render service uses the webhook runner, not run_polling.
             # Attach the persistent keyboard to /start and log Telegram's API result.
-            markup = telegram_menu() if command_name in {"/start", "/help"} else None
+            markup = telegram_menu()
             delivered = _reply(chat_id, response, reply_markup=markup)
             print(
                 "Telegram delivery | "
@@ -194,7 +194,7 @@ def handle_update(update: dict) -> None:
             )
             _reply(
                 chat_id,
-                "⚠️ Comando non disponibile. Scegli Classifica, Aggressivo o Soft.",
+                "⚠️ Comando non disponibile. Usa i pulsanti Trading 2-1-2 qui sotto oppure /start.",
                 reply_markup=telegram_menu(),
             )
 
