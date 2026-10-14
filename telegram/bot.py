@@ -963,9 +963,9 @@ def _command_response(
             _profile_response("SOFT")
             results = _run_analysis()
             report = _format_classifica(results or [])
-            return "🏦 TRADING 212 CFD — PROFILO SOFT\\n" + report + "\\n\\nQuotazioni: feed Trading 212 CFD non collegato; prezzi mostrati dal provider Gagarin. Verifica il contratto e bid/ask in app prima di operare.\\n🧪 PAPER ONLY — nessun ordine inviato."
+            return "🏦 TRADING 212 CFD — PROFILO SOFT\n" + report + "\n\nQuotazioni: feed Trading 212 CFD non collegato; prezzi mostrati dal provider Gagarin. Verifica il contratto e bid/ask in app prima di operare.\n🧪 PAPER ONLY — nessun ordine inviato."
         except Exception as exc:
-            return f"❌ TRADING 212 SOFT ERROR\\n{type(exc).__name__}: {exc}"
+            return f"❌ TRADING 212 SOFT ERROR\n{type(exc).__name__}: {exc}"
 
     if command_name in {"/aggressivo", "/aggressive", "/aggressivo212"}:
         try:
@@ -973,10 +973,10 @@ def _command_response(
             results = _run_analysis()  # fresh scan of the entire enabled universe
             report = format_aggressive_desk(results or [])
             if command_name == "/aggressivo212":
-                return "🏦 TRADING 212 CFD — PROFILO AGGRESSIVO\\n" + report + "\\n\\nQuotazioni: feed Trading 212 CFD non collegato; prezzi mostrati dal provider Gagarin. Verifica il contratto e bid/ask in app prima di operare.\\n🧪 PAPER ONLY — nessun ordine inviato."
+                return "🏦 TRADING 212 CFD — PROFILO AGGRESSIVO\n" + report + "\n\nQuotazioni: feed Trading 212 CFD non collegato; prezzi mostrati dal provider Gagarin. Verifica il contratto e bid/ask in app prima di operare.\n🧪 PAPER ONLY — nessun ordine inviato."
             return report
         except Exception as exc:
-            return f"❌ PREVISIONE AGGRESSIVA ERROR\\n{type(exc).__name__}: {exc}"
+            return f"❌ PREVISIONE AGGRESSIVA ERROR\n{type(exc).__name__}: {exc}"
 
     if command_name in {"/profilo", "/profile"}:
         return _profile_response()
