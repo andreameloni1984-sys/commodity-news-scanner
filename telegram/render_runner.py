@@ -134,7 +134,7 @@ def handle_update(update: dict) -> None:
             "🚀 AGGRESSIVE": "/aggressivo",
             "🛡 SOFT": "/soft",
             "🏆 CLASSIFICA": "/classifica",
-            "🔄 AGGIORNA": "/aggiorna",
+            "🔄 AGGIORNA": "/analisi",
         }
         original_text = text.strip()
         text = button_commands.get(original_text.upper(), original_text)
