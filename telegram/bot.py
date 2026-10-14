@@ -941,10 +941,10 @@ def _command_response(
         "⚠️ rischio": "/rischio",
         "🛡 soft": "/soft",
         "🚀 aggressivo": "/aggressivo",
-        "🚀 AGGRESSIVE TRADING 2-1-2": "/aggressivo212",
-        "🚀 AGGRESSIVO TRADING 212": "/aggressivo212",
-        "🛡 SOFT TRADING 2-1-2": "/soft212",
-        "🛡 SOFT 212": "/soft212",
+        "🚀 aggressive trading 2-1-2": "/aggressivo212",
+        "🚀 aggressivo trading 212": "/aggressivo212",
+        "🛡 soft trading 2-1-2": "/soft212",
+        "🛡 soft 212": "/soft212",
         "🎛 profilo": "/profilo",
         "🔄 aggiorna": "/analisi",
         "⚙️ stato": "/status",
@@ -977,9 +977,9 @@ def _command_response(
     if command_name == "/prezzo212":
         try:
             if len(parts) != 4:
-                return ("📌 PREZZO TRADING 212 — PAPER ONLY\\n"
-                        "Uso: /prezzo212 brent PREZZO_ACQUISTO PREZZO_VENDITA\\n"
-                        "Esempio: /prezzo212 brent 105.92 105.88\\n"
+                return ("📌 PREZZO TRADING 212 — PAPER ONLY\n"
+                        "Uso: /prezzo212 brent PREZZO_ACQUISTO PREZZO_VENDITA\n"
+                        "Esempio: /prezzo212 brent 105.92 105.88\n"
                         "Inserisci i prezzi BUY e SELL letti ora nell'app Trading 212.")
             commodity = _resolve_commodity(parts[1])
             if commodity is None:
@@ -1005,7 +1005,7 @@ def _command_response(
             valid = (stop < broker_entry < tp1 < tp2 < tp3) if direction == "LONG" else (tp3 < tp2 < tp1 < broker_entry < stop)
             if not valid:
                 return "❌ Test livelli fallito: ordine SL/TP incoerente rispetto all'entry Trading 212. Nessun setup pubblicato."
-            return "\\n".join([
+            return "\n".join([
                 "🏦 TRADING 212 — LIVELLI ALLINEATI",
                 "━━━━━━━━━━━━━━━━━━━━",
                 f"Strumento: {commodity.name}",
@@ -1489,18 +1489,26 @@ def poll_once(
 
 
 def telegram_menu() -> dict:
-    """Persistent dashboard with the original and Trading 212 profiles."""
+    """Persistent dashboard: analysis plus both Trading 212 profiles."""
     return {
         "keyboard": [
             [
-                {"text": "🚀 TRADING 2-1-2 AGGRESSIVE"},
-                {"text": "🛡 TRADING 2-1-2 SOFT"},
+                {"text": "🏆 Classifica"},
+                {"text": "🔄 Aggiorna"},
+            ],
+            [
+                {"text": "🚀 Aggressivo"},
+                {"text": "🛡 Soft"},
+            ],
+            [
+                {"text": "🚀 AGGRESSIVE TRADING 2-1-2"},
+                {"text": "🛡 SOFT TRADING 2-1-2"},
             ],
         ],
         "resize_keyboard": True,
         "is_persistent": True,
         "one_time_keyboard": False,
-        "input_field_placeholder": "Scegli il profilo Trading",
+        "input_field_placeholder": "Scegli analisi o profilo Trading",
     }
 
 
