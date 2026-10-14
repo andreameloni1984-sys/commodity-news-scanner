@@ -126,7 +126,7 @@ def handle_update(update: dict) -> None:
         # Reply-keyboard buttons send plain text, not slash commands.
         button_commands = {
             "🚀 AGGRESSIVE TRADING 2-1-2": "/aggressivo212",
-            "🛡 AGGRESSIVE SOFT TRADING 2-1-2": "/soft212",
+            "🛡 SOFT TRADING 2-1-2": "/soft212",
         }
         original_text = text.strip()
         text = button_commands.get(original_text.upper(), original_text)
