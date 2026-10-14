@@ -128,6 +128,8 @@ def handle_update(update: dict) -> None:
             "🏆 CLASSIFICA": "/classifica",
             "🚀 AGGRESSIVO": "/aggressivo",
             "🛡 SOFT": "/soft",
+            "🚀 AGGRESSIVO TRADING 212": "/aggressivo212",
+            "🛡 SOFT 212": "/soft212",
         }
         original_text = text.strip()
         text = button_commands.get(original_text.upper(), original_text)
@@ -145,7 +147,7 @@ def handle_update(update: dict) -> None:
 
         # Acknowledge slow commands before calling market-data providers.
         heavy_commands = {
-            "/aggressivo", "/aggressive", "/analisi", "/top", "/classifica",
+            "/aggressivo", "/aggressive", "/aggressivo212", "/soft212", "/analisi", "/top", "/classifica",
             "/setup", "/intraday", "/comprare", "/compra", "/cosa",
             "/cosacomprare", "/qualeccompro", "/quale", "/compro",
             "/segnali", "/perche", "/perché", "/prezzo", "/metalli",
