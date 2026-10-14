@@ -125,25 +125,9 @@ def handle_update(update: dict) -> None:
 
         # Reply-keyboard buttons send plain text, not slash commands.
         button_commands = {
-            "📰 NEWS": "/top",
-            "🔥 TOP OPPORTUNITÀ": "/top",
             "🏆 CLASSIFICA": "/classifica",
-            "⚡ INTRADAY": "/intraday",
-            "💰 COSA COMPRARE": "/comprare",
-            "🛒 QUALE COMPRO?": "/qualeccompro",
-            "📊 ANALISI": "/analisi",
-            "📡 SEGNALI": "/segnali",
-            "🥇 METALLI": "/analisi oro",
-            "🛢 PETROLIO": "/analisi wti",
-            "🌾 AGRI": "/analisi riso",
-            "🌍 MACRO": "/comprare",
-            "❓ PERCHÉ": "/perche",
-            "🔄 AGGIORNA": "/analisi",
-            "🛡 SOFT": "/soft",
             "🚀 AGGRESSIVO": "/aggressivo",
-            "🎛 PROFILO": "/profilo",
-            "⚙️ STATO": "/status",
-            "ℹ️ GUIDA": "/guida",
+            "🛡 SOFT": "/soft",
         }
         original_text = text.strip()
         text = button_commands.get(original_text.upper(), original_text)
@@ -211,9 +195,7 @@ def handle_update(update: dict) -> None:
             )
             _reply(
                 chat_id,
-                "⚠️ Questa funzione non è ancora disponibile. "
-                "Ti mostro il menu GAGARIN: scegli Classifica, Intraday, "
-                "Cosa comprare, Analisi o Segnali.",
+                "⚠️ Comando non disponibile. Scegli Classifica, Aggressivo o Soft.",
                 reply_markup=telegram_menu(),
             )
 
