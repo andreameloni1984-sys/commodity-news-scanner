@@ -13,6 +13,7 @@ from engine.gagarin import analyze_universe
 from soyuz_gagarin.adapter import evaluate_states
 from paper_portfolio import PaperPortfolio
 from engine.day_registry import load as load_day_registry, run as run_day_registry, summary as day_summary
+from state_store import ensure_schema, load_state, save_state
 
 app = FastAPI(title="SOYUZ GAGARIN CLOUD", version="1.0")
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -20,6 +21,19 @@ RUN_LOCK = Lock()
 PORTFOLIO = PaperPortfolio(100.0)
 AGGRESSIVE_PORTFOLIO = PaperPortfolio(100.0)
 FOREX_AGGRESSIVE_PORTFOLIO = PaperPortfolio(100.0)
+
+# Restore durable paper accounts at startup so Render restarts never reset them.
+try:
+    _DB_READY = ensure_schema()
+    if _DB_READY:
+        PORTFOLIO.restore_state(load_state("portfolio_main"))
+        AGGRESSIVE_PORTFOLIO.restore_state(load_state("portfolio_aggressive"))
+        FOREX_AGGRESSIVE_PORTFOLIO.restore_state(load_state("portfolio_forex_aggressive"))
+    else:
+        print("GAGARIN PERSISTENCE DISABLED | DATABASE_URL missing", flush=True)
+except Exception as _persistence_error:
+    _DB_READY = False
+    print(f"GAGARIN PERSISTENCE INIT FAILED | {type(_persistence_error).__name__}: {_persistence_error}", flush=True)
 
 
 def _authorize(x_api_key: str | None) -> None:
@@ -155,6 +169,12 @@ def _run_gagarin():
     day_registry = run_day_registry(day_registry)
     day_snap = day_summary(day_registry)
 
+    # Persist before returning the completed analysis response.
+    if _DB_READY:
+        save_state("portfolio_main", PORTFOLIO.export_state())
+        save_state("portfolio_aggressive", AGGRESSIVE_PORTFOLIO.export_state())
+        save_state("portfolio_forex_aggressive", FOREX_AGGRESSIVE_PORTFOLIO.export_state())
+
     return {
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "mode": "PAPER ONLY",
@@ -211,6 +231,7 @@ def status(x_api_key: str | None = Header(default=None)):
         "service": "GAGARIN CLOUD",
         "mode": "PAPER ONLY",
         "execution_enabled": os.getenv("EXECUTION_ENABLED", "0") == "1",
+        "persistence": "POSTGRESQL" if _DB_READY else "DISABLED",
         "broker": os.getenv("EXECUTION_BROKER", "paper"),
     }
 
