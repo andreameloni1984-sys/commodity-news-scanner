@@ -1,1 +1,1 @@
-PLACEHOLDER_BOT_PY
+# read from artifact
