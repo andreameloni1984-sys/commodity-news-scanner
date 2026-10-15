@@ -1,6 +1,6 @@
 # ============================================================
 # INVEST ENGINE — Analisi azionario / ETF
-# PAPER ONLY. SPUTNIK bridge + Trading 212 demo opzionale.
+# PAPER ONLY. SPUTNIK + prezzi + Trading 212 demo.
 # ============================================================
 
 from __future__ import annotations
@@ -11,6 +11,13 @@ from typing import Optional, List
 
 from engine.invest_universe import enabled_instruments
 from engine.sputnik_bridge import sputnik_to_invest_signals
+from engine.invest_prices import get_price
+from engine.trading212_demo import (
+    get_account_summary,
+    get_positions,
+    place_market_order,
+    get_pending_orders,
+)
 
 @dataclass
 class InvestSignal:
@@ -25,12 +32,12 @@ class InvestSignal:
     source: str = "LOCAL"
 
 def analyze_invest_universe() -> List[InvestSignal]:
-    """Combina paniere base + segnali SPUTNIK."""
+    """Combina paniere base + segnali SPUTNIK + prezzi."""
     signals: List[InvestSignal] = []
 
-    # 1. Segnali da SPUTNIK (catalizzatori pubblici)
     sputnik_raw = sputnik_to_invest_signals()
     for item in sputnik_raw:
+        price = get_price(item["symbol"])
         signals.append(
             InvestSignal(
                 name=item["name"],
@@ -38,17 +45,17 @@ def analyze_invest_universe() -> List[InvestSignal]:
                 symbol=item["symbol"],
                 direction=item["direction"],
                 score=float(item["score"]),
-                price=item.get("price"),
+                price=price,
                 reason=item["reason"],
                 source="SPUTNIK",
             )
         )
 
-    # 2. Paniere base (se non già coperto da SPUTNIK)
     covered = {s.symbol for s in signals}
     for inst in enabled_instruments():
         if inst.symbol in covered:
             continue
+        price = get_price(inst.symbol)
         signals.append(
             InvestSignal(
                 name=inst.name,
@@ -56,7 +63,7 @@ def analyze_invest_universe() -> List[InvestSignal]:
                 symbol=inst.symbol,
                 direction="NONE",
                 score=0.0,
-                price=None,
+                price=price,
                 reason="Nessun catalizzatore SPUTNIK recente.",
                 source="LOCAL",
             )
@@ -69,7 +76,7 @@ def format_invest_report(signals: List[InvestSignal]) -> str:
     lines = [
         "📈 SEZIONE INVEST — PAPER ONLY",
         "━" * 22,
-        "🧪 Segnali da SPUTNIK + paniere base.",
+        "🧪 Segnali SPUTNIK + prezzi pubblici.",
         "Nessun ordine reale.",
         "",
     ]
@@ -79,7 +86,7 @@ def format_invest_report(signals: List[InvestSignal]) -> str:
 
     sputnik_count = sum(1 for s in signals if s.source == "SPUTNIK")
     if sputnik_count:
-        lines.append(f"🛰 {sputnik_count} segnale/i da SPUTNIK (catalizzatori pubblici).")
+        lines.append(f"🛰 {sputnik_count} segnale/i da SPUTNIK.")
         lines.append("")
 
     for s in signals:
@@ -93,8 +100,7 @@ def format_invest_report(signals: List[InvestSignal]) -> str:
             lines.append(f"  {s.reason}")
 
     lines.append("")
-    lines.append("Per ordini demo Trading 212: imposta T212_API_KEY e T212_API_SECRET.")
-    lines.append("Endpoint demo: https://demo.trading212.com/api/v0")
+    lines.append("Comandi demo: /invest_demo /invest_account /invest_orders")
     return "\n".join(lines)
 
 def trading212_demo_available() -> bool:
@@ -106,3 +112,55 @@ def get_trading212_demo_status() -> str:
     if trading212_demo_available():
         return "✅ Trading 212 Demo API configurata (chiavi presenti)."
     return "⚪ Trading 212 Demo API non configurata. Imposta T212_API_KEY e T212_API_SECRET."
+
+def format_account_status() -> str:
+    if not trading212_demo_available():
+        return get_trading212_demo_status()
+    ok, data = get_account_summary()
+    if not ok:
+        return f"❌ Errore account demo: {data}"
+    cash = data.get("cash", {})
+    available = cash.get("availableToTrade")
+    total = data.get("totalValue")
+    currency = data.get("currency", "")
+    return (
+        "💰 ACCOUNT DEMO TRADING 212\n"
+        f"Totale: {total} {currency}\n"
+        f"Disponibile: {available} {currency}\n"
+        "PAPER ONLY."
+    )
+
+def format_pending_orders() -> str:
+    if not trading212_demo_available():
+        return get_trading212_demo_status()
+    ok, data = get_pending_orders()
+    if not ok:
+        return f"❌ Errore ordini: {data}"
+    if not data:
+        return "Nessun ordine pendente in demo."
+    lines = ["📋 ORDINI DEMO PENDENTI", ""]
+    for order in data[:10]:
+        ticker = order.get("ticker", "?")
+        qty = order.get("quantity", 0)
+        side = "BUY" if qty > 0 else "SELL"
+        status = order.get("status", "?")
+        lines.append(f"• {ticker} | {side} {abs(qty)} | {status}")
+    return "\n".join(lines)
+
+def place_demo_order(ticker: str, quantity: float) -> str:
+    """Piazza un ordine market demo. Solo se le chiavi ci sono."""
+    if not trading212_demo_available():
+        return get_trading212_demo_status()
+    ok, data = place_market_order(ticker, quantity)
+    if not ok:
+        return f"❌ Ordine demo fallito: {data}"
+    order_id = data.get("id", "?")
+    status = data.get("status", "?")
+    return (
+        f"✅ Ordine demo inviato\n"
+        f"Ticker: {ticker}\n"
+        f"Qty: {quantity}\n"
+        f"ID: {order_id}\n"
+        f"Status: {status}\n"
+        "PAPER ONLY."
+    )
