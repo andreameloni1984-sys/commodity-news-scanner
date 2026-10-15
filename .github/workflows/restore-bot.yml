@@ -3,6 +3,9 @@ name: restore-and-patch-bot
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   patch:
     runs-on: ubuntu-latest
