@@ -1,0 +1,102 @@
+"""Aggressive entry alert for SOYUZ GAGARIN.
+
+Checks the aggressive profile every run. If a commodity has probability >= 55,
+quality >= 45, confidence >= 50, trigger confirmed, live data and an approved
+entry, sends a short Telegram alert. Otherwise stays silent.
+"""
+from __future__ import annotations
+
+import os
+from typing import Any, Iterable
+
+from soyuz_gagarin.trading_profiles import get_profile
+
+
+AGGRESSIVE_MIN_PROBABILITY = 55.0
+AGGRESSIVE_MIN_QUALITY = 45.0
+AGGRESSIVE_MIN_CONFIDENCE = 50.0
+
+
+def _is_aggressive_ready(item: dict) -> bool:
+    return (
+        float(item.get("probability") or 0) >= AGGRESSIVE_MIN_PROBABILITY
+        and float(item.get("quality") or 0) >= AGGRESSIVE_MIN_QUALITY
+        and float(item.get("confidence") or 0) >= AGGRESSIVE_MIN_CONFIDENCE
+        and bool(item.get("trigger_confirmed"))
+        and bool(item.get("live"))
+        and item.get("final_decision") in {"PAPER_ENTRY", "PAPER_SIGNAL", "ENTRY"}
+        and item.get("entry") is not None
+        and item.get("stop") is not None
+        and item.get("tp1") is not None
+    )
+
+
+def find_aggressive_alerts(states: Iterable[Any]) -> list[dict]:
+    """Return ranked aggressive-ready setups from scan results."""
+    ready = []
+    for state in states:
+        item = {
+            "commodity": getattr(state, "commodity", None),
+            "symbol": getattr(state, "symbol", None),
+            "direction": getattr(state, "setup_direction", None) or getattr(state, "opportunity_direction", None),
+            "probability": getattr(state, "probability", 0),
+            "quality": getattr(state, "quality", 0),
+            "confidence": getattr(state, "confidence", 0),
+            "trigger_confirmed": getattr(state, "trigger_confirmed", False),
+            "live": getattr(state, "live", False),
+            "final_decision": getattr(state, "final_decision", None),
+            "entry": getattr(state, "entry", None),
+            "stop": getattr(state, "stop", None),
+            "tp1": getattr(state, "tp1", None),
+            "tp2": getattr(state, "tp2", None),
+            "tp3": getattr(state, "tp3", None),
+            "price": getattr(state, "price", None),
+            "atr": getattr(state, "atr", None),
+        }
+        if _is_aggressive_ready(item):
+            ready.append(item)
+    ready.sort(key=lambda x: (-float(x["probability"]), -float(x["quality"])))
+    return ready[:3]
+
+
+def format_aggressive_alert(states: Iterable[Any]) -> str:
+    """Short Telegram message. Empty string means nothing to send."""
+    alerts = find_aggressive_alerts(states)
+    if not alerts:
+        return ""
+    lines = [
+        "AGGRESSIVE ALERT",
+        "Profilo: probabilita >= 55, qualita >= 45, trigger confermato, dati live",
+        "PAPER ONLY - nessun ordine inviato",
+        "",
+    ]
+    for index, item in enumerate(alerts, 1):
+        title = "SCELTA PRINCIPALE" if index == 1 else "Alternativa %d" % index
+        lines.append("%s: %s - %s" % (title, item["commodity"], item["direction"]))
+        lines.append("Prezzo: %.6g" % item["price"] if item["price"] is not None else "Prezzo: N/D")
+        lines.append("ENTRY: %.6g" % item["entry"] if item["entry"] is not None else "ENTRY: N/D")
+        lines.append("STOP: %.6g" % item["stop"] if item["stop"] is not None else "STOP: N/D")
+        if item["tp1"] is not None:
+            lines.append("TP1: %.6g | TP2: %.6g | TP3: %.6g" % (item["tp1"], item["tp2"], item["tp3"]))
+        else:
+            lines.append("TP: N/D")
+        lines.append(
+            "Probabilita: %.0f | Quality: %.0f | Confidence: %.0f | Trigger: CONFERMATO"
+            % (item["probability"], item["quality"], item["confidence"])
+        )
+        lines.append("")
+    lines.append("REGOLA: il profilo aggressivo abbassa le soglie, non disattiva i controlli.")
+    return "\n".join(lines)
+
+
+def run_aggressive_alert(states: Iterable[Any]) -> bool:
+    """Send alert if ready setups exist. Returns True if a message was sent."""
+    message = format_aggressive_alert(states)
+    if not message:
+        return False
+    try:
+        from telegram.bot import send_telegram
+        return send_telegram(message)
+    except Exception as exc:
+        print("AGGRESSIVE ALERT ERROR: %s: %s" % (type(exc).__name__, exc), flush=True)
+        return False

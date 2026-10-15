@@ -1,0 +1,35 @@
+name: aggressive-alert
+
+on:
+  schedule:
+    - cron: "0 7-20 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  alert:
+    name: AGGRESSIVE ENTRY ALERT
+    runs-on: ubuntu-latest
+    env:
+      TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY}}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN}}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID}}
+      TELEGRAM_ENABLED: "1"
+      PAPER_TRADING_ONLY: "1"
+      GAGARIN_TRADING_PROFILE: "AGGRESSIVE"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; else pip install requests; fi
+      - name: Compile check
+        run: python -m compileall -q telegram/aggressive_alert.py
+      - name: Run aggressive alert
+        run: python -c "from telegram.aggressive_alert import run_aggressive_alert; from soyuz_gagarin.adapter import evaluate_states; from engine.gagarin import analyze_universe; from commodities.universe import enabled_commodities; r = analyze_universe(enabled_commodities()); run_aggressive_alert(r)"
