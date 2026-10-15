@@ -51,6 +51,17 @@ def _api(method: str, payload: Optional[dict] = None) -> tuple[bool, dict]:
     except requests.RequestException as exc:
         return False, {"description": f"NETWORK_ERROR: {exc}"}
 
+def telegram_diagnostic() -> bool:
+    """Verifica il bot Telegram. Richiesta da render_runner."""
+    ok, data = _api("getMe")
+    if not ok:
+        print(f"Telegram DIAGNOSTIC FAILED | {data.get('description', 'unknown')}", flush=True)
+        return False
+    result = data.get("result", {})
+    print(f"Telegram DIAGNOSTIC OK | bot=@{result.get('username', 'unknown')} | id={result.get('id', 'unknown')}", flush=True)
+    print("Telegram CHAT ID: " + ("PRESENT" if TELEGRAM_CHAT_ID else "MISSING"), flush=True)
+    return True
+
 def send_telegram(message: str) -> bool:
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         return False
