@@ -3,6 +3,9 @@
 Checks the aggressive profile every run. If a commodity has probability >= 55,
 quality >= 45, confidence >= 50, trigger confirmed, live data and an approved
 entry, sends a short Telegram alert. Otherwise stays silent.
+
+Session filter: prefers London-NY overlap and silences energy alerts inside
+the EIA window (Wednesday report). Paper only.
 """
 from __future__ import annotations
 
@@ -10,11 +13,19 @@ import os
 from typing import Any, Iterable
 
 from soyuz_gagarin.trading_profiles import get_profile
+from engine.session_windows import is_overlap, is_eia_window
 
 
 AGGRESSIVE_MIN_PROBABILITY = 55.0
 AGGRESSIVE_MIN_QUALITY = 45.0
 AGGRESSIVE_MIN_CONFIDENCE = 50.0
+
+ENERGY_NAMES = {"wti", "brent", "gasoline", "heating", "gasoil", "crude", "petrolio"}
+
+
+def _is_energy(name: str) -> bool:
+    text = (name or "").lower()
+    return any(k in text for k in ENERGY_NAMES)
 
 
 def _is_aggressive_ready(item: dict) -> bool:
@@ -64,13 +75,34 @@ def format_aggressive_alert(states: Iterable[Any]) -> str:
     alerts = find_aggressive_alerts(states)
     if not alerts:
         return ""
+
+    # Session filter
+    in_overlap = is_overlap()
+    in_eia = is_eia_window()
+
+    filtered = []
+    for item in alerts:
+        name = item.get("commodity") or ""
+        if _is_energy(name) and in_eia:
+            continue  # silence energy inside EIA window
+        if not in_overlap and _is_energy(name):
+            # outside liquid window: only keep if very strong, otherwise skip
+            if float(item.get("probability") or 0) < 70:
+                continue
+        filtered.append(item)
+
+    if not filtered:
+        return ""
+
     lines = [
         "AGGRESSIVE ALERT",
         "Profilo: probabilita >= 55, qualita >= 45, trigger confermato, dati live",
         "PAPER ONLY - nessun ordine inviato",
+        "Sessione: overlap attivo" if in_overlap else "Sessione: fuori overlap",
+        "EIA window: SI - energy silenziato" if in_eia else "EIA window: NO",
         "",
     ]
-    for index, item in enumerate(alerts, 1):
+    for index, item in enumerate(filtered, 1):
         title = "SCELTA PRINCIPALE" if index == 1 else "Alternativa %d" % index
         lines.append("%s: %s - %s" % (title, item["commodity"], item["direction"]))
         lines.append("Prezzo: %.6g" % item["price"] if item["price"] is not None else "Prezzo: N/D")
