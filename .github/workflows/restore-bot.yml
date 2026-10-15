@@ -1,0 +1,18 @@
+name: restore-and-patch-bot
+
+on:
+  workflow_dispatch:
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_TOKEN || secrets.PAT || github.token}}
+          fetch-depth: 0
+      - name: Restore and patch bot.py
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.PAT || github.token}}
+          TOKEN: ${{ secrets.GH_TOKEN || secrets.PAT || github.token}}
+        run: python3 scripts/restore_and_patch_bot.py
