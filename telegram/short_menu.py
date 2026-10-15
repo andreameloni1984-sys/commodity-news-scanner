@@ -10,7 +10,7 @@ DAY = Path("data/day_trading_filter.json")
 
 
 def menu_text() -> str:
-    return "GAGARIN\n1 Commodity\n2 Day\n3 Stato"
+    return "GAGARIN\n1 Commodity\n2 Day\n3 Stato\n4 Test filtro"
 
 
 def _load(path: Path) -> dict:
@@ -70,3 +70,8 @@ def stato_text(paper: dict | None = None, report: dict | None = None) -> str:
     allowed = report.get("allowed") or []
     lines.append("Day: " + (", ".join(allowed) if allowed else "nessuno"))
     return "\n".join(lines)
+
+
+def session_test_text() -> str:
+    from telegram.session_test import session_test_text as _test
+    return _test()
