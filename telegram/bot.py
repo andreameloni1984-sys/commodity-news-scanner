@@ -153,6 +153,10 @@ def _command_response(command: str) -> Optional[str]:
         "⚠️ rischio": "/rischio",
         "🔄 aggiorna": "/analisi",
         "⚙️ stato": "/status",
+        "🚀 aggressive trading 2-1-2": "/aggressivo212",
+        "🛡 soft trading 2-1-2": "/soft212",
+        "🚀 aggressivo": "/aggressivo212",
+        "🛡 soft": "/soft212",
     }
     raw = button_commands.get(raw.lower(), raw)
     parts = raw.split()
@@ -178,13 +182,105 @@ def _command_response(command: str) -> Optional[str]:
             "/top — top setup\n"
             "/guida — guida canale\n"
             "/rischio — regole di rischio\n"
-            "/aggressivo212 — confronto Trading 212 CFD\n"
+            "/aggressivo212 — desk aggressive + confronto 212\n"
+            "/soft212 — desk soft\n"
+            "/prezzo212 — confronto prezzi Trading 212\n"
             "/invest — sezione Invest (azioni/ETF)\n"
             "/invest_demo — stato API Trading 212 demo\n"
             "/invest_account — saldo demo\n"
             "/invest_orders — ordini demo pendenti\n"
             "/invest_buy TICKER QTY — ordine market demo"
         )
+
+    if command_name in {"/aggressivo212", "/aggressive212"}:
+        try:
+            from soyuz_gagarin.aggressive_desk import format_aggressive_desk
+            from soyuz_gagarin.trading_profiles import get_profile
+            from engine.trading212 import compare_price, format_comparison, parse_bid_ask
+            profile = get_profile("AGGRESSIVE")
+            results = _run_analysis()
+            if results is None:
+                return "Nessun risultato. Riprova con /analisi."
+            set_last_results(results)
+            desk = format_aggressive_desk(results)
+            try:
+                from cloud_api import FOREX_AGGRESSIVE_PORTFOLIO
+                fx = FOREX_AGGRESSIVE_PORTFOLIO.snapshot()
+                fx_lines = ["", "FX AGGRESSIVE", "Capitale: " + str(round(fx.get("equity", 100), 2)), "Aperte: " + str(len(fx.get("open_positions", [])))]
+                for p in fx.get("open_positions", [])[:5]:
+                    fx_lines.append(str(p.get("symbol")) + " " + str(p.get("direction")) + " entry " + str(p.get("entry")))
+                desk = desk + "\n" + "\n".join(fx_lines)
+            except Exception:
+                pass
+            if argument:
+                bid, ask = parse_bid_ask(argument)
+                if bid is not None:
+                    sym = None
+                    for part in argument.replace(",", ".").split():
+                        up = part.upper()
+                        if up in {"WTI", "BRENT", "ORO", "ARGENTO", "SPY", "QQQ", "EURUSD", "GBPUSD"}:
+                            sym = up
+                            break
+                    if sym:
+                        gprice = None
+                        for st in results:
+                            if str(getattr(st, "symbol", "")).upper() == sym:
+                                gprice = getattr(st, "price", None)
+                                break
+                        comp = compare_price(sym, gprice, bid, ask)
+                        desk = desk + "\n\n" + format_comparison(comp)
+                    else:
+                        desk = desk + "\n\n212: incolla anche il simbolo, es. /aggressivo212 WTI 78.10 78.13"
+                else:
+                    desk = desk + "\n\n212: per il confronto incolla bid e ask, es. /aggressivo212 WTI 78.10 78.13"
+            else:
+                desk = desk + "\n\n212: per confrontare i prezzi Trading 212 incolla bid e ask dopo il comando."
+            desk = desk + "\n\nProfilo: probabilita >= " + str(profile.min_probability) + ", qualita >= " + str(profile.min_quality) + ", rischio " + str(profile.risk_per_trade_pct) + "% per operazione, max " + str(profile.max_open_positions) + " posizioni."
+            return desk
+        except Exception as exc:
+            return "Errore reparto aggressive: " + type(exc).__name__ + ": " + str(exc)
+
+    if command_name in {"/soft212", "/soft"}:
+        try:
+            from soyuz_gagarin.trading_profiles import get_profile
+            profile = get_profile("SOFT")
+            results = _run_analysis()
+            if results is None:
+                return "Nessun risultato. Riprova con /analisi."
+            set_last_results(results)
+            return _format_classifica(results) + "\n\nProfilo SOFT: probabilita >= " + str(profile.min_probability) + ", qualita >= " + str(profile.min_quality) + ", rischio " + str(profile.risk_per_trade_pct) + "%."
+        except Exception as exc:
+            return "Errore soft: " + type(exc).__name__ + ": " + str(exc)
+
+    if command_name == "/prezzo212":
+        try:
+            from engine.trading212 import compare_price, format_comparison, parse_bid_ask
+            if not argument:
+                return "212 PREZZI\nIncolla: simbolo bid ask\nEs: /prezzo212 WTI 78.10 78.13"
+            parts = argument.split()
+            sym = parts[0].upper()
+            bid, ask = parse_bid_ask(" ".join(parts[1:]))
+            gprice = None
+            results = get_last_results()
+            if results:
+                for st in results:
+                    if str(getattr(st, "symbol", "")).upper() == sym:
+                        gprice = getattr(st, "price", None)
+                        break
+            if gprice is None:
+                try:
+                    results = _run_analysis()
+                    if results:
+                        set_last_results(results)
+                        for st in results:
+                            if str(getattr(st, "symbol", "")).upper() == sym:
+                                gprice = getattr(st, "price", None)
+                                break
+                except Exception:
+                    pass
+            return format_comparison(compare_price(sym, gprice, bid, ask))
+        except Exception as exc:
+            return "Errore 212: " + type(exc).__name__ + ": " + str(exc)
 
     if command_name == "/invest":
         signals = analyze_invest_universe()
