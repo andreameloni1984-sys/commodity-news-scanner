@@ -9,6 +9,8 @@ Fonti studiate:
 - Opening Range Breakout: range dei primi 30 minuti, entrata sulla rottura,
   stop dentro il range, target pari all'altezza del range.
 - Studio 2026 su E-mini S&P: 75% successo ORB vs 53% momentum generico.
+- Test 7 anni NQ (tickstream 2026): ORB 15 min breakout con target 2R
+  o ride to EOD resta positivo in sample e holdout; il fade del range perde.
 - Studio 2026 su micro Nasdaq: 14 famiglie di segnali OHLCV, 11 falliscono
   perché il guadagno lordo è sotto il costo di transazione.
 - Stop in ATR adattivi: drawdown ridotto 45-65% su 15 futures, 20 anni.
@@ -35,11 +37,11 @@ OUT = Path("data/day_research.json")
 
 NOTES = {
     "orb": {
-        "description": "Opening Range Breakout: range dei primi 30 minuti USA",
+        "description": "Opening Range Breakout: range dei primi 15-30 minuti USA",
         "entry": "rottura del range con volume sopra la media",
         "stop": "lato opposto del range, mai sotto 0.8 ATR",
-        "target": "altezza del range, poi uscita sul VWAP",
-        "evidence": "studio 2026 E-mini S&P: 75% vs 53% momentum generico",
+        "target": "altezza del range o 2R, poi uscita sul VWAP",
+        "evidence": "studio 2026 E-mini S&P: 75% vs 53% momentum generico; test 7 anni NQ: 15 min breakout positivo OOS, fade negativo",
     },
     "vwap_exit": {
         "description": "Uscita al ritorno sul VWAP, non a prezzo fisso",
@@ -69,6 +71,10 @@ NOTES = {
     "candles_fibonacci": {
         "description": "Candele giapponesi e Fibonacci: etichette, non segnali",
         "evidence": "studi su engulfing S&P 500: potere predittivo vicino a zero dopo i costi",
+    },
+    "near_miss": {
+        "description": "Diagnosi: elenco condizioni mancanti e flag near quando manca una sola",
+        "purpose": "il filtro non resta muto; Telegram/dashboard possono mostrare i candidati vicini",
     },
 }
 

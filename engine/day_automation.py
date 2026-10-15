@@ -3,6 +3,8 @@
 Stesso cervello: settimana, finestra, range, volume, VWAP, spread, news.
 Se i dati ci sono, può dire ENTER anche su una commodity.
 Se manca un numero, l'azione è NONE. Non manda ordini.
+
+Aggiunto: lista di condizioni mancanti e flag near quando manca una sola cosa.
 """
 
 from __future__ import annotations
@@ -62,52 +64,64 @@ def decide(symbol: str, snapshot: dict | None) -> dict:
         "stop": None,
         "exit": None,
         "reason": "",
+        "missing": [],
+        "near": False,
         "paper_only": True,
         "send_order": False,
     }
     if not spec:
         base["reason"] = "strumento fuori lista"
+        base["missing"] = ["strumento"]
         return base
+
+    missing = []
     weekly = str(snapshot.get("weekly_bias", "UNKNOWN")).upper()
     if weekly not in {"LONG", "SHORT"}:
-        base["reason"] = "settimana non direzionale"
-        return base
+        missing.append("settimana non direzionale")
+
     window = spec["window"]
     if str(snapshot.get("session", "")).upper() != window:
-        base["reason"] = "fuori finestra"
-        return base
+        missing.append("fuori finestra")
+
     if str(snapshot.get("news_window", "")).upper() == "ACTIVE":
-        base["reason"] = "dato macro in uscita"
-        return base
+        missing.append("dato macro in uscita")
+
     if str(snapshot.get("opening_range", "")).upper() != "BROKEN":
-        base["reason"] = "range non rotto"
-        return base
+        missing.append("range non rotto")
+
     if str(snapshot.get("volume", "")).upper() != "ABOVE_AVERAGE":
-        base["reason"] = "volume basso"
-        return base
+        missing.append("volume basso")
+
     price = _num(snapshot.get("price"))
     range_high = _num(snapshot.get("range_high"))
     range_low = _num(snapshot.get("range_low"))
     vwap = _num(snapshot.get("vwap"))
     spread = _num(snapshot.get("spread"))
     max_spread = _num(snapshot.get("max_spread", spec["max_spread"]))
+
     if None in (price, range_high, range_low, vwap, spread, max_spread):
-        base["reason"] = "manca prezzo, range, VWAP o spread"
+        missing.append("manca prezzo, range, VWAP o spread")
+    else:
+        if spread > max_spread:
+            missing.append("spread troppo largo")
+        if weekly == "LONG" and not (price > range_high and price > vwap):
+            missing.append("rottura long non confermata")
+        if weekly == "SHORT" and not (price < range_low and price < vwap):
+            missing.append("rottura short non confermata")
+        risk = abs(price - (range_low if weekly == "LONG" else range_high))
+        if risk <= 0:
+            missing.append("stop non valido")
+
+    base["missing"] = missing
+    base["near"] = len(missing) == 1 and "manca prezzo" not in missing[0]
+
+    if missing:
+        base["reason"] = missing[0]
         return base
-    if spread > max_spread:
-        base["reason"] = "spread troppo largo"
-        return base
-    if weekly == "LONG" and not (price > range_high and price > vwap):
-        base["reason"] = "rottura long non confermata"
-        return base
-    if weekly == "SHORT" and not (price < range_low and price < vwap):
-        base["reason"] = "rottura short non confermata"
-        return base
+
+    # Tutte le condizioni ok
     stop = range_low if weekly == "LONG" else range_high
     risk = abs(price - stop)
-    if risk <= 0:
-        base["reason"] = "stop non valido"
-        return base
     base.update({
         "action": "ENTER",
         "side": weekly,
@@ -152,6 +166,7 @@ def run(config: dict | None = None) -> dict:
         "read_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "universe": list(UNIVERSE),
         "entries": [row["symbol"] for row in rows if row["action"] == "ENTER"],
+        "near": [row["symbol"] for row in rows if row.get("near")],
         "rows": rows,
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)
@@ -160,11 +175,13 @@ def run(config: dict | None = None) -> dict:
 
 
 def line(decision: dict) -> str:
-    if decision.get("action") != "ENTER":
-        return f"{decision.get('symbol', 'DAY')}\nNiente\n{decision.get('reason', '')}".strip()
-    return (
-        f"{decision['symbol']} {decision['side']}\n"
-        f"entra {decision['entry']}\n"
-        f"stop {decision['stop']}\n"
-        f"esci {decision['exit']}"
-    )
+    if decision.get("action") == "ENTER":
+        return (
+            f"{decision['symbol']} {decision['side']}\n"
+            f"entra {decision['entry']}\n"
+            f"stop {decision['stop']}\n"
+            f"esci {decision['exit']}"
+        )
+    if decision.get("near"):
+        return f"{decision.get('symbol', 'DAY')}\nVicino\n{decision.get('reason', '')}"
+    return f"{decision.get('symbol', 'DAY')}\nNiente\n{decision.get('reason', '')}".strip()
