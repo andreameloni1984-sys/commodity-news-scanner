@@ -1,0 +1,54 @@
+name: wire-aggressive-alert
+
+on:
+  workflow_dispatch:
+
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_TOKEN || secrets.github_token || github.token}}
+
+      - name: Add aggressive alert hook to soyuz cycle
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path("soyuz_gagarin/cycle.py")
+          if not p.exists():
+              # try alternate locations
+              for alt in ["soyuz/cycle.py", "engine/soyuz_cycle.py", "gagarin_cycle.py"]:
+                  if Path(alt).exists():
+                      p = Path(alt)
+                      break
+          text = p.read_text()
+          needle = "from telegram.aggressive_alert import run_aggressive_alert"
+          if needle in text:
+              print("already wired")
+          else:
+              # add import after existing telegram imports if any, else at top
+              lines = text.splitlines(True)
+              insert_at = 0
+              for i, line in enumerate(lines):
+                  if line.startswith("from telegram") or line.startswith("import telegram"):
+                      insert_at = i + 1
+              lines.insert(insert_at, needle + "\n")
+              # add call near end of main loop if a results variable exists
+              joined = "".join(lines)
+              if "run_aggressive_alert(results)" not in joined:
+                  # append a safe call block at end
+                  lines.append("\n")
+                  lines.append("    try:\n")
+                  lines.append("        run_aggressive_alert(results)\n")
+                  lines.append("    except Exception as exc:\n")
+                  lines.append("        print("AGGRESSIVE ALERT HOOK ERROR:", exc, flush=True)\n")
+              p.write_text("".join(lines))
+              print("wired into", p)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && echo "No changes" || git commit -m "feat: wire aggressive alert into soyuz cycle"
+          git push
