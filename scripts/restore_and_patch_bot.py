@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Restore telegram/bot.py from feat/gagarin-telegram-menu and add
 /aggressivo212, /soft212, /prezzo212 with Trading 212 comparison.
-Run by GitHub Actions workflow."""
-import base64, json, os, subprocess, sys, urllib.request
+Commits via GitHub Contents API."""
+import base64, json, os, sys, urllib.request, urllib.error
 
 OWNER, REPO, BRANCH = "andreameloni1984-sys", "commodity-news-scanner", "main"
 FEAT = "feat/gagarin-telegram-menu"
@@ -106,44 +106,57 @@ ADDITION = r'''
             return "Errore 212: " + type(exc).__name__ + ": " + str(exc)
 '''
 
-def gh(path, ref=None):
-    url = f"https://api.github.com/repos/{OWNER}/{REPO}/contents/{path}"
-    if ref: url += f"?ref={ref}"
-    req = urllib.request.Request(url, headers={"Authorization": f"token {TOKEN}", "Accept": "application/vnd.github+json", "User-Agent": "gagarin-bot"})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return json.load(r)
+def api(method, path, data=None, ref=None):
+    url = f"https://api.github.com/repos/{OWNER}/{REPO}/{path}"
+    if ref and "?" not in url:
+        url += f"?ref={ref}"
+    body = json.dumps(data).encode() if data is not None else None
+    req = urllib.request.Request(url, data=body, method=method, headers={
+        "Authorization": f"Bearer {TOKEN}",
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "gagarin-bot",
+        "Content-Type": "application/json",
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return json.load(r)
+    except urllib.error.HTTPError as e:
+        print(f"API {method} {path} failed: {e.code} {e.read().decode()[:500]}")
+        raise
 
-data = gh("telegram/bot.py", FEAT)
-content = base64.b64decode(data["content"]).decode("utf-8")
-print(f"Downloaded bot.py from {FEAT}: {len(content)} bytes, sha={data['sha'][:8]}")
+# Download real bot.py from feat branch
+feat = api("GET", "contents/telegram/bot.py", ref=FEAT)
+content = base64.b64decode(feat["content"]).decode("utf-8")
+print(f"Downloaded bot.py from {FEAT}: {len(content)} bytes, sha={feat['sha'][:8]}")
 
-needle = '        return None\n\n\n# ============================================================\n# POLLING'
-if needle not in content:
-    # try alternate ending
-    idx = content.rfind("return None")
-    print(f"Needle not found, last return None at index {idx}")
-    if idx < 0:
-        print("CANNOT_PATCH"); sys.exit(2)
-    # insert before the last return None
-    content = content[:idx] + ADDITION + "\n" + content[idx:]
-else:
-    content = content.replace(needle, ADDITION + "\n" + needle, 1)
-
+# Insert the addition before the last return None
+idx = content.rfind("return None")
+if idx < 0:
+    print("CANNOT_PATCH"); sys.exit(2)
+content = content[:idx] + ADDITION + "\n" + content[idx:]
 print(f"Patched bot.py: {len(content)} bytes")
-# sanity: must contain the new commands
+
 for cmd in ["/aggressivo212", "/soft212", "/prezzo212", "engine.trading212", "FOREX_AGGRESSIVE_PORTFOLIO"]:
     assert cmd in content, f"missing {cmd}"
 print("Sanity checks passed")
 
-# commit via git
-subprocess.run(["git", "config", "user.name", "gagarin-bot"], check=True)
-subprocess.run(["git", "config", "user.email", "bot@gagarin.local"], check=True)
-with open("telegram/bot.py", "w", encoding="utf-8") as f:
-    f.write(content)
-subprocess.run(["git", "add", "telegram/bot.py"], check=True)
-r = subprocess.run(["git", "diff", "--cached", "--quiet"])
-if r.returncode == 0:
-    print("No changes"); sys.exit(0)
-subprocess.run(["git", "commit", "-m", "fix(telegram): restore bot.py and wire /aggressivo212 Trading 212 reparto"], check=True)
-subprocess.run(["git", "push"], check=True)
-print("PUSH_OK")
+# Get current SHA of bot.py on main (for the update)
+try:
+    current = api("GET", "contents/telegram/bot.py", ref=BRANCH)
+    current_sha = current["sha"]
+    print(f"Current bot.py on {BRANCH}: sha={current_sha[:8]}, size={current.get('size')}")
+except Exception:
+    current_sha = None
+    print("bot.py does not exist on main, will create")
+
+# Commit via Contents API
+payload = {
+    "message": "fix(telegram): restore bot.py and wire /aggressivo212 Trading 212 reparto",
+    "content": base64.b64encode(content.encode("utf-8")).decode(),
+    "branch": BRANCH,
+}
+if current_sha:
+    payload["sha"] = current_sha
+
+result = api("PUT", "contents/telegram/bot.py", payload)
+print(f"COMMIT_OK sha={result.get('commit', {}).get('sha', '?')[:8]}")
