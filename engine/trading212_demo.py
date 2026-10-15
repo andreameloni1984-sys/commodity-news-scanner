@@ -8,7 +8,7 @@ import os
 import json
 from typing import Any, Optional
 from urllib.request import urlopen, Request
-from urllib.error import HTTPError, URLError
+from urllib.error import HTTPError
 import base64
 
 DEMO_BASE = "https://demo.trading212.com/api/v0"
@@ -39,15 +39,16 @@ def _request(method: str, path: str, body: Optional[dict] = None, timeout: int =
             return True, json.loads(raw) if raw else {}
     except HTTPError as exc:
         try:
-            err = json.loads(exc.read().decode("utf-8"))
+            err_body = exc.read().decode("utf-8")
+            err = json.loads(err_body) if err_body else {"error": f"HTTP {exc.code}"}
         except Exception:
-            err = {"error": str(exc)}
+            err = {"error": f"HTTP {exc.code}: {exc.reason}"}
         return False, err
     except Exception as exc:
         return False, {"error": str(exc)}
 
 def get_account_summary() -> tuple[bool, Any]:
-    return _request("GET", "/equity/account/info")
+    return _request("GET", "/equity/account/summary")
 
 def get_positions() -> tuple[bool, Any]:
     return _request("GET", "/equity/portfolio")
