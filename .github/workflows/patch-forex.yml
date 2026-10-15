@@ -1,0 +1,20 @@
+name: patch-forex-aggressive
+
+on:
+  workflow_dispatch:
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run patch
+        run: python3 scripts/patch_forex_aggressive.py
+      - name: Commit and push
+        run: |
+          git config user.name gagarin-bot
+          git config user.email bot@gagarin.local
+          git add telegram/bot.py
+          git diff --cached --quiet && echo "No changes" && exit 0
+          git commit -m "fix(telegram): add forex aggressive block to /aggressivo212"
+          git push
