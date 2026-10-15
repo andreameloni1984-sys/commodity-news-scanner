@@ -6,7 +6,7 @@ Comandi principali:
     /classifica /setup /analisi /prezzo
     /segnali /top /guida /rischio
     /aggressivo212 /soft212 /prezzo212
-    /invest /invest_demo
+    /invest /invest_demo /invest_account /invest_orders /invest_buy
 
 PAPER ONLY.
 """
@@ -21,7 +21,14 @@ import requests
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 from engine.gagarin import analyze_universe
 from commodities.universe import enabled_commodities, get_commodity_by_name
-from engine.invest import analyze_invest_universe, format_invest_report, get_trading212_demo_status
+from engine.invest import (
+    analyze_invest_universe,
+    format_invest_report,
+    get_trading212_demo_status,
+    format_account_status,
+    format_pending_orders,
+    place_demo_order,
+)
 
 API_BASE = "https://api.telegram.org"
 REQUEST_TIMEOUT = 30
@@ -173,7 +180,10 @@ def _command_response(command: str) -> Optional[str]:
             "/rischio — regole di rischio\n"
             "/aggressivo212 — confronto Trading 212 CFD\n"
             "/invest — sezione Invest (azioni/ETF)\n"
-            "/invest_demo — stato API Trading 212 demo"
+            "/invest_demo — stato API Trading 212 demo\n"
+            "/invest_account — saldo demo\n"
+            "/invest_orders — ordini demo pendenti\n"
+            "/invest_buy TICKER QTY — ordine market demo"
         )
 
     if command_name == "/invest":
@@ -182,6 +192,23 @@ def _command_response(command: str) -> Optional[str]:
 
     if command_name == "/invest_demo":
         return get_trading212_demo_status()
+
+    if command_name == "/invest_account":
+        return format_account_status()
+
+    if command_name == "/invest_orders":
+        return format_pending_orders()
+
+    if command_name == "/invest_buy":
+        parts = argument.split()
+        if len(parts) < 2:
+            return "Uso: /invest_buy TICKER QTY\nEsempio: /invest_buy AAPL_US_EQ 1"
+        ticker = parts[0].upper()
+        try:
+            qty = float(parts[1])
+        except ValueError:
+            return "Quantità non valida."
+        return place_demo_order(ticker, qty)
 
     if command_name == "/classifica":
         results = get_last_results() or _run_analysis()
