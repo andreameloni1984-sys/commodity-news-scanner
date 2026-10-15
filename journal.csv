@@ -32,3 +32,14 @@ data,mercato,direzione,ingresso,stop,TP,size,motivo,esito
 2026-10-12,zucchero SB,LONG,,,,,"trend STRONG LONG slope_atr=5.75 RSI=77.2; livello non toccato; roll BLOCCATO (mese 10 giorni 8-16); eventi OK",bloccato
 2026-10-12,caffe KC,SHORT,,,,,"trend STRONG SHORT slope_atr=-5.05 RSI=57.1 momentum contrario; livello non toccato; roll OK; eventi OK",nessun segnale
 2026-10-12,cacao CC,SHORT,,,,,"trend STRONG SHORT slope_atr=-3.25 RSI=61.5 momentum contrario; livello non toccato; roll OK; eventi OK",nessun segnale
+2026-10-15,oro XAU/USD,,,,,,"dati Twelve Data non accessibili in ambiente automazione (credenziali GitHub secrets esterne)",nessun segnale
+2026-10-15,argento XAG/USD,,,,,,"dati Twelve Data non accessibili in ambiente automazione (credenziali GitHub secrets esterne)",nessun segnale
+2026-10-15,rame HG,,,,,,"dati Twelve Data non accessibili in ambiente automazione (credenziali GitHub secrets esterne)",nessun segnale
+2026-10-15,WTI CL,,,,,,"dati Twelve Data non accessibili in ambiente automazione (credenziali GitHub secrets esterne)",nessun segnale
+2026-10-15,Brent BZ,,,,,,"dati Twelve Data non accessibili in ambiente automazione (credenziali GitHub secrets esterne)",nessun segnale
+2026-10-15,gas naturale NG,,,,,,"dati Twelve Data non accessibili in ambiente automazione (credenziali GitHub secrets esterne)",nessun segnale
+2026-10-15,grano ZW,,,,,,"dati Twelve Data non accessibili in ambiente automazione (credenziali GitHub secrets esterne)",nessun segnale
+2026-10-15,mais ZC,,,,,,"dati Twelve Data non accessibili in ambiente automazione (credenziali GitHub secrets esterne)",nessun segnale
+2026-10-15,zucchero SB,,,,,,"dati Twelve Data non accessibili in ambiente automazione (credenziali GitHub secrets esterne)",nessun segnale
+2026-10-15,caffe KC,,,,,,"dati Twelve Data non accessibili in ambiente automazione (credenziali GitHub secrets esterne)",nessun segnale
+2026-10-15,cacao CC,,,,,,"dati Twelve Data non accessibili in ambiente automazione (credenziali GitHub secrets esterne)",nessun segnale
