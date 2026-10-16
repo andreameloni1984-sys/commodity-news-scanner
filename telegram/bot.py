@@ -411,6 +411,18 @@ def _command_response(command: str) -> Optional[str]:
             return "Quantità non valida."
         return place_demo_order(ticker, qty)
 
+    if command_name == "/invest_buy_value":
+        parts = argument.split()
+        if len(parts) != 3:
+            return "Uso: /invest_buy_value TICKER SIMBOLO IMPORTO\nEsempio: /invest_buy_value NVDA_US_EQ NVDA 10"
+        ticker, symbol = parts[0].upper(), parts[1].upper()
+        try:
+            amount = float(parts[2])
+        except ValueError:
+            return "Importo non valido."
+        from engine.invest import place_demo_order_by_value
+        return place_demo_order_by_value(ticker, symbol, amount)
+
     if command_name == "/invest_auto":
         return auto_buy_best_signal()
 
