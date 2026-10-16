@@ -19,15 +19,19 @@ jobs:
 
     env:
 
-      TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+      TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }
 
-      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }
 
-      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }
 
       TELEGRAM_ENABLED: "1"
 
-      SIFTING_API_KEY: ${{ secrets.SIFTING_API_KEY }} 
+      SIFTING_API_KEY: ${{ secrets.SIFTING_API_KEY }
+
+      T212_API_KEY: ${{ secrets.T212_API_KEY }
+
+      T212_API_SECRET: ${{ secrets.T212_API_SECRET }
 
       PAPER_TRADING_ONLY: "1"
 
@@ -95,17 +99,27 @@ jobs:
             echo "❌ TWELVE_DATA_API_KEY MISSING"
             exit 1
           fi
-          echo "✅ TWELVE_DATA_API_KEY PRESENT"
+            echo "✅ TWELVE_DATA_API_KEY PRESENT"
           if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
             echo "❌ TELEGRAM_BOT_TOKEN MISSING"
             exit 1
           fi
-          echo "✅ TELEGRAM_BOT_TOKEN PRESENT"
+            echo "✅ TELEGRAM_BOT_TOKEN PRESENT"
           if [ -z "$TELEGRAM_CHAT_ID" ]; then
             echo "❌ TELEGRAM_CHAT_ID MISSING"
             exit 1
           fi
-          echo "✅ TELEGRAM_CHAT_ID PRESENT"
+            echo "✅ TELEGRAM_CHAT_ID PRESENT"
+          if [ -z "$T212_API_KEY" ]; then
+            echo "⚠️ T212_API_KEY MISSING"
+          else
+            echo "✅ T212_API_KEY PRESENT"
+          fi
+          if [ -z "$T212_API_SECRET" ]; then
+            echo "⚠️ T212_API_SECRET MISSING"
+          else
+            echo "✅ T212_API_SECRET PRESENT"
+          fi
           echo "PAPER_TRADING_ONLY=$PAPER_TRADING_ONLY"
 
       - name: Compile Python
@@ -123,7 +137,7 @@ jobs:
         run: |
           if [ -f "diagnostic_agri.py" ]; then
             echo "✅ diagnostic_agri.py FOUND"
-          else
+            else
             echo "❌ diagnostic_agri.py NOT FOUND"
             exit 1
           fi
