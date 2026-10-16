@@ -46,3 +46,20 @@ def get_price(symbol: str) -> Optional[float]:
     if price is not None and price > 0:
         return price
     return fetch_stooq_price(symbol)
+
+
+def get_price_history(symbol: str, timeout: int = 8) -> list[float]:
+    """Ultime chiusure giornaliere Yahoo; lista vuota se i dati non sono disponibili."""
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=1mo"
+    try:
+        req = Request(url, headers={"User-Agent": "SOYUZ-GAGARIN"})
+        with urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        result = data.get("chart", {}).get("result")
+        if not result:
+            return []
+        quote = result[0].get("indicators", {}).get("quote", [{}])[0]
+        closes = quote.get("close") or []
+        return [float(v) for v in closes if v is not None and float(v) > 0]
+    except Exception:
+        return []
