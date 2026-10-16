@@ -1,6 +1,6 @@
 """Tests for the forex aggressive block in Soyuz Gagarin."""
 
-from engine.gagarin import GagarinConfig
+from soyuz_gagarin.config import GagarinConfig
 
 
 def test_aggressive_profile_thresholds():
