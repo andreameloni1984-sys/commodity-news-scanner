@@ -16,6 +16,8 @@ from engine.trading212_demo import (
     get_account_summary,
     get_positions,
     place_market_order,
+    place_limit_order,
+    place_stop_order,
     get_pending_orders,
 )
 
@@ -165,28 +167,59 @@ def place_demo_order(ticker: str, quantity: float) -> str:
         "PAPER ONLY."
     )
 
-def auto_buy_best_signal(min_score: float = 60.0, quantity: float = 1.0) -> str:
-    """Sceglie il miglior segnale LONG sopra soglia e piazza ordine demo."""
+def auto_buy_best_signal(
+    min_score: float = 60.0,
+    quantity: float = 1.0,
+    sl_pct: float = 0.03,
+    tp_pct: float = 0.06,
+) -> str:
+    """Sceglie il miglior segnale LONG, piazza market + SL + TP demo."""
     if not trading212_demo_available():
         return get_trading212_demo_status()
 
     signals = analyze_invest_universe()
     candidates = [
         s for s in signals
-        if s.direction == "LONG" and s.score >= min_score and s.ticker
+        if s.direction == "LONG" and s.score >= min_score and s.ticker and s.price and s.price > 0
     ]
     if not candidates:
         return (
-            "⚪ Nessun segnale LONG sopra soglia " + str(min_score) + ".\n"
+            "⚪ Nessun segnale LONG sopra soglia " + str(min_score) + " con prezzo.\n"
             "Nessun ordine piazzato."
         )
 
     best = candidates[0]
-    result = place_demo_order(best.ticker, quantity)
-    return (
-        f"🤖 AUTO DEMO\n"
-        f"Scelto: {best.name} ({best.ticker})\n"
-        f"Score: {best.score:.1f} | Direzione: {best.direction}\n"
-        f"Motivo: {best.reason}\n\n"
-        + result
-    )
+    entry_price = best.price
+    stop_price = round(entry_price * (1 - sl_pct), 2)
+    tp_price = round(entry_price * (1 + tp_pct), 2)
+
+    # 1. Market BUY
+    buy_ok, buy_data = place_market_order(best.ticker, quantity)
+    if not buy_ok:
+        return (
+            f"🤖 AUTO DEMO\n"
+            f"Scelto: {best.name} ({best.ticker})\n"
+            f"Score: {best.score:.1f}\n"
+            f"❌ Buy fallito: {buy_data}"
+        )
+
+    # 2. Stop Loss (SELL a prezzo più basso)
+    sl_ok, sl_data = place_stop_order(best.ticker, -quantity, stop_price)
+
+    # 3. Take Profit (SELL a prezzo più alto)
+    tp_ok, tp_data = place_limit_order(best.ticker, -quantity, tp_price)
+
+    lines = [
+        "🤖 AUTO DEMO",
+        f"Scelto: {best.name} ({best.ticker})",
+        f"Score: {best.score:.1f} | Direzione: {best.direction}",
+        f"Motivo: {best.reason}",
+        "",
+        f"✅ BUY market qty={quantity} | ID {buy_data.get('id', '?')}",
+        f"Prezzo riferimento: {entry_price:.2f}",
+        f"SL: {stop_price:.2f} (-{sl_pct*100:.0f}%) | {'OK' if sl_ok else 'FALLITO ' + str(sl_data)}",
+        f"TP: {tp_price:.2f} (+{tp_pct*100:.0f}%) | {'OK' if tp_ok else 'FALLITO ' + str(tp_data)}",
+        "",
+        "PAPER ONLY.",
+    ]
+    return "\n".join(lines)
