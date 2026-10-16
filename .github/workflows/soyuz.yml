@@ -3,8 +3,9 @@ name: SOYUZ GAGARIN
 on:
   workflow_dispatch:
 
-  schedule:
-    - cron: "*/15 * * * *"
+  # schedule disabilitato per risparmiare dati
+  # schedule:
+  #   - cron: "*/15 * * * *"
 
 permissions:
   contents: read
@@ -19,10 +20,6 @@ jobs:
 
     env:
 
-      # ==================================================
-      # API
-      # ==================================================
-
       TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
 
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -32,17 +29,8 @@ jobs:
       TELEGRAM_ENABLED: "1"
 
       SIFTING_API_KEY: ${{ secrets.SIFTING_API_KEY }} 
-      
-      # ==================================================
-      # TRADING MODE
-      # ==================================================
 
       PAPER_TRADING_ONLY: "1"
-
-
-      # ==================================================
-      # GAGARIN ENTRY GATES
-      # ==================================================
 
       MIN_ENTRY_PROBABILITY: "62"
 
@@ -52,39 +40,19 @@ jobs:
 
       MIN_ENTRY_RR: "2.5"
 
-
-      # ==================================================
-      # RISK
-      # ==================================================
-
       MAX_ENTRY_STOP_ATR: "2.5"
 
       SL_STRUCTURE_BUFFER_ATR: "0.15"
 
       SL_MIN_ATR: "0.80"
 
-
-      # ==================================================
-      # MONITOR
-      # ==================================================
-
       MONITOR_INTERVAL_MINUTES: "15"
-
-
-      # ==================================================
-      # POLITICAL / MACRO
-      # ==================================================
 
       POLITICAL_IMPACT_ENABLED: "1"
 
       US_PRESIDENT_IMPACT_ENABLED: "1"
 
       ELECTION_IMPACT_ENABLED: "1"
-
-
-      # ==================================================
-      # MARKET INTELLIGENCE
-      # ==================================================
 
       FUTURES_STRUCTURE_ENABLED: "1"
 
@@ -98,237 +66,77 @@ jobs:
 
       SOLE24_ENABLED: "1"
 
-
     steps:
 
-
-      # ==================================================
-      # 1. CHECKOUT
-      # ==================================================
-
       - name: Checkout repository
-
         uses: actions/checkout@v4
 
-
-      # ==================================================
-      # 2. PYTHON
-      # ==================================================
-
       - name: Setup Python
-
         uses: actions/setup-python@v5
-
         with:
-
           python-version: "3.11"
-
           cache: "pip"
 
-
-      # ==================================================
-      # 3. INSTALL DEPENDENCIES
-      # ==================================================
-
       - name: Install dependencies
-
         run: |
-
           python -m pip install --upgrade pip
-
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           else
             pip install requests
           fi
 
-
-      # ==================================================
-      # 4. ENVIRONMENT CHECK
-      # ==================================================
-
       - name: Environment check
-
         run: |
-
           echo "=============================================="
           echo "SOYUZ GAGARIN ENVIRONMENT"
           echo "=============================================="
-
           python --version
-
-          echo ""
-
           if [ -z "$TWELVE_DATA_API_KEY" ]; then
             echo "❌ TWELVE_DATA_API_KEY MISSING"
             exit 1
           fi
-
           echo "✅ TWELVE_DATA_API_KEY PRESENT"
-
           if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
             echo "❌ TELEGRAM_BOT_TOKEN MISSING"
             exit 1
           fi
-
           echo "✅ TELEGRAM_BOT_TOKEN PRESENT"
-
           if [ -z "$TELEGRAM_CHAT_ID" ]; then
             echo "❌ TELEGRAM_CHAT_ID MISSING"
             exit 1
           fi
-
           echo "✅ TELEGRAM_CHAT_ID PRESENT"
-
-          echo ""
           echo "PAPER_TRADING_ONLY=$PAPER_TRADING_ONLY"
-          echo "MONITOR_INTERVAL_MINUTES=$MONITOR_INTERVAL_MINUTES"
-
-          echo ""
-          echo "=============================================="
-
-
-      # ==================================================
-      # 5. COMPILE CHECK
-      # ==================================================
 
       - name: Compile Python
-
-        run: |
-
-          echo "=============================================="
-          echo "PYTHON COMPILE CHECK"
-          echo "=============================================="
-
-          python -m compileall -q .
-
-          echo "✅ COMPILE OK"
-
-
-      # ==================================================
-      # 6. TESTS
-      # ==================================================
+        run: python -m compileall -q .
 
       - name: Run tests
-
         run: |
-
-          echo "=============================================="
-          echo "PYTEST"
-          echo "=============================================="
-
           if [ -d "tests" ]; then
-
             python -m pytest -q tests/
-
           else
-
-            echo "ℹ️ No tests directory found."
-            echo "Tests skipped."
-
+            echo "No tests directory."
           fi
-
-
-      # ==================================================
-      # 7. CHECK DIAGNOSTIC FILE
-      # ==================================================
 
       - name: Check agriculture diagnostic
-
         run: |
-
-          echo "=============================================="
-          echo "🌾 AGRICULTURE DIAGNOSTIC CHECK"
-          echo "=============================================="
-
-          echo ""
-          echo "Repository root:"
-          pwd
-
-          echo ""
-
-          echo "Files in repository root:"
-          ls -la
-
-          echo ""
-
           if [ -f "diagnostic_agri.py" ]; then
-
             echo "✅ diagnostic_agri.py FOUND"
-
           else
-
             echo "❌ diagnostic_agri.py NOT FOUND"
-
-            echo ""
-            echo "The diagnostic file must exist in the repository root."
-            echo ""
-
             exit 1
-
           fi
 
-
-      # ==================================================
-      # 8. AGRICULTURE DIAGNOSTIC
-      # ==================================================
-
       - name: Agriculture diagnostic
-
-        run: |
-
-          echo "=============================================="
-          echo "🌾 AGRICULTURE DATA DIAGNOSTIC"
-          echo "=============================================="
-
-          echo ""
-
-          python diagnostic_agri.py
-
-
-      # ==================================================
-      # 9. SOYUZ GAGARIN
-      # ==================================================
+        run: python diagnostic_agri.py
 
       - name: Run SOYUZ GAGARIN
-
-        run: |
-
-          echo "=============================================="
-          echo "🚀 SOYUZ GAGARIN"
-          echo "=============================================="
-
-          echo "DATA -> REGIME -> STRUCTURE -> SETUP -> TRIGGER -> RISK -> SAFETY"
-
-          echo ""
-
-          echo "MODE: PAPER ONLY"
-
-          echo ""
-
-          python main.py
-
-
-      # ==================================================
-      # 10. FINAL STATUS
-      # ==================================================
+        run: python main.py
 
       - name: Final status
-
         if: always()
-
         run: |
-
-          echo ""
-          echo "=============================================="
-          echo "🏁 SOYUZ GAGARIN RUN FINISHED"
-          echo "=============================================="
-
-          echo ""
+          echo "SOYUZ GAGARIN RUN FINISHED"
           echo "PAPER_TRADING_ONLY=$PAPER_TRADING_ONLY"
-
-          echo ""
-          echo "No real orders are allowed."
-
-          echo ""
-          echo "=============================================="

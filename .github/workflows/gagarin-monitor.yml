@@ -1,8 +1,9 @@
 name: Gagarin Paper Monitor
 
 on:
-  schedule:
-    - cron: "*/5 * * * *"
+  # schedule disabilitato per risparmiare dati
+  # schedule:
+  #   - cron: "*/5 * * * *"
   workflow_dispatch:
 
 permissions:

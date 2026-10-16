@@ -1,8 +1,9 @@
 name: aggressive-alert
 
 on:
-  schedule:
-    - cron: "0 7-20 * * *"
+  # schedule disabilitato per risparmiare dati
+  # schedule:
+  #   - cron: "0 7-20 * * *"
   workflow_dispatch:
 
 permissions:

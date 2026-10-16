@@ -1,9 +1,9 @@
 name: DAY RESEARCH
 
 on:
-  schedule:
-    # ogni ora dalle 07:00 alle 20:00 ora di Roma (05:00-18:00 UTC in inverno)
-    - cron: "0 5-18 * * *"
+  # schedule disabilitato per risparmiare dati
+  # schedule:
+  #   - cron: "0 5-18 * * *"
   workflow_dispatch:
 
 permissions:
