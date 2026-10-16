@@ -96,29 +96,29 @@ jobs:
           echo "=============================================="
           python --version
           if [ -z "$TWELVE_DATA_API_KEY" ]; then
-            echo "❌ TWELVE_DATA_API_KEY MISSING"
+            echo "TWELVE_DATA_API_KEY MISSING"
             exit 1
           fi
-            echo "✅ TWELVE_DATA_API_KEY PRESENT"
+          echo "TWELVE_DATA_API_KEY PRESENT"
           if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
-            echo "❌ TELEGRAM_BOT_TOKEN MISSING"
+            echo "TELEGRAM_BOT_TOKEN MISSING"
             exit 1
           fi
-            echo "✅ TELEGRAM_BOT_TOKEN PRESENT"
+          echo "TELEGRAM_BOT_TOKEN PRESENT"
           if [ -z "$TELEGRAM_CHAT_ID" ]; then
-            echo "❌ TELEGRAM_CHAT_ID MISSING"
+            echo "TELEGRAM_CHAT_ID MISSING"
             exit 1
           fi
-            echo "✅ TELEGRAM_CHAT_ID PRESENT"
+          echo "TELEGRAM_CHAT_ID PRESENT"
           if [ -z "$T212_API_KEY" ]; then
-            echo "⚠️ T212_API_KEY MISSING"
+            echo "T212_API_KEY MISSING"
           else
-            echo "✅ T212_API_KEY PRESENT"
+            echo "T212_API_KEY PRESENT"
           fi
           if [ -z "$T212_API_SECRET" ]; then
-            echo "⚠️ T212_API_SECRET MISSING"
+            echo "T212_API_SECRET MISSING"
           else
-            echo "✅ T212_API_SECRET PRESENT"
+            echo "T212_API_SECRET PRESENT"
           fi
           echo "PAPER_TRADING_ONLY=$PAPER_TRADING_ONLY"
 
@@ -136,9 +136,9 @@ jobs:
       - name: Check agriculture diagnostic
         run: |
           if [ -f "diagnostic_agri.py" ]; then
-            echo "✅ diagnostic_agri.py FOUND"
-            else
-            echo "❌ diagnostic_agri.py NOT FOUND"
+            echo "diagnostic_agri.py FOUND"
+          else
+            echo "diagnostic_agri.py NOT FOUND"
             exit 1
           fi
 
