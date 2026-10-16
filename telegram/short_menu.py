@@ -10,7 +10,7 @@ DAY = Path("data/day_trading_filter.json")
 
 
 def menu_text() -> str:
-    return "GAGARIN\n1 Commodity\n2 Day\n3 Stato\n4 Test filtro"
+    return "GAGARIN\n1 Commodity\n2 Day\n3 Stato"
 
 
 def _load(path: Path) -> dict:
