@@ -86,7 +86,7 @@ def format_aggressive_alert(states: Iterable[Any]) -> str:
         if _is_energy(name) and in_eia:
             continue  # silence energy inside EIA window
         if not in_overlap and _is_energy(name):
-            # outside liquid window: only keep if very strong, otherwise skip
+            # outside liquid window: only keep if strong, otherwise skip
             if float(item.get("probability") or 0) < 65:
                 continue
         filtered.append(item)
