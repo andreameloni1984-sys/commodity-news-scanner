@@ -82,8 +82,25 @@ def invest_auto_loop() -> None:
     else:
         print("Trading212 DEMO API connectivity: NOT CONFIGURED (credentials missing)", flush=True)
 
+    # Ricontrolla l'autenticazione almeno ogni ora; solo GET account summary.
+    last_t212_check = time.monotonic()
+    t212_check_interval = 60 * 60
+
     while True:
         try:
+            now = time.monotonic()
+            if now - last_t212_check >= t212_check_interval:
+                last_t212_check = now
+                if trading212_demo_available():
+                    auth_ok, auth_data = get_account_summary()
+                    if auth_ok:
+                        print("Trading212 DEMO hourly auth check: OK (read-only)", flush=True)
+                    else:
+                        auth_err = auth_data.get("error", auth_data.get("message", "API_ERROR")) if isinstance(auth_data, dict) else "API_ERROR"
+                        print(f"Trading212 DEMO hourly auth check: FAILED | {str(auth_err)[:180]}", flush=True)
+                else:
+                    print("Trading212 DEMO hourly auth check: NOT CONFIGURED", flush=True)
+
             signals = analyze_invest_universe()
             candidates = [s for s in signals if s.direction == "LONG"]
             if candidates:
