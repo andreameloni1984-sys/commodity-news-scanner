@@ -19,54 +19,30 @@ jobs:
 
     env:
 
-      TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }
-
+      TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }
-
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }
-
       TELEGRAM_ENABLED: "1"
-
       SIFTING_API_KEY: ${{ secrets.SIFTING_API_KEY }
-
       T212_API_KEY: ${{ secrets.T212_API_KEY }
-
       T212_API_SECRET: ${{ secrets.T212_API_SECRET }
-
       PAPER_TRADING_ONLY: "1"
-
       MIN_ENTRY_PROBABILITY: "68"
-
       MIN_ENTRY_QUALITY: "60"
-
       MIN_ENTRY_CONFIDENCE: "65"
-
       MIN_ENTRY_RR: "2.5"
-
       MAX_ENTRY_STOP_ATR: "2.5"
-
       SL_STRUCTURE_BUFFER_ATR: "0.15"
-
       SL_MIN_ATR: "0.80"
-
       MONITOR_INTERVAL_MINUTES: "15"
-
       POLITICAL_IMPACT_ENABLED: "1"
-
       US_PRESIDENT_IMPACT_ENABLED: "1"
-
       ELECTION_IMPACT_ENABLED: "1"
-
       FUTURES_STRUCTURE_ENABLED: "1"
-
       WEATHER_ENABLED: "1"
-
       DISASTER_ENABLED: "1"
-
       CFTC_ENABLED: "1"
-
       EIA_ENABLED: "1"
-
       SOLE24_ENABLED: "1"
 
     steps:
