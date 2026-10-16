@@ -48,18 +48,48 @@ def get_price(symbol: str) -> Optional[float]:
     return fetch_stooq_price(symbol)
 
 
+def fetch_stooq_history(symbol: str, timeout: int = 8) -> list[float]:
+    """Fallback storico Stooq: chiusure giornaliere CSV, più robusto se Yahoo limita le richieste."""
+    stooq_sym = f"{symbol.lower()}.us"
+    url = f"https://stooq.com/q/d/l/?s={stooq_sym}&i=d"
+    try:
+        req = Request(url, headers={"User-Agent": "SOYUZ-GAGARIN/1.0"})
+        with urlopen(req, timeout=timeout) as resp:
+            text = resp.read().decode("utf-8-sig").strip()
+        lines = text.splitlines()
+        if len(lines) < 2 or lines[0].strip().lower() != "date,open,high,low,close,volume":
+            return []
+        closes: list[float] = []
+        for row in lines[1:]:
+            parts = row.split(",")
+            if len(parts) < 5:
+                continue
+            try:
+                close = float(parts[4])
+                if close > 0:
+                    closes.append(close)
+            except (TypeError, ValueError):
+                continue
+        # Basta un mese circa per la logica momentum; evita di mantenere un archivio enorme.
+        return closes[-30:]
+    except Exception:
+        return []
+
+
 def get_price_history(symbol: str, timeout: int = 8) -> list[float]:
-    """Ultime chiusure giornaliere Yahoo; lista vuota se i dati non sono disponibili."""
+    """Storico Yahoo con fallback Stooq; non nasconde l'assenza di entrambi i provider."""
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=1mo"
     try:
-        req = Request(url, headers={"User-Agent": "SOYUZ-GAGARIN"})
+        req = Request(url, headers={"User-Agent": "SOYUZ-GAGARIN/1.0"})
         with urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
         result = data.get("chart", {}).get("result")
-        if not result:
-            return []
-        quote = result[0].get("indicators", {}).get("quote", [{}])[0]
-        closes = quote.get("close") or []
-        return [float(v) for v in closes if v is not None and float(v) > 0]
+        if result:
+            quote = result[0].get("indicators", {}).get("quote", [{}])[0]
+            closes = quote.get("close") or []
+            history = [float(v) for v in closes if v is not None and float(v) > 0]
+            if len(history) >= 6:
+                return history
     except Exception:
-        return []
+        pass
+    return fetch_stooq_history(symbol, timeout=timeout)
