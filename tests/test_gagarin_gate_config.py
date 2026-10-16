@@ -26,9 +26,9 @@ def valid_candidate():
         "tp2": 108.0,
         "tp3": 110.0,
         "atr": 1.0,
-        "probability": 62.0,
-        "quality": 55.0,
-        "confidence": 60.0,
+        "probability": 68.0,
+        "quality": 60.0,
+        "confidence": 65.0,
     }
 
 
