@@ -64,5 +64,29 @@ def place_market_order(ticker: str, quantity: float) -> tuple[bool, Any]:
     }
     return _request("POST", "/equity/orders/market", body)
 
+def place_limit_order(ticker: str, quantity: float, limit_price: float, time_validity: str = "GOOD_TILL_CANCEL") -> tuple[bool, Any]:
+    """Ordine limit demo. quantity negativa = SELL (per TP)."""
+    if not ticker or quantity == 0 or limit_price <= 0:
+        return False, {"error": "INVALID_PARAMS"}
+    body = {
+        "ticker": ticker,
+        "quantity": quantity,
+        "limitPrice": limit_price,
+        "timeValidity": time_validity,
+    }
+    return _request("POST", "/equity/orders/limit", body)
+
+def place_stop_order(ticker: str, quantity: float, stop_price: float, time_validity: str = "GOOD_TILL_CANCEL") -> tuple[bool, Any]:
+    """Ordine stop demo. quantity negativa = SELL (per SL)."""
+    if not ticker or quantity == 0 or stop_price <= 0:
+        return False, {"error": "INVALID_PARAMS"}
+    body = {
+        "ticker": ticker,
+        "quantity": quantity,
+        "stopPrice": stop_price,
+        "timeValidity": time_validity,
+    }
+    return _request("POST", "/equity/orders/stop", body)
+
 def get_pending_orders() -> tuple[bool, Any]:
     return _request("GET", "/equity/orders")
