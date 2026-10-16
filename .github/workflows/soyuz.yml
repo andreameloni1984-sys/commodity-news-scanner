@@ -19,19 +19,19 @@ jobs:
 
     env:
 
-      TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }
+      TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
 
-      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
-      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
       TELEGRAM_ENABLED: "1"
 
-      SIFTING_API_KEY: ${{ secrets.SIFTING_API_KEY }
+      SIFTING_API_KEY: ${{ secrets.SIFTING_API_KEY }}
 
-      T212_API_KEY: ${{ secrets.T212_API_KEY }
+      T212_API_KEY: ${{ secrets.T212_API_KEY }}
 
-      T212_API_SECRET: ${{ secrets.T212_API_SECRET }
+      T212_API_SECRET: ${{ secrets.T212_API_SECRET }}
 
       PAPER_TRADING_ONLY: "1"
 
