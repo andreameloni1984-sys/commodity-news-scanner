@@ -16,9 +16,9 @@ from soyuz_gagarin.trading_profiles import get_profile
 from engine.session_windows import is_overlap, is_eia_window
 
 
-AGGRESSIVE_MIN_PROBABILITY = 55.0
-AGGRESSIVE_MIN_QUALITY = 45.0
-AGGRESSIVE_MIN_CONFIDENCE = 50.0
+AGGRESSIVE_MIN_PROBABILITY = 50.0
+AGGRESSIVE_MIN_QUALITY = 40.0
+AGGRESSIVE_MIN_CONFIDENCE = 45.0
 
 ENERGY_NAMES = {"wti", "brent", "gasoline", "heating", "gasoil", "crude", "petrolio"}
 
@@ -87,7 +87,7 @@ def format_aggressive_alert(states: Iterable[Any]) -> str:
             continue  # silence energy inside EIA window
         if not in_overlap and _is_energy(name):
             # outside liquid window: only keep if very strong, otherwise skip
-            if float(item.get("probability") or 0) < 70:
+            if float(item.get("probability") or 0) < 65:
                 continue
         filtered.append(item)
 
@@ -96,7 +96,7 @@ def format_aggressive_alert(states: Iterable[Any]) -> str:
 
     lines = [
         "AGGRESSIVE ALERT",
-        "Profilo: probabilita >= 55, qualita >= 45, trigger confermato, dati live",
+        "Profilo AGGRESSIVE: probabilita >= 50, qualita >= 40, confidence >= 45; trigger confermato e dati live",
         "PAPER ONLY - nessun ordine inviato",
         "Sessione: overlap attivo" if in_overlap else "Sessione: fuori overlap",
         "EIA window: SI - energy silenziato" if in_eia else "EIA window: NO",
