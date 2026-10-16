@@ -100,7 +100,7 @@ def format_invest_report(signals: List[InvestSignal]) -> str:
             lines.append(f"  {s.reason}")
 
     lines.append("")
-    lines.append("Comandi demo: /invest_demo /invest_account /invest_orders")
+    lines.append("Comandi demo: /invest_demo /invest_account /invest_orders /invest_auto")
     return "\n".join(lines)
 
 def trading212_demo_available() -> bool:
@@ -163,4 +163,30 @@ def place_demo_order(ticker: str, quantity: float) -> str:
         f"ID: {order_id}\n"
         f"Status: {status}\n"
         "PAPER ONLY."
+    )
+
+def auto_buy_best_signal(min_score: float = 60.0, quantity: float = 1.0) -> str:
+    """Sceglie il miglior segnale LONG sopra soglia e piazza ordine demo."""
+    if not trading212_demo_available():
+        return get_trading212_demo_status()
+
+    signals = analyze_invest_universe()
+    candidates = [
+        s for s in signals
+        if s.direction == "LONG" and s.score >= min_score and s.ticker
+    ]
+    if not candidates:
+        return (
+            "⚪ Nessun segnale LONG sopra soglia " + str(min_score) + ".\n"
+            "Nessun ordine piazzato."
+        )
+
+    best = candidates[0]
+    result = place_demo_order(best.ticker, quantity)
+    return (
+        f"🤖 AUTO DEMO\n"
+        f"Scelto: {best.name} ({best.ticker})\n"
+        f"Score: {best.score:.1f} | Direzione: {best.direction}\n"
+        f"Motivo: {best.reason}\n\n"
+        + result
     )
