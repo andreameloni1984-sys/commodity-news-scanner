@@ -30,6 +30,8 @@ from engine.invest import (
     place_demo_order,
     auto_buy_best_signal,
 )
+from engine.daily_forecast import predict_today
+from soyuz_gagarin.adapter import evaluate_states
 
 API_BASE = "https://api.telegram.org"
 REQUEST_TIMEOUT = 30
@@ -69,6 +71,23 @@ def telegram_diagnostic() -> bool:
     print(f"Telegram DIAGNOSTIC OK | bot=@{result.get('username', 'unknown')} | id={result.get('id', 'unknown')}", flush=True)
     print("Telegram CHAT ID: " + ("PRESENT" if TELEGRAM_CHAT_ID else "MISSING"), flush=True)
     return True
+
+def telegram_menu() -> dict:
+    """Menu keyboard per /start."""
+    return {
+        "keyboard": [
+            [{"text": "📰 NEWS"}, {"text": "🔥 TOP OPPORTUNITÀ"}],
+            [{"text": "🏆 CLASSIFICA"}, {"text": "⚡ INTRADAY"}],
+            [{"text": "💰 COSA COMPRARE"}, {"text": "🛒 QUALE COMPRO?"}],
+            [{"text": "📊 ANALISI"}, {"text": "📡 SEGNALI"}],
+            [{"text": "🥇 METALLI"}, {"text": "🛢 PETROLIO"}],
+            [{"text": "🌾 AGRI"}, {"text": "🌍 MACRO"}],
+            [{"text": "❓ PERCHÉ"}, {"text": "🔄 AGGIORNA"}],
+            [{"text": "⚙️ STATO"}, {"text": "ℹ️ GUIDA"}],
+        ],
+        "resize_keyboard": True,
+        "is_persistent": True,
+    }
 
 def send_telegram(message: str) -> bool:
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
@@ -116,8 +135,11 @@ def _resolve_commodity(name: str):
     aliases = {
         "oro": "Oro", "gold": "Oro",
         "argento": "Argento", "silver": "Argento",
+        "platino": "Platino",
+        "palladio": "Palladio",
         "wti": "Petrolio WTI", "brent": "Petrolio Brent",
-        "zucchero": "Zucchero", "cacao": "Cacao", "caffe": "Caffè",
+        "riso": "Riso",
+        "zucchero": "Zucchero", "cacao": "Cacao", "caffe": "Caffè", "caffè": "Caffè",
     }
     canonical = aliases.get(key)
     if canonical is None:
@@ -139,6 +161,87 @@ def _format_classifica(results):
     lines.append("")
     lines.append("🎯 OPERATIVITÀ")
     lines.append(f"🟢 {len(entries)} ENTRATA/E AUTORIZZATA/E" if entries else "🟡 NESSUNA ENTRATA AUTORIZZATA")
+    return "\n".join(lines)
+
+def _format_setup(results):
+    if not results:
+        return "📊 SETUP\nNessun risultato disponibile."
+    lines = ["🚀 SOYUZ GAGARIN", "📊 SETUP", "━━━━━━━━━━━━━━━━━━━━", "🧪 PAPER ONLY", ""]
+    for state in results:
+        direction = state.setup_direction if state.setup_direction in {"LONG", "SHORT"} else "—"
+        if state.setup_direction in {"LONG", "SHORT"} and not getattr(state, "trigger_confirmed", False):
+            status = "IN ATTESA"
+        elif state.setup_direction in {"LONG", "SHORT"} and getattr(state, "trigger_confirmed", False):
+            status = "TRIGGER CONFERMATO"
+        else:
+            status = "NESSUN SETUP"
+        lines.append(
+            f"{state.commodity} | {direction} | {status} | "
+            f"Setup Q {getattr(state, 'setup_quality', 0):.1f} | "
+            f"Confluence {state.probability:.1f} | Q {state.quality:.1f} | C {state.confidence:.1f}"
+        )
+    return "\n".join(lines)
+
+def _format_intraday(results):
+    if not results:
+        return "INTRADAY\nNessun risultato disponibile."
+    lines = ["🚀 SOYUZ GAGARIN", "INTRADAY", "━━━━━━━━━━━━━━━━━━━━", "🧪 PAPER ONLY", ""]
+    for state in results:
+        direction = state.setup_direction if state.setup_direction in {"LONG", "SHORT"} else "—"
+        setup = getattr(state, "setup", "NONE")
+        trigger = getattr(state, "trigger", "NONE")
+        lines.append(
+            f"{state.commodity} | {direction} | {setup} | {trigger} | "
+            f"{state.final_decision}"
+        )
+    return "\n".join(lines)
+
+def _format_buy(results):
+    if not results:
+        return "GAGARIN — OGGI\nNessun risultato disponibile."
+    forecast = predict_today(results)
+    lines = ["GAGARIN — OGGI", "━━━━━━━━━━━━━━━━━━━━", "🧪 PAPER ONLY", ""]
+    if forecast is None:
+        lines.append("Nessuna previsione disponibile.")
+        return "\n".join(lines)
+    lines.append(f"COMMODITY: {forecast['commodity']}")
+    lines.append(f"PREVISIONE: {forecast['forecast']}")
+    lines.append(f"DIREZIONE: {forecast['direction']}")
+    if forecast.get("entry") is not None:
+        lines.append(f"ENTRY: {forecast['entry']:.6g}")
+    if forecast.get("stop") is not None:
+        lines.append(f"SL: {forecast['stop']:.6g}")
+    if forecast.get("tp1") is not None:
+        lines.append(f"TP1: {forecast['tp1']:.6g}")
+    if forecast.get("tp2") is not None:
+        lines.append(f"TP2: {forecast['tp2']:.6g}")
+    return "\n".join(lines)
+
+def _format_morning_pick(results):
+    if not results:
+        return "GAGARIN — COSA COMPRO?\nNessun risultato disponibile."
+    decisions = evaluate_states(results)
+    best = None
+    for decision in decisions:
+        if decision.action == "PAPER_SIGNAL":
+            best = decision
+            break
+    lines = ["GAGARIN — COSA COMPRO?", "━━━━━━━━━━━━━━━━━━━━", "🧪 PAPER ONLY", ""]
+    if best is None:
+        lines.append("Nessun segnale PAPER disponibile.")
+        return "\n".join(lines)
+    state = next((s for s in results if str(getattr(s, "symbol", "")).upper() == best.symbol), None)
+    if state is None:
+        lines.append("Nessun segnale PAPER disponibile.")
+        return "\n".join(lines)
+    lines.append(f"COMMODITY: {state.commodity}")
+    lines.append(f"DIREZIONE: {state.setup_direction}")
+    if state.entry is not None:
+        lines.append(f"ENTRY: {state.entry:.6g}")
+    if state.stop is not None:
+        lines.append(f"SL: {state.stop:.6g}")
+    if state.tp3 is not None:
+        lines.append(f"TP3: {state.tp3:.6g}")
     return "\n".join(lines)
 
 def _command_response(command: str) -> Optional[str]:
@@ -342,6 +445,10 @@ def _command_response(command: str) -> Optional[str]:
 
     if command_name == "/ping":
         return "pong"
+
+    if raw.lower() in {"cosa compro?", "quale compro?", "cosa comprare"}:
+        results = get_last_results() or _run_analysis()
+        return _format_buy(results)
 
     return None
 
