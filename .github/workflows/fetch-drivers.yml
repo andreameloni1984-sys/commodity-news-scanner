@@ -1,9 +1,9 @@
 name: FETCH DRIVERS
 
 on:
-  # schedule disabilitato per risparmiare dati
-  # schedule:
-  #   - cron: "0 7 * * *"
+  schedule:
+    # ogni giorno alle 08:00 ora di Roma (07:00 UTC in inverno, 06:00 in estate)
+    - cron: "0 7 * * *"
   workflow_dispatch:
 
 permissions:

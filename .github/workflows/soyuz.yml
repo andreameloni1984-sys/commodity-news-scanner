@@ -3,9 +3,8 @@ name: SOYUZ GAGARIN
 on:
   workflow_dispatch:
 
-  # schedule disabilitato per risparmiare dati
-  # schedule:
-  #   - cron: "*/15 * * * *"
+  schedule:
+    - cron: "*/15 * * * *"
 
 permissions:
   contents: read
