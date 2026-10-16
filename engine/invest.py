@@ -145,6 +145,58 @@ def place_demo_order(ticker: str, quantity: float) -> str:
     )
 
 
+
+def place_demo_order_by_value(ticker: str, symbol: str, amount: float, account_currency: str = "EUR") -> str:
+    """Ordine demo per budget: converte l'importo in quantità frazionaria stimata.
+    Trading 212 Public API non supporta VALUE orders; invia QUANTITY frazionaria.
+    """
+    if not trading212_demo_available():
+        return get_trading212_demo_status()
+    if amount <= 0 or not ticker or not symbol:
+        return "❌ Parametri non validi."
+    ok, account = get_account_summary()
+    if not ok or not isinstance(account, dict):
+        return f"❌ Impossibile verificare il conto Demo: {account}"
+    currency = str(account.get("currency", "")).upper()
+    if currency != account_currency.upper():
+        return f"❌ Valuta conto {currency or 'N/D'}: il comando è configurato per {account_currency}. Nessun ordine inviato."
+    cash = account.get("cash", {}) if isinstance(account.get("cash"), dict) else {}
+    available = cash.get("availableToTrade")
+    try:
+        available = float(available)
+    except (TypeError, ValueError):
+        return "❌ Liquidità disponibile non verificabile. Nessun ordine inviato."
+    if available < amount:
+        return f"❌ Liquidità Demo insufficiente: disponibili {available:.2f} {currency}, richiesti {amount:.2f}. Nessun ordine inviato."
+    # Prezzi pubblici in USD; converti EUR->USD per stimare le azioni frazionarie.
+    from engine.invest_prices import get_price
+    price_usd = get_price(symbol)
+    eurusd = get_price("EURUSD=X")
+    if not price_usd or price_usd <= 0 or not eurusd or eurusd <= 0:
+        return "❌ Prezzo NVDA o cambio EUR/USD non disponibile. Nessun ordine inviato."
+    estimated_quantity = round((amount * eurusd) / price_usd, 6)
+    if estimated_quantity <= 0:
+        return "❌ Quantità frazionaria non valida. Nessun ordine inviato."
+    estimated_value_eur = estimated_quantity * price_usd / eurusd
+    if estimated_value_eur > amount * 1.005:
+        return f"❌ Stima oltre il budget: {estimated_value_eur:.2f} EUR. Nessun ordine inviato."
+    order_ok, data = place_market_order(ticker, estimated_quantity)
+    if not order_ok:
+        return f"❌ Ordine Demo non accettato: {data}"
+    return "\n".join([
+        "🧪 ORDINE DEMO INVIATO — quantità frazionaria",
+        f"Strumento: {ticker}",
+        f"Budget obiettivo: {amount:.2f} EUR",
+        f"Quantità richiesta: {estimated_quantity:.6f} azioni",
+        f"Prezzo di riferimento: {price_usd:.2f} USD | EUR/USD {eurusd:.5f}",
+        f"Valore stimato: {estimated_value_eur:.2f} EUR (non garantito: ordine market/slippage)",
+        f"ID ordine: {data.get('id', '?')}",
+        f"Stato broker: {data.get('status', '?')}",
+        f"Valuta broker: {data.get('currency', currency)}",
+        "Importo effettivo dipende dall'esecuzione; verificare /invest_orders e le posizioni.",
+        "PAPER ONLY — DEMO.",
+    ])
+
 def auto_buy_best_signal(
     min_score: float = 35.0,
     quantity: float = 1.0,
