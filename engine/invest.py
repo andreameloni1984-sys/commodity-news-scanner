@@ -161,10 +161,33 @@ def auto_buy_best_signal(
         if s.direction == "LONG" and s.score >= min_score and s.ticker and s.price and s.price > 0
     ]
     if not candidates:
-        return (
-            f"⚪ Nessun segnale LONG sopra soglia {min_score:.1f} con prezzo.\n"
-            "Nessun ordine piazzato."
-        )
+        # Diagnostica utile: mostra i migliori strumenti osservati senza
+        # trasformare un WATCH in un ordine o inventare un segnale.
+        ranked = sorted(
+            (s for s in signals if s.price is not None and s.price > 0),
+            key=lambda s: (s.score, s.direction == "LONG"),
+            reverse=True,
+        )[:3]
+        lines = [
+            f"⚪ NESSUN LONG CONFERMATO (soglia {min_score:.1f})",
+            "Nessun ordine piazzato. PAPER ONLY.",
+            "",
+            "Migliori strumenti osservati:",
+        ]
+        if not ranked:
+            lines.append("• Nessun prezzo valido ricevuto dal provider.")
+        else:
+            for s in ranked:
+                lines.append(
+                    f"• {s.name} ({s.ticker}) | {s.direction} | "
+                    f"score {s.score:.1f} | prezzo {s.price:.4f}"
+                )
+                lines.append(f"  Motivo: {s.reason}")
+        lines.extend([
+            "",
+            "Per autorizzare un acquisto servono LONG confermato, prezzo valido e API broker funzionante.",
+        ])
+        return "\n".join(lines)
 
     best = candidates[0]
     entry_price = best.price
