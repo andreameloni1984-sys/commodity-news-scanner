@@ -124,3 +124,27 @@ def place_stop_order(ticker: str, quantity: float, stop_price: float, time_valid
 
 def get_pending_orders() -> tuple[bool, Any]:
     return _request("GET", "/equity/orders")
+
+
+def quantity_for_budget(budget: float, price_in_account_currency: float, reserve_fraction: float = 0.02) -> tuple[bool, Any]:
+    """Calcola una quantità frazionaria entro un budget, senza inviare ordini.
+
+    price_in_account_currency deve essere un prezzo aggiornato espresso nella
+    valuta principale del conto (non necessariamente la valuta di quotazione).
+    reserve_fraction lascia margine per slippage/arrotondamenti; non garantisce
+    un tetto monetario assoluto per gli ordini market.
+    """
+    if budget <= 0 or price_in_account_currency <= 0 or not 0 <= reserve_fraction < 1:
+        return False, {"error": "INVALID_PARAMS"}
+    spendable = budget * (1.0 - reserve_fraction)
+    quantity = round(spendable / price_in_account_currency, 6)
+    if quantity <= 0:
+        return False, {"error": "BUDGET_TOO_SMALL"}
+    return True, {
+        "budget": round(budget, 2),
+        "spendable_estimate": round(spendable, 2),
+        "reference_price_in_account_currency": price_in_account_currency,
+        "quantity": quantity,
+        "estimated_value": round(quantity * price_in_account_currency, 2),
+        "warning": "Stima soltanto: l'API Trading 212 supporta ordini per quantità, non per importo. Il prezzo market finale può variare."
+    }
