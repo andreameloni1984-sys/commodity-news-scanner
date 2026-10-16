@@ -81,7 +81,7 @@ def get_account_summary() -> tuple[bool, Any]:
 
 
 def get_positions() -> tuple[bool, Any]:
-    return _request("GET", "/equity/portfolio")
+    return _request("GET", "/equity/positions")
 
 
 def place_market_order(ticker: str, quantity: float) -> tuple[bool, Any]:
