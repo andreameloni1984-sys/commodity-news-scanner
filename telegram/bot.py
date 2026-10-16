@@ -6,7 +6,7 @@ Comandi principali:
     /classifica /setup /analisi /prezzo
     /segnali /top /guida /rischio
     /aggressivo212 /soft212 /prezzo212
-    /invest /invest_demo /invest_account /invest_orders /invest_buy
+    /invest /invest_demo /invest_account /invest_orders /invest_buy /invest_auto
 
 PAPER ONLY.
 """
@@ -28,6 +28,7 @@ from engine.invest import (
     format_account_status,
     format_pending_orders,
     place_demo_order,
+    auto_buy_best_signal,
 )
 
 API_BASE = "https://api.telegram.org"
@@ -189,7 +190,8 @@ def _command_response(command: str) -> Optional[str]:
             "/invest_demo — stato API Trading 212 demo\n"
             "/invest_account — saldo demo\n"
             "/invest_orders — ordini demo pendenti\n"
-            "/invest_buy TICKER QTY — ordine market demo"
+            "/invest_buy TICKER QTY — ordine market demo\n"
+            "/invest_auto — sceglie il miglior LONG e piazza ordine demo"
         )
 
     if command_name in {"/aggressivo212", "/aggressive212"}:
@@ -305,6 +307,9 @@ def _command_response(command: str) -> Optional[str]:
         except ValueError:
             return "Quantità non valida."
         return place_demo_order(ticker, qty)
+
+    if command_name == "/invest_auto":
+        return auto_buy_best_signal()
 
     if command_name == "/classifica":
         results = get_last_results() or _run_analysis()
