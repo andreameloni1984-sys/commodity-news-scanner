@@ -99,3 +99,258 @@ def invest_auto_loop() -> None:
             print(f"Invest SCAN error | {type(exc).__name__}: {exc}", flush=True)
         time.sleep(INVEST_AUTO_INTERVAL)
 
+
+def handle_update(update: dict) -> None:
+    try:
+        message = update.get("message") or {}
+        chat = message.get("chat") or {}
+
+        chat_id = chat.get("id")
+        text = message.get("text", "")
+
+        if chat_id is None or not text:
+            return
+
+        button_commands = {
+            "🚀 AGGRESSIVE TRADING 2-1-2": "/aggressivo212",
+            "🛡 SOFT TRADING 2-1-2": "/soft212",
+            "🚀 TRADING 2-1-2 AGGRESSIVE": "/aggressivo212",
+            "🛡 TRADING 2-1-2 SOFT": "/soft212",
+            "🚀 AGGRESSIVO": "/aggressivo",
+            "🛡 SOFT": "/soft",
+            "🏆 CLASSIFICA": "/classifica",
+            "🔄 AGGIORNA": "/analisi",
+        }
+        original_text = text.strip()
+        normalized = " ".join(original_text.upper().split())
+        text = button_commands.get(normalized, original_text)
+
+        if text == original_text:
+            if normalized.startswith("🚀 AGGRESSIVO"):
+                text = "/aggressivo"
+            elif normalized.startswith("🛡 SOFT"):
+                text = "/soft"
+            elif normalized.startswith("🏆 CLASSIFICA"):
+                text = "/classifica"
+            elif normalized.startswith("🔄 AGGIORNA"):
+                text = "/analisi"
+
+        if not text.startswith("/"):
+            _reply(chat_id, "Comando non riconosciuto. Usa /aggressivo212, /soft212, /analisi, /classifica oppure /help.")
+            return
+
+        print(
+            "Telegram webhook command | "
+            f"chat_id={chat_id} | text={original_text} | routed={text}",
+            flush=True,
+        )
+
+        command_name = text.strip().split("@", 1)[0].lower()
+
+        heavy_commands = {
+            "/aggressivo", "/aggressive", "/aggressivo212", "/soft212", "/analisi", "/top", "/classifica",
+            "/setup", "/intraday", "/comprare", "/compra", "/cosa",
+            "/cosacomprare", "/qualeccompro", "/quale", "/compro",
+            "/segnali", "/perche", "/perché", "/prezzo", "/metalli",
+            "/petrolio", "/agri", "/macro",
+        }
+        if command_name in heavy_commands:
+            _reply(
+                chat_id,
+                "🛰 GAGARIN — RICHIESTA RICEVUTA\n"
+                "Sto elaborando i dati di mercato. Ti invio il risultato appena termina l'analisi."
+            )
+
+        response = _command_response(text)
+
+        if response:
+            delivered = _reply(chat_id, response)
+            print(
+                "Telegram delivery | "
+                f"command={command_name} | delivered={'YES' if delivered else 'NO'}",
+                flush=True,
+            )
+
+        elif text.lower().startswith("/id"):
+            _reply(chat_id, f"🆔 CHAT ID: {chat_id}")
+
+        else:
+            print(f"Telegram webhook | unsupported command: {text}", flush=True)
+            _reply(
+                chat_id,
+                "⚠️ Comando non disponibile. Usa /aggressivo212, /soft212, /analisi, /classifica oppure /help.",
+            )
+
+    except Exception as exc:
+        print(
+            "Telegram webhook handler error | "
+            f"{type(exc).__name__}: {exc}",
+            flush=True,
+        )
+        try:
+            if chat_id is not None:
+                _reply(
+                    chat_id,
+                    "❌ GAGARIN non ha completato la richiesta. "
+                    f"Errore: {type(exc).__name__}. Riprova con /status o /analisi."
+                )
+        except Exception:
+            pass
+
+
+def dispatch_update(update: dict) -> None:
+    threading.Thread(
+        target=handle_update,
+        args=(update,),
+        name="telegram-update",
+        daemon=True,
+    ).start()
+
+
+class HealthHandler(BaseHTTPRequestHandler):
+
+    def _send_text(self, status: int, body: str) -> None:
+        data = body.encode("utf-8")
+
+        self.send_response(status)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def do_GET(self) -> None:
+        path = urlparse(self.path).path
+
+        if path == "/mt5/paper":
+            try:
+                results = get_last_results() or _run_analysis()
+                if not results:
+                    self._send_text(200, json.dumps({
+                        "paper_only": True,
+                        "execution": "DISABLED",
+                        "signal": False,
+                        "reason": "NO_RESULTS",
+                    }))
+                    return
+
+                decisions = evaluate_states(results)
+                payloads = build_demo_payloads(decisions)
+
+                if not payloads:
+                    self._send_text(200, json.dumps({
+                        "paper_only": True,
+                        "execution": "DISABLED",
+                        "signal": False,
+                        "reason": "NO_PAPER_SIGNAL",
+                    }))
+                    return
+
+                self._send_text(200, json.dumps(payloads[0]))
+            except Exception as exc:
+                print(f"MT5 bridge error | {type(exc).__name__}: {exc}", flush=True)
+                self._send_text(500, json.dumps({
+                    "paper_only": True,
+                    "execution": "DISABLED",
+                    "signal": False,
+                    "reason": "BRIDGE_ERROR",
+                }))
+            return
+
+        if path == "/health":
+            self._send_text(200, "OK")
+        elif path == "/":
+            self._send_text(200, "🚀 SOYUZ GAGARIN TELEGRAM ONLINE\nWebhook: ACTIVE\n")
+        else:
+            self._send_text(404, "NOT FOUND")
+
+    def do_HEAD(self) -> None:
+        path = urlparse(self.path).path
+        self.send_response(200 if path in {"/", "/health"} else 404)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.end_headers()
+
+    def do_POST(self) -> None:
+        if urlparse(self.path).path != WEBHOOK_PATH:
+            self._send_text(404, "NOT FOUND")
+            return
+
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if length <= 0:
+                self._send_text(400, "EMPTY BODY")
+                return
+
+            raw = self.rfile.read(length)
+            update = json.loads(raw.decode("utf-8"))
+
+            if not isinstance(update, dict):
+                self._send_text(400, "INVALID UPDATE")
+                return
+
+            print(f"Telegram webhook received | update_id={update.get('update_id')}", flush=True)
+            dispatch_update(update)
+            self._send_text(200, "OK")
+
+        except Exception as exc:
+            print(f"Telegram webhook POST error | {type(exc).__name__}: {exc}", flush=True)
+            try:
+                self._send_text(400, "BAD REQUEST")
+            except Exception:
+                pass
+
+    def log_message(self, format, *args) -> None:
+        return
+
+
+def main() -> None:
+    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", flush=True)
+    print("🚀 SOYUZ GAGARIN TELEGRAM", flush=True)
+    print("🧪 PAPER ONLY", flush=True)
+    print("📡 MODE: TELEGRAM WEBHOOK", flush=True)
+    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", flush=True)
+
+    if not telegram_diagnostic():
+        raise RuntimeError("Telegram configuration invalid")
+
+    port = int(os.getenv("PORT", str(DEFAULT_PORT)))
+
+    server = ThreadingHTTPServer(("0.0.0.0", port), HealthHandler)
+    print(f"🌐 HTTP server: 0.0.0.0:{port}", flush=True)
+    print("🟢 Render HTTP: ONLINE", flush=True)
+
+    if not prepare_webhook():
+        server.server_close()
+        raise RuntimeError("Telegram webhook registration failed")
+
+    print("🟢 Telegram webhook: ACTIVE", flush=True)
+
+    # Avvia il loop autonomo Invest ogni 15 minuti
+    threading.Thread(
+        target=invest_auto_loop,
+        name="invest-auto",
+        daemon=True,
+    ).start()
+
+    if TELEGRAM_CHAT_ID:
+        welcome_sent = _reply(
+            TELEGRAM_CHAT_ID,
+            "🚀 GAGARIN ONLINE — invia un comando.\n🧪 PAPER ONLY.\n\n/aggressivo212 — Trading aggressivo\n/soft212 — Trading prudente\n/analisi — Analisi completa\n/classifica — Classifica\n/invest_auto — Ordine demo automatico\n/help — Aiuto",
+        )
+        print(
+            "Telegram startup welcome | "
+            f"chat_configured=YES | delivered={'YES' if welcome_sent else 'NO'}",
+            flush=True,
+        )
+    else:
+        print("Telegram startup welcome | chat_configured=NO", flush=True)
+
+    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", flush=True)
+
+    try:
+        server.serve_forever()
+    finally:
+        server.server_close()
+
+
+if __name__ == "__main__":
+    main()
