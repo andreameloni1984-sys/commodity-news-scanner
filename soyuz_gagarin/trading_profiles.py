@@ -41,9 +41,9 @@ PROFILES = {
     ),
     "AGGRESSIVE": TradingProfile(
         name="AGGRESSIVE",
-        min_probability=55.0,
-        min_quality=45.0,
-        min_confidence=50.0,
+        min_probability=50.0,
+        min_quality=40.0,
+        min_confidence=45.0,
         # Keep the existing staged-target governor: TP1>=1.5R, TP2>=2R, TP3>=2.5R.
         min_rr=2.5,
         risk_per_trade_pct=0.75,
