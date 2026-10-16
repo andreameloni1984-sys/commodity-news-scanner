@@ -13,9 +13,9 @@ jobs:
     name: AGGRESSIVE ENTRY ALERT
     runs-on: ubuntu-latest
     env:
-      TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY}}
-      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN}}
-      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID}}
+      TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       TELEGRAM_ENABLED: "1"
       PAPER_TRADING_ONLY: "1"
       GAGARIN_TRADING_PROFILE: "AGGRESSIVE"
