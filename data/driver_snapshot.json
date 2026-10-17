@@ -1,6 +1,6 @@
 {
   "paper_only": true,
-  "read_at": "2026-10-16T11:57:18Z",
+  "read_at": "2026-10-17T11:13:37Z",
   "sources": {
     "us_crude_stocks": "EIA WCRSTUS1 (api -> public page)",
     "us_natgas_storage": "EIA NW2_EPG0_SWO_R48_BCF (api -> public page)",
@@ -33,9 +33,9 @@
     },
     "real_rate_10y": {
       "series_id": "DFII10",
-      "value": 2.84,
-      "date": "2026-10-14",
-      "previous": 2.88,
+      "value": 2.78,
+      "date": "2026-10-15",
+      "previous": 2.84,
       "source": "fred_csv",
       "error": null
     },
