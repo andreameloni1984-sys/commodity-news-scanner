@@ -325,10 +325,11 @@ def _load_state() -> dict[str, Any]:
             payload.setdefault("clusters", [])
             payload.setdefault("pending", [])
             payload.setdefault("last_analysis_at", 0)
+            payload.setdefault("initialized", False)
             return payload
     except (OSError, json.JSONDecodeError):
         pass
-    return {"seen": [], "clusters": [], "pending": [], "last_analysis_at": 0}
+    return {"seen": [], "clusters": [], "pending": [], "last_analysis_at": 0, "initialized": False}
 
 
 def _save_state(state: dict[str, Any]) -> None:
@@ -356,6 +357,8 @@ def poll_news_once(
     fetched = fetcher()
     new_relevant: list[dict[str, Any]] = []
     fresh_cutoff = now - timedelta(minutes=60)
+    initialized = bool(state.get("initialized", False))
+    bootstrap_cutoff = now - timedelta(minutes=3)
 
     for item in fetched:
         published = _parse_datetime(item.get("published_at"))
@@ -364,6 +367,12 @@ def poll_news_once(
         fp = _fingerprint(item)
         cluster = _title_cluster(item)
         if fp in seen or cluster in clusters:
+            continue
+        # On first successful poll, seed existing headlines without firing stale alerts.
+        # Only items published in the last three minutes are eligible for immediate handling.
+        if not initialized and published < bootstrap_cutoff:
+            seen.add(fp)
+            clusters.add(cluster)
             continue
         seen.add(fp)
         clusters.add(cluster)
@@ -378,6 +387,9 @@ def poll_news_once(
         event["expires_at"] = (now + timedelta(seconds=PENDING_TTL_SECONDS)).isoformat()
         pending.append(event)
         new_relevant.append(event)
+
+    if fetched:
+        state["initialized"] = True
 
     # Expire pending items after 45 minutes to avoid stale headlines.
     valid_pending = []
