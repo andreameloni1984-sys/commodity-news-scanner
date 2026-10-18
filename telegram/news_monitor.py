@@ -308,6 +308,9 @@ def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str
             entry = getattr(state, "entry", None)
             stop = getattr(state, "stop", None)
             tp1 = getattr(state, "tp1", None)
+            price_source = str(getattr(state, "data_source", "") or getattr(state, "provider", "")).strip()
+            if not price_source or price_source.upper() in {"UNKNOWN", "N/A", "NONE"}:
+                continue
             if any(v is None for v in (price, entry, stop, tp1)):
                 continue
             try:
@@ -329,6 +332,7 @@ def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str
                 "stop": stop,
                 "tp1": tp1,
                 "tp2": getattr(state, "tp2", None),
+                "price_source": price_source,
                 "move_pct": move_pct,
             })
     return setups
@@ -342,17 +346,19 @@ def _format_news_alert(event: dict[str, Any], setup: dict[str, Any]) -> str:
         f"NEWS: {event.get('title', '')}\n"
         f"Fonte: {event.get('source', 'N/D')}\n"
         f"Pubblicazione UTC: {published}\n"
+        f"Rilevata UTC: {event.get('first_seen_at', 'N/D')}\n"
         f"Link: {event.get('url', '')}\n\n"
         f"Strumento: {setup['asset']}\n"
         f"Impatto ipotizzato: {setup['impact']}\n"
         f"Reazione dal rilevamento: {float(setup.get('move_pct', 0.0)):+.3f}%\n"
         f"Setup Gagarin: {setup['direction']} — TRIGGER CONFERMATO\n"
+        f"Feed prezzo Gagarin: {setup.get('price_source', 'N/D')}\n"
         f"Prezzo: {float(setup['price']):.6g}\n"
         f"Entry indicativa: {float(setup['entry']):.6g}\n"
         f"SL: {float(setup['stop']):.6g}\n"
         f"TP1: {float(setup['tp1']):.6g}"
         + (f" | TP2: {float(setup['tp2']):.6g}" if setup.get("tp2") is not None else "")
-        + "\n\nImpatto e direzione sono ipotesi; l'alert non invia ordini."
+        + "\n\nImpatto e direzione sono ipotesi. I livelli usano il feed Gagarin, non quotazioni CFD Trading 212; l'alert non invia ordini."
     )
 
 
