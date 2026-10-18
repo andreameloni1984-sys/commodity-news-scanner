@@ -334,22 +334,22 @@ def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str
 def _format_news_alert(event: dict[str, Any], setup: dict[str, Any]) -> str:
     published = event.get("published_at") or "timestamp non disponibile"
     return (
-        "🛰 GAGARIN — NEWS → IMPATTO → SETUP → CONFERMA\\n"
-        "🧪 PAPER/DEMO — NESSUN ORDINE\\n\\n"
-        f"NEWS: {event.get('title', '')}\\n"
-        f"Fonte: {event.get('source', 'N/D')}\\n"
-        f"Pubblicazione UTC: {published}\\n"
-        f"Link: {event.get('url', '')}\\n\\n"
-        f"Strumento: {setup['asset']}\\n"
-        f"Impatto ipotizzato: {setup['impact']}\\n"
-        f"Reazione dal rilevamento: {float(setup.get('move_pct', 0.0)):+.3f}%\\n"
-        f"Setup Gagarin: {setup['direction']} — TRIGGER CONFERMATO\\n"
-        f"Prezzo: {float(setup['price']):.6g}\\n"
-        f"Entry indicativa: {float(setup['entry']):.6g}\\n"
-        f"SL: {float(setup['stop']):.6g}\\n"
+        "🛰 GAGARIN — NEWS → IMPATTO → SETUP → CONFERMA\n"
+        "🧪 PAPER/DEMO — NESSUN ORDINE\n\n"
+        f"NEWS: {event.get('title', '')}\n"
+        f"Fonte: {event.get('source', 'N/D')}\n"
+        f"Pubblicazione UTC: {published}\n"
+        f"Link: {event.get('url', '')}\n\n"
+        f"Strumento: {setup['asset']}\n"
+        f"Impatto ipotizzato: {setup['impact']}\n"
+        f"Reazione dal rilevamento: {float(setup.get('move_pct', 0.0)):+.3f}%\n"
+        f"Setup Gagarin: {setup['direction']} — TRIGGER CONFERMATO\n"
+        f"Prezzo: {float(setup['price']):.6g}\n"
+        f"Entry indicativa: {float(setup['entry']):.6g}\n"
+        f"SL: {float(setup['stop']):.6g}\n"
         f"TP1: {float(setup['tp1']):.6g}"
         + (f" | TP2: {float(setup['tp2']):.6g}" if setup.get("tp2") is not None else "")
-        + "\\n\\nImpatto e direzione sono ipotesi; l'alert non invia ordini."
+        + "\n\nImpatto e direzione sono ipotesi; l'alert non invia ordini."
     )
 
 
