@@ -73,20 +73,16 @@ def telegram_diagnostic() -> bool:
     return True
 
 def telegram_menu() -> dict:
-    """Menu keyboard per /start."""
+    """Menu Telegram minimale: i tre comandi richiesti dall'utente."""
     return {
         "keyboard": [
-            [{"text": "📰 NEWS"}, {"text": "🔥 TOP OPPORTUNITÀ"}],
-            [{"text": "🏆 CLASSIFICA"}, {"text": "⚡ INTRADAY"}],
-            [{"text": "💰 COSA COMPRARE"}, {"text": "🛒 QUALE COMPRO?"}],
-            [{"text": "📊 ANALISI"}, {"text": "📡 SEGNALI"}],
-            [{"text": "🥇 METALLI"}, {"text": "🛢 PETROLIO"}],
-            [{"text": "🌾 AGRI"}, {"text": "🌍 MACRO"}],
-            [{"text": "❓ PERCHÉ"}, {"text": "🔄 AGGIORNA"}],
-            [{"text": "⚙️ STATO"}, {"text": "ℹ️ GUIDA"}],
+            [{"text": "🚀 AGGRESSIVE 212"}],
+            [{"text": "🛡 SOFT 212"}],
+            [{"text": "🔗 COLLEGAMENTO INVEST TRADING212"}],
         ],
         "resize_keyboard": True,
         "is_persistent": True,
+        "one_time_keyboard": False,
     }
 
 def send_telegram(message: str) -> bool:
@@ -259,6 +255,9 @@ def _command_response(command: str) -> Optional[str]:
         "⚙️ stato": "/status",
         "🚀 aggressive trading 2-1-2": "/aggressivo212",
         "🛡 soft trading 2-1-2": "/soft212",
+        "🚀 aggressive 212": "/aggressivo212",
+        "🛡 soft 212": "/soft212",
+        "🔗 collegamento invest trading212": "/collegamento212",
         "🚀 aggressivo": "/aggressivo212",
         "🛡 soft": "/soft212",
     }
@@ -390,6 +389,16 @@ def _command_response(command: str) -> Optional[str]:
     if command_name == "/invest":
         signals = analyze_invest_universe()
         return format_invest_report(signals)
+
+    if command_name in {"/collegamento212", "/collegamento-invest-trading212"}:
+        status = get_trading212_demo_status()
+        return (
+            "🔗 COLLEGAMENTO INVEST TRADING212\\n"
+            "Verifica sola lettura dell'account DEMO. Nessun ordine viene inviato.\\n\\n"
+            + status
+            + "\\n\\nSe la connessione non è disponibile, controllare le chiavi API INVEST DEMO nelle variabili ambiente del servizio. "
+              "Questo pulsante non esegue acquisti."
+        )
 
     if command_name == "/invest_demo":
         return get_trading212_demo_status()
