@@ -20,3 +20,10 @@ jobs:
             -X POST \
             -H "User-Agent: Gagarin-GitHub-Monitor" \
             "https://gagarin-cloud.onrender.com/api/monitor"
+
+          # Keep the free Telegram webhook service awake so its 60-second
+          # public-news monitor continues running between Telegram updates.
+          curl --fail --silent --show-error \
+            --max-time 180 \
+            -H "User-Agent: Gagarin-News-Monitor-Keepalive" \
+            "https://soyuz-gagarin-telegram-v2.onrender.com/health"
