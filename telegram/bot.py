@@ -270,30 +270,14 @@ def _command_response(command: str) -> Optional[str]:
         command_name = command_name.split("@", 1)[0]
     argument = " ".join(parts[1:]).strip()
 
-    if command_name in {"/start", "/help"}:
+    if command_name in {"/start", "/help", "/menu"}:
         return (
-            "🚀 SOYUZ GAGARIN\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            "🧪 PAPER ONLY\n\n"
-            "/classifica — classifica completa\n"
-            "/setup — setup e trigger\n"
-            "/analisi — analisi completa\n"
-            "/prezzo — prezzi e provider\n"
-            "/status — stato bot\n"
-            "/ping — verifica collegamento\n"
-            "/segnali — signal board\n"
-            "/top — top setup\n"
-            "/guida — guida canale\n"
-            "/rischio — regole di rischio\n"
-            "/aggressivo212 — desk aggressive + confronto 212\n"
-            "/soft212 — desk soft\n"
-            "/prezzo212 — confronto prezzi Trading 212\n"
-            "/invest — sezione Invest (azioni/ETF)\n"
-            "/invest_demo — stato API Trading 212 demo\n"
-            "/invest_account — saldo demo\n"
-            "/invest_orders — ordini demo pendenti\n"
-            "/invest_buy TICKER QTY — ordine market demo\n"
-            "/invest_auto — sceglie il miglior LONG e piazza ordine demo"
+            "🚀 GAGARIN — MENU SEMPLICE\\n"
+            "🧪 PAPER/DEMO — nessun ordine reale.\\n\\n"
+            "🚀 AGGRESSIVE 212 — profilo aggressivo\\n"
+            "🛡 SOFT 212 — profilo prudente\\n"
+            "🔗 COLLEGAMENTO INVEST TRADING212 — verifica sola lettura\\n\\n"
+            "Le NEWS rilevanti avviano un'analisi immediata; l'alert viene inviato solo dopo conferma del movimento e del trigger."
         )
 
     if command_name in {"/aggressivo212", "/aggressive212"}:
