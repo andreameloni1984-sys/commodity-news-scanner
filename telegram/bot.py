@@ -271,6 +271,20 @@ def _command_response(command: str) -> Optional[str]:
         command_name = command_name.split("@", 1)[0]
     argument = " ".join(parts[1:]).strip()
 
+    if command_name == "/news":
+        if not argument:
+            return (
+                "📰 GAGARIN — NEWS IMPACT DESK\\n"
+                "Uso: /news <testo della notizia>\\n"
+                "Incolla titolo/testo e, se possibile, verifica fonte e ora di pubblicazione.\\n"
+                "Questa prima versione analizza il testo fornito: non è ancora un feed news automatico."
+            )
+        try:
+            from engine.news_alert import analyze_headline, format_news_alert
+            return format_news_alert(analyze_headline(argument))
+        except Exception as news_exc:
+            return "NEWS IMPACT DESK non disponibile: " + type(news_exc).__name__
+
     if command_name in {"/start", "/help"}:
         return (
             "🚀 SOYUZ GAGARIN\n"
@@ -287,6 +301,7 @@ def _command_response(command: str) -> Optional[str]:
             "/guida — guida canale\n"
             "/rischio — regole di rischio\n"
             "/aggressivo212 — desk aggressive + confronto 212\n"
+            "/news TESTO_NOTIZIA — analisi euristica impatto news su commodity\n"
             "/soft212 — desk soft\n"
             "/prezzo212 — confronto prezzi Trading 212\n"
             "/invest — sezione Invest (azioni/ETF)\n"
@@ -308,6 +323,12 @@ def _command_response(command: str) -> Optional[str]:
                 return "Nessun risultato. Riprova con /analisi."
             set_last_results(results)
             desk = format_aggressive_desk(results)
+            # Parallel time-window analysis: informational only; never feeds selection thresholds.
+            try:
+                from engine.time_edge import format_time_edge_desk
+                desk = desk + "\n\n" + format_time_edge_desk(results)
+            except Exception as time_edge_exc:
+                desk = desk + "\n\n🧠 TIME EDGE parallelo non disponibile: " + type(time_edge_exc).__name__
             try:
                 from cloud_api import FOREX_AGGRESSIVE_PORTFOLIO
                 fx = FOREX_AGGRESSIVE_PORTFOLIO.snapshot()
