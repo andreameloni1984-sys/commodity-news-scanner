@@ -38,6 +38,7 @@ def test_alert_requires_existing_live_confirmed_aligned_setup():
         stop=78.5,
         tp1=83.0,
         tp2=84.0,
+        data_source="TEST_FEED",
     )
     not_live = SimpleNamespace(
         commodity="Petrolio Brent",
