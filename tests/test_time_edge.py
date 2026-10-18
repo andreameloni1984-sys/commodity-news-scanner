@@ -45,6 +45,11 @@ class TimeEdgeTests(unittest.TestCase):
         self.assertEqual(after_us_transition["overlap"], "14:00–18:00")
         self.assertEqual(after_us_transition["wall_open"], "15:30")
 
+    def test_weekend_is_not_labeled_as_active_session(self):
+        context = _session_context(datetime(2026, 10, 18, 9, 0, tzinfo=ROME))
+        self.assertIn("WEEKEND", context["active"])
+        self.assertIn("ricerca storica", context["note"])
+
     def test_time_edge_is_informational_and_keeps_candidate(self):
         report = format_time_edge_desk(
             [candidate()],
