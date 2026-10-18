@@ -586,14 +586,9 @@ def test_telegram_dashboard_menu_matches_gagarin_sections():
     labels = [button["text"] for row in menu["keyboard"] for button in row]
 
     assert labels == [
-        "📰 NEWS", "🔥 TOP OPPORTUNITÀ",
-        "🏆 CLASSIFICA", "⚡ INTRADAY",
-        "💰 COSA COMPRARE", "🛒 QUALE COMPRO?",
-        "📊 ANALISI", "📡 SEGNALI",
-        "🥇 METALLI", "🛢 PETROLIO",
-        "🌾 AGRI", "🌍 MACRO",
-        "❓ PERCHÉ", "🔄 AGGIORNA",
-        "⚙️ STATO", "ℹ️ GUIDA",
+        "🚀 AGGRESSIVE 212",
+        "🛡 SOFT 212",
+        "🔗 COLLEGAMENTO INVEST TRADING212",
     ]
     assert menu["resize_keyboard"] is True
     assert menu["is_persistent"] is True
@@ -607,7 +602,7 @@ def test_telegram_start_uses_dashboard_keyboard():
 
     assert "SOYUZ GAGARIN" in text
     assert "PAPER ONLY" in text
-    assert "🔥 TOP OPPORTUNITÀ" in [
+    assert "🚀 AGGRESSIVE 212" in [
         button["text"] for row in menu["keyboard"] for button in row
     ]
 
