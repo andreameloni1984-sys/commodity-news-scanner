@@ -308,6 +308,12 @@ def _command_response(command: str) -> Optional[str]:
                 return "Nessun risultato. Riprova con /analisi."
             set_last_results(results)
             desk = format_aggressive_desk(results)
+            # Parallel time-window analysis: informational only; never feeds selection thresholds.
+            try:
+                from engine.time_edge import format_time_edge_desk
+                desk = desk + "\\n\\n" + format_time_edge_desk(results)
+            except Exception as time_edge_exc:
+                desk = desk + "\\n\\n🧠 TIME EDGE parallelo non disponibile: " + type(time_edge_exc).__name__
             try:
                 from cloud_api import FOREX_AGGRESSIVE_PORTFOLIO
                 fx = FOREX_AGGRESSIVE_PORTFOLIO.snapshot()
