@@ -244,3 +244,31 @@ def format_intraday_window_report(report: dict[str, Any] | None = None) -> str:
             f"Dettaglio: {type(exc).__name__}: {str(exc)[:120]}\n"
             "Nessuna modifica alla strategia; PAPER/DEMO."
         )
+
+def format_intraday_window_summary(report: dict[str, Any] | None = None) -> str:
+    """Short summary suitable for appending to existing Telegram trading reports."""
+    try:
+        report = report or collect_intraday_window_statistics()
+        lines = [
+            "⏰ FASCE ORARIE — RANGE MEDIANO",
+            "Fonte Yahoo futures M5 | ultime 60g richieste | Europe/Rome",
+        ]
+        for asset in ("Oro", "Argento", "WTI", "Brent"):
+            item = (report.get("assets") or {}).get(asset, {})
+            if item.get("error") or not item.get("windows"):
+                lines.append(f"{asset}: dati non disponibili")
+                continue
+            values = []
+            for stat in item["windows"]:
+                if stat.get("n", 0) == 0:
+                    values.append(f"{stat['window']} N/D")
+                else:
+                    values.append(f"{stat['window']} {stat['median_range_pct']:.3f}% (n={stat['n']})")
+            lines.append(f"{asset}: " + " | ".join(values))
+        lines.extend([
+            "Range = movimento osservato, NON redditività. Costi e spread esclusi.",
+            "Dettaglio: /fasceorario. Nessuna modifica a segnali o rischio.",
+        ])
+        return "\\n".join(lines)
+    except Exception as exc:
+        return f"⏰ FASCE ORARIE: dati non disponibili ({type(exc).__name__}). Strategia invariata."
