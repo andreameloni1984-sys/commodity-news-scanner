@@ -346,7 +346,7 @@ def _command_response(command: str) -> Optional[str]:
                 window_summary = format_intraday_window_summary()
             except Exception as exc:
                 window_summary = "Fasce orarie: dati non disponibili (" + type(exc).__name__ + ")."
-            return _format_classifica(results) + "\n\n" + window_summary + "\n\nProfilo SOFT: probabilita >= " + str(profile.min_probability) + ", qualita >= " + str(profile.min_quality) + ", rischio " + str(profile.risk_per_trade_pct) + "%.
+            return _format_classifica(results) + "\n\n" + window_summary + "\n\nProfilo SOFT: probabilita >= " + str(profile.min_probability) + ", qualita >= " + str(profile.min_quality) + ", rischio " + str(profile.risk_per_trade_pct) + "%."
         except Exception as exc:
             return "Errore soft: " + type(exc).__name__ + ": " + str(exc)
 
