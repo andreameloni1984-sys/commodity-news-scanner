@@ -7,7 +7,7 @@ are supplied in a future version.
 """
 from __future__ import annotations
 
-from datetime import datetime, time
+from datetime import date, datetime, time
 from zoneinfo import ZoneInfo
 from typing import Any, Iterable
 
@@ -20,10 +20,10 @@ def _session_context(now: datetime | None = None) -> dict[str, Any]:
     now = (now or datetime.now(ROME)).astimezone(ROME)
     day = now.date()
     # US/EU daylight-saving transition weeks (Italian local time).
-    if day < __import__("datetime").date(2026, 10, 26):
+    if day < date(2026, 10, 26):
         overlap = (time(15, 0), time(19, 0))
         wall_open = time(15, 30)
-    elif day < __import__("datetime").date(2026, 11, 2):
+    elif day < date(2026, 11, 2):
         overlap = (time(14, 0), time(19, 0))
         wall_open = time(14, 30)
     else:
