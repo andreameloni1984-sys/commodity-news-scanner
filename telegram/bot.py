@@ -393,10 +393,10 @@ def _command_response(command: str) -> Optional[str]:
     if command_name in {"/collegamento212", "/collegamento-invest-trading212"}:
         status = get_trading212_demo_status()
         return (
-            "🔗 COLLEGAMENTO INVEST TRADING212\\n"
-            "Verifica sola lettura dell'account DEMO. Nessun ordine viene inviato.\\n\\n"
+            "🔗 COLLEGAMENTO INVEST TRADING212\n"
+            "Verifica sola lettura dell'account DEMO. Nessun ordine viene inviato.\n\n"
             + status
-            + "\\n\\nSe la connessione non è disponibile, controllare le chiavi API INVEST DEMO nelle variabili ambiente del servizio. "
+            + "\n\nSe la connessione non è disponibile, controllare le chiavi API INVEST DEMO nelle variabili ambiente del servizio. "
               "Questo pulsante non esegue acquisti."
         )
 
