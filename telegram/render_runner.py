@@ -17,7 +17,8 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from telegram.bot import _api, _command_response, _reply, telegram_diagnostic, _run_analysis, get_last_results
+from telegram.bot import _api, _command_response, _reply, telegram_diagnostic, _run_analysis, get_last_results, telegram_menu, send_telegram
+from telegram.news_monitor import news_monitor_loop
 from config import TELEGRAM_CHAT_ID
 from soyuz_gagarin.adapter import evaluate_states
 from soyuz_gagarin.mt5_bridge import build_demo_payloads
@@ -129,28 +130,20 @@ def handle_update(update: dict) -> None:
             return
 
         button_commands = {
-            "🚀 AGGRESSIVE TRADING 2-1-2": "/aggressivo212",
-            "🛡 SOFT TRADING 2-1-2": "/soft212",
-            "🚀 TRADING 2-1-2 AGGRESSIVE": "/aggressivo212",
-            "🛡 TRADING 2-1-2 SOFT": "/soft212",
-            "🚀 AGGRESSIVO": "/aggressivo",
-            "🛡 SOFT": "/soft",
-            "🏆 CLASSIFICA": "/classifica",
-            "🔄 AGGIORNA": "/analisi",
+            "🚀 AGGRESSIVE 212": "/aggressivo212",
+            "🛡 SOFT 212": "/soft212",
+            "🔗 COLLEGAMENTO INVEST TRADING212": "/collegamento212",
         }
         original_text = text.strip()
         normalized = " ".join(original_text.upper().split())
         text = button_commands.get(normalized, original_text)
 
-        if text == original_text:
-            if normalized.startswith("🚀 AGGRESSIVO"):
-                text = "/aggressivo"
-            elif normalized.startswith("🛡 SOFT"):
-                text = "/soft"
-            elif normalized.startswith("🏆 CLASSIFICA"):
-                text = "/classifica"
-            elif normalized.startswith("🔄 AGGIORNA"):
-                text = "/analisi"
+        if text == original_text and normalized.startswith("🚀 AGGRESSIVE 212"):
+            text = "/aggressivo212"
+        elif text == original_text and normalized.startswith("🛡 SOFT 212"):
+            text = "/soft212"
+        elif text == original_text and normalized.startswith("🔗 COLLEGAMENTO INVEST TRADING212"):
+            text = "/collegamento212"
 
         if not text.startswith("/"):
             _reply(chat_id, "Comando non riconosciuto. Usa /aggressivo212, /soft212, /analisi, /classifica oppure /help.")
@@ -181,7 +174,8 @@ def handle_update(update: dict) -> None:
         response = _command_response(text)
 
         if response:
-            delivered = _reply(chat_id, response)
+            reply_markup = telegram_menu() if command_name in {"/start", "/help", "/menu"} else None
+            delivered = _reply(chat_id, response, reply_markup=reply_markup)
             print(
                 "Telegram delivery | "
                 f"command={command_name} | delivered={'YES' if delivered else 'NO'}",
@@ -341,6 +335,23 @@ def main() -> None:
 
     print("🟢 Telegram webhook: ACTIVE", flush=True)
 
+    commands_ok, commands_data = _api("setMyCommands", {"commands": [
+        {"command": "aggressivo212", "description": "Profilo AGGRESSIVE 212"},
+        {"command": "soft212", "description": "Profilo SOFT 212"},
+        {"command": "collegamento212", "description": "Stato collegamento Invest Trading 212"},
+    ]})
+    print(f"Telegram commands menu | configured={'YES' if commands_ok else 'NO'}", flush=True)
+
+    # Monitor NEWS indipendente: controlla le fonti ogni minuto e avvia
+    # l'analisi Gagarin fuori ciclo solo per eventi nuovi e rilevanti.
+    threading.Thread(
+        target=news_monitor_loop,
+        args=(send_telegram, _run_analysis),
+        name="gagarin-news-monitor",
+        daemon=True,
+    ).start()
+    print("Gagarin NEWS monitor | interval=60s | PAPER/DEMO | event-triggered analysis", flush=True)
+
     # Avvia il loop autonomo Invest ogni 15 minuti
     threading.Thread(
         target=invest_auto_loop,
@@ -351,7 +362,8 @@ def main() -> None:
     if TELEGRAM_CHAT_ID:
         welcome_sent = _reply(
             TELEGRAM_CHAT_ID,
-            "🚀 GAGARIN ONLINE — invia un comando.\n🧪 PAPER ONLY.\n\n/aggressivo212 — Trading aggressivo\n/soft212 — Trading prudente\n/analisi — Analisi completa\n/classifica — Classifica\n/invest_auto — Ordine demo automatico\n/help — Aiuto",
+            "🚀 GAGARIN ONLINE\\n🧪 PAPER/DEMO — nessun ordine reale.\\n\\nUsa uno dei tre pulsanti:\\n• AGGRESSIVE 212\\n• SOFT 212\\n• COLLEGAMENTO INVEST TRADING212",
+            reply_markup=telegram_menu(),
         )
         print(
             "Telegram startup welcome | "
