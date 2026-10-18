@@ -31,6 +31,9 @@ STATE_PATH = Path(os.getenv("GAGARIN_NEWS_STATE_PATH", "data/news_monitor_state.
 RSS_FEEDS = (
     ("EIA", "https://www.eia.gov/rss/press_releases.xml"),
     ("Federal Reserve", "https://www.federalreserve.gov/feeds/press_all.xml"),
+    # These are the same public primary-source feeds watched by SPUTNIK.
+    ("SPUTNIK / WHITE HOUSE", "https://www.whitehouse.gov/news/feed/"),
+    ("SPUTNIK / TRUTH ARCHIVE", "https://www.trumpstruth.org/feed"),
 )
 GDELT_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
 GDELT_QUERY = '(oil OR crude OR WTI OR Brent OR gold OR silver OR OPEC OR sanctions OR Trump OR "Federal Reserve" OR Iran OR Hormuz OR energy OR inflation)'
