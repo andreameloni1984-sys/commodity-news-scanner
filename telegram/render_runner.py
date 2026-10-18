@@ -162,7 +162,7 @@ def handle_update(update: dict) -> None:
             "/setup", "/intraday", "/comprare", "/compra", "/cosa",
             "/cosacomprare", "/qualeccompro", "/quale", "/compro",
             "/segnali", "/perche", "/perché", "/prezzo", "/metalli",
-            "/petrolio", "/agri", "/macro",
+            "/petrolio", "/agri", "/macro", "/fasceorario",
         }
         if command_name in heavy_commands:
             _reply(

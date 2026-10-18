@@ -20,7 +20,7 @@ jobs:
           python-version: "3.12"
       - name: Install test dependencies
         run: python -m pip install "pytest>=8,<9" "requests>=2.31,<3"
-      - name: Compile changed Python modules
-        run: python -m py_compile telegram/news_monitor.py telegram/bot.py telegram/render_runner.py
-      - name: Test news classifier, confirmed setups and Telegram menu
-        run: python -m pytest -q tests/test_news_monitor.py tests/test_telegram_minimal_menu.py
+      - name: Compile Python modules
+        run: python -m py_compile telegram/news_monitor.py telegram/bot.py telegram/render_runner.py research/intraday_windows.py
+      - name: Test news monitor, Telegram menu and intraday statistics
+        run: python -m pytest -q tests/test_news_monitor.py tests/test_telegram_minimal_menu.py tests/test_intraday_windows.py
