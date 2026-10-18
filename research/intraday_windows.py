@@ -269,6 +269,6 @@ def format_intraday_window_summary(report: dict[str, Any] | None = None) -> str:
             "Range = movimento osservato, NON redditività. Costi e spread esclusi.",
             "Dettaglio: /fasceorario. Nessuna modifica a segnali o rischio.",
         ])
-        return "\\n".join(lines)
+        return "\n".join(lines)
     except Exception as exc:
         return f"⏰ FASCE ORARIE: dati non disponibili ({type(exc).__name__}). Strategia invariata."
