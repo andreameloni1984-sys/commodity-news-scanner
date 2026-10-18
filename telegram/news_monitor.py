@@ -254,12 +254,38 @@ def _asset_matches(asset: str, state: Any) -> bool:
     return False
 
 
+def _capture_baseline(event: dict[str, Any], states: list[Any]) -> dict[str, float]:
+    """Capture live prices at first analysis after the news; no retrospective attribution."""
+    baseline: dict[str, float] = {}
+    for asset in event.get("assets") or classify_event(event.get("title", ""))["assets"]:
+        for state in states:
+            if not _asset_matches(asset, state) or not bool(getattr(state, "live", False)):
+                continue
+            try:
+                value = float(getattr(state, "price", None))
+            except (TypeError, ValueError):
+                continue
+            if value > 0:
+                baseline[asset] = value
+                break
+    return baseline
+
+
 def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str, Any]]:
+    """Require a live Gagarin trigger and measurable price movement after news detection."""
     classified = classify_event(event.get("title", ""))
+    baselines = event.get("baseline_prices") or {}
+    min_reaction_pct = max(0.0, float(os.getenv("GAGARIN_NEWS_MIN_REACTION_PCT", "0.05")))
     setups: list[dict[str, Any]] = []
     for asset in classified["assets"]:
         impact = classified["impact"].get(asset, "MISTA")
         if impact == "MISTA":
+            continue
+        try:
+            baseline = float(baselines.get(asset))
+        except (TypeError, ValueError):
+            continue
+        if baseline <= 0:
             continue
         expected_direction = "LONG" if impact == "RIALZISTA" else "SHORT"
         for state in states:
@@ -281,6 +307,15 @@ def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str
             tp1 = getattr(state, "tp1", None)
             if any(v is None for v in (price, entry, stop, tp1)):
                 continue
+            try:
+                price_value = float(price)
+            except (TypeError, ValueError):
+                continue
+            move_pct = (price_value / baseline - 1.0) * 100.0
+            if impact == "RIALZISTA" and move_pct < min_reaction_pct:
+                continue
+            if impact == "RIBASSISTA" and move_pct > -min_reaction_pct:
+                continue
             setups.append({
                 "asset": asset,
                 "impact": impact,
@@ -291,29 +326,30 @@ def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str
                 "stop": stop,
                 "tp1": tp1,
                 "tp2": getattr(state, "tp2", None),
+                "move_pct": move_pct,
             })
     return setups
 
 
 def _format_news_alert(event: dict[str, Any], setup: dict[str, Any]) -> str:
-    state = setup["state"]
     published = event.get("published_at") or "timestamp non disponibile"
     return (
-        "🛰 GAGARIN — NEWS → IMPATTO → SETUP → CONFERMA\n"
-        "🧪 PAPER/DEMO — NESSUN ORDINE\n\n"
-        f"NEWS: {event.get('title', '')}\n"
-        f"Fonte: {event.get('source', 'N/D')}\n"
-        f"Pubblicazione UTC: {published}\n"
-        f"Link: {event.get('url', '')}\n\n"
-        f"Strumento: {setup['asset']}\n"
-        f"Impatto ipotizzato: {setup['impact']}\n"
-        f"Setup Gagarin: {setup['direction']} — TRIGGER CONFERMATO\n"
-        f"Prezzo: {float(setup['price']):.6g}\n"
-        f"Entry indicativa: {float(setup['entry']):.6g}\n"
-        f"SL: {float(setup['stop']):.6g}\n"
+        "🛰 GAGARIN — NEWS → IMPATTO → SETUP → CONFERMA\\n"
+        "🧪 PAPER/DEMO — NESSUN ORDINE\\n\\n"
+        f"NEWS: {event.get('title', '')}\\n"
+        f"Fonte: {event.get('source', 'N/D')}\\n"
+        f"Pubblicazione UTC: {published}\\n"
+        f"Link: {event.get('url', '')}\\n\\n"
+        f"Strumento: {setup['asset']}\\n"
+        f"Impatto ipotizzato: {setup['impact']}\\n"
+        f"Reazione dal rilevamento: {float(setup.get('move_pct', 0.0)):+.3f}%\\n"
+        f"Setup Gagarin: {setup['direction']} — TRIGGER CONFERMATO\\n"
+        f"Prezzo: {float(setup['price']):.6g}\\n"
+        f"Entry indicativa: {float(setup['entry']):.6g}\\n"
+        f"SL: {float(setup['stop']):.6g}\\n"
         f"TP1: {float(setup['tp1']):.6g}"
         + (f" | TP2: {float(setup['tp2']):.6g}" if setup.get("tp2") is not None else "")
-        + "\n\nImpatto e direzione sono ipotesi; l'alert non invia ordini."
+        + "\\n\\nImpatto e direzione sono ipotesi; l'alert non invia ordini."
     )
 
 
@@ -412,6 +448,15 @@ def poll_news_once(
             state["last_analysis_at"] = now.timestamp()
             still_pending = []
             for event in pending:
+                # Capture a baseline at the first analysis after detection.
+                # Later checks require a measurable move aligned with the news bias.
+                if not event.get("baseline_prices"):
+                    baseline = _capture_baseline(event, states)
+                    if baseline:
+                        event["baseline_prices"] = baseline
+                        event["baseline_at"] = now.isoformat()
+                    still_pending.append(event)
+                    continue
                 matches = _confirmed_setups(event, states)
                 delivered = False
                 for setup in matches:
