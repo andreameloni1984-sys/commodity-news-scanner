@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-from research.intraday_windows import calculate_window_statistics, format_intraday_window_report
+from research.intraday_windows import calculate_window_statistics, format_intraday_window_report, format_intraday_window_summary
 
 
 def _bars_for_window(day, start_hour, start_minute, count, price=100.0):
@@ -51,3 +51,24 @@ def test_format_report_disclaims_profitability():
     assert "non è un backtest" in text.lower()
     assert "Europe/Rome" in text
     assert "win rate" in text.lower()
+
+def test_compact_summary_contains_all_assets_and_three_windows():
+    report = {
+        "assets": {
+            name: {
+                "symbol": symbol,
+                "windows": [
+                    {"window": label, "n": 3, "mean_range_pct": 0.4,
+                     "median_range_pct": 0.3, "mean_close_open_pct": -0.1,
+                     "median_close_open_pct": -0.05}
+                    for label in ("08:00–11:00", "14:00–18:00", "15:30–18:00")
+                ],
+            }
+            for name, symbol in (("Oro", "GC=F"), ("Argento", "SI=F"), ("WTI", "CL=F"), ("Brent", "BZ=F"))
+        }
+    }
+    text = format_intraday_window_summary(report)
+    for asset in ("Oro", "Argento", "WTI", "Brent"):
+        assert asset in text
+    assert "Range = movimento osservato" in text
+    assert "/fasceorario" in text
