@@ -31,7 +31,12 @@ def _session_context(now: datetime | None = None) -> dict[str, Any]:
         wall_open = time(15, 30)
 
     t = now.time().replace(tzinfo=None)
-    if time(8, 0) <= t <= time(11, 0):
+    # The windows are research buckets, not a market calendar. Never label a
+    # weekend as an active session; instrument-specific holidays remain unknown.
+    if now.weekday() >= 5:
+        active = "WEEKEND — MERCATI DI RIFERIMENTO GENERALMENTE CHIUSI"
+        note = "Le fasce sottostanti restano utili per la ricerca storica; calendario festivi e orari CFD dipendono dallo strumento."
+    elif time(8, 0) <= t <= time(11, 0):
         active = "SESSIONE EUROPEA 08:00–11:00"
         note = "Finestra da osservare per metalli e petrolio; il vantaggio netto non è dimostrato."
     elif overlap[0] <= t <= overlap[1]:
