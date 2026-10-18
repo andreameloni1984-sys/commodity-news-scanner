@@ -72,3 +72,8 @@ def test_compact_summary_contains_all_assets_and_three_windows():
         assert asset in text
     assert "Range = movimento osservato" in text
     assert "/fasceorario" in text
+
+def test_partial_window_without_boundary_bars_is_rejected():
+    rows = _bars_for_window(12, 8, 5, 35)
+    stats = calculate_window_statistics(rows)
+    assert stats[0]["n"] == 0
