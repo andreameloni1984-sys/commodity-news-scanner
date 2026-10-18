@@ -26,6 +26,13 @@ POLL_SECONDS = max(30, int(os.getenv("GAGARIN_NEWS_POLL_SECONDS", "60")))
 RECHECK_SECONDS = max(300, int(os.getenv("GAGARIN_NEWS_RECHECK_SECONDS", "300")))
 PENDING_TTL_SECONDS = 45 * 60
 REQUEST_TIMEOUT_SECONDS = 8
+# Source-specific throttling: avoid hammering feeds that are timing out or rate-limiting us.
+GDELT_MIN_INTERVAL_SECONDS = max(300, int(os.getenv("GAGARIN_GDELT_MIN_INTERVAL_SECONDS", "300")))
+SOURCE_BACKOFF_MAX_SECONDS = 60 * 60
+_SOURCE_FAILURES: dict[str, int] = {}
+_SOURCE_RETRY_AT: dict[str, float] = {}
+_SOURCE_LAST_SUCCESS: dict[str, float] = {}
+_SOURCE_LOCK = threading.Lock()
 STATE_PATH = Path(os.getenv("GAGARIN_NEWS_STATE_PATH", "data/news_monitor_state.json"))
 
 RSS_FEEDS = (
@@ -123,6 +130,61 @@ def _title_cluster(item: dict[str, Any]) -> str:
     return hashlib.sha256(title.encode("utf-8")).hexdigest()[:20]
 
 
+def _source_allowed(source: str, min_interval: int = 0) -> bool:
+    """Return false while a source is in backoff or within its minimum poll interval."""
+    now = time.monotonic()
+    with _SOURCE_LOCK:
+        retry_at = _SOURCE_RETRY_AT.get(source, 0.0)
+        if now < retry_at:
+            return False
+        last_success = _SOURCE_LAST_SUCCESS.get(source, 0.0)
+        return not min_interval or now - last_success >= min_interval
+
+
+def _source_succeeded(source: str) -> None:
+    with _SOURCE_LOCK:
+        recovered = _SOURCE_FAILURES.pop(source, 0) > 0
+        _SOURCE_RETRY_AT.pop(source, None)
+        _SOURCE_LAST_SUCCESS[source] = time.monotonic()
+    if recovered:
+        print(f"NEWS source recovered | source={source}", flush=True)
+
+
+def _source_failed(source: str, exc: Exception) -> int:
+    """Apply exponential cooldown; honour Retry-After when the server supplies it."""
+    response = getattr(exc, "response", None)
+    status = getattr(response, "status_code", None)
+    retry_after = None
+    try:
+        retry_after = float((getattr(response, "headers", {}) or {}).get("Retry-After", ""))
+    except (TypeError, ValueError):
+        retry_after = None
+
+    with _SOURCE_LOCK:
+        failures = _SOURCE_FAILURES.get(source, 0) + 1
+        _SOURCE_FAILURES[source] = failures
+        if status == 429:
+            base = max(15 * 60, retry_after or 0)
+        elif source == "EIA":
+            base = 10 * 60
+        elif source == "GDELT":
+            base = 5 * 60
+        else:
+            base = 2 * 60
+        delay = min(SOURCE_BACKOFF_MAX_SECONDS, int(base * (2 ** min(failures - 1, 4))))
+        if retry_after is not None:
+            delay = min(SOURCE_BACKOFF_MAX_SECONDS, max(delay, int(retry_after)))
+        _SOURCE_RETRY_AT[source] = time.monotonic() + delay
+
+    status_text = f" HTTP={status}" if status is not None else ""
+    print(
+        f"NEWS source failure | source={source} | error={type(exc).__name__}"
+        f"{status_text} | retry_in={delay}s",
+        flush=True,
+    )
+    return delay
+
+
 def _get_rss_items(source: str, url: str) -> list[dict[str, Any]]:
     response = requests.get(
         url,
@@ -186,18 +248,31 @@ def _get_gdelt_items() -> list[dict[str, Any]]:
 
 
 def fetch_news_items() -> list[dict[str, Any]]:
-    """Fetch the latest items from official RSS feeds and the public GDELT index."""
+    """Fetch public news feeds with per-source cooldowns and rate-limit protection."""
     items: list[dict[str, Any]] = []
     for source, url in RSS_FEEDS:
+        # EIA is a low-frequency release feed; do not poll it more than every 5 minutes.
+        min_interval = 300 if source == "EIA" else 0
+        if not _source_allowed(source, min_interval=min_interval):
+            continue
         try:
-            items.extend(_get_rss_items(source, url))
+            source_items = _get_rss_items(source, url)
+            _source_succeeded(source)
+            items.extend(source_items)
         except Exception as exc:
-            print(f"NEWS RSS fetch failed | source={source} | {type(exc).__name__}: {exc}", flush=True)
-    try:
-        items.extend(_get_gdelt_items())
-    except Exception as exc:
-        print(f"NEWS GDELT fetch failed | {type(exc).__name__}: {exc}", flush=True)
-    # Newest first; source duplicates are handled below.
+            _source_failed(source, exc)
+
+    # GDELT was returning timeouts/429s; limit healthy polling to once per 5 minutes.
+    if _source_allowed("GDELT", min_interval=GDELT_MIN_INTERVAL_SECONDS):
+        try:
+            gdelt_items = _get_gdelt_items()
+            _source_succeeded("GDELT")
+            items.extend(gdelt_items)
+        except Exception as exc:
+            _source_failed("GDELT", exc)
+
+    # Newest first; source duplicates are handled below. Other feeds remain usable
+    # when one provider is cooling down or unavailable.
     items.sort(key=lambda x: x.get("published_at", ""), reverse=True)
     return items
 
