@@ -362,7 +362,7 @@ def main() -> None:
     if TELEGRAM_CHAT_ID:
         welcome_sent = _reply(
             TELEGRAM_CHAT_ID,
-            "🚀 GAGARIN ONLINE\\n🧪 PAPER/DEMO — nessun ordine reale.\\n\\nUsa uno dei tre pulsanti:\\n• AGGRESSIVE 212\\n• SOFT 212\\n• COLLEGAMENTO INVEST TRADING212",
+            "🚀 GAGARIN ONLINE\n🧪 PAPER/DEMO — nessun ordine reale.\n\nUsa uno dei tre pulsanti:\n• AGGRESSIVE 212\n• SOFT 212\n• COLLEGAMENTO INVEST TRADING212",
             reply_markup=telegram_menu(),
         )
         print(
