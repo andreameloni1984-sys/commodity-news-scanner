@@ -106,6 +106,14 @@ def _window_samples(rows: list[dict[str, float]], start_minute: int, end_minute:
         bars = [unique[key] for key in sorted(unique)]
         if len(bars) < minimum_bars:
             continue
+        first_time = min(unique)
+        last_time = max(unique)
+        # Require the first and last 5-minute bars so a partial window is not
+        # mistaken for a complete session even when bar coverage exceeds 80%.
+        if first_time.hour * 60 + first_time.minute != start_minute:
+            continue
+        if last_time.hour * 60 + last_time.minute != end_minute - 5:
+            continue
         first_open = bars[0]["open"]
         last_close = bars[-1]["close"]
         if first_open <= 0:
@@ -207,7 +215,10 @@ def format_intraday_window_report(report: dict[str, Any] | None = None) -> str:
         any_data = False
         for asset in ("Oro", "Argento", "WTI", "Brent"):
             item = (report.get("assets") or {}).get(asset, {})
-            lines.append(f"▸ {asset} ({item.get('symbol', ASSETS[asset])})")
+            period = ""
+            if item.get("first_utc") and item.get("last_utc"):
+                period = f" | M5={item.get('bars', 0)} | {item['first_utc'][:10]}→{item['last_utc'][:10]} UTC"
+            lines.append(f"▸ {asset} ({item.get('symbol', ASSETS[asset])}){period}")
             if item.get("error"):
                 lines.append(f"  Dati non disponibili: {item['error']}")
                 lines.append("")
