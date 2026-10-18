@@ -25,7 +25,7 @@ def test_ambiguous_macro_headline_does_not_force_direction():
 
 
 def test_alert_requires_existing_live_confirmed_aligned_setup():
-    event = {"title": "OPEC announces production cut"}
+    event = {"title": "OPEC announces production cut", "baseline_prices": {"WTI": 80.0}}
     good = SimpleNamespace(
         commodity="Petrolio WTI",
         symbol="WTI/USD",
@@ -33,7 +33,7 @@ def test_alert_requires_existing_live_confirmed_aligned_setup():
         final_decision="PAPER_SIGNAL",
         trigger_confirmed=True,
         live=True,
-        price=80.0,
+        price=80.1,
         entry=80.1,
         stop=78.5,
         tp1=83.0,
@@ -55,3 +55,4 @@ def test_alert_requires_existing_live_confirmed_aligned_setup():
     assert len(matches) == 1
     assert matches[0]["asset"] == "WTI"
     assert matches[0]["direction"] == "LONG"
+    assert matches[0]["move_pct"] >= 0.05
