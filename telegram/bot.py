@@ -324,6 +324,11 @@ def _command_response(command: str) -> Optional[str]:
             else:
                 desk = desk + "\n\n212: per confrontare i prezzi Trading 212 incolla bid e ask dopo il comando."
             desk = desk + "\n\nProfilo: probabilita >= " + str(profile.min_probability) + ", qualita >= " + str(profile.min_quality) + ", rischio " + str(profile.risk_per_trade_pct) + "% per operazione, max " + str(profile.max_open_positions) + " posizioni."
+            try:
+                from research.intraday_windows import format_intraday_window_summary
+                desk = desk + "\\n\\n" + format_intraday_window_summary()
+            except Exception as exc:
+                desk = desk + "\\n\\nFasce orarie: dati non disponibili (" + type(exc).__name__ + ")."
             return desk
         except Exception as exc:
             return "Errore reparto aggressive: " + type(exc).__name__ + ": " + str(exc)
@@ -336,7 +341,12 @@ def _command_response(command: str) -> Optional[str]:
             if results is None:
                 return "Nessun risultato. Riprova con /analisi."
             set_last_results(results)
-            return _format_classifica(results) + "\n\nProfilo SOFT: probabilita >= " + str(profile.min_probability) + ", qualita >= " + str(profile.min_quality) + ", rischio " + str(profile.risk_per_trade_pct) + "%."
+            try:
+                from research.intraday_windows import format_intraday_window_summary
+                window_summary = format_intraday_window_summary()
+            except Exception as exc:
+                window_summary = "Fasce orarie: dati non disponibili (" + type(exc).__name__ + ")."
+            return _format_classifica(results) + "\\n\\n" + window_summary + "\\n\\nProfilo SOFT: probabilita >= " + str(profile.min_probability) + ", qualita >= " + str(profile.min_quality) + ", rischio " + str(profile.risk_per_trade_pct) + "%.
         except Exception as exc:
             return "Errore soft: " + type(exc).__name__ + ": " + str(exc)
 
@@ -444,6 +454,10 @@ def _command_response(command: str) -> Optional[str]:
                 f"Decisione: {state.final_decision}"
             )
         return _format_classifica(results)
+
+    if command_name == "/fasceorario":
+        from research.intraday_windows import format_intraday_window_report
+        return format_intraday_window_report()
 
     if command_name == "/status":
         return "Bot attivo. PAPER ONLY. Sezione Invest disponibile."
