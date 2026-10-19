@@ -41,7 +41,7 @@ def test_missing_stop_does_not_invent_exit():
 
 def test_long_normal_pullback_is_reported_without_forced_exit():
     result = analyze_pattern_and_exit(
-        direction="LONG", closes=[100, 102, 104, 105, 104],
+        direction="LONG", closes=[100, 102, 104, 105, 103],
         entry=102, stop=98, tp1=112, atr=2,
     )
     assert result["retracement_status"] == "RITRACCIAMENTO NORMALE"
