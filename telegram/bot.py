@@ -141,7 +141,8 @@ def _resolve_commodity(name: str):
     canonical = aliases.get(key)
     if canonical is None:
         return None
-    return get_commodity_by_name(canonical)
+    commodity = get_commodity_by_name(canonical)
+    return commodity if commodity is not None and commodity.enabled else None
 
 def _format_classifica(results):
     if not results:
