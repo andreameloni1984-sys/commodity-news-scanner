@@ -164,7 +164,7 @@ def format_aggressive_alert(states: Iterable[Any]) -> str:
         ))
         lines.append("")
     lines.append("Nota: prezzi del provider Gagarin, non necessariamente coincidenti con bid/ask Trading 212.")
-    return "\\n".join(lines)
+    return "\n".join(lines)
 
 
 def run_aggressive_alert(states: Iterable[Any]) -> bool:
