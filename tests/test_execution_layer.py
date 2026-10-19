@@ -10,9 +10,9 @@ def _state(action="PAPER_SIGNAL"):
         setup_direction="LONG",
         entry=100.0,
         stop=98.0,
-        tp1=102.0,
+        tp1=103.0,
         tp2=104.0,
-        tp3=106.0,
+        tp3=105.0,
         metadata={"gagarin_action": action},
     )
 
