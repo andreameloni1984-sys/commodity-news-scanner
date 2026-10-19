@@ -115,3 +115,26 @@ def test_new_news_triggers_immediate_analysis_then_waits_for_price_confirmation(
     assert len(messages) == 1
     assert "Reazione dal rilevamento" in messages[0]
     assert "PAPER/DEMO" in messages[0]
+
+
+
+def test_oil_supply_risk_headlines_are_classified_bullish():
+    for title in (
+        "Tanker attacks raise oil supply risk",
+        "Iran sanctions threaten crude exports",
+        "Oilfield shutdown disrupts production",
+    ):
+        result = classify_event(title)
+        assert result["impact"]["Brent"] == "RIALZISTA"
+        assert result["impact"]["WTI"] == "RIALZISTA"
+        assert result["matched_terms"]["Brent"]["bullish"]
+
+
+def test_mixed_oil_catalysts_stay_neutral_and_explain_why():
+    result = classify_event(
+        "OPEC production cut as weak demand outlook raises oversupply concerns"
+    )
+    assert result["impact"]["Brent"] == "MISTA"
+    assert result["matched_terms"]["Brent"]["bullish"]
+    assert result["matched_terms"]["Brent"]["bearish"]
+    assert 0 <= result["confidence_score"] <= 100
