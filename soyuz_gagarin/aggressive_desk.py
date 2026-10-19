@@ -3,6 +3,7 @@
 Ranks opportunities more permissively than the standard governor but never
 places real orders and never fabricates market prices. A directional pick is
 not represented as an approved entry unless the governor says so.
+Commodity price levels are displayed explicitly in USD, their quote currency.
 """
 from __future__ import annotations
 
@@ -17,6 +18,7 @@ def format_aggressive_desk(states: Iterable[Any]) -> str:
         "🚀 GAGARIN — REPARTO AGGRESSIVE",
         "━━━━━━━━━━━━━━━━━━━━━━━━",
         "🧪 SIMULAZIONE PAPER ONLY",
+        "Prezzi delle materie prime espressi in USD.",
         "Mandato: trovare la migliore opportunità LONG o SHORT del mercato.",
         "Il reparto classifica anche candidati non ancora autorizzati all'ingresso.",
         "",
@@ -41,12 +43,12 @@ def format_aggressive_desk(states: Iterable[Any]) -> str:
         lines.extend([
             f"{'🎯 SCELTA PRINCIPALE' if index == 1 else f'Alternativa {index}'}: {item['commodity']} — {item['direction']}",
             f"Score comparativo: {item['score']:.1f}/100 | movimento stimato: {item['expected_move_pct']:.2f}%",
-            f"Prezzo attuale: {item['price']:.6g}",
-            f"ENTRY: {item['entry']:.6g}" if item["entry"] is not None else "ENTRY: N/D",
-            f"STOP LOSS: {item['stop']:.6g}" if item["stop"] is not None else "STOP LOSS: N/D",
-            f"TP1: {item['tp1']:.6g}" if item["tp1"] is not None else "TP1: N/D",
-            f"TP2: {item['tp2']:.6g}" if item["tp2"] is not None else "TP2: N/D",
-            f"TP3: {item['tp3']:.6g}" if item["tp3"] is not None else "TP3: N/D",
+            f"Prezzo attuale (USD): ${item['price']:.6g}",
+            f"ENTRY (USD): ${item['entry']:.6g}" if item["entry"] is not None else "ENTRY (USD): N/D",
+            f"STOP LOSS (USD): ${item['stop']:.6g}" if item["stop"] is not None else "STOP LOSS (USD): N/D",
+            f"TP1 (USD): ${item['tp1']:.6g}" if item["tp1"] is not None else "TP1 (USD): N/D",
+            f"TP2 (USD): ${item['tp2']:.6g}" if item["tp2"] is not None else "TP2 (USD): N/D",
+            f"TP3 (USD): ${item['tp3']:.6g}" if item["tp3"] is not None else "TP3 (USD): N/D",
             f"Qualità {item['quality']:.0f} | Confidence {item['confidence']:.0f} | Trigger {'CONFERMATO' if item['trigger_confirmed'] else 'DA CONFERMARE'}",
             f"Dati: {item['data_status']} | {'LIVE' if item['live'] else 'NON LIVE'}",
             "STATO: SEGNALE PAPER AUTORIZZATO" if approved else "STATO: CANDIDATO AGGRESSIVO — non ancora autorizzato dal governor",
