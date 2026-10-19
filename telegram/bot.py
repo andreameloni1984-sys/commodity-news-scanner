@@ -483,3 +483,13 @@ def handle_update(update: dict) -> None:
     response = _command_response(text)
     if response:
         _reply(chat_id, response)
+
+
+def run_polling() -> None:
+    """Backward-compatible Render entry point.
+
+    The Render service historically imports telegram.bot.run_polling.
+    The actual bot runtime uses the webhook HTTP server in render_runner.
+    """
+    from telegram.render_runner import main as webhook_main
+    webhook_main()
