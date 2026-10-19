@@ -242,10 +242,16 @@ def auto_buy_best_signal_budget(amount: float = 10.0, min_score: float = 50.0) -
             quantity = 0
         if ticker and quantity > 0:
             held.add(ticker)
-    pending_buys = {
-        str(order.get("ticker", "")).upper()
-        for order in orders if isinstance(order, dict) and float(order.get("quantity", 0) or 0) > 0
-    }
+    pending_buys = set()
+    for order in orders:
+        if not isinstance(order, dict):
+            continue
+        try:
+            quantity = float(order.get("quantity", 0) or 0)
+        except (TypeError, ValueError):
+            return "AUTO DEMO: dati di un ordine pendente non validi; nessun ordine."
+        if quantity > 0 and order.get("ticker"):
+            pending_buys.add(str(order["ticker"]).upper())
 
     signals = analyze_invest_universe()
     candidates = [s for s in signals if s.direction == "LONG" and s.score >= min_score
