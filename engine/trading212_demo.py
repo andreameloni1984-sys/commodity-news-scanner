@@ -124,3 +124,9 @@ def place_stop_order(ticker: str, quantity: float, stop_price: float, time_valid
 
 def get_pending_orders() -> tuple[bool, Any]:
     return _request("GET", "/equity/orders")
+
+
+def get_order_history(limit: int = 50) -> tuple[bool, Any]:
+    """Read recent historical orders from the Demo Invest account."""
+    safe_limit = max(1, min(int(limit), 50))
+    return _request("GET", f"/equity/history/orders?limit={safe_limit}")
