@@ -44,6 +44,9 @@ def _item_from_state(state: Any) -> dict:
         "tp2": getattr(state, "tp2", None),
         "tp3": getattr(state, "tp3", None),
         "price": getattr(state, "price", None),
+        # Only explicit quote timestamps are accepted; signal timestamps are not
+        # interchangeable with quote timestamps for freshness checks.
+        "quote_timestamp": getattr(state, "price_timestamp", None) or getattr(state, "quote_timestamp", None),
         "atr": getattr(state, "atr", None),
         "closes": getattr(state, "closes", []),
         "highs": getattr(state, "highs", []),
@@ -52,12 +55,39 @@ def _item_from_state(state: Any) -> dict:
 
 
 def _valid_levels(item: dict) -> bool:
+    """Require coherent stop/entry/targets, including every supplied target."""
     entry, stop, tp1 = (_number(item.get(k)) for k in ("entry", "stop", "tp1"))
     if entry is None or stop is None or tp1 is None:
         return False
+
+    raw_tp2, raw_tp3 = item.get("tp2"), item.get("tp3")
+    tp2, tp3 = _number(raw_tp2), _number(raw_tp3)
+    # A supplied but invalid target must not be silently treated as absent.
+    if raw_tp2 is not None and tp2 is None:
+        return False
+    if raw_tp3 is not None and tp3 is None:
+        return False
+    # TP3 is the third target; require TP2 to be present as its predecessor.
+    if tp3 is not None and tp2 is None:
+        return False
+
     if item["direction"] == "LONG":
-        return stop < entry < tp1
-    return tp1 < entry < stop
+        if not stop < entry < tp1:
+            return False
+        if tp2 is not None and not tp1 < tp2:
+            return False
+        if tp3 is not None and not tp2 < tp3:
+            return False
+        return True
+    if item["direction"] == "SHORT":
+        if not tp1 < entry < stop:
+            return False
+        if tp2 is not None and not tp2 < tp1:
+            return False
+        if tp3 is not None and not tp3 < tp2:
+            return False
+        return True
+    return False
 
 
 def _stage(item: dict) -> str | None:
@@ -70,11 +100,14 @@ def _stage(item: dict) -> str | None:
         confidence = float(item.get("confidence") or 0)
     except (TypeError, ValueError):
         return None
-    pattern = analyze_pattern_and_exit(
+    # Evaluate the current provider quote against exit levels. Candle-pattern
+    # recognition itself continues to use closed OHLC candles.
+    analyze_pattern_and_exit(
         direction=direction, closes=item.get("closes"),
         highs=item.get("highs"), lows=item.get("lows"),
         entry=item.get("entry"), stop=item.get("stop"),
         tp1=item.get("tp1"), atr=item.get("atr"),
+        current_price=item.get("price"),
     )
     decision = str(item.get("final_decision") or "").upper()
     confirmed = (
@@ -110,6 +143,7 @@ def find_aggressive_alerts(states: Iterable[Any]) -> list[dict]:
                 highs=item.get("highs"), lows=item.get("lows"),
                 entry=item.get("entry"), stop=item.get("stop"),
                 tp1=item.get("tp1"), atr=item.get("atr"),
+                current_price=item.get("price"),
             )
             found.append(item)
     found.sort(key=lambda x: (
@@ -140,6 +174,12 @@ def format_aggressive_alert(states: Iterable[Any]) -> str:
         lines.append("STATO: %s" % ("🟢 CONFERMATA" if item["stage"] == "CONFERMATA" else "🟡 POSSIBILE OPPORTUNITÀ — in attesa di conferma"))
         price = _number(item.get("price"))
         lines.append("Quotazione provider: %.6g USD" % price if price is not None else "Quotazione: N/D")
+        quote_timestamp = item.get("quote_timestamp")
+        lines.append(
+            "Timestamp quotazione: %s" % quote_timestamp
+            if quote_timestamp is not None
+            else "Freschezza quotazione: NON VERIFICATA (timestamp provider assente)"
+        )
         for key, label in (("entry", "Ingresso potenziale"), ("stop", "Stop indicativo"), ("tp1", "TP1"), ("tp2", "TP2"), ("tp3", "TP3")):
             value = _number(item.get(key))
             lines.append("%s: %.6g" % (label, value) if value is not None else "%s: da definire" % label)
@@ -158,6 +198,7 @@ def format_aggressive_alert(states: Iterable[Any]) -> str:
         ))
         lines.append("")
     lines.append("Nota: prezzi del provider Gagarin, non necessariamente coincidenti con bid/ask Trading 212.")
+    lines.append("Spread e costi Trading 212: NON VERIFICATI; controllare i dettagli dello strumento nell'app.")
     return "\n".join(lines)
 
 
