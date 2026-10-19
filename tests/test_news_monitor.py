@@ -138,3 +138,25 @@ def test_mixed_oil_catalysts_stay_neutral_and_explain_why():
     assert result["matched_terms"]["Brent"]["bullish"]
     assert result["matched_terms"]["Brent"]["bearish"]
     assert 0 <= result["confidence_score"] <= 100
+
+
+def test_selected_agricultural_commodities_are_classified_by_crop_catalyst():
+    coffee = classify_event("Brazil drought threatens Arabica coffee harvest")
+    cocoa = classify_event("Cocoa crop disease reduces production forecast")
+    rice = classify_event("Rice export ban disrupts supply")
+    sugar = classify_event("Sugar production rises after bumper harvest")
+    assert coffee["impact"]["Caffè"] == "RIALZISTA"
+    assert cocoa["impact"]["Cacao"] == "RIALZISTA"
+    assert rice["impact"]["Riso"] == "RIALZISTA"
+    assert sugar["impact"]["Zucchero"] == "RIBASSISTA"
+
+
+def test_platinum_supported_but_silver_excluded_from_selected_universe():
+    result = classify_event("Platinum rises as the Federal Reserve signals rate cuts")
+    assert "Platino" in result["assets"]
+    assert "Argento" not in result["assets"]
+
+
+def test_agricultural_mixed_catalysts_remain_mixed():
+    result = classify_event("Coffee harvest improves but drought threatens supply")
+    assert result["impact"]["Caffè"] == "MISTA"
