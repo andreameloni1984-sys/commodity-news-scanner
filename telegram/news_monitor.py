@@ -64,7 +64,12 @@ OIL_TERMS = {
     "oil inventories", "oil stocks", "energy supply", "hormuz",
     "iran", "russia", "sanctions", "eia", "barrel", "barrels",
 }
-METAL_TERMS = {"gold", "silver", "bullion", "precious metal", "precious metals", "xau", "xag"}
+METAL_TERMS = {"gold", "bullion", "precious metal", "precious metals", "xau", "platinum", "platino", "xpt"}
+AGRI_TERMS = {
+    "coffee", "arabica", "robusta", "caffè", "caffe", "cocoa", "cacao",
+    "rice", "riso", "sugar", "zucchero", "raw sugar", "white sugar",
+    "coffee futures", "cocoa futures", "rice futures", "sugar futures",
+}
 MACRO_TERMS = {
     "federal reserve", "fed", "interest rate", "interest rates", "rate cut",
     "rate hike", "inflation", "cpi", "pce", "dollar", "treasury yield",
@@ -110,6 +115,22 @@ METAL_BULLISH_TERMS = {
 METAL_BEARISH_TERMS = {
     "rate hike", "raises rates", "hawkish", "yields rise", "yields climb",
     "dollar rises", "dollar strengthens", "ceasefire", "peace deal",
+}
+
+AGRI_BULLISH_TERMS = {
+    "drought", "crop damage", "crop losses", "poor harvest", "harvest shortfall",
+    "frost", "freeze", "flood", "flooding", "heatwave", "heat wave",
+    "export ban", "exports banned", "export restriction", "supply disruption",
+    "production cut", "production falls", "production drop", "lower output",
+    "pest outbreak", "disease outbreak", "port closure", "shipping disruption",
+    "stocks fall", "inventories fall", "stocks decline", "production forecast cut",
+}
+AGRI_BEARISH_TERMS = {
+    "bumper harvest", "record harvest", "good harvest", "harvest improves",
+    "crop forecast raised", "production rises", "production increase", "higher output",
+    "output increase", "exports resume", "export ban lifted", "export restrictions eased",
+    "supply improves", "supply increase", "stocks rise", "inventories rise",
+    "stocks build", "oversupply", "surplus supply", "demand falls", "weak demand",
 }
 
 
@@ -310,14 +331,24 @@ def classify_event(title: str) -> dict[str, Any]:
     """Heuristic event mapping. It is interpretation, never a fact or trade by itself."""
     text = re.sub(r"\\s+", " ", (title or "").lower()).strip()
     has_oil = any(term in text for term in OIL_TERMS)
-    has_metals = any(term in text for term in METAL_TERMS)
+    has_metals = any(term in text for term in METAL_TERMS) or any(term in text for term in {"gold", "oro", "xau"})
     has_macro = any(term in text for term in MACRO_TERMS)
+    has_agri = any(term in text for term in AGRI_TERMS)
 
     assets: list[str] = []
     if has_oil:
         assets.extend(["WTI", "Brent"])
     if has_metals or has_macro:
-        assets.extend(["Oro", "Argento"])
+        assets.extend(["Oro", "Platino"])
+    if has_agri:
+        for asset, terms in {
+            "Caffè": {"coffee", "arabica", "robusta", "caffè", "caffe"},
+            "Cacao": {"cocoa", "cacao"},
+            "Riso": {"rice", "riso"},
+            "Zucchero": {"sugar", "zucchero"},
+        }.items():
+            if any(term in text for term in terms):
+                assets.append(asset)
     assets = list(dict.fromkeys(assets))
 
     if not assets:
@@ -328,6 +359,8 @@ def classify_event(title: str) -> dict[str, Any]:
     for asset in assets:
         if asset in {"WTI", "Brent"}:
             up_terms, down_terms = OIL_BULLISH_TERMS, OIL_BEARISH_TERMS
+        elif asset in {"Caffè", "Cacao", "Riso", "Zucchero"}:
+            up_terms, down_terms = AGRI_BULLISH_TERMS, AGRI_BEARISH_TERMS
         else:
             up_terms, down_terms = METAL_BULLISH_TERMS, METAL_BEARISH_TERMS
         up_hits = sorted(term for term in up_terms if term in text)
@@ -367,8 +400,16 @@ def _asset_matches(asset: str, state: Any) -> bool:
         return "brent" in name or "BRENT" in symbol or symbol in {"BRENT/USD", "UKOIL"}
     if asset == "Oro":
         return "oro" in name or "gold" in name or "XAU" in symbol
-    if asset == "Argento":
-        return "argento" in name or "silver" in name or "XAG" in symbol
+    if asset == "Platino":
+        return "platino" in name or "platinum" in name or "XPT" in symbol
+    if asset == "Caffè":
+        return "caff" in name or "coffee" in name
+    if asset == "Cacao":
+        return "cacao" in name or "cocoa" in name
+    if asset == "Riso":
+        return "riso" in name or "rice" in name
+    if asset == "Zucchero":
+        return "zucchero" in name or "sugar" in name
     return False
 
 
