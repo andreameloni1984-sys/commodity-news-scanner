@@ -26,3 +26,33 @@ def test_unknown_domain_does_not_match_universe():
         [{"symbol": "USOIL", "commodity": "WTI Crude Oil", "action": "WAIT"}],
         ["UNKNOWN"],
     ) == []
+
+def _valid_confirmation_row(**overrides):
+    row = {
+        "symbol": "USOIL",
+        "commodity": "WTI Crude Oil",
+        "action": "PAPER_SIGNAL",
+        "data_status": "LIVE",
+        "live": True,
+        "price": 80.0,
+        "direction": "LONG",
+        "entry": 80.0,
+        "stop": 78.0,
+        "tp1": 84.0,
+        "volume_confirmed": True,
+        "relative_volume": 1.1,
+    }
+    row.update(overrides)
+    return row
+
+
+def test_setup_confirmation_requires_live_price_coherent_risk_and_volume():
+    from cloud_api import _is_sputnik_setup_confirmed
+
+    assert _is_sputnik_setup_confirmed(_valid_confirmation_row())
+    assert not _is_sputnik_setup_confirmed(_valid_confirmation_row(data_status="STALE"))
+    assert not _is_sputnik_setup_confirmed(_valid_confirmation_row(live=False))
+    assert not _is_sputnik_setup_confirmed(_valid_confirmation_row(volume_confirmed=False))
+    assert not _is_sputnik_setup_confirmed(_valid_confirmation_row(relative_volume=None, volume_confirmed=False))
+    assert not _is_sputnik_setup_confirmed(_valid_confirmation_row(stop=81.0))
+    assert not _is_sputnik_setup_confirmed(_valid_confirmation_row(price=0.0))
