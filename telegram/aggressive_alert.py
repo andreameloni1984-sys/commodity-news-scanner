@@ -140,6 +140,14 @@ def format_aggressive_alert(states: Iterable[Any]) -> str:
                 except (TypeError, ValueError):
                     continue
         lines.append(" | ".join(targets) if targets else "TP: N/D")
+        pattern = analyze_pattern_and_exit(
+            direction=item["direction"], closes=item.get("closes"),
+            highs=item.get("highs"), lows=item.get("lows"),
+            entry=item.get("entry"), stop=item.get("stop"),
+            tp1=item.get("tp1"), atr=item.get("atr"),
+        )
+        lines.append("SCHEMA: %s | Bias: %s" % (pattern["pattern"], pattern["bias"]))
+        lines.append("GESTIONE USCITA: %s — %s" % (pattern["exit_action"], pattern["reason"]))
         lines.append(
             "Probabilita: %.0f | Quality: %.0f | Confidence: %.0f | Trigger: CONFERMATO"
             % (item["probability"], item["quality"], item["confidence"])
