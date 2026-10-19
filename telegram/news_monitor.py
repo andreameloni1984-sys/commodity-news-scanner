@@ -324,26 +324,37 @@ def classify_event(title: str) -> dict[str, Any]:
         return {"relevant": False, "assets": [], "impact": {}, "reason": "no commodity exposure keywords"}
 
     impact: dict[str, str] = {}
+    matched_terms: dict[str, dict[str, list[str]]] = {}
     for asset in assets:
         if asset in {"WTI", "Brent"}:
-            up = any(term in text for term in OIL_BULLISH_TERMS)
-            down = any(term in text for term in OIL_BEARISH_TERMS)
+            up_terms, down_terms = OIL_BULLISH_TERMS, OIL_BEARISH_TERMS
         else:
-            up = any(term in text for term in METAL_BULLISH_TERMS)
-            down = any(term in text for term in METAL_BEARISH_TERMS)
-        if up and down:
+            up_terms, down_terms = METAL_BULLISH_TERMS, METAL_BEARISH_TERMS
+        up_hits = sorted(term for term in up_terms if term in text)
+        down_hits = sorted(term for term in down_terms if term in text)
+        matched_terms[asset] = {"bullish": up_hits, "bearish": down_hits}
+        if up_hits and down_hits:
             impact[asset] = "MISTA"
-        elif up:
+        elif up_hits:
             impact[asset] = "RIALZISTA"
-        elif down:
+        elif down_hits:
             impact[asset] = "RIBASSISTA"
         else:
             impact[asset] = "MISTA"
+    directional = [value for value in impact.values() if value != "MISTA"]
+    if directional:
+        # Confidence is a transparent heuristic, not a calibrated probability.
+        strength = max(len(hits["bullish"]) + len(hits["bearish"]) for hits in matched_terms.values())
+        confidence = min(75, 35 + 10 * max(0, strength - 1))
+    else:
+        confidence = 20
     return {
         "relevant": True,
         "assets": assets,
         "impact": impact,
-        "reason": "keyword heuristic; price confirmation required",
+        "matched_terms": matched_terms,
+        "confidence_score": confidence,
+        "reason": "keyword heuristic; not a calibrated probability; price confirmation required",
     }
 
 
