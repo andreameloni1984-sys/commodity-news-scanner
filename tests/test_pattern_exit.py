@@ -37,3 +37,35 @@ def test_missing_stop_does_not_invent_exit():
         entry=100, tp1=110, atr=2,
     )
     assert result["exit_action"] in {"HOLD", "TIGHTEN_STOP"}
+
+
+def test_long_normal_pullback_is_reported_without_forced_exit():
+    result = analyze_pattern_and_exit(
+        direction="LONG", closes=[100, 102, 104, 105, 104],
+        entry=102, stop=98, tp1=112, atr=2,
+    )
+    assert result["retracement_status"] == "RITRACCIAMENTO NORMALE"
+    assert result["exit_action"] == "HOLD"
+
+
+def test_long_deep_pullback_warns_to_reassess():
+    result = analyze_pattern_and_exit(
+        direction="LONG", closes=[100, 105, 110, 109, 106],
+        entry=108, stop=100, tp1=120, atr=2,
+    )
+    assert result["retracement_status"].startswith("RITRACCIAMENTO PROFONDO")
+    assert result["exit_action"] == "TIGHTEN_STOP"
+
+
+def test_short_pullback_is_measured_against_short_direction():
+    result = analyze_pattern_and_exit(
+        direction="SHORT", closes=[110, 105, 100, 101, 103],
+        entry=102, stop=110, tp1=90, atr=2,
+    )
+    assert result["retracement_status"].startswith("RITRACCIAMENTO PROFONDO")
+    assert result["exit_action"] == "TIGHTEN_STOP"
+
+
+def test_missing_atr_labels_retracement_unavailable():
+    result = analyze_pattern_and_exit(direction="LONG", closes=[100, 101, 102, 103, 104])
+    assert result["retracement_status"] == "NON VALUTABILE — ATR ASSENTE"
