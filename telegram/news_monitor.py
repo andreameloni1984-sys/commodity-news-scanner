@@ -84,8 +84,24 @@ OIL_BEARISH_TERMS = {
     "inventory build", "inventories rose", "stocks rose", "reserve release",
     "release reserves", "sanctions eased", "sanctions lifted", "sanctions relief",
     "ceasefire", "strait reopens", "reopen hormuz", "oil exports resume",
-    "exports resume", "production rises",
+    "exports resume", "production rises", "demand destruction", "demand falls",
+    "weak demand", "economic slowdown", "recession risk",
 }
+OIL_BULLISH_TERMS |= {
+    "shipping attacks", "tanker attack", "tanker attacks", "supply threat",
+    "supply threats", "production outage", "production outages", "outage",
+    "outages", "oilfield shutdown", "oil field shutdown", "refinery shutdown",
+    "refinery outage", "export disruption", "exports disrupted", "supply disruption",
+    "supply risk", "geopolitical escalation", "escalating conflict",
+    "strait of hormuz", "hormuz", "iran sanctions", "russia sanctions",
+    "opec production cut", "opec+ cut", "crude inventories fell",
+}
+OIL_BEARISH_TERMS |= {
+    "demand outlook weakens", "demand outlook weakened", "oil demand forecast cut",
+    "oil demand downgraded", "opec raises output", "opec+ raises output",
+    "spare capacity", "surplus supply", "glut", "oversupply",
+}
+
 METAL_BULLISH_TERMS = {
     "rate cut", "cuts rates", "dovish", "yields fall", "yields decline",
     "dollar falls", "dollar weakens", "war", "airstrike", "military strike",
@@ -292,7 +308,7 @@ def fetch_news_items() -> list[dict[str, Any]]:
 
 def classify_event(title: str) -> dict[str, Any]:
     """Heuristic event mapping. It is interpretation, never a fact or trade by itself."""
-    text = (title or "").lower()
+    text = re.sub(r"\\s+", " ", (title or "").lower()).strip()
     has_oil = any(term in text for term in OIL_TERMS)
     has_metals = any(term in text for term in METAL_TERMS)
     has_macro = any(term in text for term in MACRO_TERMS)
