@@ -223,9 +223,23 @@ def auto_buy_best_signal_budget(amount: float = 10.0, min_score: float = 50.0) -
 
     # Persistent restart-safe daily cap: reconcile broker order history, not process memory.
     history_ok, history_data = get_order_history(limit=50)
-    if not history_ok or not isinstance(history_data, dict) or not isinstance(history_data.get("items"), list):
-        return "AUTO DEMO: storico ordini non verificabile; blocco acquisto per sicurezza."
-    for hist_order in history_data["items"]:
+    if not history_ok:
+        return f"AUTO DEMO: storico ordini non verificabile; blocco acquisto per sicurezza. Dettaglio API: {history_data}"
+    # API versions may return either a bare list or a paginated object.
+    if isinstance(history_data, list):
+        history_items = history_data
+    elif isinstance(history_data, dict):
+        history_items = history_data.get("items")
+        if history_items is None:
+            history_items = history_data.get("orders")
+        if history_items is None and isinstance(history_data.get("data"), list):
+            history_items = history_data["data"]
+    else:
+        history_items = None
+    if not isinstance(history_items, list):
+        shape = list(history_data.keys()) if isinstance(history_data, dict) else type(history_data).__name__
+        return f"AUTO DEMO: formato storico ordini non riconosciuto ({shape}); blocco acquisto per sicurezza."
+    for hist_order in history_items:
         if not isinstance(hist_order, dict):
             return "AUTO DEMO: struttura storico ordini non valida; blocco acquisto per sicurezza."
         # Trading 212 history endpoint returns HistoricalOrder items directly;
