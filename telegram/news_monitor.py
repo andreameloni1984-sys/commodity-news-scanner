@@ -124,7 +124,7 @@ AGRI_BULLISH_TERMS = {
     "frost", "freeze", "flood", "flooding", "heatwave", "heat wave",
     "export ban", "exports banned", "export restriction", "supply disruption",
     "production cut", "production falls", "production drop", "lower output",
-    "pest outbreak", "disease outbreak", "port closure", "shipping disruption",
+    "pest outbreak", "disease outbreak", "crop disease", "port closure", "shipping disruption",
     "stocks fall", "inventories fall", "stocks decline", "production forecast cut",
 }
 AGRI_BEARISH_TERMS = {
