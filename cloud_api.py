@@ -64,6 +64,11 @@ def _state_json(state):
         "rr3": getattr(state, "rr3", None),
         "data_source": getattr(state, "data_source", None),
         "data_status": meta.get("data_status", "UNKNOWN"),
+        # Sputnik confirmation must consume explicit upstream evidence; absent
+        # fields remain false/None and can never be inferred from a price alone.
+        "live": meta.get("live") is True,
+        "volume_confirmed": meta.get("volume_confirmed") is True,
+        "relative_volume": meta.get("relative_volume"),
         "opportunity_alert": getattr(state, "opportunity_alert", "NONE"),
         "opportunity_direction": getattr(state, "opportunity_direction", "NONE"),
         "opportunity_score": getattr(state, "opportunity_score", 0.0),
