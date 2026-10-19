@@ -197,6 +197,72 @@ def place_demo_order_by_value(ticker: str, symbol: str, amount: float, account_c
         "PAPER ONLY — DEMO.",
     ])
 
+# Automatic demo-invest guard: at most one successful purchase per UTC day per process.
+_AUTO_BUY_LAST_DAY = None
+
+
+def auto_buy_best_signal_budget(amount: float = 10.0, min_score: float = 50.0) -> str:
+    """Optional Trading 212 INVEST DEMO automation; never routes to a live endpoint."""
+    global _AUTO_BUY_LAST_DAY
+    from datetime import datetime, timezone
+
+    today = datetime.now(timezone.utc).date().isoformat()
+    if _AUTO_BUY_LAST_DAY == today:
+        return "AUTO DEMO: limite di un acquisto al giorno già raggiunto."
+    if not trading212_demo_available():
+        return get_trading212_demo_status()
+
+    # Fail closed unless account, positions and pending orders can all be verified.
+    ok, account = get_account_summary()
+    if not ok or not isinstance(account, dict):
+        return f"AUTO DEMO: conto non verificabile; nessun ordine. {account}"
+    currency = str(account.get("currency", "")).upper()
+    if currency != "EUR":
+        return f"AUTO DEMO: valuta conto {currency or 'N/D'} non EUR; nessun ordine."
+    cash = account.get("cash", {}) if isinstance(account.get("cash"), dict) else {}
+    try:
+        available = float(cash.get("availableToTrade"))
+    except (TypeError, ValueError):
+        return "AUTO DEMO: liquidità non verificabile; nessun ordine."
+    if available < amount:
+        return f"AUTO DEMO: liquidità insufficiente ({available:.2f} EUR); nessun ordine."
+
+    pos_ok, positions = get_positions()
+    orders_ok, orders = get_pending_orders()
+    if not pos_ok or not orders_ok or not isinstance(positions, list) or not isinstance(orders, list):
+        return "AUTO DEMO: posizioni/ordini non verificabili; nessun ordine."
+    held = set()
+    for position in positions:
+        if not isinstance(position, dict):
+            continue
+        ticker = str(position.get("ticker", "")).upper()
+        try:
+            quantity = float(position.get("quantity", 0) or 0)
+        except (TypeError, ValueError):
+            quantity = 0
+        if ticker and quantity > 0:
+            held.add(ticker)
+    pending_buys = {
+        str(order.get("ticker", "")).upper()
+        for order in orders if isinstance(order, dict) and float(order.get("quantity", 0) or 0) > 0
+    }
+
+    signals = analyze_invest_universe()
+    candidates = [s for s in signals if s.direction == "LONG" and s.score >= min_score
+                  and s.ticker and s.symbol and s.price is not None and s.price > 0
+                  and s.ticker.upper() not in held and s.ticker.upper() not in pending_buys]
+    if not candidates:
+        best = next((s for s in signals if s.price is not None and s.price > 0), None)
+        detail = f" Migliore osservato: {best.name} score {best.score:.1f} ({best.direction})." if best else " Nessun prezzo valido."
+        return f"AUTO DEMO: nessun LONG idoneo con score >= {min_score:.0f}; nessun ordine.{detail}"
+
+    best = candidates[0]
+    result = place_demo_order_by_value(best.ticker, best.symbol, amount, account_currency="EUR")
+    if "ORDINE DEMO INVIATO" in result:
+        _AUTO_BUY_LAST_DAY = today
+    return f"🤖 GAGARIN AUTO INVEST — DEMO ONLY\nSelezione: {best.name} ({best.ticker})\nScore: {best.score:.1f}\n{result}"
+
+
 def auto_buy_best_signal(
     min_score: float = 35.0,
     quantity: float = 1.0,
