@@ -22,6 +22,8 @@ from urllib.parse import urlencode
 
 import requests
 
+from engine.public_event_brain import classify as classify_public_intelligence
+
 POLL_SECONDS = max(30, int(os.getenv("GAGARIN_NEWS_POLL_SECONDS", "60")))
 RECHECK_SECONDS = max(300, int(os.getenv("GAGARIN_NEWS_RECHECK_SECONDS", "300")))
 PENDING_TTL_SECONDS = 45 * 60
@@ -387,6 +389,7 @@ def classify_event(title: str) -> dict[str, Any]:
         "impact": impact,
         "matched_terms": matched_terms,
         "confidence_score": confidence,
+        "political_intelligence": classify_public_intelligence(title),
         "reason": "keyword heuristic; not a calibrated probability; price confirmation required",
     }
 
