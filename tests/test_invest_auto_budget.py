@@ -67,7 +67,7 @@ def test_auto_demo_blocks_second_buy_same_day_from_broker_history(monkeypatch):
     from datetime import datetime, timezone
     today = datetime.now(timezone.utc).isoformat()
     monkeypatch.setattr(invest, "get_order_history", lambda limit=50: (True, {
-        "items": [{"order": {"ticker": "MSFT_US_EQ", "quantity": 0.1, "side": "BUY", "createdAt": today}, "fill": {}}]
+        "items": [{"ticker": "MSFT_US_EQ", "quantity": 0.1, "createdAt": today}]
     }))
     monkeypatch.setattr(invest, "analyze_invest_universe", lambda: [SimpleNamespace(
         direction="LONG", score=80.0, ticker="AAPL_US_EQ", symbol="AAPL", price=100.0, name="Apple"
