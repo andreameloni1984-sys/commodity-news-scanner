@@ -18,6 +18,7 @@ from engine.trading212_demo import (
     place_limit_order,
     place_stop_order,
     get_pending_orders,
+    get_order_history,
 )
 
 
@@ -197,18 +198,11 @@ def place_demo_order_by_value(ticker: str, symbol: str, amount: float, account_c
         "PAPER ONLY — DEMO.",
     ])
 
-# Automatic demo-invest guard: at most one successful purchase per UTC day per process.
-_AUTO_BUY_LAST_DAY = None
-
-
 def auto_buy_best_signal_budget(amount: float = 10.0, min_score: float = 50.0) -> str:
     """Optional Trading 212 INVEST DEMO automation; never routes to a live endpoint."""
-    global _AUTO_BUY_LAST_DAY
     from datetime import datetime, timezone
 
     today = datetime.now(timezone.utc).date().isoformat()
-    if _AUTO_BUY_LAST_DAY == today:
-        return "AUTO DEMO: limite di un acquisto al giorno già raggiunto."
     if not trading212_demo_available():
         return get_trading212_demo_status()
 
@@ -226,6 +220,39 @@ def auto_buy_best_signal_budget(amount: float = 10.0, min_score: float = 50.0) -
         return "AUTO DEMO: liquidità non verificabile; nessun ordine."
     if available < amount:
         return f"AUTO DEMO: liquidità insufficiente ({available:.2f} EUR); nessun ordine."
+
+    # Persistent restart-safe daily cap: reconcile broker order history, not process memory.
+    history_ok, history_data = get_order_history(limit=50)
+    if not history_ok or not isinstance(history_data, dict) or not isinstance(history_data.get("items"), list):
+        return "AUTO DEMO: storico ordini non verificabile; blocco acquisto per sicurezza."
+    for hist_order in history_data["items"]:
+        if not isinstance(hist_order, dict):
+            return "AUTO DEMO: riga storico non valida; blocco acquisto per sicurezza."
+        try:
+            hist_qty = float(hist_order.get("quantity", 0) or 0)
+        except (TypeError, ValueError):
+            return "AUTO DEMO: quantità storico non valida; blocco acquisto per sicurezza."
+        if hist_qty <= 0:
+            continue
+        raw_date = next((hist_order.get(k) for k in (
+            "createdAt", "dateCreated", "creationTime", "created_at", "created"
+        ) if hist_order.get(k) is not None), None)
+        try:
+            if isinstance(raw_date, (int, float)):
+                # API timestamps may be milliseconds or seconds since epoch.
+                stamp = float(raw_date)
+                if stamp > 10_000_000_000:
+                    stamp /= 1000.0
+                order_day = datetime.fromtimestamp(stamp, timezone.utc).date().isoformat()
+            elif isinstance(raw_date, str):
+                normalized = raw_date.strip().replace("Z", "+00:00")
+                order_day = datetime.fromisoformat(normalized).astimezone(timezone.utc).date().isoformat()
+            else:
+                return "AUTO DEMO: data di un acquisto storico non verificabile; blocco per sicurezza."
+        except (ValueError, TypeError, OverflowError, OSError):
+            return "AUTO DEMO: data di un acquisto storico non valida; blocco per sicurezza."
+        if order_day == today:
+            return "AUTO DEMO: acquisto BUY già registrato oggi nello storico broker; nessun altro ordine."
 
     pos_ok, positions = get_positions()
     orders_ok, orders = get_pending_orders()
@@ -264,8 +291,6 @@ def auto_buy_best_signal_budget(amount: float = 10.0, min_score: float = 50.0) -
 
     best = candidates[0]
     result = place_demo_order_by_value(best.ticker, best.symbol, amount, account_currency="EUR")
-    if "ORDINE DEMO INVIATO" in result:
-        _AUTO_BUY_LAST_DAY = today
     return f"🤖 GAGARIN AUTO INVEST — DEMO ONLY\nSelezione: {best.name} ({best.ticker})\nScore: {best.score:.1f}\n{result}"
 
 
