@@ -226,15 +226,29 @@ def auto_buy_best_signal_budget(amount: float = 10.0, min_score: float = 50.0) -
     if not history_ok or not isinstance(history_data, dict) or not isinstance(history_data.get("items"), list):
         return "AUTO DEMO: storico ordini non verificabile; blocco acquisto per sicurezza."
     for hist_order in history_data["items"]:
-        if not isinstance(hist_order, dict) or not isinstance(hist_order.get("order"), dict):
+        if not isinstance(hist_order, dict):
             return "AUTO DEMO: struttura storico ordini non valida; blocco acquisto per sicurezza."
-        broker_order = hist_order["order"]
-        side = str(broker_order.get("side", "")).upper()
-        if side not in {"BUY", "SELL"}:
-            return "AUTO DEMO: lato ordine storico non verificabile; blocco acquisto per sicurezza."
-        if side != "BUY":
-            continue
+        # Trading 212 history endpoint returns HistoricalOrder items directly;
+        # accept nested order objects too, if an API version returns that wrapper.
+        broker_order = hist_order.get("order") if isinstance(hist_order.get("order"), dict) else hist_order
         raw_date = broker_order.get("createdAt")
+        raw_quantity = broker_order.get("quantity")
+        if raw_quantity is None:
+            return "AUTO DEMO: quantità storico assente; blocco acquisto per sicurezza."
+        try:
+            hist_qty = float(raw_quantity)
+        except (TypeError, ValueError):
+            return "AUTO DEMO: quantità storico non valida; blocco acquisto per sicurezza."
+        side = str(broker_order.get("side", "")).upper()
+        if side:
+            if side not in {"BUY", "SELL"}:
+                return "AUTO DEMO: lato ordine storico non verificabile; blocco acquisto per sicurezza."
+            is_buy = side == "BUY"
+        else:
+            # API historical order quantity is signed: positive BUY, negative SELL.
+            is_buy = hist_qty > 0
+        if not is_buy:
+            continue
         try:
             if isinstance(raw_date, (int, float)):
                 stamp = float(raw_date)
@@ -243,7 +257,10 @@ def auto_buy_best_signal_budget(amount: float = 10.0, min_score: float = 50.0) -
                 order_day = datetime.fromtimestamp(stamp, timezone.utc).date().isoformat()
             elif isinstance(raw_date, str):
                 normalized = raw_date.strip().replace("Z", "+00:00")
-                order_day = datetime.fromisoformat(normalized).astimezone(timezone.utc).date().isoformat()
+                parsed = datetime.fromisoformat(normalized)
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+                order_day = parsed.astimezone(timezone.utc).date().isoformat()
             else:
                 return "AUTO DEMO: data di un acquisto storico non verificabile; blocco per sicurezza."
         except (ValueError, TypeError, OverflowError, OSError):
