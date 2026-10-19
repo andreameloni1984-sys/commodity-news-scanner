@@ -50,7 +50,7 @@ def test_long_normal_pullback_is_reported_without_forced_exit():
 
 def test_long_deep_pullback_warns_to_reassess():
     result = analyze_pattern_and_exit(
-        direction="LONG", closes=[100, 105, 110, 109, 106],
+        direction="LONG", closes=[100, 105, 110, 109, 107],
         entry=108, stop=100, tp1=120, atr=2,
     )
     assert result["retracement_status"].startswith("RITRACCIAMENTO PROFONDO")
