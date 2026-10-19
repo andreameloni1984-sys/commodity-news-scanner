@@ -94,3 +94,20 @@ def test_auto_demo_fails_closed_if_order_history_unavailable(monkeypatch):
 
     assert "storico ordini non verificabile" in result
     assert calls == []
+
+
+def test_auto_demo_detects_existing_position_with_nested_instrument(monkeypatch):
+    setup_demo(monkeypatch)
+    monkeypatch.setattr(invest, "get_positions", lambda: (True, [{
+        "instrument": {"ticker": "AAPL_US_EQ"}, "quantity": 0.2
+    }]))
+    monkeypatch.setattr(invest, "analyze_invest_universe", lambda: [SimpleNamespace(
+        direction="LONG", score=80.0, ticker="AAPL_US_EQ", symbol="AAPL", price=100.0, name="Apple"
+    )])
+    calls = []
+    monkeypatch.setattr(invest, "place_demo_order_by_value", lambda *args, **kwargs: calls.append(args))
+
+    result = invest.auto_buy_best_signal_budget(amount=10.0, min_score=50.0)
+
+    assert "nessun LONG idoneo" in result
+    assert calls == []
