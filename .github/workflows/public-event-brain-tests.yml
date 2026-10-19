@@ -1,0 +1,29 @@
+name: Gagarin Public Event Brain Tests
+
+on:
+  push:
+    branches:
+      - fix/telegram-run-polling-alert
+  pull_request:
+    branches:
+      - main
+      - fix/telegram-run-polling-alert
+
+permissions:
+  contents: read
+
+jobs:
+  public-event-brain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test dependencies
+        run: python -m pip install --upgrade pip pytest requests
+      - name: Test public event intelligence brain
+        run: python -m pytest -q tests/test_public_event_brain.py tests/test_news_monitor.py
