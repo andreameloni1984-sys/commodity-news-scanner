@@ -1,1 +1,3 @@
-PLACEHOLDER
+data,mercato,direzione,ingresso,stop,TP,size,motivo,esito
+2026-10-19,oro XAU/USD,SHORT,,,,"trend STRONG SHORT slope_atr=-6.072; livello strutturale non toccato per direzione (supporto 4091.2 / resistenza 4414.1); momentum non confermato (RSI=51.9 serve <45); roll OK; eventi OK (Yahoo fallback); paper-only",nessun segnale
+2026-10-19,argento XAG/USD,SHORT,,,,"trend STRONG SHORT slope_atr=-8.149; livello strutturale non toccato per direzione (supporto 55.5 / resistenza 66.22); RSI=39.5 OK; roll OK; eventi OK (Yahoo fallback); paper-only",nessun segnale
