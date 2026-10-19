@@ -95,3 +95,42 @@ def test_reversal_signal_is_directional_for_short_setup():
     assert result["reversal_score"] >= 3
     assert result["reversal_status"].startswith("POSSIBILE INVERSIONE")
     assert result["exit_action"] == "EXIT_WARNING"
+
+
+
+def test_live_quote_crossing_stop_triggers_warning_before_candle_close():
+    result = analyze_pattern_and_exit(
+        direction="LONG",
+        closes=[104, 103, 102, 101, 100],
+        entry=103, stop=99, tp1=110, atr=2,
+        current_price=98.5,
+    )
+    assert result["current_close"] == 100
+    assert result["reference_price"] == 98.5
+    assert result["reference_price_source"] == "live_quote"
+    assert result["exit_action"] == "EXIT_WARNING"
+
+
+def test_live_quote_reaching_target_triggers_profit_watch_before_candle_close():
+    result = analyze_pattern_and_exit(
+        direction="LONG",
+        closes=[100, 101, 102, 103, 104],
+        entry=100, stop=98, tp1=105, atr=2,
+        current_price=106,
+    )
+    assert result["current_close"] == 104
+    assert result["reference_price"] == 106
+    assert result["exit_action"] == "TAKE_PROFIT_WATCH"
+
+
+def test_live_quote_is_used_for_retracement_but_not_candle_momentum():
+    result = analyze_pattern_and_exit(
+        direction="LONG",
+        closes=[100, 105, 110, 109, 107],
+        entry=108, stop=100, tp1=120, atr=2,
+        current_price=101,
+    )
+    assert result["current_close"] == 107
+    assert result["reference_price"] == 101
+    assert result["retracement_atr"] == 4.5
+    assert result["exit_action"] == "EXIT_WARNING"
