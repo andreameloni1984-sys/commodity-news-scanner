@@ -226,22 +226,17 @@ def auto_buy_best_signal_budget(amount: float = 10.0, min_score: float = 50.0) -
     if not history_ok or not isinstance(history_data, dict) or not isinstance(history_data.get("items"), list):
         return "AUTO DEMO: storico ordini non verificabile; blocco acquisto per sicurezza."
     for hist_order in history_data["items"]:
-        if not isinstance(hist_order, dict):
-            return "AUTO DEMO: riga storico non valida; blocco acquisto per sicurezza."
-        if "quantity" not in hist_order:
-            return "AUTO DEMO: quantità storico assente; blocco acquisto per sicurezza."
-        try:
-            hist_qty = float(hist_order.get("quantity"))
-        except (TypeError, ValueError):
-            return "AUTO DEMO: quantità storico non valida; blocco acquisto per sicurezza."
-        if hist_qty <= 0:
+        if not isinstance(hist_order, dict) or not isinstance(hist_order.get("order"), dict):
+            return "AUTO DEMO: struttura storico ordini non valida; blocco acquisto per sicurezza."
+        broker_order = hist_order["order"]
+        side = str(broker_order.get("side", "")).upper()
+        if side not in {"BUY", "SELL"}:
+            return "AUTO DEMO: lato ordine storico non verificabile; blocco acquisto per sicurezza."
+        if side != "BUY":
             continue
-        raw_date = next((hist_order.get(k) for k in (
-            "createdAt", "dateCreated", "creationTime", "created_at", "created"
-        ) if hist_order.get(k) is not None), None)
+        raw_date = broker_order.get("createdAt")
         try:
             if isinstance(raw_date, (int, float)):
-                # API timestamps may be milliseconds or seconds since epoch.
                 stamp = float(raw_date)
                 if stamp > 10_000_000_000:
                     stamp /= 1000.0
