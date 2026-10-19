@@ -87,21 +87,9 @@ def _stage(item: dict) -> str | None:
     )
     if confirmed:
         return "CONFERMATA"
-    directional_pattern = (
-        (direction == "LONG" and pattern["bias"] == "BULLISH")
-        or (direction == "SHORT" and pattern["bias"] == "BEARISH")
-        or pattern["pattern"] == "COMPRESSION / POSSIBILE BREAKOUT"
-        or pattern["pattern"] == "COMPRESSIONE / POSSIBILE BREAKOUT"
-    )
-    potential = (
-        probability >= POTENTIAL_MIN_PROBABILITY
-        and quality >= POTENTIAL_MIN_QUALITY
-        and confidence >= POTENTIAL_MIN_CONFIDENCE
-        and (directional_pattern or bool(getattr(item, "opportunity_direction", None)))
-    )
-    # A directional setup already produced by Gagarin is itself a hypothesis;
-    # the lower thresholds ensure it can alert before trigger confirmation.
-    if potential or (
+    # Any live directional hypothesis above the preliminary thresholds alerts,
+    # even if the trigger and final-entry decision are not confirmed yet.
+    if (
         probability >= POTENTIAL_MIN_PROBABILITY
         and quality >= POTENTIAL_MIN_QUALITY
         and confidence >= POTENTIAL_MIN_CONFIDENCE
