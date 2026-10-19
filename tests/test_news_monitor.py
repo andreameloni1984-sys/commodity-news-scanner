@@ -14,7 +14,7 @@ def test_oil_inventory_draw_is_provisional_bullish_for_crude():
 def test_hawkish_fed_headline_is_provisional_bearish_for_metals():
     result = classify_event("Federal Reserve signals hawkish policy and a rate hike")
     assert "Oro" in result["assets"]
-    assert "Argento" in result["assets"]
+    assert "Argento" not in result["assets"]  # excluded from this selected commodity universe
     assert result["impact"]["Oro"] == "RIBASSISTA"
 
 
