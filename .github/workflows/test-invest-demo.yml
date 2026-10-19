@@ -1,0 +1,29 @@
+name: Gagarin Invest Demo Tests
+
+on:
+  pull_request:
+    paths:
+      - "engine/invest.py"
+      - "engine/trading212_demo.py"
+      - "tests/test_invest_auto_budget.py"
+      - ".github/workflows/test-invest-demo.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-invest-demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Compile changed Python modules
+        run: python -m py_compile engine/invest.py engine/trading212_demo.py tests/test_invest_auto_budget.py
+      - name: Run focused tests
+        run: python -m pytest -q tests/test_invest_auto_budget.py
