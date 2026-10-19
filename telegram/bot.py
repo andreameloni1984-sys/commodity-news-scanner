@@ -198,6 +198,9 @@ def _format_buy(results):
         return "GAGARIN — OGGI\nNessun risultato disponibile."
     forecast = predict_today(results)
     lines = ["GAGARIN — OGGI", "━━━━━━━━━━━━━━━━━━━━", "🧪 PAPER ONLY", ""]
+    # Prediction APIs may return a ranked list; Telegram displays its top candidate.
+    if isinstance(forecast, (list, tuple)):
+        forecast = forecast[0] if forecast else None
     if forecast is None:
         lines.append("Nessuna previsione disponibile.")
         return "\n".join(lines)
