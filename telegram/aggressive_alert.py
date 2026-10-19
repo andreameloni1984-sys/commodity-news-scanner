@@ -144,6 +144,11 @@ def format_aggressive_alert(states: Iterable[Any]) -> str:
             value = _number(item.get(key))
             lines.append("%s: %.6g" % (label, value) if value is not None else "%s: da definire" % label)
         lines.append("Pattern: %s | Bias: %s" % (analysis["pattern"], analysis["bias"]))
+        retracement = analysis.get("retracement_atr")
+        retracement_text = analysis.get("retracement_status", "NON VALUTABILE")
+        if retracement is not None:
+            retracement_text += " (%.2f ATR)" % retracement
+        lines.append("Ritracciamento: %s" % retracement_text)
         lines.append("Gestione/uscita: %s — %s" % (analysis["exit_action"], analysis["reason"]))
         lines.append("Probabilità: %.0f | Qualità: %.0f | Affidabilità: %.0f | Trigger: %s" % (
             float(item.get("probability") or 0), float(item.get("quality") or 0),
