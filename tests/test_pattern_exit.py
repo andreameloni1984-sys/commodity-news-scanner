@@ -69,3 +69,29 @@ def test_short_pullback_is_measured_against_short_direction():
 def test_missing_atr_labels_retracement_unavailable():
     result = analyze_pattern_and_exit(direction="LONG", closes=[100, 101, 102, 103, 104])
     assert result["retracement_status"] == "NON VALUTABILE — ATR ASSENTE"
+
+
+def test_multiple_bearish_evidence_warns_on_long_reversal():
+    result = analyze_pattern_and_exit(
+        direction="LONG",
+        closes=[110, 108, 106, 104, 101],
+        highs=[112, 111, 109, 107, 105],
+        lows=[108, 106, 104, 102, 99],
+        entry=108, stop=98, tp1=120, atr=2,
+    )
+    assert result["reversal_score"] >= 3
+    assert result["reversal_status"].startswith("POSSIBILE INVERSIONE")
+    assert result["exit_action"] == "EXIT_WARNING"
+
+
+def test_reversal_signal_is_directional_for_short_setup():
+    result = analyze_pattern_and_exit(
+        direction="SHORT",
+        closes=[100, 102, 104, 106, 109],
+        highs=[101, 103, 105, 107, 110],
+        lows=[98, 100, 102, 104, 107],
+        entry=104, stop=112, tp1=95, atr=2,
+    )
+    assert result["reversal_score"] >= 3
+    assert result["reversal_status"].startswith("POSSIBILE INVERSIONE")
+    assert result["exit_action"] == "EXIT_WARNING"
