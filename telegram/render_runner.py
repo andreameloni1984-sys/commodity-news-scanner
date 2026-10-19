@@ -108,11 +108,19 @@ def invest_auto_loop() -> None:
                 best = candidates[0]
                 print(
                     f"Invest SCAN | LONG={len(candidates)} | best={best.ticker} "
-                    f"score={best.score:.1f} price={best.price} | NO ORDER (read-only monitor)",
+                    f"score={best.score:.1f} price={best.price}",
                     flush=True,
                 )
             else:
-                print("Invest SCAN | no confirmed LONG | NO ORDER (read-only monitor)", flush=True)
+                print("Invest SCAN | no confirmed LONG", flush=True)
+
+            # Automated buying is opt-in and strictly DEMO-only. Default remains OFF.
+            if os.getenv("T212_AUTO_BUY_ENABLED", "0").strip() == "1":
+                from engine.invest import auto_buy_best_signal_budget
+                result = auto_buy_best_signal_budget(amount=10.0, min_score=50.0)
+                print("Invest AUTO BUY | " + result.replace("\\n", " | ")[:900], flush=True)
+                if "ORDINE DEMO INVIATO" in result:
+                    send_telegram(result)
         except Exception as exc:
             print(f"Invest SCAN error | {type(exc).__name__}: {exc}", flush=True)
         time.sleep(INVEST_AUTO_INTERVAL)
