@@ -18,6 +18,7 @@ from engine.trading212_demo import (
     place_limit_order,
     place_stop_order,
     get_pending_orders,
+    get_order_history,
 )
 
 
@@ -196,6 +197,119 @@ def place_demo_order_by_value(ticker: str, symbol: str, amount: float, account_c
         "Importo effettivo dipende dall'esecuzione; verificare /invest_orders e le posizioni.",
         "PAPER ONLY — DEMO.",
     ])
+
+def auto_buy_best_signal_budget(amount: float = 10.0, min_score: float = 50.0) -> str:
+    """Optional Trading 212 INVEST DEMO automation; never routes to a live endpoint."""
+    from datetime import datetime, timezone
+
+    today = datetime.now(timezone.utc).date().isoformat()
+    if not trading212_demo_available():
+        return get_trading212_demo_status()
+
+    # Fail closed unless account, positions and pending orders can all be verified.
+    ok, account = get_account_summary()
+    if not ok or not isinstance(account, dict):
+        return f"AUTO DEMO: conto non verificabile; nessun ordine. {account}"
+    currency = str(account.get("currency", "")).upper()
+    if currency != "EUR":
+        return f"AUTO DEMO: valuta conto {currency or 'N/D'} non EUR; nessun ordine."
+    cash = account.get("cash", {}) if isinstance(account.get("cash"), dict) else {}
+    try:
+        available = float(cash.get("availableToTrade"))
+    except (TypeError, ValueError):
+        return "AUTO DEMO: liquidità non verificabile; nessun ordine."
+    if available < amount:
+        return f"AUTO DEMO: liquidità insufficiente ({available:.2f} EUR); nessun ordine."
+
+    # Persistent restart-safe daily cap: reconcile broker order history, not process memory.
+    history_ok, history_data = get_order_history(limit=50)
+    if not history_ok or not isinstance(history_data, dict) or not isinstance(history_data.get("items"), list):
+        return "AUTO DEMO: storico ordini non verificabile; blocco acquisto per sicurezza."
+    for hist_order in history_data["items"]:
+        if not isinstance(hist_order, dict):
+            return "AUTO DEMO: struttura storico ordini non valida; blocco acquisto per sicurezza."
+        # Trading 212 history endpoint returns HistoricalOrder items directly;
+        # accept nested order objects too, if an API version returns that wrapper.
+        broker_order = hist_order.get("order") if isinstance(hist_order.get("order"), dict) else hist_order
+        raw_date = broker_order.get("createdAt")
+        raw_quantity = broker_order.get("quantity")
+        if raw_quantity is None:
+            return "AUTO DEMO: quantità storico assente; blocco acquisto per sicurezza."
+        try:
+            hist_qty = float(raw_quantity)
+        except (TypeError, ValueError):
+            return "AUTO DEMO: quantità storico non valida; blocco acquisto per sicurezza."
+        side = str(broker_order.get("side", "")).upper()
+        if side:
+            if side not in {"BUY", "SELL"}:
+                return "AUTO DEMO: lato ordine storico non verificabile; blocco acquisto per sicurezza."
+            is_buy = side == "BUY"
+        else:
+            # API historical order quantity is signed: positive BUY, negative SELL.
+            is_buy = hist_qty > 0
+        if not is_buy:
+            continue
+        try:
+            if isinstance(raw_date, (int, float)):
+                stamp = float(raw_date)
+                if stamp > 10_000_000_000:
+                    stamp /= 1000.0
+                order_day = datetime.fromtimestamp(stamp, timezone.utc).date().isoformat()
+            elif isinstance(raw_date, str):
+                normalized = raw_date.strip().replace("Z", "+00:00")
+                parsed = datetime.fromisoformat(normalized)
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+                order_day = parsed.astimezone(timezone.utc).date().isoformat()
+            else:
+                return "AUTO DEMO: data di un acquisto storico non verificabile; blocco per sicurezza."
+        except (ValueError, TypeError, OverflowError, OSError):
+            return "AUTO DEMO: data di un acquisto storico non valida; blocco per sicurezza."
+        if order_day == today:
+            return "AUTO DEMO: acquisto BUY già registrato oggi nello storico broker; nessun altro ordine."
+
+    pos_ok, positions = get_positions()
+    orders_ok, orders = get_pending_orders()
+    if not pos_ok or not orders_ok or not isinstance(positions, list) or not isinstance(orders, list):
+        return "AUTO DEMO: posizioni/ordini non verificabili; nessun ordine."
+    held = set()
+    for position in positions:
+        if not isinstance(position, dict):
+            continue
+        instrument = position.get("instrument", {}) if isinstance(position.get("instrument"), dict) else {}
+        ticker = str(position.get("ticker") or instrument.get("ticker") or "").upper()
+        try:
+            quantity = float(position.get("quantity", 0) or 0)
+        except (TypeError, ValueError):
+            quantity = 0
+        if ticker and quantity > 0:
+            held.add(ticker)
+    pending_buys = set()
+    for order in orders:
+        if not isinstance(order, dict):
+            continue
+        try:
+            quantity = float(order.get("quantity", 0) or 0)
+        except (TypeError, ValueError):
+            return "AUTO DEMO: dati di un ordine pendente non validi; nessun ordine."
+        side = str(order.get("side", "")).upper()
+        is_buy = side == "BUY" if side else quantity > 0
+        if is_buy and order.get("ticker"):
+            pending_buys.add(str(order["ticker"]).upper())
+
+    signals = analyze_invest_universe()
+    candidates = [s for s in signals if s.direction == "LONG" and s.score >= min_score
+                  and s.ticker and s.symbol and s.price is not None and s.price > 0
+                  and s.ticker.upper() not in held and s.ticker.upper() not in pending_buys]
+    if not candidates:
+        best = next((s for s in signals if s.price is not None and s.price > 0), None)
+        detail = f" Migliore osservato: {best.name} score {best.score:.1f} ({best.direction})." if best else " Nessun prezzo valido."
+        return f"AUTO DEMO: nessun LONG idoneo con score >= {min_score:.0f}; nessun ordine.{detail}"
+
+    best = candidates[0]
+    result = place_demo_order_by_value(best.ticker, best.symbol, amount, account_currency="EUR")
+    return f"🤖 GAGARIN AUTO INVEST — DEMO ONLY\nSelezione: {best.name} ({best.ticker})\nScore: {best.score:.1f}\n{result}"
+
 
 def auto_buy_best_signal(
     min_score: float = 35.0,
