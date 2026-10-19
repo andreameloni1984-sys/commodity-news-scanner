@@ -29,6 +29,7 @@ from engine.invest import (
     format_pending_orders,
     place_demo_order,
     auto_buy_best_signal,
+    auto_buy_best_signal_budget,
 )
 from engine.daily_forecast import predict_today
 from soyuz_gagarin.adapter import evaluate_states
@@ -427,7 +428,8 @@ def _command_response(command: str) -> Optional[str]:
         return place_demo_order_by_value(ticker, symbol, amount)
 
     if command_name == "/invest_auto":
-        return auto_buy_best_signal()
+        # Explicit user command: one guarded €10 order at most, INVEST DEMO only.
+        return auto_buy_best_signal_budget(amount=10.0, min_score=50.0)
 
     if command_name == "/classifica":
         results = get_last_results() or _run_analysis()
