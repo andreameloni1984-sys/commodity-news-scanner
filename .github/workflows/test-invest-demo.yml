@@ -1,6 +1,13 @@
 name: Gagarin Invest Demo Tests
 
 on:
+  push:
+    branches: ["main"]
+    paths:
+      - "engine/invest.py"
+      - "engine/trading212_demo.py"
+      - "tests/test_invest_auto_budget.py"
+      - ".github/workflows/test-invest-demo.yml"
   pull_request:
     paths:
       - "engine/invest.py"
