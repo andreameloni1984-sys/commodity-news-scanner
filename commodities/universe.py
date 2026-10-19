@@ -59,25 +59,14 @@ class Commodity:
 # MAIN UNIVERSE
 # ============================================================
 #
-# Manteniamo il paniere che abbiamo deciso per SOYUZ:
-#
-# METALLI
-#   Oro
-#   Platino
-#
-# Argento e Palladio restano nel catalogo storico ma sono disabilitati
-# dall'universo operativo su richiesta dell'utente.
-#
-# ENERGY
-#   WTI
-#   Brent
-#
-# AGRICOLTURA / FOOD
-#   Riso
-#   Zucchero
-#   Cacao
-#   Caffè
-#
+# Universo operativo Gagarin: 8 materie prime.
+# Priorità di monitoraggio (non è un segnale di acquisto):
+# 1 Oro, 2 WTI, 3 Brent, 4 Caffè, 5 Cacao.
+# Radar secondario: Platino, Zucchero, Riso.
+# Argento, Palladio e le commodity extra sono disabilitati.
+# Il ranking operativo continua a dipendere dai segnali/dati correnti.
+
+
 # ============================================================
 
 
@@ -109,7 +98,7 @@ COMMODITIES = [
         symbol="XPT/USD",
         category="Metal",
         unit="USD",
-        priority=3,
+        priority=6,
     ),
 
     Commodity(
@@ -130,7 +119,7 @@ COMMODITIES = [
         symbol="WTI/USD",
         category="Energy",
         unit="USD",
-        priority=5,
+        priority=2,
     ),
 
     Commodity(
@@ -138,7 +127,7 @@ COMMODITIES = [
         symbol="BRENT/USD",
         category="Energy",
         unit="USD",
-        priority=6,
+        priority=3,
     ),
 
     # --------------------------------------------------------
@@ -150,7 +139,7 @@ COMMODITIES = [
         symbol="RICE/USD",
         category="Agriculture",
         unit="USD",
-        priority=7,
+        priority=8,
     ),
 
     Commodity(
@@ -158,7 +147,7 @@ COMMODITIES = [
         symbol="SUGAR/USD",
         category="Agriculture",
         unit="USD",
-        priority=8,
+        priority=7,
     ),
 
     Commodity(
@@ -166,7 +155,7 @@ COMMODITIES = [
         symbol="COCOA/USD",
         category="Agriculture",
         unit="USD",
-        priority=9,
+        priority=5,
     ),
 
     Commodity(
@@ -174,18 +163,18 @@ COMMODITIES = [
         symbol="COFFEE/USD",
         category="Agriculture",
         unit="USD",
-        priority=10,
+        priority=4,
     ),
 
     # --------------------------------------------------------
-    # EXTRA COMMODITIES — amplia il paniere a 13 materie prime
+    # EXTRA COMMODITIES — catalogo storico, non operativo
     # --------------------------------------------------------
-    Commodity(name="Rame", symbol="COPPER/USD", category="Metal", unit="USD", priority=11),
-    Commodity(name="Benzina", symbol="GASOLINE/USD", category="Energy", unit="USD", priority=12),
-    Commodity(name="Gas naturale", symbol="NATGAS/USD", category="Energy", unit="USD", priority=13),
+    Commodity(name="Rame", symbol="COPPER/USD", category="Metal", unit="USD", priority=11, enabled=False),
+    Commodity(name="Benzina", symbol="GASOLINE/USD", category="Energy", unit="USD", priority=12, enabled=False),
+    Commodity(name="Gas naturale", symbol="NATGAS/USD", category="Energy", unit="USD", priority=13, enabled=False),
 
     # --------------------------------------------------------
-    # FOREX — universo complessivo 21 strumenti
+    # FOREX — strumenti separati dal paniere commodity
     # --------------------------------------------------------
     Commodity(name="EUR/USD", symbol="EUR/USD", category="Forex", unit="USD", priority=14),
     Commodity(name="GBP/USD", symbol="GBP/USD", category="Forex", unit="USD", priority=15),
