@@ -8,9 +8,7 @@ from telegram.bot import _resolve_commodity
     ("alias", "expected"),
     [
         ("oro", "Oro"),
-        ("argento", "Argento"),
         ("platino", "Platino"),
-        ("palladio", "Palladio"),
         ("wti", "Petrolio WTI"),
         ("brent", "Petrolio Brent"),
         ("riso", "Riso"),
@@ -57,3 +55,29 @@ def test_setup_formatter_distinguishes_pending_setup_from_no_setup():
 
     empty = _format_setup([])
     assert "Nessun risultato disponibile." in empty
+
+
+def test_excluded_commodities_are_not_resolvable():
+    assert _resolve_commodity("argento") is None
+    assert _resolve_commodity("silver") is None
+    assert _resolve_commodity("palladio") is None
+
+
+def test_active_commodity_basket_and_monitoring_priorities():
+    from commodities.universe import COMMODITIES
+
+    active = [
+        item for item in COMMODITIES
+        if item.enabled and item.category != "Forex"
+    ]
+    assert {item.name for item in active} == {
+        "Oro", "Platino", "Petrolio WTI", "Petrolio Brent",
+        "Riso", "Zucchero", "Cacao", "Caffè",
+    }
+    priority_names = {
+        item.name: item.priority for item in active
+    }
+    assert sorted(
+        name for name, priority in priority_names.items()
+        if priority <= 5
+    ) == ["Cacao", "Caffè", "Oro", "Petrolio Brent", "Petrolio WTI"]
