@@ -228,8 +228,10 @@ def auto_buy_best_signal_budget(amount: float = 10.0, min_score: float = 50.0) -
     for hist_order in history_data["items"]:
         if not isinstance(hist_order, dict):
             return "AUTO DEMO: riga storico non valida; blocco acquisto per sicurezza."
+        if "quantity" not in hist_order:
+            return "AUTO DEMO: quantità storico assente; blocco acquisto per sicurezza."
         try:
-            hist_qty = float(hist_order.get("quantity", 0) or 0)
+            hist_qty = float(hist_order.get("quantity"))
         except (TypeError, ValueError):
             return "AUTO DEMO: quantità storico non valida; blocco acquisto per sicurezza."
         if hist_qty <= 0:
