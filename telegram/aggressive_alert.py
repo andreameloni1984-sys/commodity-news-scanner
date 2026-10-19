@@ -14,6 +14,7 @@ from typing import Any, Iterable
 
 from soyuz_gagarin.trading_profiles import get_profile
 from engine.session_windows import is_overlap, is_eia_window
+from engine.pattern_exit import analyze_pattern_and_exit
 
 
 AGGRESSIVE_MIN_PROBABILITY = 50.0
@@ -81,6 +82,9 @@ def find_aggressive_alerts(states: Iterable[Any]) -> list[dict]:
             "tp3": getattr(state, "tp3", None),
             "price": getattr(state, "price", None),
             "atr": getattr(state, "atr", None),
+            "closes": getattr(state, "closes", []),
+            "highs": getattr(state, "highs", []),
+            "lows": getattr(state, "lows", []),
         }
         if _is_aggressive_ready(item):
             ready.append(item)
