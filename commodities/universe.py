@@ -63,9 +63,10 @@ class Commodity:
 #
 # METALLI
 #   Oro
-#   Argento
 #   Platino
-#   Palladio
+#
+# Argento e Palladio restano nel catalogo storico ma sono disabilitati
+# dall'universo operativo su richiesta dell'utente.
 #
 # ENERGY
 #   WTI
@@ -100,6 +101,7 @@ COMMODITIES = [
         category="Metal",
         unit="USD",
         priority=2,
+        enabled=False,  # Escluso dall'universo operativo Gagarin.
     ),
 
     Commodity(
@@ -116,6 +118,7 @@ COMMODITIES = [
         category="Metal",
         unit="USD",
         priority=4,
+        enabled=False,  # Escluso dall'universo operativo Gagarin.
     ),
 
     # --------------------------------------------------------
