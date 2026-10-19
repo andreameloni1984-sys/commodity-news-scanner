@@ -197,6 +197,114 @@ def _run_gagarin():
     }
 
 
+SPUTNIK_DOMAIN_TERMS = {
+    "ENERGY": ("oil", "wti", "brent", "petrol", "energy"),
+    "METALS": ("gold", "silver", "oro", "argento", "metal"),
+    "AGRICULTURE": ("corn", "wheat", "rice", "sugar", "coffee", "cocoa", "agriculture"),
+    "DEFENSE": ("defense", "aerospace", "military"),
+    "AI_TECH": ("nasdaq", "semiconductor", "technology", "chip"),
+    "TRADE_POLICY": ("gold", "oil", "wti", "brent", "silver", "nasdaq", "usd"),
+    "RATES_MACRO": ("gold", "silver", "usd", "nasdaq", "dollar", "treasury"),
+}
+
+
+def _sputnik_domain_terms(domains: list[str]) -> tuple[str, ...]:
+    terms = []
+    for domain in domains:
+        terms.extend(SPUTNIK_DOMAIN_TERMS.get(str(domain).upper(), ()))
+    return tuple(dict.fromkeys(terms))
+
+
+def _match_sputnik_rows(rows: list[dict], domains: list[str]) -> list[dict]:
+    terms = _sputnik_domain_terms(domains)
+    if not terms:
+        return []
+    matched = []
+    for row in rows:
+        label = " ".join(
+            str(row.get(key) or "")
+            for key in ("symbol", "commodity")
+        ).lower()
+        if any(term in label for term in terms):
+            matched.append(row)
+    return matched
+
+
+def _run_sputnik_confirmation(events: list[dict]) -> dict:
+    """Refresh market analysis for Sputnik catalysts without opening positions."""
+    errors = validate_universe()
+    if errors:
+        raise RuntimeError("CONFIGURATION_BLOCKED: " + ", ".join(errors))
+
+    commodities = enabled_commodities()
+    results = analyze_universe(commodities)
+    decisions = evaluate_states(results)
+    by_symbol = {str(d.symbol).upper(): d for d in decisions}
+
+    for state in results:
+        symbol = str(getattr(state, "symbol", "")).upper()
+        decision = by_symbol.get(symbol)
+        metadata = getattr(state, "metadata", None)
+        if not isinstance(metadata, dict):
+            metadata = {}
+            state.metadata = metadata
+        metadata["gagarin_action"] = decision.action if decision else "WAIT"
+        metadata["gagarin_reason"] = decision.reason if decision else "NO_DECISION"
+
+    rows = [_state_json(state) for state in results]
+    confirmations = []
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        domains = event.get("domains") if isinstance(event.get("domains"), list) else []
+        matched = _match_sputnik_rows(rows, domains)
+        eligible = [
+            row for row in matched
+            if row.get("action") in {"PAPER_ENTRY", "PAPER_SIGNAL"}
+            and row.get("price") is not None
+            and row.get("stop") is not None
+            and row.get("tp1") is not None
+        ]
+        confirmations.append({
+            "event_id": str(event.get("event_id") or ""),
+            "title": str(event.get("title") or "")[:300],
+            "source_url": str(event.get("url") or "")[:1000],
+            "domains": [str(x).upper() for x in domains],
+            "status": "GAGARIN_SETUP_CONFIRMED" if eligible else (
+                "NO_MATCHING_INSTRUMENT" if not matched else "WATCH_ONLY"
+            ),
+            "matched_instruments": matched[:10],
+            "eligible_setups": eligible[:5],
+            "trade_placed": False,
+        })
+
+    return {
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        "mode": "PAPER ONLY",
+        "analysis_type": "SPUTNIK_CATALYST_CONFIRMATION",
+        "trade_placed": False,
+        "events": confirmations,
+    }
+
+
+@app.post("/api/sputnik/confirm")
+def confirm_sputnik_catalysts(payload: dict, x_api_key: str | None = Header(default=None)):
+    _authorize(x_api_key)
+    events = payload.get("events") if isinstance(payload, dict) else None
+    if not isinstance(events, list) or not events:
+        raise HTTPException(status_code=422, detail="Payload must contain a non-empty events list")
+    if len(events) > 20:
+        raise HTTPException(status_code=422, detail="At most 20 catalyst events per request")
+    if not RUN_LOCK.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="Analysis already running")
+    try:
+        return _run_sputnik_confirmation(events)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}")
+    finally:
+        RUN_LOCK.release()
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "gagarin-cloud", "mode": "PAPER ONLY"}
