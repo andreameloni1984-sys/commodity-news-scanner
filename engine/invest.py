@@ -259,7 +259,8 @@ def auto_buy_best_signal_budget(amount: float = 10.0, min_score: float = 50.0) -
     for position in positions:
         if not isinstance(position, dict):
             continue
-        ticker = str(position.get("ticker", "")).upper()
+        instrument = position.get("instrument", {}) if isinstance(position.get("instrument"), dict) else {}
+        ticker = str(position.get("ticker") or instrument.get("ticker") or "").upper()
         try:
             quantity = float(position.get("quantity", 0) or 0)
         except (TypeError, ValueError):
@@ -274,7 +275,9 @@ def auto_buy_best_signal_budget(amount: float = 10.0, min_score: float = 50.0) -
             quantity = float(order.get("quantity", 0) or 0)
         except (TypeError, ValueError):
             return "AUTO DEMO: dati di un ordine pendente non validi; nessun ordine."
-        if quantity > 0 and order.get("ticker"):
+        side = str(order.get("side", "")).upper()
+        is_buy = side == "BUY" if side else quantity > 0
+        if is_buy and order.get("ticker"):
             pending_buys.add(str(order["ticker"]).upper())
 
     signals = analyze_invest_universe()
