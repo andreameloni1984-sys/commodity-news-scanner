@@ -56,3 +56,17 @@ def test_setup_confirmation_requires_live_price_coherent_risk_and_volume():
     assert not _is_sputnik_setup_confirmed(_valid_confirmation_row(relative_volume=None, volume_confirmed=False))
     assert not _is_sputnik_setup_confirmed(_valid_confirmation_row(stop=81.0))
     assert not _is_sputnik_setup_confirmed(_valid_confirmation_row(price=0.0))
+
+
+def test_state_json_does_not_infer_live_or_volume_confirmation():
+    from types import SimpleNamespace
+    from cloud_api import _state_json
+
+    row = _state_json(SimpleNamespace(
+        symbol="USOIL", commodity="WTI Crude Oil", price=80.0,
+        setup_direction="LONG", metadata={"data_status": "LIVE"},
+    ))
+    assert row["data_status"] == "LIVE"
+    assert row["live"] is False
+    assert row["volume_confirmed"] is False
+    assert row["relative_volume"] is None
