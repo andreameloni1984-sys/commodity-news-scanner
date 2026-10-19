@@ -118,7 +118,7 @@ def invest_auto_loop() -> None:
             if os.getenv("T212_AUTO_BUY_ENABLED", "0").strip() == "1":
                 from engine.invest import auto_buy_best_signal_budget
                 result = auto_buy_best_signal_budget(amount=10.0, min_score=50.0)
-                print("Invest AUTO BUY | " + result.replace("\\n", " | ")[:900], flush=True)
+                print("Invest AUTO BUY | " + result.replace("\n", " | ")[:900], flush=True)
                 if "ORDINE DEMO INVIATO" in result:
                     send_telegram(result)
         except Exception as exc:
