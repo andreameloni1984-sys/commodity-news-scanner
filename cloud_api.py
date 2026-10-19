@@ -230,6 +230,31 @@ def _match_sputnik_rows(rows: list[dict], domains: list[str]) -> list[dict]:
     return matched
 
 
+def _is_sputnik_setup_confirmed(row: dict) -> bool:
+    """Require live market data, coherent risk levels, and volume confirmation."""
+    if not isinstance(row, dict):
+        return False
+    if str(row.get("data_status") or "").upper() != "LIVE":
+        return False
+    if row.get("live") is not True or row.get("volume_confirmed") is not True:
+        return False
+    try:
+        price = float(row.get("price"))
+        stop = float(row.get("stop"))
+        target = float(row.get("tp1"))
+        relative_volume = float(row.get("relative_volume"))
+    except (TypeError, ValueError):
+        return False
+    if price <= 0 or relative_volume <= 0:
+        return False
+    direction = str(row.get("direction") or "").upper()
+    if direction == "LONG":
+        return stop < price < target
+    if direction == "SHORT":
+        return target < price < stop
+    return False
+
+
 def _run_sputnik_confirmation(events: list[dict]) -> dict:
     """Refresh market analysis for Sputnik catalysts without opening positions."""
     errors = validate_universe()
@@ -261,9 +286,7 @@ def _run_sputnik_confirmation(events: list[dict]) -> dict:
         eligible = [
             row for row in matched
             if row.get("action") in {"PAPER_ENTRY", "PAPER_SIGNAL"}
-            and row.get("price") is not None
-            and row.get("stop") is not None
-            and row.get("tp1") is not None
+            and _is_sputnik_setup_confirmed(row)
         ]
         confirmations.append({
             "event_id": str(event.get("event_id") or ""),
