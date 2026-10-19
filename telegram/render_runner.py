@@ -339,6 +339,7 @@ def main() -> None:
         {"command": "aggressivo212", "description": "Profilo AGGRESSIVE 212"},
         {"command": "soft212", "description": "Profilo SOFT 212"},
         {"command": "collegamento212", "description": "Stato collegamento Invest Trading 212"},
+        {"command": "fasceorario", "description": "Statistiche delle tre fasce orarie"},
     ]})
     print(f"Telegram commands menu | configured={'YES' if commands_ok else 'NO'}", flush=True)
 
