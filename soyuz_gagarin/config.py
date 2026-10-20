@@ -67,16 +67,26 @@ class GagarinConfig:
     def __post_init__(self):
         profile = _resolve_profile(self.profile_name)
         self.profile_name = profile.name
-        if "MIN_ENTRY_PROBABILITY" not in os.environ:
-            self.min_probability = profile.min_probability
-        if "MIN_ENTRY_QUALITY" not in os.environ:
-            self.min_quality = profile.min_quality
-        if "MIN_ENTRY_CONFIDENCE" not in os.environ:
-            self.min_confidence = profile.min_confidence
-        if "MIN_ENTRY_RR" not in os.environ:
-            self.min_rr = profile.min_rr
-        if "MAX_ENTRY_STOP_ATR" not in os.environ:
-            self.max_stop_atr = profile.max_stop_atr
+        self.min_probability = (
+            _env_float("MIN_ENTRY_PROBABILITY", profile.min_probability)
+            if "MIN_ENTRY_PROBABILITY" in os.environ else profile.min_probability
+        )
+        self.min_quality = (
+            _env_float("MIN_ENTRY_QUALITY", profile.min_quality)
+            if "MIN_ENTRY_QUALITY" in os.environ else profile.min_quality
+        )
+        self.min_confidence = (
+            _env_float("MIN_ENTRY_CONFIDENCE", profile.min_confidence)
+            if "MIN_ENTRY_CONFIDENCE" in os.environ else profile.min_confidence
+        )
+        self.min_rr = (
+            _env_float("MIN_ENTRY_RR", profile.min_rr)
+            if "MIN_ENTRY_RR" in os.environ else profile.min_rr
+        )
+        self.max_stop_atr = (
+            _env_float("MAX_ENTRY_STOP_ATR", profile.max_stop_atr)
+            if "MAX_ENTRY_STOP_ATR" in os.environ else profile.max_stop_atr
+        )
 
 
 if __name__ == "__main__":
