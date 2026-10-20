@@ -597,18 +597,10 @@ def run():
         try:
 
             if energy_states:
-                event = energy_states[0].metadata.get("energy") or {}
-                legs = ", ".join(
-                    f"{row.get('family')} {float(row.get('pct') or 0):+.2f}%"
-                    for row in event.get("legs", [])
-                )
-                send_telegram(
-                    "ENERGY SHOCK "
-                    + str(event.get("direction", "NONE"))
-                    + "\n"
-                    + legs
-                    + "\nPAPER ONLY. Continuazione da verificare."
-                )
+                # This scheduled runner executes every 15 minutes. Avoid repeating
+                # the same energy-shock message on every run; the Render event and
+                # forecast monitors own event-triggered Telegram notifications.
+                print("ENERGY SHOCK observed; Telegram notification delegated to event monitor")
             if signal_results:
                 send_telegram(
                     format_signal_board(signal_results)
