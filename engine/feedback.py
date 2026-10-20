@@ -245,14 +245,30 @@ def summarize(path=FEEDBACK_FILE):
     rows = load_feedback(path)
     outcomes = {}
     realized_r = []
+    groups = {}
     for row in rows:
         outcome = row.get("outcome", "OPEN") or "OPEN"
         outcomes[outcome] = outcomes.get(outcome, 0) + 1
         value = _number(row.get("r_multiple"))
-        if outcome != "OPEN" and value is not None:
-            realized_r.append(value)
+        if outcome == "OPEN" or value is None:
+            continue
+        realized_r.append(value)
+        key = (str(row.get("symbol", "")), str(row.get("direction", "")))
+        group = groups.setdefault(key, {"closed": 0, "wins": 0, "realized_r": 0.0})
+        group["closed"] += 1
+        group["wins"] += int(value > 0)
+        group["realized_r"] += value
     closed = len(realized_r)
     wins = sum(value > 0 for value in realized_r)
+    by_symbol_direction = {}
+    for (symbol, direction), group in groups.items():
+        count = group["closed"]
+        by_symbol_direction[f"{symbol} {direction}"] = {
+            "closed": count,
+            "win_rate_pct": round(100.0 * group["wins"] / count, 2),
+            "average_r": round(group["realized_r"] / count, 4),
+            "realized_r": round(group["realized_r"], 4),
+        }
     return {
         "total": len(rows),
         "open": outcomes.get("OPEN", 0),
@@ -261,14 +277,23 @@ def summarize(path=FEEDBACK_FILE):
         "win_rate_pct": round(100.0 * wins / closed, 2) if closed else None,
         "average_r": round(sum(realized_r) / closed, 4) if closed else None,
         "realized_r": round(sum(realized_r), 4) if closed else 0.0,
+        "by_symbol_direction": by_symbol_direction,
     }
 
 
 def format_summary(summary):
     win_rate = "N/D" if summary.get("win_rate_pct") is None else f"{summary['win_rate_pct']:.1f}%"
     avg_r = "N/D" if summary.get("average_r") is None else f"{summary['average_r']:.2f}R"
-    return (
+    text = (
         f"signals={summary['total']} open={summary['open']} closed={summary['closed']} "
         f"win_rate={win_rate} avg_R={avg_r} total_R={summary.get('realized_r', 0.0)} "
         f"outcomes={summary['outcomes']}"
     )
+    groups = summary.get("by_symbol_direction", {})
+    if groups:
+        best = sorted(groups.items(), key=lambda item: (item[1]["average_r"], item[1]["closed"]), reverse=True)[:3]
+        text += " | per_asset=" + "; ".join(
+            f"{name}: n={stats['closed']} win={stats['win_rate_pct']:.1f}% avg={stats['average_r']:.2f}R"
+            for name, stats in best
+        )
+    return text
