@@ -167,28 +167,32 @@ def run_directional_commodity_alert(states: Iterable[Any]) -> bool:
     now = datetime.now(timezone.utc)
     with _LOCK:
         state = _read_state()
+        next_state = json.loads(json.dumps(state))
         to_send = []
         for candidate in candidates:
             key = candidate["symbol"]
-            previous = state.get(key)
+            previous = next_state.get(key)
             if _changed(candidate, previous, now):
                 to_send.append(candidate)
-                state[key] = {
+                next_state[key] = {
                     **{k: candidate[k] for k in ("direction", "probability", "quality", "confidence")},
                     "last_sent_at": now.isoformat(), "last_seen_at": now.isoformat(), "active": True,
                 }
             else:
                 previous["last_seen_at"] = now.isoformat()
                 previous["active"] = True
-        _write_state(state)
-    if not to_send:
-        return False
+        if not to_send:
+            _write_state(next_state)
+            return False
     message = format_directional_alert(to_send)
     try:
         from telegram.bot import send_telegram
         sent = bool(send_telegram(message))
-        if not sent:
-            print("Gagarin forecast alert | Telegram delivery failed", flush=True)
+        if sent:
+            with _LOCK:
+                _write_state(next_state)
+        else:
+            print("Gagarin forecast alert | Telegram delivery failed; state not consumed", flush=True)
         return sent
     except Exception as exc:
         print(f"Gagarin forecast alert error | {type(exc).__name__}: {exc}", flush=True)
