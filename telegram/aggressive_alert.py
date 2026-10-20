@@ -116,13 +116,16 @@ def _stage(item: dict) -> str | None:
     # The pattern/exit result must affect the decision, not merely decorate
     # the Telegram message. Use closed OHLC candles for patterns and a live
     # provider quote for stop/target checks.
-    pattern_analysis = analyze_pattern_and_exit(
-        direction=direction, opens=item.get("opens"), closes=item.get("closes"),
-        highs=item.get("highs"), lows=item.get("lows"),
-        entry=item.get("entry"), stop=item.get("stop"),
-        tp1=item.get("tp1"), atr=item.get("atr"),
-        current_price=item.get("price"),
-    )
+    pattern_analysis = item.get("pattern_analysis")
+    if not isinstance(pattern_analysis, dict):
+        pattern_analysis = analyze_pattern_and_exit(
+            direction=direction, opens=item.get("opens"), closes=item.get("closes"),
+            highs=item.get("highs"), lows=item.get("lows"),
+            entry=item.get("entry"), stop=item.get("stop"),
+            tp1=item.get("tp1"), atr=item.get("atr"),
+            current_price=item.get("price"),
+        )
+        item["pattern_analysis"] = pattern_analysis
     decision = str(item.get("final_decision") or "").upper()
     scores_ok = (
         probability >= POTENTIAL_MIN_PROBABILITY
@@ -131,6 +134,8 @@ def _stage(item: dict) -> str | None:
     )
     # Never advertise an entry as confirmed/potential when the setup is already
     # invalidated or several closed-candle signals point to an adverse reversal.
+    if pattern_analysis.get("stop_invalidated"):
+        return "RISCHIO"
     if scores_ok and pattern_analysis.get("exit_action") == "EXIT_WARNING":
         return "RISCHIO"
     if scores_ok and pattern_analysis.get("exit_action") == "TAKE_PROFIT_WATCH":
@@ -159,15 +164,16 @@ def find_aggressive_alerts(states: Iterable[Any]) -> list[dict]:
     found = []
     for state in states:
         item = _item_from_state(state)
+        # Calculate once so stage and displayed exit/TP/SL use identical evidence.
+        item["pattern_analysis"] = analyze_pattern_and_exit(
+            direction=item["direction"], opens=item.get("opens"), closes=item.get("closes"),
+            highs=item.get("highs"), lows=item.get("lows"),
+            entry=item.get("entry"), stop=item.get("stop"),
+            tp1=item.get("tp1"), atr=item.get("atr"),
+            current_price=item.get("price"),
+        )
         item["stage"] = _stage(item)
         if item["stage"]:
-            item["pattern_analysis"] = analyze_pattern_and_exit(
-                direction=item["direction"], closes=item.get("closes"),
-                highs=item.get("highs"), lows=item.get("lows"),
-                entry=item.get("entry"), stop=item.get("stop"),
-                tp1=item.get("tp1"), atr=item.get("atr"),
-                current_price=item.get("price"),
-            )
             found.append(item)
     found.sort(key=lambda x: (
         0 if x["stage"] == "RISCHIO" else 1 if x["stage"] == "ATTENZIONE" else 2 if x["stage"] == "PROFITTO" else 3 if x["stage"] == "CONFERMATA" else 4,
@@ -203,7 +209,12 @@ def format_aggressive_alert(states: Iterable[Any]) -> str:
         }.get(item["stage"], item["stage"])
         lines.append("STATO: %s" % status_label)
         price = _number(item.get("price"))
-        lines.append("Quotazione provider: %.6g USD" % price if price is not None else "Quotazione: N/D")
+        lines.append("Quotazione provider: %.6g (valuta da verificare per strumento)" % price if price is not None else "Quotazione: N/D")
+        try:
+            age_value = float(item.get("data_age_seconds"))
+            lines.append("Età prezzo provider: %.0f s" % age_value if math.isfinite(age_value) and age_value >= 0 else "Età prezzo provider: NON VERIFICATA")
+        except (TypeError, ValueError):
+            lines.append("Età prezzo provider: NON VERIFICATA")
         quote_timestamp = item.get("quote_timestamp")
         lines.append(
             "Timestamp quotazione: %s" % quote_timestamp
@@ -221,6 +232,7 @@ def format_aggressive_alert(states: Iterable[Any]) -> str:
             retracement_text += " (%.2f ATR)" % retracement
         lines.append("Ritracciamento: %s" % retracement_text)
         lines.append("Inversione: %s (punteggio %s/5)" % (analysis.get("reversal_status", "NON VALUTABILE"), analysis.get("reversal_score", 0)))
+        lines.append("Stop superato sul prezzo provider: %s" % ("SÌ — verificare lato broker" if analysis.get("stop_invalidated") else "NON RILEVATO"))
         lines.append("Gestione/uscita: %s — %s" % (analysis["exit_action"], analysis["reason"]))
         lines.append("Probabilità: %.0f | Qualità: %.0f | Affidabilità: %.0f | Trigger: %s" % (
             float(item.get("probability") or 0), float(item.get("quality") or 0),
