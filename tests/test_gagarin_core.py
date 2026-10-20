@@ -239,3 +239,53 @@ def test_stale_timestamp_fails_closed_even_when_freshness_gate_is_true():
     decisions = evaluate_states([state])
     assert decisions[0].action == "PAPER_WATCH"
     assert decisions[0].reason == "FRESHNESS_FAIL"
+
+
+def test_missing_bracket_is_generated_from_atr_and_structure():
+    state = SimpleNamespace(
+        symbol="XAU/USD",
+        price=100.0,
+        atr=2.0,
+        setup_direction="LONG",
+        probability=80.0,
+        quality=70.0,
+        confidence=70.0,
+        data_ok=True,
+        live=True,
+        trigger_confirmed=True,
+        structure_direction="LONG",
+        mtf_direction="LONG",
+        entry=None,
+        stop=None,
+        tp1=None,
+        tp2=None,
+        tp3=None,
+        rr1=None,
+        rr2=None,
+        rr3=None,
+        highs=[101.0, 102.0, 101.5],
+        lows=[98.5, 99.0, 98.8],
+        regime="TREND_UP",
+        opportunity_type="TREND_CONTINUATION",
+        analysis_timestamp=datetime.now(timezone.utc).isoformat(),
+        metadata={
+            "data_status": "OK",
+            "candle_count": 40,
+            "fresh_live": True,
+            "resolved_symbol": "XAU/USD",
+            "operational_gates": {
+                "paper_only": True, "data_quality_ok": True, "freshness_ok": True,
+                "contract_ok": True, "liquidity_ok": True, "volatility_ok": True,
+                "regime_ok": True, "session_ok": True, "curve_ok": True,
+            },
+        },
+        blockers=[],
+    )
+    decisions = evaluate_states([state])
+    assert len(decisions) == 1
+    candidate = decisions[0].candidate
+    assert candidate is not None
+    assert candidate.entry == 100.0
+    assert candidate.stop < candidate.entry < candidate.tp1 < candidate.tp2 < candidate.tp3
+    assert (candidate.rr1, candidate.rr2, candidate.rr3) == (1.5, 2.0, 2.5)
+    assert "SL_TP_GENERATED_FROM_ATR_AND_STRUCTURE" in candidate.reasons
