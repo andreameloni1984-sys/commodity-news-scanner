@@ -134,3 +134,40 @@ def test_live_quote_is_used_for_retracement_but_not_candle_momentum():
     assert result["reference_price"] == 101
     assert result["retracement_atr"] == 4.5
     assert result["exit_action"] == "EXIT_WARNING"
+
+
+
+def test_bullish_engulfing_is_recognized_from_closed_ohlc():
+    result = analyze_pattern_and_exit(
+        direction="LONG",
+        opens=[108, 106, 104, 103, 99],
+        closes=[106, 104, 103, 100, 105],
+        highs=[109, 107, 105, 104, 106],
+        lows=[105, 103, 101, 98, 98],
+        atr=2,
+    )
+    assert result["candlestick_pattern"].startswith("BULLISH ENGULFING")
+
+
+def test_bearish_engulfing_is_recognized_from_closed_ohlc():
+    result = analyze_pattern_and_exit(
+        direction="SHORT",
+        opens=[98, 99, 100, 100, 105],
+        closes=[99, 100, 102, 104, 99],
+        highs=[100, 101, 103, 105, 106],
+        lows=[97, 98, 99, 99, 98],
+        atr=2,
+    )
+    assert result["candlestick_pattern"].startswith("BEARISH ENGULFING")
+
+
+def test_doji_is_reported_as_indecision_not_a_directional_signal():
+    result = analyze_pattern_and_exit(
+        direction="LONG",
+        opens=[100, 101, 102, 103, 100],
+        closes=[101, 102, 103, 102, 100.05],
+        highs=[102, 103, 104, 104, 101],
+        lows=[99, 100, 101, 101, 99],
+        atr=2,
+    )
+    assert result["candlestick_pattern"] == "DOJI — INDECISIONE"
