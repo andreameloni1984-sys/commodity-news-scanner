@@ -69,6 +69,24 @@ class PaperPortfolioExitTests(unittest.TestCase):
         self.assertEqual(pos.status, "CLOSED")
         self.assertTrue(pos.tp1_hit and pos.tp2_hit and pos.tp3_hit)
 
+    def test_rejects_non_finite_prices_and_below_minimum_rr(self):
+        p = PaperPortfolio(1000.0)
+        self.assertIsNone(p.open_signal(signal(entry=float("nan"))))
+        self.assertIsNone(p.open_signal(signal(tp1=110.0, tp2=120.0, tp3=125.0)))
+
+    def test_caps_open_positions_and_aggregate_stop_risk(self):
+        p = PaperPortfolio(1000.0)
+        self.assertIsNotNone(p.open_signal(signal(symbol="A"), risk_pct=0.005))
+        self.assertIsNotNone(p.open_signal(signal(symbol="B"), risk_pct=0.005))
+        self.assertIsNotNone(p.open_signal(signal(symbol="C"), risk_pct=0.005))
+        self.assertIsNone(p.open_signal(signal(symbol="D"), risk_pct=0.005))
+
+    def test_aggregate_open_stop_risk_cannot_exceed_two_percent(self):
+        p = PaperPortfolio(1000.0)
+        self.assertIsNotNone(p.open_signal(signal(symbol="A"), risk_pct=0.01))
+        self.assertIsNotNone(p.open_signal(signal(symbol="B"), risk_pct=0.01))
+        self.assertIsNone(p.open_signal(signal(symbol="C"), risk_pct=0.01))
+
 
 if __name__ == "__main__":
     unittest.main()
