@@ -187,7 +187,7 @@ def update_open_outcomes(results, path=FEEDBACK_FILE):
         risk = entry - stop if side == "LONG" else stop - entry
         if risk <= 0:
             continue
-        start_ts = _timestamp(row.get("entry_bar_timestamp"))
+        start_ts = _timestamp(row.get("entry_bar_timestamp")) or _timestamp(row.get("timestamp_utc"))
         candles = [c for c in _candles(state) if start_ts is not None and c[0] > start_ts]
         if not candles:
             continue
