@@ -26,6 +26,7 @@ on:
       - "tests/test_commodity_trade_plan.py"
       - "tests/test_gagarin_core.py"
       - "tests/test_feedback_outcomes.py"
+      - "telegram/render_runner.py"
       - ".github/workflows/commodity-trade-plan-tests.yml"
   workflow_dispatch:
 
