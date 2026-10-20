@@ -32,4 +32,18 @@ jobs:
       - name: Compile check
         run: python -m compileall -q telegram/aggressive_alert.py
       - name: Run aggressive alert
-        run: python -c "from telegram.aggressive_alert import run_aggressive_alert; from soyuz_gagarin.adapter import evaluate_states; from engine.gagarin import analyze_universe; from commodities.universe import enabled_commodities; r = analyze_universe(enabled_commodities()); run_aggressive_alert(r)"
+        run: |
+          python - <<'PY'
+          from commodities.universe import enabled_commodities
+          from engine.gagarin import analyze_universe
+          from telegram.aggressive_alert import format_aggressive_alert, run_aggressive_alert
+
+          states = analyze_universe(enabled_commodities())
+          message = format_aggressive_alert(states)
+          if not message:
+              print("AGGRESSIVE ALERT: no qualifying live opportunity; nothing to send.")
+          elif not run_aggressive_alert(states):
+              raise SystemExit("AGGRESSIVE ALERT FAILED: opportunity found but Telegram delivery failed; check bot token, chat ID, and Telegram API response.")
+          else:
+              print("AGGRESSIVE ALERT: Telegram delivery accepted.")
+          PY
