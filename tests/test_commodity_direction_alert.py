@@ -60,3 +60,21 @@ def test_directional_alert_requires_minimum_scores_and_commodity():
     forex = _state(name="EUR/USD")
 
     assert find_directional_commodity_alerts([weak, forex]) == []
+
+
+def test_placeholder_setup_direction_does_not_mask_valid_opportunity_direction():
+    state = _state(direction="WAIT")
+    state.opportunity_direction = "SHORT"
+
+    alerts = find_directional_commodity_alerts([state])
+
+    assert len(alerts) == 1
+    assert alerts[0]["direction"] == "SHORT"
+    assert "Oro potrebbe SCENDERE" in format_directional_commodity_alert([state])
+
+
+def test_invalid_directions_still_fail_closed():
+    state = _state(direction="WAIT")
+    state.opportunity_direction = "UNKNOWN"
+
+    assert find_directional_commodity_alerts([state]) == []
