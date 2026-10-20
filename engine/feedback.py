@@ -228,6 +228,13 @@ def update_open_outcomes(results, path=FEEDBACK_FILE):
 def _durable_store_enabled(path):
     return Path(path) == FEEDBACK_FILE and bool(os.getenv("DATABASE_URL", "").strip())
 
+def storage_backend():
+    """Describe feedback persistence without exposing credentials."""
+    if not os.getenv("DATABASE_URL", "").strip():
+        return "LOCAL_CSV_NO_DATABASE_URL"
+    rows = _load_durable_rows()
+    return "POSTGRES" if rows is not None else "LOCAL_CSV_DATABASE_UNAVAILABLE"
+
 
 def _load_durable_rows():
     try:
