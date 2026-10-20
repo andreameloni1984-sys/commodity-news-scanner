@@ -216,6 +216,31 @@ def evaluate_states(states: Iterable[object]):
             session=str(_metadata(state).get("session", "UNKNOWN")),
         )
 
-        decisions.append(engine.evaluate(market, candidate))
+        decision = engine.evaluate(market, candidate)
+
+        # Keep the canonical bracket on the source state as well as the
+        # decision object. Telegram, feedback and the paper journal consume
+        # this same state; otherwise a bracket generated here would be invisible
+        # to those downstream consumers.
+        if entry_value is not None:
+            state.entry = entry_value
+        if stop_value is not None:
+            state.stop = stop_value
+        if tp1_value is not None:
+            state.tp1 = tp1_value
+        if tp2_value is not None:
+            state.tp2 = tp2_value
+        if tp3_value is not None:
+            state.tp3 = tp3_value
+        if rr1_value is not None:
+            state.rr1 = rr1_value
+        if rr2_value is not None:
+            state.rr2 = rr2_value
+        if rr3_value is not None:
+            state.rr3 = rr3_value
+        if stop_atr > 0:
+            state.stop_atr = stop_atr
+
+        decisions.append(decision)
 
     return decisions
