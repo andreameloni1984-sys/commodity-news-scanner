@@ -40,6 +40,14 @@ def test_confirmed_setup_has_separate_confirmed_stage():
     assert alerts[0]["stage"] == "CONFERMATA"
 
 
+def test_opportunity_direction_is_used_when_setup_direction_is_placeholder_none():
+    item = candidate(setup_direction="NONE", opportunity_direction="LONG")
+    alerts = find_aggressive_alerts([item])
+    assert len(alerts) == 1
+    assert alerts[0]["direction"] == "LONG"
+    assert alerts[0]["stage"] == "POSSIBILE"
+
+
 def test_no_alert_without_live_price_or_direction():
     assert find_aggressive_alerts([candidate(live=False)]) == []
     assert find_aggressive_alerts([candidate(price=None)]) == []
