@@ -5,6 +5,7 @@ Never opens, modifies, or closes orders.
 """
 from __future__ import annotations
 
+import math
 from typing import Any
 
 
@@ -13,13 +14,13 @@ def _floats(values: Any) -> list[float]:
         result = [float(v) for v in (values or [])]
     except (TypeError, ValueError):
         return []
-    return result if all(v > 0 for v in result) else []
+    return result if all(math.isfinite(v) and v > 0 for v in result) else []
 
 
 def _positive(value: Any) -> float | None:
     try:
         number = float(value)
-        return number if number > 0 else None
+        return number if math.isfinite(number) and number > 0 else None
     except (TypeError, ValueError):
         return None
 
