@@ -28,6 +28,7 @@ def analyze_pattern_and_exit(
     *,
     direction: str,
     closes: Any,
+    opens: Any = None,
     highs: Any = None,
     lows: Any = None,
     entry: Any = None,
@@ -38,10 +39,11 @@ def analyze_pattern_and_exit(
 ) -> dict[str, Any]:
     """Analyze closed candles, but use a valid live quote for exit thresholds."""
     direction = str(direction or "").upper()
-    close, high, low = _floats(closes), _floats(highs), _floats(lows)
+    open_, close, high, low = _floats(opens), _floats(closes), _floats(highs), _floats(lows)
     if direction not in {"LONG", "SHORT"} or len(close) < 5:
         return {
             "pattern": "DATI INSUFFICIENTI",
+            "candlestick_pattern": "NON VALUTABILE",
             "bias": "UNKNOWN",
             "exit_action": "HOLD",
             "retracement_status": "NON VALUTABILE",
@@ -79,6 +81,39 @@ def analyze_pattern_and_exit(
         elif current_close < min(ls[:-1]):
             pattern, bias = "BREAKOUT RIBASSISTA", "BEARISH"
 
+    # Recognize common closed-candle patterns only when complete OHLC is
+    # available. Patterns are evidence, never standalone trade instructions.
+    candlestick_pattern = "NON DISPONIBILE — OPEN OHLC ASSENTE"
+    candle_pattern_adverse = False
+    if len(open_) >= 2 and len(high) >= 2 and len(low) >= 2 and len(open_) == len(close) and len(high) == len(close) and len(low) == len(close):
+        o1, o2 = open_[-2:]
+        c1, c2 = close[-2:]
+        h2, l2 = high[-1], low[-1]
+        body2 = abs(c2 - o2)
+        range2 = h2 - l2
+        upper_wick = h2 - max(o2, c2)
+        lower_wick = min(o2, c2) - l2
+        previous_bearish = c1 < o1
+        previous_bullish = c1 > o1
+        current_bullish = c2 > o2
+        current_bearish = c2 < o2
+        if range2 > 0 and body2 <= range2 * 0.10:
+            candlestick_pattern = "DOJI — INDECISIONE"
+        elif previous_bearish and current_bullish and o2 <= c1 and c2 >= o1:
+            candlestick_pattern = "BULLISH ENGULFING — POSSIBILE RIMBALZO"
+            candle_pattern_adverse = direction == "SHORT"
+        elif previous_bullish and current_bearish and o2 >= c1 and c2 <= o1:
+            candlestick_pattern = "BEARISH ENGULFING — POSSIBILE PRESSIONE RIBASSISTA"
+            candle_pattern_adverse = direction == "LONG"
+        elif range2 > 0 and body2 > 0 and lower_wick >= body2 * 2 and upper_wick <= body2 * 0.6 and body2 / range2 <= 0.35:
+            candlestick_pattern = "HAMMER — POSSIBILE REAZIONE RIALZISTA"
+            candle_pattern_adverse = direction == "SHORT"
+        elif range2 > 0 and body2 > 0 and upper_wick >= body2 * 2 and lower_wick <= body2 * 0.6 and body2 / range2 <= 0.35:
+            candlestick_pattern = "SHOOTING STAR — POSSIBILE REAZIONE RIBASSISTA"
+            candle_pattern_adverse = direction == "LONG"
+        else:
+            candlestick_pattern = "NESSUN PATTERN CLASSICO CONFERMATO"
+
     stop_v, tp_v, atr_v = (_positive(v) for v in (stop, tp1, atr))
     prior_closes = close[-5:-1]
     if atr_v is None:
@@ -109,15 +144,18 @@ def analyze_pattern_and_exit(
         reversal_score += int(lower_highs)
         reversal_score += int(lower_lows)
         reversal_score += int(len(ls) == 5 and current_close < min(ls[:-1]))
-        adverse = bias == "BEARISH"
+        reversal_score += int(candle_pattern_adverse)
+        adverse = bias == "BEARISH" or candle_pattern_adverse
     else:
         reversal_score += int(momentum > 0)
         reversal_score += int(prev_momentum < 0 and momentum > prev_momentum)
         reversal_score += int(higher_highs)
         reversal_score += int(higher_lows)
         reversal_score += int(len(hs) == 5 and current_close > max(hs[:-1]))
-        adverse = bias == "BULLISH"
+        reversal_score += int(candle_pattern_adverse)
+        adverse = bias == "BULLISH" or candle_pattern_adverse
 
+    reversal_score = min(5, reversal_score)
     if reversal_score >= 3:
         reversal_status = "POSSIBILE INVERSIONE — EVIDENZE MULTIPLE"
         pattern = "POSSIBILE INVERSIONE " + ("RIBASSISTA" if direction == "LONG" else "RIALZISTA")
@@ -169,6 +207,7 @@ def analyze_pattern_and_exit(
 
     return {
         "pattern": pattern,
+        "candlestick_pattern": candlestick_pattern,
         "bias": bias,
         "momentum_pct": round(momentum, 4),
         "previous_momentum_pct": round(prev_momentum, 4),
