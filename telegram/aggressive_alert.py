@@ -5,7 +5,12 @@ confirmation is reported as a separate stage. Advisory only: no orders.
 """
 from __future__ import annotations
 
+import json
 import math
+import os
+import threading
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Iterable
 
 from config import LIVE_MAX_AGE_SECONDS
@@ -19,6 +24,8 @@ POTENTIAL_MIN_CONFIDENCE = 25.0
 AGGRESSIVE_MIN_PROBABILITY = 50.0
 AGGRESSIVE_MIN_QUALITY = 40.0
 AGGRESSIVE_MIN_CONFIDENCE = 45.0
+_STATE_FILE = Path(os.getenv("GAGARIN_AGGRESSIVE_ALERT_STATE", "data/gagarin_aggressive_alert_state.json"))
+_STATE_LOCK = threading.RLock()
 
 
 def _number(value: Any) -> float | None:
@@ -247,14 +254,67 @@ def format_aggressive_alert(states: Iterable[Any]) -> str:
     return "\n".join(lines)
 
 
+def _read_alert_state() -> dict:
+    try:
+        data = json.loads(_STATE_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _alert_signature(alert: dict) -> tuple:
+    return (
+        str(alert.get("symbol") or alert.get("commodity") or ""),
+        str(alert.get("direction") or ""),
+        str(alert.get("stage") or ""),
+        str(alert.get("pattern_analysis", {}).get("exit_action") or ""),
+        bool(alert.get("pattern_analysis", {}).get("stop_invalidated")),
+        bool(alert.get("pattern_analysis", {}).get("target_reached")),
+    )
+
+
 def run_aggressive_alert(states: Iterable[Any]) -> bool:
-    """Send a Telegram alert when a potential or confirmed setup is found."""
-    message = format_aggressive_alert(states)
+    """Send only new/changed aggressive alerts; failed delivery does not consume state."""
+    alerts = find_aggressive_alerts(states)
+    if not alerts:
+        return False
+    now = datetime.now(timezone.utc)
+    with _STATE_LOCK:
+        previous = _read_alert_state()
+        due = []
+        next_state = dict(previous)
+        for alert in alerts:
+            key = str(alert.get("symbol") or alert.get("commodity") or "UNKNOWN")
+            signature = list(_alert_signature(alert))
+            prior = previous.get(key, {})
+            changed = prior.get("signature") != signature
+            try:
+                last_sent = datetime.fromisoformat(str(prior.get("last_sent_at", "")))
+                if last_sent.tzinfo is None:
+                    last_sent = last_sent.replace(tzinfo=timezone.utc)
+                reminder_due = (now - last_sent).total_seconds() >= 4 * 60 * 60
+            except (TypeError, ValueError):
+                reminder_due = True
+            if changed or reminder_due:
+                due.append(alert)
+                next_state[key] = {"signature": signature, "last_sent_at": now.isoformat()}
+        if not due:
+            return False
+    message = format_aggressive_alert(due)
     if not message:
         return False
     try:
         from telegram.bot import send_telegram
-        return bool(send_telegram(message))
+        sent = bool(send_telegram(message))
+        if sent:
+            with _STATE_LOCK:
+                _STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+                temp = _STATE_FILE.with_suffix(_STATE_FILE.suffix + ".tmp")
+                temp.write_text(json.dumps(next_state, ensure_ascii=False, indent=2), encoding="utf-8")
+                temp.replace(_STATE_FILE)
+        else:
+            print("AGGRESSIVE ALERT | Telegram delivery failed; state not consumed", flush=True)
+        return sent
     except Exception as exc:
         print("AGGRESSIVE ALERT ERROR: %s: %s" % (type(exc).__name__, exc), flush=True)
         return False
