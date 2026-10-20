@@ -192,7 +192,7 @@ def update_open_outcomes(results, path=FEEDBACK_FILE):
             continue
         mfe, mae = 0.0, 0.0
         last_ts = start_ts
-        bars = int(_number(row.get("bars_held")) or 0)
+        bars = 0
         for ts, high, low in candles:
             last_ts = ts
             bars += 1
