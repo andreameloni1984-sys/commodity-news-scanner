@@ -68,7 +68,9 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
         data_ok = bool(getattr(state, "data_ok", False))
         price = _num(getattr(state, "price", 0))
         atr = _num(getattr(state, "atr", 0))
-        if price <= 0:
+        # A directional ranking without a valid price and volatility scale is
+        # not comparable; fail closed rather than inventing a candidate.
+        if price <= 0 or atr <= 0:
             continue
 
         pre_move = _num(getattr(state, "pre_move_score", 0))
