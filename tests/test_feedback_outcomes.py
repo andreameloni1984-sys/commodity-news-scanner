@@ -72,3 +72,18 @@ def test_same_bar_stop_and_target_is_scored_as_stop(tmp_path):
     row = load_feedback(path)[0]
     assert row["outcome"] == "STOP"
     assert float(row["r_multiple"]) == -1.0
+
+
+def test_summary_breaks_down_per_asset_and_direction(tmp_path):
+    path = tmp_path / "feedback.csv"
+    append_signal(state([{"timestamp": 1000, "high": 101, "low": 99}]), path=path)
+    s1 = state([
+        {"timestamp": 1000, "high": 101, "low": 99},
+        {"timestamp": 2000, "high": 103.5, "low": 99.5},
+    ])
+    update_open_outcomes([s1], path=path)
+    summary = summarize(path=path)
+    group = summary["by_symbol_direction"]["XAU/USD LONG"]
+    assert group["closed"] == 1
+    assert group["win_rate_pct"] == 100.0
+    assert group["average_r"] == 1.5
