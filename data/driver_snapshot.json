@@ -1,6 +1,6 @@
 {
   "paper_only": true,
-  "read_at": "2026-10-19T14:06:11Z",
+  "read_at": "2026-10-20T12:20:21Z",
   "sources": {
     "us_crude_stocks": "EIA WCRSTUS1 (api -> public page)",
     "us_natgas_storage": "EIA NW2_EPG0_SWO_R48_BCF (api -> public page)",
@@ -25,17 +25,17 @@
     },
     "dollar_index": {
       "series_id": "DTWEXBGS",
-      "value": 121.6023,
-      "date": "2026-10-09",
-      "previous": 121.4469,
+      "value": 121.4048,
+      "date": "2026-10-16",
+      "previous": 121.5693,
       "source": "fred_csv",
       "error": null
     },
     "real_rate_10y": {
       "series_id": "DFII10",
-      "value": 2.78,
-      "date": "2026-10-15",
-      "previous": 2.84,
+      "value": 2.74,
+      "date": "2026-10-16",
+      "previous": 2.78,
       "source": "fred_csv",
       "error": null
     },
@@ -60,7 +60,7 @@
     "curve": "UNKNOWN",
     "supply_shock": "UNKNOWN",
     "refined": "UNKNOWN",
-    "dollar": "UP",
+    "dollar": "DOWN",
     "real_rates": "DOWN",
     "systematic_flow": "UNKNOWN",
     "weather": "UNKNOWN",
