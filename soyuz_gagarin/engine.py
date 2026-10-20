@@ -1,4 +1,10 @@
 from .config import GagarinConfig
+from .execution_economics import (
+    executable_price,
+    rr_from_prices,
+    spread,
+    spread_bps,
+)
 from .models import Candidate, Decision, MarketSnapshot
 from .risk_governor import approve
 
@@ -32,6 +38,25 @@ class GagarinEngine:
             "stop_distance_atr": candidate.stop_distance_atr,
             "market_atr": market.atr,
         }
+
+        # Execution economics are diagnostic evidence only. They never create
+        # an ENTRY and never replace the intraday trigger. Missing quotes remain
+        # None rather than being estimated from price or spread defaults.
+        if market.bid is not None or market.ask is not None:
+            diagnostics["bid"] = market.bid
+            diagnostics["ask"] = market.ask
+            diagnostics["spread"] = spread(market.bid, market.ask)
+            diagnostics["spread_bps"] = spread_bps(market.bid, market.ask)
+            diagnostics["executable_price"] = executable_price(
+                candidate.side, market.bid, market.ask
+            )
+
+        diagnostics["rr3_from_prices"] = rr_from_prices(
+            candidate.side,
+            candidate.entry,
+            candidate.stop,
+            candidate.tp3,
+        )
 
         return Decision(
             "PAPER_ENTRY" if ok else "PAPER_WATCH",

@@ -23,6 +23,15 @@ def _float(value, default=0.0) -> float:
         return float(default)
 
 
+def _optional_float(value):
+    try:
+        if value is None or value == "":
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _metadata(state) -> dict:
     value = getattr(state, "metadata", {}) or {}
     return value if isinstance(value, dict) else {}
@@ -212,6 +221,8 @@ def evaluate_states(states: Iterable[object]):
             timestamp=str(getattr(state, "analysis_timestamp", "") or ""),
             price=price,
             atr=atr,
+            bid=_optional_float(getattr(state, "bid", None)),
+            ask=_optional_float(getattr(state, "ask", None)),
             regime=str(getattr(state, "regime", "UNKNOWN")),
             session=str(_metadata(state).get("session", "UNKNOWN")),
         )

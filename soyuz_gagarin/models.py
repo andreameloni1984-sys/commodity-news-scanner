@@ -16,6 +16,10 @@ class MarketSnapshot:
     market_quality_score: float = 0.0
     regime: str = "UNKNOWN"
     session: str = "UNKNOWN"
+    # Optional execution evidence. Missing quote data is intentional and
+    # must remain distinguishable from a measured zero spread.
+    bid: Optional[float] = None
+    ask: Optional[float] = None
 
 
 @dataclass
