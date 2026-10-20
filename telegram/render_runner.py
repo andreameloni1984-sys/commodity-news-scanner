@@ -136,6 +136,8 @@ def position_monitor_loop() -> None:
     print("Gagarin market monitor | interval=15min | deduplicated forecast + position alerts", flush=True)
     while True:
         try:
+            from engine.alert_review_scheduler import daily_alert_review_tick
+            daily_alert_review_tick(send_telegram)
             states = _run_analysis()
             if states:
                 # New/meaningfully changed directional forecasts only; no no-signal heartbeat.
