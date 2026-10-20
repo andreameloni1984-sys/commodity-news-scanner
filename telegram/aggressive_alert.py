@@ -48,6 +48,7 @@ def _item_from_state(state: Any) -> dict:
         # interchangeable with quote timestamps for freshness checks.
         "quote_timestamp": getattr(state, "price_timestamp", None) or getattr(state, "quote_timestamp", None),
         "atr": getattr(state, "atr", None),
+        "opens": getattr(state, "opens", []),
         "closes": getattr(state, "closes", []),
         "highs": getattr(state, "highs", []),
         "lows": getattr(state, "lows", []),
@@ -104,7 +105,7 @@ def _stage(item: dict) -> str | None:
     # the Telegram message. Use closed OHLC candles for patterns and a live
     # provider quote for stop/target checks.
     pattern_analysis = analyze_pattern_and_exit(
-        direction=direction, closes=item.get("closes"),
+        direction=direction, opens=item.get("opens"), closes=item.get("closes"),
         highs=item.get("highs"), lows=item.get("lows"),
         entry=item.get("entry"), stop=item.get("stop"),
         tp1=item.get("tp1"), atr=item.get("atr"),
@@ -120,6 +121,10 @@ def _stage(item: dict) -> str | None:
     # invalidated or several closed-candle signals point to an adverse reversal.
     if scores_ok and pattern_analysis.get("exit_action") == "EXIT_WARNING":
         return "RISCHIO"
+    if scores_ok and pattern_analysis.get("exit_action") == "TAKE_PROFIT_WATCH":
+        return "PROFITTO"
+    if scores_ok and pattern_analysis.get("exit_action") == "TIGHTEN_STOP":
+        return "ATTENZIONE"
     confirmed = (
         decision in {"PAPER_ENTRY", "PAPER_SIGNAL", "ENTRY"}
         and item["trigger_confirmed"]
@@ -153,7 +158,7 @@ def find_aggressive_alerts(states: Iterable[Any]) -> list[dict]:
             )
             found.append(item)
     found.sort(key=lambda x: (
-        0 if x["stage"] == "RISCHIO" else 1 if x["stage"] == "CONFERMATA" else 2,
+        0 if x["stage"] == "RISCHIO" else 1 if x["stage"] == "ATTENZIONE" else 2 if x["stage"] == "PROFITTO" else 3 if x["stage"] == "CONFERMATA" else 4,
         -float(x.get("probability") or 0),
         -float(x.get("quality") or 0),
     ))
@@ -179,6 +184,8 @@ def format_aggressive_alert(states: Iterable[Any]) -> str:
         lines.append("%s. %s — %s" % (index, item["commodity"], item["direction"]))
         status_label = {
             "RISCHIO": "🔴 RISCHIO — NON INGRESSARE: setup invalidato o inversione possibile",
+            "ATTENZIONE": "🟠 ATTENZIONE — ritracciamento profondo o segnali contrari; rivalutare e proteggere il rischio",
+            "PROFITTO": "💰 TARGET RAGGIUNTO — valutare presa profitto/protezione del residuo",
             "CONFERMATA": "🟢 CONFERMATA",
             "POSSIBILE": "🟡 POSSIBILE OPPORTUNITÀ — in attesa di conferma",
         }.get(item["stage"], item["stage"])
@@ -194,7 +201,8 @@ def format_aggressive_alert(states: Iterable[Any]) -> str:
         for key, label in (("entry", "Ingresso potenziale"), ("stop", "Stop indicativo"), ("tp1", "TP1"), ("tp2", "TP2"), ("tp3", "TP3")):
             value = _number(item.get(key))
             lines.append("%s: %.6g" % (label, value) if value is not None else "%s: da definire" % label)
-        lines.append("Pattern: %s | Bias: %s" % (analysis["pattern"], analysis["bias"]))
+        lines.append("Struttura: %s | Bias: %s" % (analysis["pattern"], analysis["bias"]))
+        lines.append("Candela: %s" % analysis.get("candlestick_pattern", "NON VALUTABILE"))
         retracement = analysis.get("retracement_atr")
         retracement_text = analysis.get("retracement_status", "NON VALUTABILE")
         if retracement is not None:
