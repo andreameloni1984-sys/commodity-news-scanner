@@ -49,6 +49,7 @@ from telegram.bot import (
     send_telegram,
 )
 from telegram.signals import format_signal_board
+from telegram.commodity_direction_alert import run_directional_commodity_alert
 from soyuz_gagarin.adapter import evaluate_states
 from execution.router import execute_state
 
@@ -609,6 +610,10 @@ def run():
                     + legs
                     + "\nPAPER ONLY. Continuazione da verificare."
                 )
+            direction_alert_sent = run_directional_commodity_alert(results)
+            if direction_alert_sent:
+                print("📈 DIRECTIONAL COMMODITY ALERT: sent")
+
             if signal_results:
                 send_telegram(
                     format_signal_board(signal_results)
@@ -616,15 +621,14 @@ def run():
                 print(
                     f"📡 SIGNAL CHANNEL: {len(signal_results)} signal(s) published"
                 )
-            else:
+            elif not direction_alert_sent:
                 send_telegram(
-                    "SOYUZ GIORNO\n"
-                    "Verso: piatto. Shock e settimana non coincidono.\n"
-                    "Energia: scorte, curva, offerta. Metalli: dollaro. Agri: meteo.\n"
-                    "PAPER ONLY. Nessun prezzo inventato."
+                    "GAGARIN — NESSUN ALERT DIREZIONALE CONFERMATO\\n"
+                    "Nessuna commodity supera in questo controllo le soglie di direzione, qualità e freschezza dati.\\n"
+                    "PAPER ONLY. Nessun ordine inviato."
                 )
                 print(
-                    "📡 SIGNAL CHANNEL: status only — no entry"
+                    "📡 SIGNAL CHANNEL: status only — no qualifying direction"
                 )
 
         except Exception as exc:
