@@ -91,3 +91,26 @@ def test_aggressive_alert_does_not_consume_state_when_delivery_fails(monkeypatch
     assert module.run_aggressive_alert([candidate()]) is False
     assert module.run_aggressive_alert([candidate()]) is True
     assert state_file.exists()
+
+
+
+def test_delivery_formats_preanalyzed_candidates_without_reclassifying(monkeypatch, tmp_path):
+    import telegram.aggressive_alert as module
+
+    state_file = tmp_path / "aggressive-state.json"
+    monkeypatch.setattr(module, "_STATE_FILE", state_file)
+    original_find = module.find_aggressive_alerts
+    calls = []
+
+    def counted_find(states):
+        calls.append(1)
+        return original_find(states)
+
+    monkeypatch.setattr(module, "find_aggressive_alerts", counted_find)
+    sent = []
+    monkeypatch.setattr("telegram.bot.send_telegram", lambda message: sent.append(message) or True)
+
+    assert module.run_aggressive_alert([candidate()]) is True
+    assert len(calls) == 1
+    assert len(sent) == 1
+    assert "POSSIBILE OPPORTUNITÀ" in sent[0]
