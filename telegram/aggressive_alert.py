@@ -233,6 +233,8 @@ def format_aggressive_alert(states: Iterable[Any]) -> str:
         lines.append("Ritracciamento: %s" % retracement_text)
         lines.append("Inversione: %s (punteggio %s/5)" % (analysis.get("reversal_status", "NON VALUTABILE"), analysis.get("reversal_score", 0)))
         lines.append("Stop superato sul prezzo provider: %s" % ("SÌ — verificare lato broker" if analysis.get("stop_invalidated") else "NON RILEVATO"))
+        lines.append("TP1 sul prezzo provider: %s" % ("RAGGIUNTO — valutare gestione/protezione" if analysis.get("target_reached") else "NON RILEVATO"))
+        lines.append("Trading 212 CFD: lato uscita da verificare — LONG Sell/Bid; SHORT Buy/Ask. Prezzo broker non acquisito.")
         lines.append("Gestione/uscita: %s — %s" % (analysis["exit_action"], analysis["reason"]))
         lines.append("Probabilità: %.0f | Qualità: %.0f | Affidabilità: %.0f | Trigger: %s" % (
             float(item.get("probability") or 0), float(item.get("quality") or 0),
