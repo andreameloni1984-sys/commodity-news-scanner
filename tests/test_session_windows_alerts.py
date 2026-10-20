@@ -38,7 +38,7 @@ def test_aggressive_alert_formatter_survives_session_annotation(monkeypatch):
         "opportunity_direction": "LONG", "probability": 42, "quality": 32,
         "confidence": 30, "trigger_confirmed": False, "live": True,
         "final_decision": "WATCH", "entry": 2700, "stop": 2680, "tp1": 2740,
-        "tp2": 2760, "tp3": None, "price": 2710, "atr": 10,
+        "tp2": 2760, "tp3": None, "price": 2710, "data_age_seconds": 10, "atr": 10,
         "closes": [2680, 2690, 2695, 2702, 2710],
         "highs": [2685, 2695, 2700, 2705, 2712],
         "lows": [2670, 2680, 2688, 2695, 2701],
