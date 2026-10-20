@@ -130,6 +130,7 @@ def position_monitor_loop() -> None:
     """Periodic forecast and position monitor; Telegram is transition-only."""
     from engine.position_monitor import evaluate_positions, list_positions
     from telegram.commodity_direction_alert import run_directional_commodity_alert
+    from telegram.aggressive_alert import run_aggressive_alert
 
     interval = 15 * 60
     print("Gagarin market monitor | interval=15min | deduplicated forecast + position alerts", flush=True)
@@ -139,6 +140,8 @@ def position_monitor_loop() -> None:
             if states:
                 # New/meaningfully changed directional forecasts only; no no-signal heartbeat.
                 run_directional_commodity_alert(states)
+                # Pattern/exit alerts run in the actual Render service, not only in GitHub Actions.
+                run_aggressive_alert(states)
                 if list_positions():
                     for alert in evaluate_positions(states):
                         if send_telegram(alert):
