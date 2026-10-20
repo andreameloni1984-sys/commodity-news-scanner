@@ -289,6 +289,12 @@ def test_missing_bracket_is_generated_from_atr_and_structure():
     assert candidate.stop < candidate.entry < candidate.tp1 < candidate.tp2 < candidate.tp3
     assert (candidate.rr1, candidate.rr2, candidate.rr3) == (1.5, 2.0, 2.5)
     assert "SL_TP_GENERATED_FROM_ATR_AND_STRUCTURE" in candidate.reasons
+    assert state.entry == 100.0
+    assert state.stop == candidate.stop
+    assert state.tp1 == candidate.tp1
+    assert state.tp2 == candidate.tp2
+    assert state.tp3 == candidate.tp3
+    assert state.stop_atr == candidate.stop_distance_atr
 
 
 def test_rejects_long_against_explicit_bearish_structure():
