@@ -1,3 +1,14 @@
 data,mercato,direzione,ingresso,stop,TP,size,motivo,esito
 2026-10-19,oro XAU/USD,SHORT,,,,"trend STRONG SHORT slope_atr=-6.072; livello strutturale non toccato per direzione (supporto 4091.2 / resistenza 4414.1); momentum non confermato (RSI=51.9 serve <45); roll OK; eventi OK (Yahoo fallback); paper-only",nessun segnale
 2026-10-19,argento XAG/USD,SHORT,,,,"trend STRONG SHORT slope_atr=-8.149; livello strutturale non toccato per direzione (supporto 55.5 / resistenza 66.22); RSI=39.5 OK; roll OK; eventi OK (Yahoo fallback); paper-only",nessun segnale
+2026-10-20,Oro XAU/USD,SHORT,,,,"trend STRONG SHORT slope_atr=-5.513; livello non toccato (supp 4091.20/res 4407.50); momentum no (RSI=45.8); roll OK; eventi OK; paper-only",nessun segnale
+2026-10-20,Argento XAG/USD,SHORT,,,,"trend STRONG SHORT slope_atr=-7.782; livello non toccato (supp 55.50/res 66.22); momentum OK (RSI=38.6); roll OK; eventi OK; paper-only",nessun segnale
+2026-10-20,Rame HG,SHORT,,,,"trend STRONG SHORT slope_atr=-2.573; livello non toccato; momentum no (RSI=49.6); roll OK; eventi OK; paper-only",nessun segnale
+2026-10-20,WTI CL,LONG,,,,"trend STRONG LONG slope_atr=3.241; livello non toccato; momentum OK (RSI=64.7); roll BLOCCATO (15-22); eventi OK; paper-only",bloccato
+2026-10-20,Brent BZ,LONG,,,,"trend STRONG LONG slope_atr=5.68; livello toccato; momentum OK (RSI=68.9); roll BLOCCATO (15-22); eventi OK; paper-only",bloccato
+2026-10-20,Gas Naturale NG,NONE,,,,"trend NONE slope_atr=0.111; roll BLOCCATO; eventi OK; paper-only",bloccato
+2026-10-20,Grano ZW,SHORT,,,,"trend STRONG SHORT slope_atr=-8.518; livello toccato; momentum OK (RSI=38.0); roll BLOCCATO (softs); eventi OK; paper-only",bloccato
+2026-10-20,Mais ZC,SHORT,,,,"trend STRONG SHORT slope_atr=-13.419; livello toccato; momentum OK (RSI=23.4); roll BLOCCATO (softs); eventi OK; paper-only",bloccato
+2026-10-20,Zucchero SB,LONG,,,,"trend STRONG LONG slope_atr=6.852; livello non toccato; momentum OK (RSI=72.6); roll BLOCCATO (softs); eventi OK; paper-only",bloccato
+2026-10-20,Caffè KC,LONG,,,,"trend STRONG LONG slope_atr=8.208; livello toccato; momentum OK (RSI=67.2); roll BLOCCATO (softs); eventi OK; paper-only",bloccato
+2026-10-20,Cacao CC,LONG,,,,"trend STRONG LONG slope_atr=3.129; livello non toccato; momentum OK; roll BLOCCATO (softs); eventi OK; paper-only",bloccato
