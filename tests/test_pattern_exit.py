@@ -181,3 +181,15 @@ def test_live_stop_is_checked_even_when_candles_are_insufficient():
     )
     assert result["pattern"] == "DATI INSUFFICIENTI"
     assert result["exit_action"] == "EXIT_WARNING"
+
+
+
+def test_live_short_stop_is_checked_with_insufficient_candles():
+    result = analyze_pattern_and_exit(
+        direction="SHORT", closes=[100, 101], entry=100, stop=102, tp1=95,
+        current_price=103,
+    )
+    assert result["pattern"] == "DATI INSUFFICIENTI"
+    assert result["stop_invalidated"] is True
+    assert result["exit_action"] == "EXIT_WARNING"
+    assert result["reference_price"] == 103
