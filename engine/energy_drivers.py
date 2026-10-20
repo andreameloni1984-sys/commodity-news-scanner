@@ -32,6 +32,10 @@ def energy_driver_note(commodity: str) -> dict:
         "eia_window": is_eia_window(),
         "stocks_value": None,
         "stocks_source": None,
+        "stocks_date": None,
+        "stocks_previous": None,
+        "stocks_change": None,
+        "data_quality": "UNKNOWN",
         "note": "Driver note. Non è un ingresso.",
     }
 
@@ -39,6 +43,23 @@ def energy_driver_note(commodity: str) -> dict:
     if isinstance(stocks, dict):
         note["stocks_value"] = stocks.get("value")
         note["stocks_source"] = stocks.get("source")
+        note["stocks_date"] = stocks.get("date")
+        note["stocks_previous"] = stocks.get("previous")
+        current = stocks.get("value")
+        previous = stocks.get("previous")
+        if current is not None and previous is not None:
+            try:
+                note["stocks_change"] = float(current) - float(previous)
+                note["data_quality"] = "AVAILABLE"
+            except (TypeError, ValueError):
+                note["data_quality"] = "INVALID"
+        else:
+            note["data_quality"] = "MISSING"
+
+    if note["is_energy"] and note["data_quality"] == "UNKNOWN":
+        note["data_quality"] = "MISSING"
+    if note["is_energy"] and note["data_quality"] != "AVAILABLE":
+        note["note"] = "Dati scorte non disponibili/validati: non interpretarli come neutri."
 
     return note
 

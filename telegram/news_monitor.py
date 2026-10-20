@@ -22,6 +22,8 @@ from urllib.parse import urlencode
 
 import requests
 
+from engine.public_event_brain import classify as classify_public_intelligence
+
 POLL_SECONDS = max(30, int(os.getenv("GAGARIN_NEWS_POLL_SECONDS", "60")))
 RECHECK_SECONDS = max(300, int(os.getenv("GAGARIN_NEWS_RECHECK_SECONDS", "300")))
 PENDING_TTL_SECONDS = 45 * 60
@@ -34,6 +36,19 @@ _SOURCE_RETRY_AT: dict[str, float] = {}
 _SOURCE_LAST_SUCCESS: dict[str, float] = {}
 _SOURCE_LOCK = threading.Lock()
 STATE_PATH = Path(os.getenv("GAGARIN_NEWS_STATE_PATH", "data/news_monitor_state.json"))
+JOURNAL_PATH = Path(os.getenv("GAGARIN_NEWS_JOURNAL_PATH", "data/news_event_journal.jsonl"))
+
+
+def _journal(record: dict[str, Any]) -> None:
+    """Append a durable audit record for news, baseline, reaction and forecast."""
+    row = dict(record)
+    row.setdefault("recorded_at", _utc_now().isoformat())
+    try:
+        JOURNAL_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with JOURNAL_PATH.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
+    except OSError as exc:
+        print(f"NEWS journal save failed | {type(exc).__name__}: {exc}", flush=True)
 
 RSS_FEEDS = (
     ("EIA", "https://www.eia.gov/rss/press_releases.xml"),
@@ -51,7 +66,12 @@ OIL_TERMS = {
     "oil inventories", "oil stocks", "energy supply", "hormuz",
     "iran", "russia", "sanctions", "eia", "barrel", "barrels",
 }
-METAL_TERMS = {"gold", "silver", "bullion", "precious metal", "precious metals", "xau", "xag"}
+METAL_TERMS = {"gold", "bullion", "precious metal", "precious metals", "xau", "platinum", "platino", "xpt"}
+AGRI_TERMS = {
+    "coffee", "arabica", "robusta", "caffè", "caffe", "cocoa", "cacao",
+    "rice", "riso", "sugar", "zucchero", "raw sugar", "white sugar",
+    "coffee futures", "cocoa futures", "rice futures", "sugar futures",
+}
 MACRO_TERMS = {
     "federal reserve", "fed", "interest rate", "interest rates", "rate cut",
     "rate hike", "inflation", "cpi", "pce", "dollar", "treasury yield",
@@ -71,8 +91,24 @@ OIL_BEARISH_TERMS = {
     "inventory build", "inventories rose", "stocks rose", "reserve release",
     "release reserves", "sanctions eased", "sanctions lifted", "sanctions relief",
     "ceasefire", "strait reopens", "reopen hormuz", "oil exports resume",
-    "exports resume", "production rises",
+    "exports resume", "production rises", "demand destruction", "demand falls",
+    "weak demand", "economic slowdown", "recession risk",
 }
+OIL_BULLISH_TERMS |= {
+    "shipping attacks", "tanker attack", "tanker attacks", "supply threat",
+    "supply threats", "production outage", "production outages", "outage",
+    "outages", "oilfield shutdown", "oil field shutdown", "refinery shutdown",
+    "refinery outage", "export disruption", "exports disrupted", "supply disruption",
+    "supply risk", "geopolitical escalation", "escalating conflict",
+    "strait of hormuz", "hormuz", "iran sanctions", "russia sanctions",
+    "opec production cut", "opec+ cut", "crude inventories fell",
+}
+OIL_BEARISH_TERMS |= {
+    "demand outlook weakens", "demand outlook weakened", "oil demand forecast cut",
+    "oil demand downgraded", "opec raises output", "opec+ raises output",
+    "spare capacity", "surplus supply", "glut", "oversupply",
+}
+
 METAL_BULLISH_TERMS = {
     "rate cut", "cuts rates", "dovish", "yields fall", "yields decline",
     "dollar falls", "dollar weakens", "war", "airstrike", "military strike",
@@ -81,6 +117,22 @@ METAL_BULLISH_TERMS = {
 METAL_BEARISH_TERMS = {
     "rate hike", "raises rates", "hawkish", "yields rise", "yields climb",
     "dollar rises", "dollar strengthens", "ceasefire", "peace deal",
+}
+
+AGRI_BULLISH_TERMS = {
+    "drought", "crop damage", "crop losses", "poor harvest", "harvest shortfall",
+    "frost", "freeze", "flood", "flooding", "heatwave", "heat wave",
+    "export ban", "exports banned", "export restriction", "supply disruption",
+    "production cut", "production falls", "production drop", "lower output",
+    "pest outbreak", "disease outbreak", "crop disease", "port closure", "shipping disruption",
+    "stocks fall", "inventories fall", "stocks decline", "production forecast cut",
+}
+AGRI_BEARISH_TERMS = {
+    "bumper harvest", "record harvest", "good harvest", "harvest improves",
+    "crop forecast raised", "production rises", "production increase", "higher output",
+    "output increase", "exports resume", "export ban lifted", "export restrictions eased",
+    "supply improves", "supply increase", "stocks rise", "inventories rise",
+    "stocks build", "oversupply", "surplus supply", "demand falls", "weak demand",
 }
 
 
@@ -279,42 +331,66 @@ def fetch_news_items() -> list[dict[str, Any]]:
 
 def classify_event(title: str) -> dict[str, Any]:
     """Heuristic event mapping. It is interpretation, never a fact or trade by itself."""
-    text = (title or "").lower()
+    text = re.sub(r"\\s+", " ", (title or "").lower()).strip()
     has_oil = any(term in text for term in OIL_TERMS)
-    has_metals = any(term in text for term in METAL_TERMS)
+    has_metals = any(term in text for term in METAL_TERMS) or any(term in text for term in {"gold", "oro", "xau"})
     has_macro = any(term in text for term in MACRO_TERMS)
+    has_agri = any(term in text for term in AGRI_TERMS)
 
     assets: list[str] = []
     if has_oil:
         assets.extend(["WTI", "Brent"])
     if has_metals or has_macro:
-        assets.extend(["Oro", "Argento"])
+        assets.extend(["Oro", "Platino"])
+    if has_agri:
+        for asset, terms in {
+            "Caffè": {"coffee", "arabica", "robusta", "caffè", "caffe"},
+            "Cacao": {"cocoa", "cacao"},
+            "Riso": {"rice", "riso"},
+            "Zucchero": {"sugar", "zucchero"},
+        }.items():
+            if any(term in text for term in terms):
+                assets.append(asset)
     assets = list(dict.fromkeys(assets))
 
     if not assets:
         return {"relevant": False, "assets": [], "impact": {}, "reason": "no commodity exposure keywords"}
 
     impact: dict[str, str] = {}
+    matched_terms: dict[str, dict[str, list[str]]] = {}
     for asset in assets:
         if asset in {"WTI", "Brent"}:
-            up = any(term in text for term in OIL_BULLISH_TERMS)
-            down = any(term in text for term in OIL_BEARISH_TERMS)
+            up_terms, down_terms = OIL_BULLISH_TERMS, OIL_BEARISH_TERMS
+        elif asset in {"Caffè", "Cacao", "Riso", "Zucchero"}:
+            up_terms, down_terms = AGRI_BULLISH_TERMS, AGRI_BEARISH_TERMS
         else:
-            up = any(term in text for term in METAL_BULLISH_TERMS)
-            down = any(term in text for term in METAL_BEARISH_TERMS)
-        if up and down:
+            up_terms, down_terms = METAL_BULLISH_TERMS, METAL_BEARISH_TERMS
+        up_hits = sorted(term for term in up_terms if term in text)
+        down_hits = sorted(term for term in down_terms if term in text)
+        matched_terms[asset] = {"bullish": up_hits, "bearish": down_hits}
+        if up_hits and down_hits:
             impact[asset] = "MISTA"
-        elif up:
+        elif up_hits:
             impact[asset] = "RIALZISTA"
-        elif down:
+        elif down_hits:
             impact[asset] = "RIBASSISTA"
         else:
             impact[asset] = "MISTA"
+    directional = [value for value in impact.values() if value != "MISTA"]
+    if directional:
+        # Confidence is a transparent heuristic, not a calibrated probability.
+        strength = max(len(hits["bullish"]) + len(hits["bearish"]) for hits in matched_terms.values())
+        confidence = min(75, 35 + 10 * max(0, strength - 1))
+    else:
+        confidence = 20
     return {
         "relevant": True,
         "assets": assets,
         "impact": impact,
-        "reason": "keyword heuristic; price confirmation required",
+        "matched_terms": matched_terms,
+        "confidence_score": confidence,
+        "political_intelligence": classify_public_intelligence(title),
+        "reason": "keyword heuristic; not a calibrated probability; price confirmation required",
     }
 
 
@@ -327,8 +403,16 @@ def _asset_matches(asset: str, state: Any) -> bool:
         return "brent" in name or "BRENT" in symbol or symbol in {"BRENT/USD", "UKOIL"}
     if asset == "Oro":
         return "oro" in name or "gold" in name or "XAU" in symbol
-    if asset == "Argento":
-        return "argento" in name or "silver" in name or "XAG" in symbol
+    if asset == "Platino":
+        return "platino" in name or "platinum" in name or "XPT" in symbol
+    if asset == "Caffè":
+        return "caff" in name or "coffee" in name
+    if asset == "Cacao":
+        return "cacao" in name or "cocoa" in name
+    if asset == "Riso":
+        return "riso" in name or "rice" in name
+    if asset == "Zucchero":
+        return "zucchero" in name or "sugar" in name
     return False
 
 
@@ -505,6 +589,18 @@ def poll_news_once(
         event["assets"] = classified["assets"]
         event["first_seen_at"] = now.isoformat()
         event["expires_at"] = (now + timedelta(seconds=PENDING_TTL_SECONDS)).isoformat()
+        _journal({
+            "kind": "NEWS_DETECTED",
+            "event_id": fp,
+            "title": event.get("title"),
+            "source": event.get("source"),
+            "url": event.get("url"),
+            "published_at": event.get("published_at"),
+            "first_seen_at": event.get("first_seen_at"),
+            "assets": event.get("assets"),
+            "impact": event.get("impact"),
+            "classification_reason": classified.get("reason"),
+        })
         pending.append(event)
         new_relevant.append(event)
 
@@ -539,14 +635,75 @@ def poll_news_once(
                     if baseline:
                         event["baseline_prices"] = baseline
                         event["baseline_at"] = now.isoformat()
+                        _journal({
+                            "kind": "NEWS_BASELINE",
+                            "event_id": event.get("event_id"),
+                            "title": event.get("title"),
+                            "baseline_at": event.get("baseline_at"),
+                            "baseline_prices": baseline,
+                        })
+                    else:
+                        _journal({
+                            "kind": "NEWS_BASELINE_MISSING",
+                            "event_id": event.get("event_id"),
+                            "title": event.get("title"),
+                            "reason": "no live matching commodity price",
+                        })
                     still_pending.append(event)
                     continue
                 matches = _confirmed_setups(event, states)
+                classified = classify_event(event.get("title", ""))
+                for asset in classified.get("assets", []):
+                    baseline_value = (event.get("baseline_prices") or {}).get(asset)
+                    for observed in states:
+                        if not _asset_matches(asset, observed) or not bool(getattr(observed, "live", False)):
+                            continue
+                        try:
+                            current_price = float(getattr(observed, "price", None))
+                            baseline_price = float(baseline_value)
+                            move_pct = (current_price / baseline_price - 1.0) * 100.0
+                        except (TypeError, ValueError, ZeroDivisionError):
+                            continue
+                        _journal({
+                            "kind": "NEWS_REACTION",
+                            "event_id": event.get("event_id"),
+                            "title": event.get("title"),
+                            "asset": asset,
+                            "impact": classified.get("impact", {}).get(asset, "MISTA"),
+                            "baseline_at": event.get("baseline_at"),
+                            "observed_at": now.isoformat(),
+                            "baseline_price": baseline_price,
+                            "current_price": current_price,
+                            "move_pct": round(move_pct, 6),
+                            "direction": getattr(observed, "setup_direction", None),
+                            "final_decision": getattr(observed, "final_decision", None),
+                            "trigger_confirmed": bool(getattr(observed, "trigger_confirmed", False)),
+                            "probability_score": getattr(observed, "probability", None),
+                            "quality_score": getattr(observed, "quality", None),
+                            "confidence_score": getattr(observed, "confidence", None),
+                            "price_source": getattr(observed, "data_source", None) or getattr(observed, "provider", None),
+                            "aligned_setup_count": len(matches),
+                        })
+                        break
                 delivered = False
                 for setup in matches:
                     if send_telegram(_format_news_alert(event, setup)):
                         sent += 1
                         delivered = True
+                        _journal({
+                            "kind": "NEWS_ALERT_SENT",
+                            "event_id": event.get("event_id"),
+                            "title": event.get("title"),
+                            "asset": setup.get("asset"),
+                            "impact": setup.get("impact"),
+                            "direction": setup.get("direction"),
+                            "move_pct": setup.get("move_pct"),
+                            "price": setup.get("price"),
+                            "price_source": setup.get("price_source"),
+                            "entry": setup.get("entry"),
+                            "stop": setup.get("stop"),
+                            "tp1": setup.get("tp1"),
+                        })
                         break
                 if not delivered:
                     still_pending.append(event)

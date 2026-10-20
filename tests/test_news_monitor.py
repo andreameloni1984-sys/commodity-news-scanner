@@ -14,7 +14,7 @@ def test_oil_inventory_draw_is_provisional_bullish_for_crude():
 def test_hawkish_fed_headline_is_provisional_bearish_for_metals():
     result = classify_event("Federal Reserve signals hawkish policy and a rate hike")
     assert "Oro" in result["assets"]
-    assert "Argento" in result["assets"]
+    assert "Argento" not in result["assets"]  # excluded from this selected commodity universe
     assert result["impact"]["Oro"] == "RIBASSISTA"
 
 
@@ -115,3 +115,48 @@ def test_new_news_triggers_immediate_analysis_then_waits_for_price_confirmation(
     assert len(messages) == 1
     assert "Reazione dal rilevamento" in messages[0]
     assert "PAPER/DEMO" in messages[0]
+
+
+
+def test_oil_supply_risk_headlines_are_classified_bullish():
+    for title in (
+        "Tanker attacks raise oil supply risk",
+        "Iran sanctions threaten crude exports",
+        "Oilfield shutdown disrupts production",
+    ):
+        result = classify_event(title)
+        assert result["impact"]["Brent"] == "RIALZISTA"
+        assert result["impact"]["WTI"] == "RIALZISTA"
+        assert result["matched_terms"]["Brent"]["bullish"]
+
+
+def test_mixed_oil_catalysts_stay_neutral_and_explain_why():
+    result = classify_event(
+        "OPEC production cut as weak demand outlook raises oversupply concerns"
+    )
+    assert result["impact"]["Brent"] == "MISTA"
+    assert result["matched_terms"]["Brent"]["bullish"]
+    assert result["matched_terms"]["Brent"]["bearish"]
+    assert 0 <= result["confidence_score"] <= 100
+
+
+def test_selected_agricultural_commodities_are_classified_by_crop_catalyst():
+    coffee = classify_event("Brazil drought threatens Arabica coffee harvest")
+    cocoa = classify_event("Cocoa crop disease reduces production forecast")
+    rice = classify_event("Rice export ban disrupts supply")
+    sugar = classify_event("Sugar production rises after bumper harvest")
+    assert coffee["impact"]["Caffè"] == "RIALZISTA"
+    assert cocoa["impact"]["Cacao"] == "RIALZISTA"
+    assert rice["impact"]["Riso"] == "RIALZISTA"
+    assert sugar["impact"]["Zucchero"] == "RIBASSISTA"
+
+
+def test_platinum_supported_but_silver_excluded_from_selected_universe():
+    result = classify_event("Platinum rises as the Federal Reserve signals rate cuts")
+    assert "Platino" in result["assets"]
+    assert "Argento" not in result["assets"]
+
+
+def test_agricultural_mixed_catalysts_remain_mixed():
+    result = classify_event("Coffee harvest improves but drought threatens supply")
+    assert result["impact"]["Caffè"] == "MISTA"

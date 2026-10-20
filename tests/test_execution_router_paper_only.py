@@ -13,9 +13,9 @@ def valid_state(**overrides):
         "setup_direction": "LONG",
         "entry": 96.0,
         "stop": 90.0,
-        "tp1": 102.0,
+        "tp1": 105.0,
         "tp2": 108.0,
-        "tp3": 114.0,
+        "tp3": 111.0,
         "metadata": {"gagarin_action": "PAPER_ENTRY"},
     }
     values.update(overrides)

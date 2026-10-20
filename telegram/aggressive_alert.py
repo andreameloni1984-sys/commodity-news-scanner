@@ -29,16 +29,34 @@ def _is_energy(name: str) -> bool:
 
 
 def _is_aggressive_ready(item: dict) -> bool:
+    direction = str(item.get("direction") or "").upper()
+    decision = str(item.get("final_decision") or "").upper()
+    entry, stop, tp1 = item.get("entry"), item.get("stop"), item.get("tp1")
+    if direction not in {"LONG", "SHORT"}:
+        return False
+    if decision not in {"PAPER_ENTRY", "PAPER_SIGNAL", "ENTRY"}:
+        return False
+    if not (bool(item.get("trigger_confirmed")) and bool(item.get("live"))):
+        return False
+    if entry is None or stop is None or tp1 is None:
+        return False
+    try:
+        entry, stop, tp1 = float(entry), float(stop), float(tp1)
+        probability = float(item.get("probability") or 0)
+        quality = float(item.get("quality") or 0)
+        confidence = float(item.get("confidence") or 0)
+    except (TypeError, ValueError):
+        return False
+    if min(entry, stop, tp1) <= 0:
+        return False
+    if direction == "LONG" and not (stop < entry < tp1):
+        return False
+    if direction == "SHORT" and not (tp1 < entry < stop):
+        return False
     return (
-        float(item.get("probability") or 0) >= AGGRESSIVE_MIN_PROBABILITY
-        and float(item.get("quality") or 0) >= AGGRESSIVE_MIN_QUALITY
-        and float(item.get("confidence") or 0) >= AGGRESSIVE_MIN_CONFIDENCE
-        and bool(item.get("trigger_confirmed"))
-        and bool(item.get("live"))
-        and item.get("final_decision") in {"PAPER_ENTRY", "PAPER_SIGNAL", "ENTRY"}
-        and item.get("entry") is not None
-        and item.get("stop") is not None
-        and item.get("tp1") is not None
+        probability >= AGGRESSIVE_MIN_PROBABILITY
+        and quality >= AGGRESSIVE_MIN_QUALITY
+        and confidence >= AGGRESSIVE_MIN_CONFIDENCE
     )
 
 
@@ -105,13 +123,19 @@ def format_aggressive_alert(states: Iterable[Any]) -> str:
     for index, item in enumerate(filtered, 1):
         title = "SCELTA PRINCIPALE" if index == 1 else "Alternativa %d" % index
         lines.append("%s: %s - %s" % (title, item["commodity"], item["direction"]))
-        lines.append("Prezzo: %.6g" % item["price"] if item["price"] is not None else "Prezzo: N/D")
+        lines.append("Prezzo provider Gagarin: %.6g USD" % float(item["price"]) if item["price"] is not None else "Prezzo provider Gagarin: N/D")
+        lines.append("Nota: quotazione provider, non Trading 212; per allineare i prezzi serve il bid/ask del broker.")
         lines.append("ENTRY: %.6g" % item["entry"] if item["entry"] is not None else "ENTRY: N/D")
         lines.append("STOP: %.6g" % item["stop"] if item["stop"] is not None else "STOP: N/D")
-        if item["tp1"] is not None:
-            lines.append("TP1: %.6g | TP2: %.6g | TP3: %.6g" % (item["tp1"], item["tp2"], item["tp3"]))
-        else:
-            lines.append("TP: N/D")
+        targets = []
+        for key in ("tp1", "tp2", "tp3"):
+            value = item.get(key)
+            if value is not None:
+                try:
+                    targets.append("%s: %.6g" % (key.upper(), float(value)))
+                except (TypeError, ValueError):
+                    continue
+        lines.append(" | ".join(targets) if targets else "TP: N/D")
         lines.append(
             "Probabilita: %.0f | Quality: %.0f | Confidence: %.0f | Trigger: CONFERMATO"
             % (item["probability"], item["quality"], item["confidence"])
