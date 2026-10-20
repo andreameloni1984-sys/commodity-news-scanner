@@ -142,7 +142,7 @@ def position_monitor_loop() -> None:
                 # forecasts from this exact market snapshot. The tracker never
                 # changes the governor decision or sends routine Telegram alerts.
                 try:
-                    from engine.feedback import record_entries, summarize, update_open_outcomes
+                    from engine.feedback import record_entries, summarize, update_open_outcomes, format_summary, storage_backend
                     decisions = evaluate_states(states)
                     by_symbol = {decision.symbol: decision for decision in decisions}
                     for state in states:
@@ -157,11 +157,12 @@ def position_monitor_loop() -> None:
                     recorded = record_entries(states)
                     summary = summarize()
                     print(
-                        "GAGARIN FEEDBACK | "
-                        f"updated={updated} new={recorded} total={summary['total']} "
-                        f"closed={summary['closed']} open={summary['open']} "
-                        f"win_rate={summary['win_rate_pct']} avg_R={summary['average_r']} "
-                        f"total_R={summary['realized_r']}",
+                        f"GAGARIN FEEDBACK STORAGE | backend={storage_backend()}",
+                        flush=True,
+                    )
+                    print(
+                        "GAGARIN FEEDBACK | " + format_summary(summary) +
+                        f" | updated={updated} new={recorded}",
                         flush=True,
                     )
                 except Exception as feedback_exc:
