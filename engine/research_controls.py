@@ -226,3 +226,169 @@ def attach_research_controls(state: Any) -> Any:
     else:
         state.metadata["research_integrity_blocked"] = False
     return state
+
+
+def anti_edge_validation(candidate_returns: list[float], benchmark_returns: list[float],
+                         candidate_costs: list[float] | None = None,
+                         benchmark_costs: list[float] | None = None,
+                         out_of_sample: list[bool] | None = None,
+                         min_sample: int = 30) -> dict:
+    """Compare net candidate and baseline returns only on explicitly OOS rows.
+
+    This is a rejection/diagnostic gate, never an automatic strategy promotion.
+    Costs are per observation in the same units as returns.
+    """
+    n = len(candidate_returns)
+    if len(benchmark_returns) != n:
+        raise ValueError("Candidate e benchmark devono avere la stessa lunghezza")
+    candidate_costs = candidate_costs or [0.0] * n
+    benchmark_costs = benchmark_costs or [0.0] * n
+    out_of_sample = out_of_sample or [True] * n
+    if not (len(candidate_costs) == len(benchmark_costs) == len(out_of_sample) == n):
+        raise ValueError("Tutte le serie devono avere la stessa lunghezza")
+    rows = []
+    for i in range(n):
+        c, b, cc, bc = map(float, (candidate_returns[i], benchmark_returns[i],
+                                   candidate_costs[i], benchmark_costs[i]))
+        if not all(math.isfinite(x) for x in (c, b, cc, bc)) or cc < 0 or bc < 0:
+            raise ValueError("Rendimenti/costi non validi")
+        if out_of_sample[i]:
+            rows.append((c - cc, b - bc))
+    if len(rows) < min_sample:
+        return {"status": "INSUFFICIENT_OOS_SAMPLE", "n_oos": len(rows),
+                "need": min_sample, "promoted": False, "paper_only": True}
+    candidate = [x[0] for x in rows]
+    benchmark = [x[1] for x in rows]
+    differences = [c - b for c, b in rows]
+    mean_candidate = statistics.mean(candidate)
+    mean_benchmark = statistics.mean(benchmark)
+    mean_difference = statistics.mean(differences)
+    return {
+        "status": "OOS_EDGE_NOT_DEMONSTRATED" if mean_difference <= 0 else "OOS_EDGE_CANDIDATE",
+        "n_oos": len(rows),
+        "candidate_net_mean": mean_candidate,
+        "benchmark_net_mean": mean_benchmark,
+        "net_mean_difference": mean_difference,
+        "candidate_positive_mean": mean_candidate > 0,
+        "promoted": False,
+        "paper_only": True,
+        "note": "La media OOS positiva non basta da sola per promuovere una strategia.",
+    }
+
+
+def deflated_sharpe_probability(returns: list[float], trials: int = 1,
+                                annualization: float = 1.0) -> dict:
+    """Approximate Deflated Sharpe probability using sample moments.
+
+    Returns are periodic simple returns. This statistic is a research diagnostic;
+    serial dependence and non-stationarity still require separate treatment.
+    """
+    from statistics import NormalDist
+    values = [float(x) for x in returns]
+    if trials < 1 or annualization <= 0:
+        raise ValueError("trials deve essere >=1 e annualization >0")
+    if len(values) < 30 or not all(math.isfinite(x) for x in values):
+        return {"status": "INSUFFICIENT_SAMPLE", "n": len(values),
+                "dsr_probability": None, "paper_only": True}
+    mean = statistics.mean(values)
+    sd = statistics.stdev(values)
+    if sd <= 0:
+        return {"status": "DEGENERATE_RETURNS", "n": len(values),
+                "dsr_probability": None, "paper_only": True}
+    sr_periodic = mean / sd
+    sr = sr_periodic * math.sqrt(annualization)
+    centered = [x - mean for x in values]
+    m2 = statistics.mean(x*x for x in centered)
+    if m2 <= 0:
+        return {"status": "DEGENERATE_RETURNS", "n": len(values),
+                "dsr_probability": None, "paper_only": True}
+    skew = statistics.mean(x**3 for x in centered) / (m2 ** 1.5)
+    kurtosis = statistics.mean(x**4 for x in centered) / (m2 ** 2)  # non-excess
+    if trials == 1:
+        benchmark_sr = 0.0
+    else:
+        normal = NormalDist()
+        euler_gamma = 0.5772156649015329
+        z1 = normal.inv_cdf(1.0 - 1.0 / trials)
+        z2 = normal.inv_cdf(1.0 - 1.0 / (trials * math.e))
+        benchmark_sr = math.sqrt(1.0 / (len(values) - 1)) * (
+            (1.0 - euler_gamma) * z1 + euler_gamma * z2
+        )
+    variance_term = 1.0 - skew * sr_periodic + ((kurtosis - 1.0) / 4.0) * sr_periodic**2
+    if variance_term <= 0:
+        return {"status": "INVALID_MOMENT_ADJUSTMENT", "n": len(values),
+                "dsr_probability": None, "paper_only": True}
+    z = (sr_periodic - benchmark_sr) * math.sqrt(len(values) - 1) / math.sqrt(variance_term)
+    probability = NormalDist().cdf(z)
+    return {
+        "status": "OBSERVATION",
+        "n": len(values),
+        "trials": trials,
+        "sharpe_periodic": sr_periodic,
+        "expected_max_sharpe_null": benchmark_sr,
+        "dsr_probability": probability,
+        "paper_only": True,
+        "note": "Approssimazione; non corregge automaticamente autocorrelazione o cambi di regime.",
+    }
+
+
+def combinatorial_pbo(returns_by_strategy: dict[str, list[float]], n_splits: int = 6) -> dict:
+    """CSCV-style Probability of Backtest Overfitting diagnostic.
+
+    Splits the chronological sample into equal contiguous blocks, enumerates
+    half-block in-sample combinations, selects the best in-sample strategy and
+    checks whether its out-of-sample rank is below the median.
+    """
+    from itertools import combinations
+    names = list(returns_by_strategy)
+    if len(names) < 2 or n_splits < 4 or n_splits % 2:
+        raise ValueError("Servono almeno 2 strategie e un numero pari di split >=4")
+    lengths = {len(returns_by_strategy[name]) for name in names}
+    if len(lengths) != 1:
+        raise ValueError("Tutte le strategie devono avere lo stesso numero di osservazioni")
+    n = lengths.pop()
+    if n < n_splits * 2:
+        return {"status": "INSUFFICIENT_SAMPLE", "n": n, "pbo": None,
+                "promoted": False, "paper_only": True}
+    arrays = {}
+    for name in names:
+        values = [float(x) for x in returns_by_strategy[name]]
+        if not all(math.isfinite(x) for x in values):
+            raise ValueError("I rendimenti devono essere finiti")
+        arrays[name] = values
+    block_size = n // n_splits
+    usable = block_size * n_splits
+    blocks = [list(range(i * block_size, (i + 1) * block_size)) for i in range(n_splits)]
+    half = n_splits // 2
+    evaluated = 0
+    overfit = 0
+    lambdas = []
+    for selected in combinations(range(n_splits), half):
+        ins = set(selected)
+        is_idx = [i for b in range(n_splits) if b in ins for i in blocks[b]]
+        oos_idx = [i for b in range(n_splits) if b not in ins for i in blocks[b]]
+        is_means = {name: statistics.mean(arrays[name][i] for i in is_idx) for name in names}
+        best = max(names, key=lambda name: is_means[name])
+        oos_means = {name: statistics.mean(arrays[name][i] for i in oos_idx) for name in names}
+        # Average rank for ties; rank 1 is worst and rank K is best.
+        value = oos_means[best]
+        less = sum(v < value for v in oos_means.values())
+        equal = sum(v == value for v in oos_means.values())
+        rank = less + (equal + 1) / 2.0
+        omega = min(1.0 - 1e-12, max(1e-12, rank / (len(names) + 1.0)))
+        lam = math.log(omega / (1.0 - omega))
+        lambdas.append(lam)
+        overfit += int(lam < 0)
+        evaluated += 1
+    return {
+        "status": "OBSERVATION",
+        "n": n,
+        "strategies": len(names),
+        "splits": n_splits,
+        "combinations_evaluated": evaluated,
+        "pbo": overfit / evaluated if evaluated else None,
+        "median_logit_rank": statistics.median(lambdas) if lambdas else None,
+        "promoted": False,
+        "paper_only": True,
+        "note": "CSCV diagnostico; la scelta di strategie e split può influenzare il risultato.",
+    }
