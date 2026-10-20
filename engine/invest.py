@@ -224,10 +224,10 @@ def auto_buy_best_signal_budget(amount: float = 10.0, min_score: float = 50.0) -
     # Persistent restart-safe daily cap: reconcile broker order history, not process memory.
     history_ok, history_data = get_order_history(limit=50)
     if not history_ok:
-        # Explicit one-shot DEMO request only: do not let a history API outage
-        # block the test. Position and pending-order checks below still apply.
-        print(f"AUTO DEMO WARNING | order history unavailable; proceeding with position/pending-order checks: {history_data}", flush=True)
-        history_data = {"items": []}
+        # Fail closed: without broker history we cannot enforce the restart-safe
+        # daily BUY cap, even for DEMO. Do not risk duplicate orders.
+        print(f"AUTO DEMO BLOCKED | order history unavailable: {history_data}", flush=True)
+        return "AUTO DEMO: storico ordini non verificabile; nessun ordine inviato."
     # API versions may return either a bare list or a paginated object.
     if isinstance(history_data, list):
         history_items = history_data
