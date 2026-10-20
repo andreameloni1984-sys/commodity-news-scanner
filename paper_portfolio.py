@@ -5,9 +5,14 @@ from datetime import datetime, timezone
 from typing import Any
 import threading
 
+from engine.order_preflight import validate_paper_signal
+
 INITIAL_CAPITAL = 100.0
 PAPER_ENTRY_ACTIONS = {"PAPER_ENTRY", "PAPER_SIGNAL"}
 TARGET_FRACTION = 1.0 / 3.0
+MAX_OPEN_POSITIONS = 3
+MAX_OPEN_RISK_PCT = 0.02
+MAX_DAILY_LOSS_PCT = 0.025
 
 
 @dataclass
@@ -127,7 +132,8 @@ class PaperPortfolio:
         risk_pct: float = 0.01,
         max_allocation_pct: float = 0.25,
     ) -> dict[str, Any] | None:
-        if str(row.get("action") or "").upper() not in PAPER_ENTRY_ACTIONS:
+        valid, _reason = validate_paper_signal(row)
+        if not valid:
             return None
         try:
             entry = float(row.get("entry"))
@@ -135,19 +141,8 @@ class PaperPortfolio:
             tp1, tp2, tp3 = (float(row.get(k)) for k in ("tp1", "tp2", "tp3"))
         except (TypeError, ValueError):
             return None
-        if min(entry, stop, tp1, tp2, tp3) <= 0:
-            return None
 
         direction = str(row.get("direction") or "").upper()
-        if direction not in {"LONG", "SHORT"}:
-            return None
-        if direction == "LONG":
-            if not stop < entry < tp1 < tp2 < tp3:
-                return None
-        else:
-            if not tp3 < tp2 < tp1 < entry < stop:
-                return None
-
         stop_move = abs(entry - stop) / entry
         if stop_move <= 0 or risk_pct <= 0 or max_allocation_pct <= 0:
             return None
@@ -156,8 +151,26 @@ class PaperPortfolio:
             return None
 
         with self._lock:
-            if any(p.status == "OPEN" and p.symbol == symbol for p in self.positions):
+            open_positions = [p for p in self.positions if p.status == "OPEN"]
+            if any(p.symbol == symbol for p in open_positions):
                 return None
+            if len(open_positions) >= MAX_OPEN_POSITIONS:
+                return None
+
+            # Daily realized-loss circuit breaker, evaluated in UTC.
+            today = datetime.now(timezone.utc).date()
+            realized_today = 0.0
+            for p in self.positions:
+                if p.closed_at:
+                    try:
+                        closed_date = datetime.fromisoformat(p.closed_at.replace("Z", "+00:00")).date()
+                    except (TypeError, ValueError):
+                        continue
+                    if closed_date == today:
+                        realized_today += p.pnl
+            if realized_today <= -(self.initial_capital * MAX_DAILY_LOSS_PCT):
+                return None
+
             try:
                 requested_cap = max_allocation_pct if allocation_pct is None else float(allocation_pct)
             except (TypeError, ValueError):
@@ -166,6 +179,18 @@ class PaperPortfolio:
             risk_budget = self.cash * float(risk_pct)
             risk_allocation = risk_budget / stop_move
             allocation = min(self.cash, self.cash * cap_pct, risk_allocation)
+            if allocation <= 0:
+                return None
+
+            # Aggregate stop-risk cap: no more than 2% of initial capital.
+            current_open_risk = sum(
+                p.allocation * p.remaining_fraction * (abs(p.entry - p.stop) / p.entry)
+                for p in open_positions if p.stop is not None and p.entry > 0
+            )
+            remaining_risk = self.initial_capital * MAX_OPEN_RISK_PCT - current_open_risk
+            if remaining_risk <= 0:
+                return None
+            allocation = round(min(allocation, remaining_risk / stop_move), 2)
             if allocation <= 0:
                 return None
 

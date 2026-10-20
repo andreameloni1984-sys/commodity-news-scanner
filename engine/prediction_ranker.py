@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
+from engine.commodity_trade_plan import build_commodity_trade_plan
+
 
 def _num(value: Any, default: float = 0.0) -> float:
     try:
@@ -121,8 +123,18 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
         score -= conflicts * 5
         score = max(0.0, min(100.0, score))
 
+        trade_plan = build_commodity_trade_plan(
+            direction=direction,
+            reference_price=price,
+            entry=getattr(state, "entry", None),
+            atr=atr,
+            highs=getattr(state, "highs", None),
+            lows=getattr(state, "lows", None),
+        )
+
         ranked.append({
             "commodity": name,
+            "trade_plan": trade_plan,
             "symbol": str(getattr(state, "symbol", "") or ""),
             "direction": direction,
             "score": round(score, 1),
@@ -170,6 +182,15 @@ def format_best_prediction(states: Iterable[Any], profile: str = "AGGRESSIVE") -
         f"TAKE PROFIT 1: {best['tp1']:.6g}" if best['tp1'] is not None else "TAKE PROFIT 1: non disponibile",
         f"TAKE PROFIT 2: {best['tp2']:.6g}" if best['tp2'] is not None else "TAKE PROFIT 2: non disponibile",
         f"TAKE PROFIT 3: {best['tp3']:.6g}" if best['tp3'] is not None else "TAKE PROFIT 3: non disponibile",
+        f"PIANO SL/TP STRUTTURALE: {best['trade_plan'].get('status', 'NON DISPONIBILE')}",
+        *(
+            [
+                f"SL/TP TEORICI (non eseguibili): SL {best['trade_plan']['stop_loss']:.6g} | TP1 {best['trade_plan']['take_profit_1']:.6g} | TP2 {best['trade_plan']['take_profit_2']:.6g} | TP3 {best['trade_plan']['take_profit_3']:.6g}",
+                f"STOP {best['trade_plan']['stop_atr']:.2f} ATR | R/R {best['trade_plan']['rr1']:.1f}/{best['trade_plan']['rr2']:.1f}/{best['trade_plan']['rr3']:.1f} | base {best['trade_plan']['stop_basis']}",
+            ]
+            if best['trade_plan'].get('status') == 'REFERENCE_ONLY'
+            else [f"PIANO NON DISPONIBILE: {best['trade_plan'].get('reason', 'livelli non validati')}"]
+        ),
         f"QUALITÀ {best['quality']:.0f} | CONFIDENCE {best['confidence']:.0f} | TRIGGER {'SÌ' if best['trigger_confirmed'] else 'NO'}",
         f"DATI: {best['data_status']} | {'LIVE' if best['live'] else 'NON LIVE'}",
         "PERCHÉ: " + (", ".join(best["reasons"]) if best["reasons"] else "segnali deboli"),
