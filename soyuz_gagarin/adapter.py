@@ -77,6 +77,7 @@ def evaluate_states(states: Iterable[object]):
         rr2_value = getattr(state, "rr2", None)
         rr3_value = getattr(state, "rr3", None)
         bracket_generated = False
+        stop_atr = _float(getattr(state, "stop_atr", 0.0))
 
         # Apply the studied structural/ATR bracket only when the source has no
         # bracket at all. Never silently replace partially supplied levels.
@@ -109,10 +110,7 @@ def evaluate_states(states: Iterable[object]):
         else:
             reasons_for_bracket = list(getattr(state, "blockers", []) or [])
 
-        stop_atr = _float(getattr(state, "stop_atr", 0.0))
-        if bracket_generated:
-            stop_atr = _float(stop_atr)
-        elif stop_atr <= 0 and price > 0 and atr > 0 and stop_value is not None:
+        if not bracket_generated and stop_atr <= 0 and price > 0 and atr > 0 and stop_value is not None:
             stop_atr = abs(price - _float(stop_value)) / atr
 
         rr_values = (
