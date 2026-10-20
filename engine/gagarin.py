@@ -13,6 +13,7 @@ from engine.predictive import evaluate_pre_move
 from engine.research_validation import annotate
 from engine.energy_confluence import stamp_energy
 from engine.energy_chain import stamp_paper
+from engine.research_controls import attach_research_controls
 
 STRONG_MOVE_ATR = 1.5
 OPPORTUNITY_MOVE_PCT_24H = 1.0
@@ -181,6 +182,7 @@ def analyze_one(commodity: Commodity) -> SoyuzState:
     )
 
     state = load_data(state, commodity)
+    state = attach_research_controls(state)
     state = evaluate_pre_move(state)
     state = scan_market_opportunity(state)
     state = apply_regime(state)
