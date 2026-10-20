@@ -201,7 +201,7 @@ def format_aggressive_alert(states: Iterable[Any]) -> str:
         for key, label in (("entry", "Ingresso potenziale"), ("stop", "Stop indicativo"), ("tp1", "TP1"), ("tp2", "TP2"), ("tp3", "TP3")):
             value = _number(item.get(key))
             lines.append("%s: %.6g" % (label, value) if value is not None else "%s: da definire" % label)
-        lines.append("Struttura: %s | Bias: %s" % (analysis["pattern"], analysis["bias"]))
+        lines.append("Pattern: %s | Bias: %s" % (analysis["pattern"], analysis["bias"]))
         lines.append("Candela: %s" % analysis.get("candlestick_pattern", "NON VALUTABILE"))
         retracement = analysis.get("retracement_atr")
         retracement_text = analysis.get("retracement_status", "NON VALUTABILE")
