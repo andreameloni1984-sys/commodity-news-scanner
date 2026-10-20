@@ -600,8 +600,8 @@ def test_telegram_start_uses_dashboard_keyboard():
     text = _command_response("/start")
     menu = telegram_menu()
 
-    assert "SOYUZ GAGARIN" in text
-    assert "PAPER ONLY" in text
+    assert "GAGARIN" in text
+    assert "PAPER/DEMO" in text
     assert "🚀 AGGRESSIVE 212" in [
         button["text"] for row in menu["keyboard"] for button in row
     ]

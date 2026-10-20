@@ -597,18 +597,10 @@ def run():
         try:
 
             if energy_states:
-                event = energy_states[0].metadata.get("energy") or {}
-                legs = ", ".join(
-                    f"{row.get('family')} {float(row.get('pct') or 0):+.2f}%"
-                    for row in event.get("legs", [])
-                )
-                send_telegram(
-                    "ENERGY SHOCK "
-                    + str(event.get("direction", "NONE"))
-                    + "\n"
-                    + legs
-                    + "\nPAPER ONLY. Continuazione da verificare."
-                )
+                # This scheduled runner executes every 15 minutes. Avoid repeating
+                # the same energy-shock message on every run; the Render event and
+                # forecast monitors own event-triggered Telegram notifications.
+                print("ENERGY SHOCK observed; Telegram notification delegated to event monitor")
             if signal_results:
                 send_telegram(
                     format_signal_board(signal_results)
@@ -616,16 +608,8 @@ def run():
                 print(
                     f"📡 SIGNAL CHANNEL: {len(signal_results)} signal(s) published"
                 )
-            else:
-                send_telegram(
-                    "SOYUZ GIORNO\n"
-                    "Verso: piatto. Shock e settimana non coincidono.\n"
-                    "Energia: scorte, curva, offerta. Metalli: dollaro. Agri: meteo.\n"
-                    "PAPER ONLY. Nessun prezzo inventato."
-                )
-                print(
-                    "📡 SIGNAL CHANNEL: status only — no entry"
-                )
+            # No routine Telegram heartbeat when no signal is available.
+            # Only actionable opportunities and meaningful position-state changes notify.
 
         except Exception as exc:
 

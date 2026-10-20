@@ -126,6 +126,34 @@ def invest_auto_loop() -> None:
         time.sleep(INVEST_AUTO_INTERVAL)
 
 
+def position_monitor_loop() -> None:
+    """Periodic forecast and position monitor; Telegram is transition-only."""
+    from engine.position_monitor import evaluate_positions, list_positions
+    from telegram.commodity_direction_alert import run_directional_commodity_alert
+    from telegram.aggressive_alert import run_aggressive_alert
+
+    interval = 15 * 60
+    print("Gagarin market monitor | interval=15min | deduplicated forecast + position alerts", flush=True)
+    while True:
+        try:
+            states = _run_analysis()
+            if states:
+                # New/meaningfully changed directional forecasts only; no no-signal heartbeat.
+                run_directional_commodity_alert(states)
+                # Pattern/exit alerts run in the actual Render service, not only in GitHub Actions.
+                run_aggressive_alert(states)
+                if list_positions():
+                    for alert in evaluate_positions(states):
+                        if send_telegram(alert):
+                            print("Gagarin position monitor | transition alert delivered", flush=True)
+                        else:
+                            print("Gagarin position monitor | transition alert delivery failed", flush=True)
+        except Exception as exc:
+            # Diagnostics only: never send routine error/status spam to Telegram.
+            print(f"Gagarin market monitor error | {type(exc).__name__}: {exc}", flush=True)
+        time.sleep(interval)
+
+
 def handle_update(update: dict) -> None:
     try:
         message = update.get("message") or {}
@@ -348,6 +376,9 @@ def main() -> None:
         {"command": "soft212", "description": "Profilo SOFT 212"},
         {"command": "collegamento212", "description": "Stato collegamento Invest Trading 212"},
         {"command": "fasceorario", "description": "Statistiche delle tre fasce orarie"},
+        {"command": "monitora", "description": "Registra una posizione per avvisi di rischio"},
+        {"command": "posizioni", "description": "Elenca le posizioni monitorate"},
+        {"command": "smetti", "description": "Disattiva il monitor di una posizione"},
     ]})
     print(f"Telegram commands menu | configured={'YES' if commands_ok else 'NO'}", flush=True)
 
@@ -361,10 +392,15 @@ def main() -> None:
     ).start()
     print("Gagarin NEWS monitor | interval=60s | PAPER/DEMO | event-triggered analysis", flush=True)
 
-    # Avvia il loop autonomo Invest ogni 15 minuti
+    # Avvia i monitor indipendenti; il monitor posizioni invia soltanto cambi di stato rilevanti.
     threading.Thread(
         target=invest_auto_loop,
         name="invest-auto",
+        daemon=True,
+    ).start()
+    threading.Thread(
+        target=position_monitor_loop,
+        name="gagarin-position-monitor",
         daemon=True,
     ).start()
 

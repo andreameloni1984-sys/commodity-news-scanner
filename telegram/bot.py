@@ -246,6 +246,51 @@ def _format_morning_pick(results):
 
 def _command_response(command: str) -> Optional[str]:
     raw = command.strip()
+
+    # Manual position registration enables transition-only post-entry monitoring.
+    # Prices are compared with Gagarin's provider feed; this is not a Trading 212 API.
+    command_name = raw.split(maxsplit=1)[0].lower() if raw else ""
+    if command_name == "/monitora":
+        parts = raw.split()
+        if len(parts) < 6 or len(parts) > 8:
+            return "Uso: /monitora ORO LONG 2700 2680 2740 [TP2] [TP3]"
+        commodity = _resolve_commodity(parts[1])
+        if commodity is None:
+            return "Commodity non riconosciuta o non abilitata. Usa oro, wti, brent, cacao, caffe, platino, riso o zucchero."
+        from engine.position_monitor import register_position
+        tp2 = parts[6] if len(parts) >= 7 else None
+        tp3 = parts[7] if len(parts) >= 8 else None
+        ok, message = register_position(
+            symbol=commodity.symbol, commodity=commodity.name,
+            direction=parts[2], entry=parts[3], stop=parts[4], tp1=parts[5],
+            tp2=tp2, tp3=tp3,
+        )
+        return message
+
+    if command_name == "/posizioni":
+        from engine.position_monitor import list_positions
+        positions = list_positions()
+        if not positions:
+            return "Nessuna posizione monitorata. Registra una con /monitora ORO LONG 2700 2680 2740."
+        lines = ["GAGARIN — POSIZIONI MONITORATE", "PAPER/ADVISORY ONLY", ""]
+        for p in positions:
+            lines.append(
+                f"{p.get('commodity')} {p.get('direction')} | Entry {p.get('entry'):g} "
+                f"| SL {p.get('stop'):g} | TP1 {p.get('tp1'):g}"
+            )
+        lines.append("")
+        lines.append("Quotazioni provider Gagarin, non Trading 212. Solo avvisi; nessun ordine viene modificato.")
+        return "\n".join(lines)
+
+    if command_name in {"/smetti", "/stopmonitore"}:
+        parts = raw.split()
+        if len(parts) != 2:
+            return "Uso: /smetti ORO"
+        commodity = _resolve_commodity(parts[1])
+        symbol = commodity.symbol if commodity is not None else parts[1].upper()
+        from engine.position_monitor import remove_position
+        _, message = remove_position(symbol)
+        return message
     button_commands = {
         "🏆 classifica": "/classifica",
         "🎯 setup": "/setup",
@@ -281,7 +326,9 @@ def _command_response(command: str) -> Optional[str]:
             "🚀 AGGRESSIVE 212 — profilo aggressivo\\n"
             "🛡 SOFT 212 — profilo prudente\\n"
             "🔗 COLLEGAMENTO INVEST TRADING212 — verifica sola lettura\\n\\n"
-            "Le NEWS rilevanti avviano un'analisi immediata; l'alert viene inviato solo dopo conferma del movimento e del trigger."
+            "Monitor posizione: /monitora ORO LONG 2700 2680 2740\\n"
+            "/posizioni — elenco monitorate | /smetti ORO — disattiva monitor.\\n"
+            "Gli avvisi automatici arrivano solo su nuovi segnali rilevanti o cambi di rischio/target; nessun messaggio di stato ripetitivo."
         )
 
     if command_name in {"/aggressivo212", "/aggressive212"}:
