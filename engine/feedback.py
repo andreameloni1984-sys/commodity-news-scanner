@@ -16,7 +16,7 @@ from pathlib import Path
 FEEDBACK_FILE = Path("gagarin_feedback.csv")
 FIELDS = [
     "signal_id", "timestamp_utc", "entry_bar_timestamp", "last_checked_timestamp",
-    "commodity", "symbol", "direction", "timeframe",
+    "commodity", "symbol", "direction", "action", "timeframe",
     "probability", "quality", "confidence", "entry", "stop", "tp1", "tp2", "tp3",
     "rr1", "rr2", "rr3", "stop_atr", "regime", "structure", "setup", "trigger",
     "data_source", "data_status", "outcome", "r_multiple", "mfe_r", "mae_r", "bars_held",
@@ -86,6 +86,7 @@ def _signal_record(state, now=None):
         "commodity": _value(state, "commodity"),
         "symbol": str(_value(state, "symbol")).upper(),
         "direction": str(_value(state, "setup_direction")).upper(),
+        "action": str(metadata.get("gagarin_action", _value(state, "final_decision", "WATCH"))).upper(),
         "entry": _value(state, "entry"),
         "stop": _value(state, "stop"),
         "tp1": _value(state, "tp1"),
@@ -103,6 +104,7 @@ def _signal_record(state, now=None):
         "commodity": values["commodity"],
         "symbol": values["symbol"],
         "direction": values["direction"],
+        "action": values["action"],
         "timeframe": _value(state, "timeframe"),
         "probability": _value(state, "probability"),
         "quality": _value(state, "quality"),
@@ -153,6 +155,36 @@ def record_entries(results, path=FEEDBACK_FILE):
             continue
         record = _signal_record(state)
         if record["signal_id"] in seen:
+            continue
+        rows.append(record)
+        seen.add(record["signal_id"])
+        count += 1
+    if count:
+        _write_rows(rows, path)
+    return count
+
+def record_forecasts(results, path=FEEDBACK_FILE):
+    """
+    Record live, directional forecasts with a valid bracket, including setups
+    that are not entry-authorized yet. These are labelled by action so forecast
+    quality is not confused with the performance of approved paper entries.
+    """
+    count = 0
+    rows = load_feedback(path)
+    seen = {row.get("signal_id") for row in rows}
+    for state in results:
+        side = str(getattr(state, "setup_direction", "") or "").upper()
+        if side not in {"LONG", "SHORT"}:
+            continue
+        if not bool(getattr(state, "data_ok", False)) or not bool(getattr(state, "live", False)):
+            continue
+        record = _signal_record(state)
+        values = [_number(record.get(k)) for k in ("entry", "stop", "tp1", "tp2", "tp3")]
+        if any(value is None or value <= 0 for value in values):
+            continue
+        entry, stop, tp1, tp2, tp3 = values
+        geometry_ok = (stop < entry < tp1 < tp2 < tp3) if side == "LONG" else (tp3 < tp2 < tp1 < entry < stop)
+        if not geometry_ok or record["signal_id"] in seen:
             continue
         rows.append(record)
         seen.add(record["signal_id"])
