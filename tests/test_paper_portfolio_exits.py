@@ -11,9 +11,9 @@ def signal(**overrides):
         "direction": "LONG",
         "entry": 100.0,
         "stop": 90.0,
-        "tp1": 110.0,
+        "tp1": 115.0,
         "tp2": 120.0,
-        "tp3": 130.0,
+        "tp3": 125.0,
     }
     row.update(overrides)
     return row
@@ -26,7 +26,7 @@ class PaperPortfolioExitTests(unittest.TestCase):
         self.assertIsNotNone(self.opened)
 
     def test_tp1_closes_one_third_and_keeps_position_open(self):
-        closed = self.portfolio.evaluate_exits({"WTI/USD": 110.0})
+        closed = self.portfolio.evaluate_exits({"WTI/USD": 115.0})
         self.assertEqual(closed, [])
         pos = self.portfolio.positions[0]
         self.assertEqual(pos.status, "OPEN")
@@ -37,7 +37,7 @@ class PaperPortfolioExitTests(unittest.TestCase):
         self.assertEqual(len(snap["open_positions"]), 1)
 
     def test_tp3_closes_all_remaining_targets_in_order(self):
-        closed = self.portfolio.evaluate_exits({"WTI/USD": 130.0})
+        closed = self.portfolio.evaluate_exits({"WTI/USD": 125.0})
         self.assertEqual(len(closed), 1)
         pos = self.portfolio.positions[0]
         self.assertEqual(pos.status, "CLOSED")
@@ -62,9 +62,9 @@ class PaperPortfolioExitTests(unittest.TestCase):
 
     def test_short_targets_close_in_descending_order(self):
         p = PaperPortfolio(1000.0)
-        row = signal(direction="SHORT", entry=100.0, stop=110.0, tp1=90.0, tp2=80.0, tp3=70.0)
+        row = signal(direction="SHORT", entry=100.0, stop=110.0, tp1=85.0, tp2=80.0, tp3=75.0)
         self.assertIsNotNone(p.open_signal(row, risk_pct=0.02))
-        p.evaluate_exits({"WTI/USD": 70.0})
+        p.evaluate_exits({"WTI/USD": 75.0})
         pos = p.positions[0]
         self.assertEqual(pos.status, "CLOSED")
         self.assertTrue(pos.tp1_hit and pos.tp2_hit and pos.tp3_hit)
