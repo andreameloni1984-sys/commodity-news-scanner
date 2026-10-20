@@ -170,8 +170,10 @@ def record_forecasts(results, path=FEEDBACK_FILE):
     quality is not confused with the performance of approved paper entries.
     """
     count = 0
+    changed = False
     rows = load_feedback(path)
-    seen = {row.get("signal_id") for row in rows}
+    by_id = {row.get("signal_id"): row for row in rows if row.get("signal_id")}
+    seen = set(by_id)
     for state in results:
         side = str(getattr(state, "setup_direction", "") or "").upper()
         if side not in {"LONG", "SHORT"}:
@@ -184,12 +186,21 @@ def record_forecasts(results, path=FEEDBACK_FILE):
             continue
         entry, stop, tp1, tp2, tp3 = values
         geometry_ok = (stop < entry < tp1 < tp2 < tp3) if side == "LONG" else (tp3 < tp2 < tp1 < entry < stop)
-        if not geometry_ok or record["signal_id"] in seen:
+        if not geometry_ok:
+            continue
+        existing = by_id.get(record["signal_id"])
+        if existing is not None:
+            # If the same setup advances from WATCH to approved ENTRY in the
+            # same candle, preserve one sample and upgrade its action label.
+            if record["action"] in {"PAPER_ENTRY", "PAPER_SIGNAL"} and existing.get("action") not in {"PAPER_ENTRY", "PAPER_SIGNAL"}:
+                existing["action"] = record["action"]
+                changed = True
             continue
         rows.append(record)
+        by_id[record["signal_id"]] = record
         seen.add(record["signal_id"])
         count += 1
-    if count:
+    if count or changed:
         _write_rows(rows, path)
     return count
 
