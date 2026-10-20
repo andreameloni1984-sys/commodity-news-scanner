@@ -114,3 +114,35 @@ def test_delivery_formats_preanalyzed_candidates_without_reclassifying(monkeypat
     assert len(calls) == 1
     assert len(sent) == 1
     assert "POSSIBILE OPPORTUNITÀ" in sent[0]
+
+
+def test_short_stop_crossing_with_insufficient_ohlc_is_risk_and_provider_only():
+    item = candidate(
+        setup_direction="SHORT",
+        opportunity_direction="SHORT",
+        probability=90,
+        quality=90,
+        confidence=90,
+        trigger_confirmed=True,
+        final_decision="PAPER_ENTRY",
+        entry=2700,
+        stop=2720,
+        tp1=2680,
+        tp2=2660,
+        tp3=None,
+        price=2725,
+        closes=[2705, 2710],
+        data_age_seconds=10,
+    )
+
+    alerts = find_aggressive_alerts([item])
+    assert len(alerts) == 1
+    assert alerts[0]["stage"] == "RISCHIO"
+    assert alerts[0]["pattern_analysis"]["stop_invalidated"] is True
+    assert alerts[0]["pattern_analysis"]["data_points"] == 2
+
+    message = format_aggressive_alert([item])
+    assert "Quotazione provider: 2725" in message
+    assert "Stop superato sul prezzo provider: SÌ — verificare lato broker" in message
+    assert "Freschezza quotazione: NON VERIFICATA (timestamp provider assente)" in message
+    assert "LONG Sell/Bid; SHORT Buy/Ask. Prezzo broker non acquisito." in message
