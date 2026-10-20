@@ -13,11 +13,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+from config import LIVE_MAX_AGE_SECONDS
 from engine.pattern_exit import analyze_pattern_and_exit
 
 _POSITION_FILE = Path(os.getenv("GAGARIN_POSITION_FILE", "data/gagarin_tracked_positions.json"))
 _LOCK = threading.RLock()
-_MAX_QUOTE_AGE = max(1.0, float(os.getenv("LIVE_MAX_AGE_SECONDS", "60")))
+_MAX_QUOTE_AGE = max(1.0, float(LIVE_MAX_AGE_SECONDS))
 
 
 def _positive(value: Any) -> float | None:
