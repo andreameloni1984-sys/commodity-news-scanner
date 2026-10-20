@@ -40,7 +40,7 @@ def analyze_pattern_and_exit(
     """Analyze closed candles, but use a valid live quote for exit thresholds."""
     direction = str(direction or "").upper()
     open_, close, high, low = _floats(opens), _floats(closes), _floats(highs), _floats(lows)
-    if direction not in {"LONG", "SHORT"} or len(close) < 5:
+    if direction not in {"LONG", "SHORT"}:
         return {
             "pattern": "DATI INSUFFICIENTI",
             "candlestick_pattern": "NON VALUTABILE",
@@ -50,8 +50,44 @@ def analyze_pattern_and_exit(
             "retracement_atr": None,
             "reversal_status": "NON VALUTABILE",
             "reversal_score": 0,
-            "reason": "Servono almeno 5 chiusure valide e direzione LONG/SHORT.",
+            "reason": "Direzione LONG/SHORT assente o non valida.",
             "data_points": len(close),
+        }
+    if len(close) < 5:
+        reference_price = _positive(current_price)
+        if reference_price is None and close:
+            reference_price = close[-1]
+        stop_v, tp_v = _positive(stop), _positive(tp1)
+        invalidated = reference_price is not None and stop_v is not None and (
+            (direction == "LONG" and reference_price <= stop_v)
+            or (direction == "SHORT" and reference_price >= stop_v)
+        )
+        target_reached = reference_price is not None and tp_v is not None and (
+            (direction == "LONG" and reference_price >= tp_v)
+            or (direction == "SHORT" and reference_price <= tp_v)
+        )
+        action = "EXIT_WARNING" if invalidated else "TAKE_PROFIT_WATCH" if target_reached else "HOLD"
+        reason = (
+            "Quotazione corrente al livello di stop o oltre: verificare subito; dati candlestick insufficienti."
+            if invalidated else
+            "Quotazione corrente a TP1 o oltre: valutare presa profitto; dati candlestick insufficienti."
+            if target_reached else
+            "Servono almeno 5 chiusure valide per analizzare trend e pattern."
+        )
+        return {
+            "pattern": "DATI INSUFFICIENTI",
+            "candlestick_pattern": "NON VALUTABILE",
+            "bias": "UNKNOWN",
+            "exit_action": action,
+            "retracement_status": "NON VALUTABILE",
+            "retracement_atr": None,
+            "reversal_status": "NON VALUTABILE",
+            "reversal_score": 0,
+            "reason": reason,
+            "data_points": len(close),
+            "current_close": close[-1] if close else None,
+            "reference_price": reference_price,
+            "reference_price_source": "live_quote" if _positive(current_price) is not None else "last_closed_candle",
         }
 
     current_close = close[-1]
