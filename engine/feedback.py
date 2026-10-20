@@ -443,4 +443,4 @@ def format_alert_review(path=FEEDBACK_FILE, limit=10, day=None):
             lines.append(f"/valutaalert {row.get('alert_id')} SBAGLIATO")
             lines.append(f"/valutaalert {row.get('alert_id')} NON_VALUTABILE")
     lines.extend(["", "Esito automatico e valutazione manuale sono metriche separate. PAPER ONLY."])
-    return "\\n".join(lines)
+    return "\n".join(lines)
