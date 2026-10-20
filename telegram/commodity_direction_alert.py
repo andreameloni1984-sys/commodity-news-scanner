@@ -167,6 +167,8 @@ def run_directional_commodity_alert(states: Iterable[Any]) -> bool:
         return False
 
     now = datetime.now(timezone.utc)
+    from engine.feedback import assign_alert_ids
+    assign_alert_ids(candidates, now=now)
     with _LOCK:
         state = _read_state()
         next_state = json.loads(json.dumps(state))
