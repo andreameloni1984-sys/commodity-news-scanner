@@ -54,17 +54,20 @@
 
 Questa è una lista dei soli nomi/temi effettivamente recuperati dai riferimenti disponibili, non la pretesa di aver ricostruito tutti i 55 o 100 elementi.
 
-## Cosa è stato implementato in questa revisione
-- engine/research_controls.py: controllo integrità OHLC, sequenza dei timestamp e timestamp futuri; rifiuto di feature con available_at successivo a decision_time; i dati order-flow mancanti/non verificati restano esplicitamente non direzionali.
-- Integrazione in engine/gagarin.py: il controllo viene eseguito subito dopo load_data; in presenza di errori d'integrità, data_ok e live vengono abbassati, lasciando a SAFETY il compito di bloccare l'ingresso.
-- Funzioni di ricerca/test per edge netto dei costi, CVaR storico, Brier score, punteggio pesato per utilità, anti-edge validation OOS, DSR approssimato e PBO tramite CSCV.
-- tests/test_research_controls.py: test per timestamp non monotoni, look-ahead, geometria OHLC, costi, CVaR, Brier e utility score.
+## Implementato nel ramo di lavoro — non ancora integrato in main né distribuito
+- `engine/research_controls.py`: controllo integrità OHLC, sequenza dei timestamp e timestamp futuri; rifiuto di feature con available_at successivo a decision_time; i dati order-flow mancanti/non verificati restano esplicitamente non direzionali.
+- Integrazione in `engine/gagarin.py`: il controllo viene eseguito subito dopo load_data; in presenza di errori d'integrità, data_ok e live vengono abbassati, lasciando a SAFETY il compito di bloccare l'ingresso.
+- Diagnostiche di ricerca in `engine/research_controls.py`: edge netto dei costi, CVaR storico, Brier score, punteggio pesato per utilità, anti-edge validation OOS, DSR approssimato e PBO tramite CSCV.
+- Nuovo `engine/research_statistics.py`: intervallo di confidenza della media con circular block bootstrap, confronto bootstrap del rendimento netto rispetto al benchmark e generatori di split walk-forward cronologici con gap/embargo. Sono diagnostiche di ricerca e non creano segnali.
+- Nuovi test in `tests/test_research_statistics.py`; workflow aggiornato per compilare il modulo e includere i test.
+- Le modifiche sono nel ramo `test/provider-quote-stop-semantics`, PR #38 in bozza. Non è stato eseguito merge o deploy.
 
 ## Non implementato/da validare prima dell'uso
 - Feed order-flow verificato e mapping di provider/strumenti; non si inventano dati di order flow.
 - Stime empiriche di lead/lag WTI-Brent, MGC reversal, IV/CVOL e prediction-market prior.
-- SPA (Superior Predictive Ability) completo resta da implementare e validare. DSR e PBO sono implementati come diagnostiche di ricerca, non come certificazione di una strategia.
+- SPA (Superior Predictive Ability) completo resta da implementare e validare: il confronto bootstrap aggiunto non viene etichettato come SPA.
 - Calibrazione statistica in produzione: servono probabilità storiche e outcome osservati, con campione sufficiente.
+- Implementazione e validazione empirica di microstructure regime, WTI overnight volatility, curve slope, squeeze breakout, MTF role separation, EMA16/32 pullback, sweep/CHoCH/FVG e cross-asset confirmation.
 - LIVE execution: esclusa; PAPER ONLY.
 - Promozione di nuove regole: disabilitata finché non superano benchmark, costi, walk-forward e out-of-sample.
 
