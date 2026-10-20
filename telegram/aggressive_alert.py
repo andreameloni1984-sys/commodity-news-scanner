@@ -33,7 +33,13 @@ def _item_from_state(state: Any) -> dict:
     return {
         "commodity": getattr(state, "commodity", None) or getattr(state, "symbol", None) or "Strumento",
         "symbol": getattr(state, "symbol", None),
-        "direction": str(getattr(state, "setup_direction", None) or getattr(state, "opportunity_direction", None) or "").upper(),
+        # SoyuzState defaults setup_direction to the truthy string "NONE".
+        # Do not let that placeholder mask a valid early opportunity direction.
+        "direction": (
+            str(getattr(state, "setup_direction", "") or "").upper()
+            if str(getattr(state, "setup_direction", "") or "").upper() in {"LONG", "SHORT"}
+            else str(getattr(state, "opportunity_direction", "") or "").upper()
+        ),
         "probability": getattr(state, "probability", 0),
         "quality": getattr(state, "quality", 0),
         "confidence": getattr(state, "confidence", 0),
