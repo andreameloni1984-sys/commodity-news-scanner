@@ -319,6 +319,11 @@ def _command_response(command: str) -> Optional[str]:
         command_name = command_name.split("@", 1)[0]
     argument = " ".join(parts[1:]).strip()
 
+    if command_name == "/alertsera":
+        from engine.feedback import format_alert_review
+        return format_alert_review(limit=10)
+
+
     if command_name in {"/start", "/help", "/menu"}:
         return (
             "🚀 GAGARIN — MENU SEMPLICE\\n"
