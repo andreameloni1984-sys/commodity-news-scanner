@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -224,8 +225,35 @@ def update_open_outcomes(results, path=FEEDBACK_FILE):
     return changed
 
 
+def _durable_store_enabled(path):
+    return Path(path) == FEEDBACK_FILE and bool(os.getenv("DATABASE_URL", "").strip())
+
+
+def _load_durable_rows():
+    try:
+        from state_store import ensure_schema, load_state
+        if not ensure_schema():
+            return None
+        rows = load_state("gagarin_feedback_rows")
+        return rows if isinstance(rows, list) else []
+    except Exception:
+        return None
+
+
+def _save_durable_rows(rows):
+    try:
+        from state_store import ensure_schema, save_state
+        if not ensure_schema():
+            return False
+        return bool(save_state("gagarin_feedback_rows", rows))
+    except Exception:
+        return False
+
+
 def _write_rows(rows, path):
     path = Path(path)
+    if _durable_store_enabled(path) and _save_durable_rows(rows):
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as file:
         writer = csv.DictWriter(file, fieldnames=FIELDS, extrasaction="ignore")
@@ -235,6 +263,10 @@ def _write_rows(rows, path):
 
 def load_feedback(path=FEEDBACK_FILE):
     path = Path(path)
+    if _durable_store_enabled(path):
+        rows = _load_durable_rows()
+        if rows is not None:
+            return rows
     if not path.exists():
         return []
     with path.open("r", newline="", encoding="utf-8") as file:
