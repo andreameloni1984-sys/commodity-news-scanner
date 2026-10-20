@@ -144,6 +144,10 @@ def format_directional_commodity_alert(states: Iterable[Any]) -> str:
             "Nota: prezzo provider, non quotazione Trading 212; "
             "lato Bid/Ask, spread e costi Trading 212 non verificati."
         )
+        lines.append(
+            "Verifica manuale: /prezzo212 SIMBOLO BID ASK "
+            "(es. /prezzo212 WTI 78.10 78.13; numeri solo esemplificativi)."
+        )
         lines.append("")
     return "\n".join(lines).strip()
 
