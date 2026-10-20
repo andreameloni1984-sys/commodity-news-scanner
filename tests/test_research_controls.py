@@ -2,7 +2,8 @@ import unittest
 from datetime import datetime, timezone
 
 from engine.research_controls import (
-    attach_research_controls, brier_score, cost_adjusted_edge,
+    anti_edge_validation, attach_research_controls, brier_score,
+    combinatorial_pbo, cost_adjusted_edge, deflated_sharpe_probability,
     expected_shortfall, utility_weighted_score, validate_market_snapshot,
 )
 from engine.state import SoyuzState
@@ -60,6 +61,28 @@ class ResearchControlsTests(unittest.TestCase):
     def test_utility_weighted_score(self):
         out = utility_weighted_score([1.0, -1.0], [3.0, 1.0])
         self.assertAlmostEqual(out["score"], 0.5)
+
+    def test_anti_edge_requires_oos_sample_and_never_promotes(self):
+        out = anti_edge_validation([0.02] * 30, [0.01] * 30, min_sample=30)
+        self.assertEqual(out["status"], "OOS_EDGE_CANDIDATE")
+        self.assertFalse(out["promoted"])
+
+    def test_dsr_returns_diagnostic(self):
+        returns = [0.001 + (0.002 if i % 2 else -0.001) for i in range(60)]
+        out = deflated_sharpe_probability(returns, trials=10)
+        self.assertEqual(out["status"], "OBSERVATION")
+        self.assertGreaterEqual(out["dsr_probability"], 0.0)
+        self.assertLessEqual(out["dsr_probability"], 1.0)
+
+    def test_pbo_runs_cscv_and_never_promotes(self):
+        rows = {
+            "stable": [0.01 if i % 3 else -0.002 for i in range(60)],
+            "noisy": [0.04 if i % 2 else -0.05 for i in range(60)],
+        }
+        out = combinatorial_pbo(rows, n_splits=6)
+        self.assertEqual(out["status"], "OBSERVATION")
+        self.assertEqual(out["combinations_evaluated"], 20)
+        self.assertFalse(out["promoted"])
 
     def test_bad_ohlc_geometry_blocks(self):
         s = self.state()
