@@ -14,11 +14,11 @@ from pathlib import Path
 
 FEEDBACK_FILE = Path("gagarin_feedback.csv")
 FIELDS = [
-    "signal_id", "timestamp_utc", "entry_bar_timestamp", "last_checked_timestamp",
+    "signal_id", "alert_id", "timestamp_utc", "entry_bar_timestamp", "last_checked_timestamp",
     "commodity", "symbol", "direction", "timeframe",
     "probability", "quality", "confidence", "entry", "stop", "tp1", "tp2", "tp3",
     "rr1", "rr2", "rr3", "stop_atr", "regime", "structure", "setup", "trigger",
-    "data_source", "data_status", "outcome", "r_multiple", "mfe_r", "mae_r", "bars_held",
+    "data_source", "data_status", "alert_price", "alert_stage", "human_review", "human_review_at", "outcome", "r_multiple", "mfe_r", "mae_r", "bars_held",
 ]
 
 
@@ -272,3 +272,140 @@ def format_summary(summary):
         f"win_rate={win_rate} avg_R={avg_r} total_R={summary.get('realized_r', 0.0)} "
         f"outcomes={summary['outcomes']}"
     )
+
+
+def assign_alert_ids(alerts, now=None):
+    """Attach stable short IDs to one outgoing alert batch before formatting."""
+    now = now or datetime.now(timezone.utc)
+    stamp = now.isoformat()
+    for alert in alerts:
+        if alert.get("alert_id"):
+            continue
+        raw = "|".join((
+            str(alert.get("symbol") or alert.get("commodity") or ""),
+            str(alert.get("direction") or ""),
+            str(alert.get("stage") or "DIRECTIONAL"),
+            stamp,
+        ))
+        alert["alert_id"] = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:10].upper()
+        alert["sent_at_utc"] = stamp
+    return alerts
+
+
+def record_sent_alerts(alerts, path=FEEDBACK_FILE):
+    """Persist only alerts confirmed delivered by Telegram; never sends messages."""
+    rows = load_feedback(path)
+    known = {str(row.get("alert_id") or "") for row in rows}
+    added = 0
+    for alert in alerts or []:
+        alert_id = str(alert.get("alert_id") or "").strip().upper()
+        if not alert_id or alert_id in known:
+            continue
+        analysis = alert.get("pattern_analysis") or {}
+        rows.append({
+            "signal_id": alert_id,
+            "alert_id": alert_id,
+            "timestamp_utc": alert.get("sent_at_utc") or datetime.now(timezone.utc).isoformat(),
+            "entry_bar_timestamp": "",
+            "last_checked_timestamp": "",
+            "commodity": alert.get("commodity", ""),
+            "symbol": str(alert.get("symbol") or alert.get("commodity") or "").upper(),
+            "direction": str(alert.get("direction") or "").upper(),
+            "action": str(alert.get("stage") or "DIRECTIONAL").upper(),
+            "timeframe": alert.get("timeframe", ""),
+            "probability": alert.get("probability", ""),
+            "quality": alert.get("quality", ""),
+            "confidence": alert.get("confidence", ""),
+            "entry": alert.get("entry", ""),
+            "stop": alert.get("stop", ""),
+            "tp1": alert.get("tp1", ""),
+            "tp2": alert.get("tp2", ""),
+            "tp3": alert.get("tp3", ""),
+            "data_source": alert.get("provider") or alert.get("data_source", ""),
+            "data_status": "SENT_ALERT",
+            "alert_price": alert.get("price", ""),
+            "alert_stage": alert.get("stage", "DIRECTIONAL"),
+            "human_review": "",
+            "human_review_at": "",
+            "outcome": "OPEN",
+            "r_multiple": "",
+            "mfe_r": "",
+            "mae_r": "",
+            "bars_held": 0,
+        })
+        known.add(alert_id)
+        added += 1
+    if added:
+        _write_rows(rows, path)
+    return added
+
+
+def pending_alert_reviews(path=FEEDBACK_FILE, limit=10):
+    """Return the newest actually-sent alerts that have not been manually reviewed."""
+    rows = load_feedback(path)
+    pending = [
+        row for row in rows
+        if row.get("alert_id") and not str(row.get("human_review") or "").strip()
+    ]
+    pending.sort(key=lambda row: str(row.get("timestamp_utc") or ""), reverse=True)
+    return pending[:max(0, int(limit))]
+
+
+def review_alert(alert_id, verdict, path=FEEDBACK_FILE, now=None):
+    """Attach a manual verdict to one alert ID (or unique ID prefix)."""
+    verdict = str(verdict or "").strip().upper().replace("-", "_")
+    aliases = {"ESATTO": "ESATTO", "CORRETTO": "ESATTO", "SBAGLIATO": "SBAGLIATO",
+               "NON_VALUTABILE": "NON_VALUTABILE", "NONVALUTABILE": "NON_VALUTABILE",
+               "N_D": "NON_VALUTABILE"}
+    if verdict not in aliases:
+        return False, "Valutazione non valida. Usa ESATTO, SBAGLIATO o NON_VALUTABILE."
+    key = str(alert_id or "").strip().upper()
+    if not key:
+        return False, "Manca l'ID alert."
+    rows = load_feedback(path)
+    matches = [row for row in rows if row.get("alert_id") and str(row["alert_id"]).upper().startswith(key)]
+    if len(matches) != 1:
+        return False, "ID non trovato o ambiguo. Usa l'ID completo mostrato in /alertsera."
+    row = matches[0]
+    if str(row.get("human_review") or "").strip():
+        return False, f"Alert {row['alert_id']} già valutato: {row['human_review']}."
+    row["human_review"] = aliases[verdict]
+    row["human_review_at"] = (now or datetime.now(timezone.utc)).isoformat()
+    _write_rows(rows, path)
+    return True, f"Alert {row['alert_id']} registrato: {row['human_review']}."
+
+
+def format_alert_review(path=FEEDBACK_FILE, limit=10, day=None):
+    """Build a daily review list; callers decide when/where to deliver it."""
+    rows = load_feedback(path)
+    pending = pending_alert_reviews(path=path, limit=limit)
+    day = day or datetime.now(timezone.utc).date().isoformat()
+    sent_today = [
+        row for row in rows
+        if row.get("alert_id") and str(row.get("timestamp_utc", "")).startswith(day)
+    ]
+    reviewed_today = [
+        row for row in sent_today if str(row.get("human_review") or "").strip()
+    ]
+    lines = [
+        "📊 GAGARIN — SONDAGGIO ALERT",
+        f"Data UTC: {day}",
+        f"Alert registrati oggi: {len(sent_today)} | valutati: {len(reviewed_today)} | da valutare: {len(sent_today) - len(reviewed_today)}",
+        "",
+    ]
+    if not pending:
+        lines.append("Nessun alert in attesa di valutazione.")
+    else:
+        lines.append("Rispondi per ogni alert:")
+        for row in pending:
+            price = row.get("alert_price") or "N/D"
+            lines.append(
+                f"ID {row.get('alert_id')} — {row.get('commodity') or row.get('symbol')} "
+                f"{row.get('direction') or 'N/D'} | prezzo alert {price} | "
+                f"stato {row.get('alert_stage') or row.get('action') or 'N/D'}"
+            )
+            lines.append(f"/valutaalert {row.get('alert_id')} ESATTO")
+            lines.append(f"/valutaalert {row.get('alert_id')} SBAGLIATO")
+            lines.append(f"/valutaalert {row.get('alert_id')} NON_VALUTABILE")
+    lines.extend(["", "Esito automatico e valutazione manuale sono metriche separate. PAPER ONLY."])
+    return "\\n".join(lines)
