@@ -64,3 +64,30 @@ def test_invalidated_setup_is_classified_as_risk_not_opportunity():
 def test_alert_displays_candlestick_analysis():
     message = format_aggressive_alert([candidate()])
     assert "Candela:" in message
+
+
+
+def test_aggressive_alert_suppresses_unchanged_repeat(monkeypatch, tmp_path):
+    import telegram.aggressive_alert as module
+
+    state_file = tmp_path / "aggressive-state.json"
+    monkeypatch.setattr(module, "_STATE_FILE", state_file)
+    sent = []
+    monkeypatch.setattr("telegram.bot.send_telegram", lambda message: sent.append(message) or True)
+
+    assert module.run_aggressive_alert([candidate()]) is True
+    assert module.run_aggressive_alert([candidate()]) is False
+    assert len(sent) == 1
+
+
+def test_aggressive_alert_does_not_consume_state_when_delivery_fails(monkeypatch, tmp_path):
+    import telegram.aggressive_alert as module
+
+    state_file = tmp_path / "aggressive-state.json"
+    monkeypatch.setattr(module, "_STATE_FILE", state_file)
+    outcomes = iter([False, True])
+    monkeypatch.setattr("telegram.bot.send_telegram", lambda message: next(outcomes))
+
+    assert module.run_aggressive_alert([candidate()]) is False
+    assert module.run_aggressive_alert([candidate()]) is True
+    assert state_file.exists()
