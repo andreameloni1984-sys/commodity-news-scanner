@@ -616,16 +616,8 @@ def run():
                 print(
                     f"📡 SIGNAL CHANNEL: {len(signal_results)} signal(s) published"
                 )
-            else:
-                send_telegram(
-                    "SOYUZ GIORNO\n"
-                    "Verso: piatto. Shock e settimana non coincidono.\n"
-                    "Energia: scorte, curva, offerta. Metalli: dollaro. Agri: meteo.\n"
-                    "PAPER ONLY. Nessun prezzo inventato."
-                )
-                print(
-                    "📡 SIGNAL CHANNEL: status only — no entry"
-                )
+            # No routine Telegram heartbeat when no signal is available.
+            # Only actionable opportunities and meaningful position-state changes notify.
 
         except Exception as exc:
 
