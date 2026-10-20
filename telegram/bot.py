@@ -323,6 +323,14 @@ def _command_response(command: str) -> Optional[str]:
         from engine.feedback import format_alert_review
         return format_alert_review(limit=10)
 
+    if command_name == "/valutaalert":
+        review_parts = argument.split()
+        if len(review_parts) != 2:
+            return "Uso: /valutaalert ID ESATTO SBAGLIATO oppure NON_VALUTABILE"
+        from engine.feedback import review_alert
+        _, message = review_alert(review_parts[0], review_parts[1])
+        return message
+
 
     if command_name in {"/start", "/help", "/menu"}:
         return (
