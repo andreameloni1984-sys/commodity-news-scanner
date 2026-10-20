@@ -100,3 +100,15 @@ def test_live_directional_watch_forecast_is_tracked_separately(tmp_path):
     assert row["direction"] == "LONG"
     assert row["action"] == "PAPER_WATCH"
     assert row["outcome"] == "OPEN"
+
+
+def test_watch_forecast_upgrades_to_entry_without_duplicate(tmp_path):
+    path = tmp_path / "feedback.csv"
+    s = state([{"timestamp": 1000, "high": 101, "low": 99}])
+    s.metadata["gagarin_action"] = "PAPER_WATCH"
+    assert record_forecasts([s], path=path) == 1
+    s.metadata["gagarin_action"] = "PAPER_ENTRY"
+    assert record_forecasts([s], path=path) == 0
+    rows = load_feedback(path)
+    assert len(rows) == 1
+    assert rows[0]["action"] == "PAPER_ENTRY"
