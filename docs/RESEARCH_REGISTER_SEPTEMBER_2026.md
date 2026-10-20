@@ -58,8 +58,10 @@ Questa è una lista dei soli nomi/temi effettivamente recuperati dai riferimenti
 - `engine/research_controls.py`: controllo integrità OHLC, sequenza dei timestamp e timestamp futuri; rifiuto di feature con available_at successivo a decision_time; i dati order-flow mancanti/non verificati restano esplicitamente non direzionali.
 - Integrazione in `engine/gagarin.py`: il controllo viene eseguito subito dopo load_data; in presenza di errori d'integrità, data_ok e live vengono abbassati, lasciando a SAFETY il compito di bloccare l'ingresso.
 - Diagnostiche di ricerca in `engine/research_controls.py`: edge netto dei costi, CVaR storico, Brier score, punteggio pesato per utilità, anti-edge validation OOS, DSR approssimato e PBO tramite CSCV.
-- Nuovo `engine/research_statistics.py`: intervallo di confidenza della media con circular block bootstrap, confronto bootstrap del rendimento netto rispetto al benchmark e generatori di split walk-forward cronologici con gap/embargo. Sono diagnostiche di ricerca e non creano segnali.
-- Nuovi test in `tests/test_research_statistics.py`; workflow aggiornato per compilare il modulo e includere i test.
+- `engine/research_statistics.py`: intervallo di confidenza della media con circular block bootstrap, confronto bootstrap del rendimento netto rispetto al benchmark e split walk-forward cronologici con gap/embargo. Diagnostiche, non segnali.
+- `engine/data.py`: conserva provider, simbolo risolto, valuta della quotazione e base dichiarata della serie. I futures continui Yahoo come `GC=F` vengono etichettati come futures continui, non come spot; le serie degli altri provider sono marcate non classificate finché l'equivalenza non è verificata.
+- `telegram/aggressive_alert.py`: mostra prezzo con valuta, provider, simbolo e base della serie; un cambio di base/simbolo modifica la firma dell'alert per evitare di trattare fonti differenti come lo stesso dato.
+- Test aggiunti: `tests/test_research_statistics.py` e `tests/test_quote_semantics.py`. Workflow aggiornato per compilare i moduli e lanciare i test.
 - Le modifiche sono nel ramo `test/provider-quote-stop-semantics`, PR #38 in bozza. Non è stato eseguito merge o deploy.
 
 ## Non implementato/da validare prima dell'uso
