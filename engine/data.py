@@ -2208,6 +2208,33 @@ def _try_provider(
 # LOAD DATA
 # ============================================================
 
+def quote_semantics(symbol: str, provider: str, provider_symbol: str | None) -> dict:
+    """Describe the quoted series without pretending unlike instruments are identical."""
+    logical = str(symbol or "").upper().strip()
+    provider_name = str(provider or "").upper().strip()
+    resolved = str(provider_symbol or "").strip()
+    quote_currency = logical.rsplit("/", 1)[-1] if "/" in logical else "UNKNOWN"
+    is_continuous_future = provider_name == "YAHOO" and resolved.endswith("=F")
+    if is_continuous_future:
+        basis = "CONTINUOUS_FUTURES"
+        label = f"FUTURES CONTINUI ({resolved})"
+        warning = "Il future continuo non è equivalente al prezzo spot; scadenze e rollover possono creare differenze."
+    else:
+        basis = "PROVIDER_NATIVE_UNCLASSIFIED"
+        label = f"SERIE PROVIDER ({resolved or logical}; base non classificata)"
+        warning = "La base dello strumento non è stata verificata indipendentemente; confrontare solo serie omogenee."
+    return {
+        "logical_symbol": logical,
+        "provider": provider_name or "UNKNOWN",
+        "provider_symbol": resolved or None,
+        "price_basis": basis,
+        "price_basis_label": label,
+        "quote_currency": quote_currency,
+        "instrument_basis_warning": warning,
+        "cross_provider_equivalence_verified": False,
+    }
+
+
 def load_data(
     state: Any,
     commodity: Any,
@@ -2296,6 +2323,12 @@ def load_data(
             state.metadata[
                 "resolved_symbol"
             ] = provider_symbol
+
+            # Preserve instrument identity across provider fallbacks. A continuous
+            # future such as GC=F must never be silently presented as spot gold.
+            state.metadata["quote_semantics"] = quote_semantics(
+                symbol, provider, provider_symbol
+            )
 
             state.metadata[
                 "provider_attempts"
