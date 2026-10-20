@@ -100,9 +100,10 @@ def _stage(item: dict) -> str | None:
         confidence = float(item.get("confidence") or 0)
     except (TypeError, ValueError):
         return None
-    # Evaluate the current provider quote against exit levels. Candle-pattern
-    # recognition itself continues to use closed OHLC candles.
-    analyze_pattern_and_exit(
+    # The pattern/exit result must affect the decision, not merely decorate
+    # the Telegram message. Use closed OHLC candles for patterns and a live
+    # provider quote for stop/target checks.
+    pattern_analysis = analyze_pattern_and_exit(
         direction=direction, closes=item.get("closes"),
         highs=item.get("highs"), lows=item.get("lows"),
         entry=item.get("entry"), stop=item.get("stop"),
@@ -110,6 +111,15 @@ def _stage(item: dict) -> str | None:
         current_price=item.get("price"),
     )
     decision = str(item.get("final_decision") or "").upper()
+    scores_ok = (
+        probability >= POTENTIAL_MIN_PROBABILITY
+        and quality >= POTENTIAL_MIN_QUALITY
+        and confidence >= POTENTIAL_MIN_CONFIDENCE
+    )
+    # Never advertise an entry as confirmed/potential when the setup is already
+    # invalidated or several closed-candle signals point to an adverse reversal.
+    if scores_ok and pattern_analysis.get("exit_action") == "EXIT_WARNING":
+        return "RISCHIO"
     confirmed = (
         decision in {"PAPER_ENTRY", "PAPER_SIGNAL", "ENTRY"}
         and item["trigger_confirmed"]
@@ -122,11 +132,7 @@ def _stage(item: dict) -> str | None:
         return "CONFERMATA"
     # Any live directional hypothesis above the preliminary thresholds alerts,
     # even if the trigger and final-entry decision are not confirmed yet.
-    if (
-        probability >= POTENTIAL_MIN_PROBABILITY
-        and quality >= POTENTIAL_MIN_QUALITY
-        and confidence >= POTENTIAL_MIN_CONFIDENCE
-    ):
+    if scores_ok:
         return "POSSIBILE"
     return None
 
@@ -147,7 +153,7 @@ def find_aggressive_alerts(states: Iterable[Any]) -> list[dict]:
             )
             found.append(item)
     found.sort(key=lambda x: (
-        0 if x["stage"] == "CONFERMATA" else 1,
+        0 if x["stage"] == "RISCHIO" else 1 if x["stage"] == "CONFERMATA" else 2,
         -float(x.get("probability") or 0),
         -float(x.get("quality") or 0),
     ))
@@ -171,7 +177,12 @@ def format_aggressive_alert(states: Iterable[Any]) -> str:
     for index, item in enumerate(alerts, 1):
         analysis = item["pattern_analysis"]
         lines.append("%s. %s — %s" % (index, item["commodity"], item["direction"]))
-        lines.append("STATO: %s" % ("🟢 CONFERMATA" if item["stage"] == "CONFERMATA" else "🟡 POSSIBILE OPPORTUNITÀ — in attesa di conferma"))
+        status_label = {
+            "RISCHIO": "🔴 RISCHIO — NON INGRESSARE: setup invalidato o inversione possibile",
+            "CONFERMATA": "🟢 CONFERMATA",
+            "POSSIBILE": "🟡 POSSIBILE OPPORTUNITÀ — in attesa di conferma",
+        }.get(item["stage"], item["stage"])
+        lines.append("STATO: %s" % status_label)
         price = _number(item.get("price"))
         lines.append("Quotazione provider: %.6g USD" % price if price is not None else "Quotazione: N/D")
         quote_timestamp = item.get("quote_timestamp")
