@@ -39,12 +39,19 @@ def _candidate(state: Any) -> dict | None:
     if name.lower() not in COMMODITY_NAMES:
         return None
 
-    direction = str(
-        getattr(state, "setup_direction", None)
-        or getattr(state, "opportunity_direction", None)
-        or ""
-    ).strip().upper()
-    if direction not in {"LONG", "SHORT"}:
+    # Prefer a valid setup direction, but do not let a placeholder such as
+    # "WAIT"/"NONE" mask a valid forecast direction. Forecast alerts may be
+    # sent without an ENTRY authorization, so inspect both fields independently.
+    direction = ""
+    for candidate_direction in (
+        getattr(state, "setup_direction", None),
+        getattr(state, "opportunity_direction", None),
+    ):
+        normalized = str(candidate_direction or "").strip().upper()
+        if normalized in {"LONG", "SHORT"}:
+            direction = normalized
+            break
+    if not direction:
         return None
 
     live = bool(getattr(state, "live", False))
