@@ -127,24 +127,27 @@ def invest_auto_loop() -> None:
 
 
 def position_monitor_loop() -> None:
-    """Monitor only manually registered positions; send transition alerts, never heartbeats."""
+    """Periodic forecast and position monitor; Telegram is transition-only."""
     from engine.position_monitor import evaluate_positions, list_positions
+    from telegram.commodity_direction_alert import run_directional_commodity_alert
 
     interval = 15 * 60
-    print("Gagarin position monitor | interval=15min | transition-only alerts | PAPER/ADVISORY", flush=True)
+    print("Gagarin market monitor | interval=15min | deduplicated forecast + position alerts", flush=True)
     while True:
         try:
-            # Avoid repeated market scans when the user has no tracked positions.
-            if list_positions():
-                states = _run_analysis()
-                for alert in evaluate_positions(states or []):
-                    if send_telegram(alert):
-                        print("Gagarin position monitor | transition alert delivered", flush=True)
-                    else:
-                        print("Gagarin position monitor | transition alert delivery failed", flush=True)
+            states = _run_analysis()
+            if states:
+                # New/meaningfully changed directional forecasts only; no no-signal heartbeat.
+                run_directional_commodity_alert(states)
+                if list_positions():
+                    for alert in evaluate_positions(states):
+                        if send_telegram(alert):
+                            print("Gagarin position monitor | transition alert delivered", flush=True)
+                        else:
+                            print("Gagarin position monitor | transition alert delivery failed", flush=True)
         except Exception as exc:
             # Diagnostics only: never send routine error/status spam to Telegram.
-            print(f"Gagarin position monitor error | {type(exc).__name__}: {exc}", flush=True)
+            print(f"Gagarin market monitor error | {type(exc).__name__}: {exc}", flush=True)
         time.sleep(interval)
 
 
