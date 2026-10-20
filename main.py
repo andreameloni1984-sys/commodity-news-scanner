@@ -42,6 +42,7 @@ from engine.feedback import (
     record_entries as record_feedback_entries,
     summarize as summarize_feedback,
     format_summary as format_feedback_summary,
+    update_open_outcomes,
 )
 
 from telegram.bot import (
@@ -374,11 +375,17 @@ def _print_feedback(results):
 
     try:
 
+        updated = update_open_outcomes(results)
+
         recorded = record_feedback_entries(
             results
         )
 
         summary = summarize_feedback()
+
+        print(
+            f"Updated open outcomes: {updated}"
+        )
 
         print(
             f"New feedback signals: "
