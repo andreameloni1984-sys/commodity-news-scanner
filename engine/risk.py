@@ -191,79 +191,45 @@ def apply_risk(state: SoyuzState) -> SoyuzState:
         state.stop_atr,
     )
 
-    # MINIMUM STOP
-    if state.stop_atr < MIN_STOP_ATR:
-        state.metadata["risk_diagnostics"]["status"] = (
-            "STOP_LT_MIN_ATR"
-        )
-        return state
-
-    # ---------------------------------------------------------
-    # WIDE STRUCTURAL STOP
-    # ---------------------------------------------------------
-    #
-    # Previously the engine simply stopped here:
-    #
-    #     STOP_GT_MAX_ATR
-    #
-    # That caused TP1/TP2/TP3 to remain empty.
-    #
-    # Now we preserve the structural stop for diagnostics and
-    # try an independent ATR fallback.
-    #
-    if state.stop_atr > MAX_STOP_ATR and source == "STRUCTURE":
-
+    # STRUCTURAL STOP NORMALIZATION
+    # A structural stop outside the allowed ATR band would leave
+    # the forecast without targets. Preserve the original structure
+    # for diagnostics and use a bounded ATR fallback instead.
+    if source == "STRUCTURE" and (
+        state.stop_atr < MIN_STOP_ATR
+        or state.stop_atr > MAX_STOP_ATR
+    ):
         structural_stop = state.stop
+        original_stop_atr = state.stop_atr
+        fallback_distance = state.atr * max(1.20, MIN_STOP_ATR)
 
-        fallback_distance = (
-            state.atr * max(1.20, MIN_STOP_ATR)
-        )
-
-        # Safety: fallback must itself respect MAX_STOP_ATR.
-        if fallback_distance <= state.atr * MAX_STOP_ATR:
-
-            if state.setup_direction == "LONG":
-                state.stop = (
-                    state.entry - fallback_distance
-                )
-
-            else:
-                state.stop = (
-                    state.entry + fallback_distance
-                )
-
-            distance = fallback_distance
-
-            state.stop_atr = (
-                distance / state.atr
-            )
-
-            state.metadata["risk_diagnostics"][
-                "structural_stop"
-            ] = structural_stop
-
-            state.metadata["risk_diagnostics"][
-                "stop_source"
-            ] = "ATR_FALLBACK_WIDE_STRUCTURE"
-
-            state.metadata["risk_diagnostics"][
-                "raw_stop"
-            ] = state.stop
-
-            state.metadata["risk_diagnostics"][
-                "stop_distance"
-            ] = distance
-
-            state.metadata["risk_diagnostics"][
-                "stop_atr"
-            ] = state.stop_atr
-
-        else:
-            state.metadata["risk_diagnostics"][
-                "status"
-            ] = "STOP_GT_MAX_ATR"
-
+        # Fail closed if configuration ever makes fallback unsafe.
+        if not (MIN_STOP_ATR <= fallback_distance / state.atr <= MAX_STOP_ATR):
+            state.metadata["risk_diagnostics"]["status"] = "ATR_FALLBACK_OUT_OF_BOUNDS"
             return state
+
+        if state.setup_direction == "LONG":
+            state.stop = state.entry - fallback_distance
+        else:
+            state.stop = state.entry + fallback_distance
+
+        distance = fallback_distance
+        state.stop_atr = distance / state.atr
+        suffix = "TIGHT" if original_stop_atr < MIN_STOP_ATR else "WIDE"
+
+        state.metadata["risk_diagnostics"].update({
+            "structural_stop": structural_stop,
+            "structural_stop_atr": original_stop_atr,
+            "stop_source": f"ATR_FALLBACK_{suffix}_STRUCTURE",
+            "raw_stop": state.stop,
+            "stop_distance": distance,
+            "stop_atr": state.stop_atr,
+        })
+
+    # Reject an invalidly tight ATR fallback rather than fabricate targets.
+    if state.stop_atr < MIN_STOP_ATR:
+        state.metadata["risk_diagnostics"]["status"] = "STOP_LT_MIN_ATR"
+        return state
 
     # Final maximum-stop check
     if state.stop_atr > MAX_STOP_ATR:
