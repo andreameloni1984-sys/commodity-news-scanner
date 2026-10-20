@@ -159,8 +159,14 @@ def run(config: dict | None = None) -> dict:
     config = config or {}
     snaps = config.get("instruments", {})
     rows = [decide(symbol, snaps.get(symbol, empty_snapshot(symbol))) for symbol in UNIVERSE]
+    # Diagnostic only: expose catalog gaps alongside the decision output.
+    # This never changes entries, sends orders, or claims provider/broker availability.
+    from engine.gagarin_coverage import build_gagarin_coverage_report
+
+    market_coverage = build_gagarin_coverage_report()
     report = {
         "paper_only": True,
+        "market_coverage": market_coverage,
         "send_order": False,
         "automation": "decision_only",
         "read_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
