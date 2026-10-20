@@ -5,8 +5,10 @@ confirmation is reported as a separate stage. Advisory only: no orders.
 """
 from __future__ import annotations
 
+import math
 from typing import Any, Iterable
 
+from config import LIVE_MAX_AGE_SECONDS
 from engine.session_windows import is_overlap, is_eia_window
 from engine.pattern_exit import analyze_pattern_and_exit
 
@@ -44,6 +46,7 @@ def _item_from_state(state: Any) -> dict:
         "tp2": getattr(state, "tp2", None),
         "tp3": getattr(state, "tp3", None),
         "price": getattr(state, "price", None),
+        "data_age_seconds": getattr(state, "data_age_seconds", None),
         # Only explicit quote timestamps are accepted; signal timestamps are not
         # interchangeable with quote timestamps for freshness checks.
         "quote_timestamp": getattr(state, "price_timestamp", None) or getattr(state, "quote_timestamp", None),
@@ -96,10 +99,13 @@ def _stage(item: dict) -> str | None:
     if direction not in {"LONG", "SHORT"} or not item["live"] or _number(item.get("price")) is None:
         return None
     try:
+        age = float(item.get("data_age_seconds"))
         probability = float(item.get("probability") or 0)
         quality = float(item.get("quality") or 0)
         confidence = float(item.get("confidence") or 0)
     except (TypeError, ValueError):
+        return None
+    if not math.isfinite(age) or age < 0 or age > LIVE_MAX_AGE_SECONDS:
         return None
     # The pattern/exit result must affect the decision, not merely decorate
     # the Telegram message. Use closed OHLC candles for patterns and a live
