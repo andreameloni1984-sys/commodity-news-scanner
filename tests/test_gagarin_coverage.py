@@ -70,3 +70,22 @@ def test_coverage_report_flags_european_index_gap():
     eu = report["day_engine_coverage"]["european_indices"]
     assert eu["configured_count"] == 0
     assert {"DAX", "EUROSTOXX50", "FTSEMIB"} <= set(eu["missing_from_day_engine"])
+
+
+def test_real_repository_universes_expose_current_runtime_gaps():
+    report = build_gagarin_coverage_report()
+    coverage = report["day_engine_coverage"]
+
+    assert coverage["commodities"]["missing_from_day_engine"] == [
+        "COPPERUSD", "GASOLINEUSD", "NATGASUSD"
+    ]
+    assert coverage["forex"]["missing_from_day_engine"] == [
+        "AUDUSD", "EURJPY", "NZDUSD", "USDCAD", "USDCHF"
+    ]
+    assert coverage["stocks"]["missing_from_day_engine"] == [
+        "AAPL", "AMZN", "MSFT", "NVDA", "TSLA"
+    ]
+    assert coverage["etfs"]["coverage_pct"] == 100.0
+    assert coverage["european_indices"]["configured_count"] == 0
+    assert report["provider_availability_verified"] is False
+    assert report["broker_tradability_verified"] is False
