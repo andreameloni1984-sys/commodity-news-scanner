@@ -57,13 +57,13 @@ Questa è una lista dei soli nomi/temi effettivamente recuperati dai riferimenti
 ## Cosa è stato implementato in questa revisione
 - engine/research_controls.py: controllo integrità OHLC, sequenza dei timestamp e timestamp futuri; rifiuto di feature con available_at successivo a decision_time; i dati order-flow mancanti/non verificati restano esplicitamente non direzionali.
 - Integrazione in engine/gagarin.py: il controllo viene eseguito subito dopo load_data; in presenza di errori d'integrità, data_ok e live vengono abbassati, lasciando a SAFETY il compito di bloccare l'ingresso.
-- Funzioni di ricerca/test per edge netto dei costi, CVaR storico, Brier score e punteggio pesato per utilità.
+- Funzioni di ricerca/test per edge netto dei costi, CVaR storico, Brier score, punteggio pesato per utilità, anti-edge validation OOS, DSR approssimato e PBO tramite CSCV.
 - tests/test_research_controls.py: test per timestamp non monotoni, look-ahead, geometria OHLC, costi, CVaR, Brier e utility score.
 
 ## Non implementato/da validare prima dell'uso
 - Feed order-flow verificato e mapping di provider/strumenti; non si inventano dati di order flow.
 - Stime empiriche di lead/lag WTI-Brent, MGC reversal, IV/CVOL e prediction-market prior.
-- DSR, PBO e SPA completi e testati su una matrice di strategie storiche: i nomi sono recuperati, ma non vengono dichiarati implementati da questa patch.
+- SPA (Superior Predictive Ability) completo resta da implementare e validare. DSR e PBO sono implementati come diagnostiche di ricerca, non come certificazione di una strategia.
 - Calibrazione statistica in produzione: servono probabilità storiche e outcome osservati, con campione sufficiente.
 - LIVE execution: esclusa; PAPER ONLY.
 - Promozione di nuove regole: disabilitata finché non superano benchmark, costi, walk-forward e out-of-sample.
