@@ -46,7 +46,7 @@ class PaperPortfolioExitTests(unittest.TestCase):
         self.assertEqual(len(self.portfolio.snapshot()["open_positions"]), 0)
 
     def test_stop_closes_remaining_fraction_after_tp1(self):
-        self.portfolio.evaluate_exits({"WTI/USD": 110.0})
+        self.portfolio.evaluate_exits({"WTI/USD": 115.0})
         closed = self.portfolio.evaluate_exits({"WTI/USD": 90.0})
         self.assertEqual(len(closed), 1)
         pos = self.portfolio.positions[0]
