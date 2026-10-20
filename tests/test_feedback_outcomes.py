@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from engine.feedback import append_signal, load_feedback, summarize, update_open_outcomes
+from engine.feedback import append_signal, load_feedback, record_forecasts, summarize, update_open_outcomes
 
 
 def state(candles):
@@ -26,6 +26,8 @@ def state(candles):
         setup="TREND_CONTINUATION",
         trigger="BREAKOUT",
         data_source="TEST",
+        data_ok=True,
+        live=True,
         metadata={"data_status": "TEST", "gagarin_action": "PAPER_ENTRY"},
         candles=candles,
         timestamps=[],
@@ -87,3 +89,14 @@ def test_summary_breaks_down_per_asset_and_direction(tmp_path):
     assert group["closed"] == 1
     assert group["win_rate_pct"] == 100.0
     assert group["average_r"] == 1.5
+
+
+def test_live_directional_watch_forecast_is_tracked_separately(tmp_path):
+    path = tmp_path / "feedback.csv"
+    s = state([{"timestamp": 1000, "high": 101, "low": 99}])
+    s.metadata["gagarin_action"] = "PAPER_WATCH"
+    assert record_forecasts([s], path=path) == 1
+    row = load_feedback(path)[0]
+    assert row["direction"] == "LONG"
+    assert row["action"] == "PAPER_WATCH"
+    assert row["outcome"] == "OPEN"
