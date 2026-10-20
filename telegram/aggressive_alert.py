@@ -212,6 +212,8 @@ def format_aggressive_alerts(alerts: Iterable[dict]) -> str:
     for index, item in enumerate(alerts, 1):
         analysis = item["pattern_analysis"]
         lines.append("%s. %s — %s" % (index, item["commodity"], item["direction"]))
+        if item.get("alert_id"):
+            lines.append("ID ALERT: %s — valuta con /valutaalert %s ESATTO|SBAGLIATO|NON_VALUTABILE" % (item["alert_id"], item["alert_id"]))
         status_label = {
             "RISCHIO": "🔴 RISCHIO — NON INGRESSARE: setup invalidato o inversione possibile",
             "ATTENZIONE": "🟠 ATTENZIONE — ritracciamento profondo o segnali contrari; rivalutare e proteggere il rischio",
@@ -305,9 +307,12 @@ def run_aggressive_alert(states: Iterable[Any]) -> bool:
                 next_state[key] = {"signature": signature, "last_sent_at": now.isoformat()}
         if not due:
             return False
-    # Format the exact candidates already analyzed above. Re-running the
-    # classifier here could change stage/SL/TP evidence between selection
-    # and delivery, and needlessly repeats market-pattern analysis.
+    # Assign IDs before formatting, but persist only after confirmed delivery.
+    try:
+        from engine.feedback import assign_alert_ids
+        assign_alert_ids(due, now=now)
+    except Exception as exc:
+        print("AGGRESSIVE ALERT REVIEW ID ERROR: %s: %s" % (type(exc).__name__, exc), flush=True)
     message = format_aggressive_alerts(due)
     if not message:
         return False
@@ -320,6 +325,11 @@ def run_aggressive_alert(states: Iterable[Any]) -> bool:
                 temp = _STATE_FILE.with_suffix(_STATE_FILE.suffix + ".tmp")
                 temp.write_text(json.dumps(next_state, ensure_ascii=False, indent=2), encoding="utf-8")
                 temp.replace(_STATE_FILE)
+            try:
+                from engine.feedback import record_sent_alerts
+                record_sent_alerts(due)
+            except Exception as feedback_exc:
+                print("AGGRESSIVE ALERT REVIEW STORE ERROR: %s: %s" % (type(feedback_exc).__name__, feedback_exc), flush=True)
         else:
             print("AGGRESSIVE ALERT | Telegram delivery failed; state not consumed", flush=True)
         return sent
