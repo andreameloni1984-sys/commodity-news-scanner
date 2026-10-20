@@ -122,6 +122,14 @@ def approve(
     if candidate.side not in {"LONG", "SHORT"}:
         return False, "NO_VALID_SETUP"
 
+    # Never approve a directional setup against explicit contrary structure
+    # or MTF evidence. Missing evidence remains governed by existing setup
+    # rules; explicit contradiction is always a veto.
+    if candidate.structure_direction in {"LONG", "SHORT"} and candidate.structure_direction != candidate.side:
+        return False, "STRUCTURE_DIRECTION_MISMATCH"
+    if candidate.mtf_direction in {"LONG", "SHORT"} and candidate.mtf_direction != candidate.side:
+        return False, "MTF_DIRECTION_MISMATCH"
+
     if not candidate.trigger_confirmed:
         return False, "TRIGGER_NOT_CONFIRMED"
 
