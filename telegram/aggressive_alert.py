@@ -37,9 +37,20 @@ def _number(value: Any) -> float | None:
 
 
 def _item_from_state(state: Any) -> dict:
+    metadata = getattr(state, "metadata", {}) or {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+    quote_semantics = metadata.get("quote_semantics", {})
+    if not isinstance(quote_semantics, dict):
+        quote_semantics = {}
     return {
         "commodity": getattr(state, "commodity", None) or getattr(state, "symbol", None) or "Strumento",
         "symbol": getattr(state, "symbol", None),
+        "quote_provider": quote_semantics.get("provider") or getattr(state, "data_source", None),
+        "quote_symbol": quote_semantics.get("provider_symbol") or metadata.get("resolved_symbol"),
+        "quote_basis": quote_semantics.get("price_basis_label") or "BASE STRUMENTO NON VERIFICATA",
+        "quote_currency": quote_semantics.get("quote_currency") or "UNKNOWN",
+        "quote_basis_warning": quote_semantics.get("instrument_basis_warning") or "Base della serie non verificata.",
         # SoyuzState defaults setup_direction to the truthy string "NONE".
         # Do not let that placeholder mask a valid early opportunity direction.
         "direction": (
@@ -223,7 +234,17 @@ def format_aggressive_alerts(alerts: Iterable[dict]) -> str:
         }.get(item["stage"], item["stage"])
         lines.append("STATO: %s" % status_label)
         price = _number(item.get("price"))
-        lines.append("Quotazione provider: %.6g (valuta da verificare per strumento)" % price if price is not None else "Quotazione: N/D")
+        quote_currency = str(item.get("quote_currency") or "UNKNOWN")
+        quote_basis = str(item.get("quote_basis") or "BASE STRUMENTO NON VERIFICATA")
+        lines.append(
+            "Quotazione provider: %.6g %s | %s" % (price, quote_currency, quote_basis)
+            if price is not None else "Quotazione: N/D"
+        )
+        lines.append("Fonte: %s | simbolo provider: %s" % (
+            item.get("quote_provider") or "NON VERIFICATO",
+            item.get("quote_symbol") or "NON VERIFICATO",
+        ))
+        lines.append("Nota strumento: %s" % (item.get("quote_basis_warning") or "Base della serie non verificata."))
         try:
             age_value = float(item.get("data_age_seconds"))
             lines.append("Età prezzo provider: %.0f s" % age_value if math.isfinite(age_value) and age_value >= 0 else "Età prezzo provider: NON VERIFICATA")
@@ -274,6 +295,8 @@ def _alert_signature(alert: dict) -> tuple:
         str(alert.get("symbol") or alert.get("commodity") or ""),
         str(alert.get("direction") or ""),
         str(alert.get("stage") or ""),
+        str(alert.get("quote_basis") or ""),
+        str(alert.get("quote_symbol") or ""),
         str(alert.get("pattern_analysis", {}).get("exit_action") or ""),
         bool(alert.get("pattern_analysis", {}).get("stop_invalidated")),
         bool(alert.get("pattern_analysis", {}).get("target_reached")),
