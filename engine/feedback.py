@@ -15,7 +15,7 @@ from pathlib import Path
 FEEDBACK_FILE = Path("gagarin_feedback.csv")
 FIELDS = [
     "signal_id", "alert_id", "timestamp_utc", "entry_bar_timestamp", "last_checked_timestamp",
-    "commodity", "symbol", "direction", "timeframe",
+    "commodity", "symbol", "direction", "action", "timeframe",
     "probability", "quality", "confidence", "entry", "stop", "tp1", "tp2", "tp3",
     "rr1", "rr2", "rr3", "stop_atr", "regime", "structure", "setup", "trigger",
     "data_source", "data_status", "alert_price", "alert_stage", "human_review", "human_review_at", "outcome", "r_multiple", "mfe_r", "mae_r", "bars_held",
@@ -224,8 +224,39 @@ def update_open_outcomes(results, path=FEEDBACK_FILE):
     return changed
 
 
+def _durable_feedback_enabled(path):
+    return Path(path) == FEEDBACK_FILE and bool(__import__("os").getenv("DATABASE_URL", "").strip())
+
+
+def _load_durable_feedback():
+    try:
+        from state_store import ensure_schema, load_state
+        if not ensure_schema():
+            return None
+        rows = load_state("gagarin_feedback_rows")
+        return rows if isinstance(rows, list) else []
+    except Exception:
+        return None
+
+
+def _save_durable_feedback(rows):
+    try:
+        from state_store import ensure_schema, save_state
+        return bool(ensure_schema() and save_state("gagarin_feedback_rows", rows))
+    except Exception:
+        return False
+
+
+def storage_backend():
+    if not __import__("os").getenv("DATABASE_URL", "").strip():
+        return "LOCAL_CSV_NO_DATABASE_URL"
+    return "POSTGRES" if _load_durable_feedback() is not None else "LOCAL_CSV_DATABASE_UNAVAILABLE"
+
+
 def _write_rows(rows, path):
     path = Path(path)
+    if _durable_feedback_enabled(path) and _save_durable_feedback(rows):
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as file:
         writer = csv.DictWriter(file, fieldnames=FIELDS, extrasaction="ignore")
@@ -235,6 +266,10 @@ def _write_rows(rows, path):
 
 def load_feedback(path=FEEDBACK_FILE):
     path = Path(path)
+    if _durable_feedback_enabled(path):
+        rows = _load_durable_feedback()
+        if rows is not None:
+            return rows
     if not path.exists():
         return []
     with path.open("r", newline="", encoding="utf-8") as file:
