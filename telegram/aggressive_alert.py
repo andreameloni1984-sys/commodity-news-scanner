@@ -191,9 +191,13 @@ def find_aggressive_alerts(states: Iterable[Any]) -> list[dict]:
 
 
 def format_aggressive_alert(states: Iterable[Any]) -> str:
-    """Format Telegram alert; empty string means no live opportunity found."""
-    states = list(states)
-    alerts = find_aggressive_alerts(states)
+    """Analyze states once and format the resulting alert candidates."""
+    return format_aggressive_alerts(find_aggressive_alerts(list(states)))
+
+
+def format_aggressive_alerts(alerts: Iterable[dict]) -> str:
+    """Format already-analyzed candidates without recalculating their state."""
+    alerts = list(alerts)
     if not alerts:
         return ""
     in_overlap = is_overlap()
@@ -301,9 +305,10 @@ def run_aggressive_alert(states: Iterable[Any]) -> bool:
                 next_state[key] = {"signature": signature, "last_sent_at": now.isoformat()}
         if not due:
             return False
-    due_keys = {str(a.get("symbol") or a.get("commodity") or "UNKNOWN") for a in due}
-    due_states = [s for s in states if str(getattr(s, "symbol", None) or getattr(s, "commodity", None) or "UNKNOWN") in due_keys]
-    message = format_aggressive_alert(due_states)
+    # Format the exact candidates already analyzed above. Re-running the
+    # classifier here could change stage/SL/TP evidence between selection
+    # and delivery, and needlessly repeats market-pattern analysis.
+    message = format_aggressive_alerts(due)
     if not message:
         return False
     try:
