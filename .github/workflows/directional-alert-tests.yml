@@ -1,0 +1,26 @@
+name: Directional commodity alert tests
+
+on:
+  push:
+    branches:
+      - fix/directional-commodity-telegram-alert
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test-directional-alert:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test dependencies
+        run: python -m pip install --upgrade pip pytest requests
+      - name: Compile directional alert module
+        run: python -m py_compile telegram/commodity_direction_alert.py
+      - name: Test directional commodity alerts
+        run: python -m pytest -q tests/test_commodity_direction_alert.py
