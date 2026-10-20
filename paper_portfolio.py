@@ -4,6 +4,7 @@ from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from typing import Any
 import threading
+import math
 
 INITIAL_CAPITAL = 100.0
 PAPER_ENTRY_ACTIONS = {"PAPER_ENTRY", "PAPER_SIGNAL"}
@@ -135,7 +136,8 @@ class PaperPortfolio:
             tp1, tp2, tp3 = (float(row.get(k)) for k in ("tp1", "tp2", "tp3"))
         except (TypeError, ValueError):
             return None
-        if min(entry, stop, tp1, tp2, tp3) <= 0:
+        prices = (entry, stop, tp1, tp2, tp3)
+        if not all(math.isfinite(value) and value > 0 for value in prices):
             return None
 
         direction = str(row.get("direction") or "").upper()
@@ -149,14 +151,31 @@ class PaperPortfolio:
                 return None
 
         stop_move = abs(entry - stop) / entry
-        if stop_move <= 0 or risk_pct <= 0 or max_allocation_pct <= 0:
+        if not math.isfinite(stop_move) or stop_move <= 0:
+            return None
+        if not math.isfinite(risk_pct) or risk_pct <= 0:
+            return None
+        if not math.isfinite(max_allocation_pct) or max_allocation_pct <= 0:
+            return None
+
+        risk_distance = abs(entry - stop)
+        rewards = (
+            abs(tp1 - entry),
+            abs(tp2 - entry),
+            abs(tp3 - entry),
+        )
+        reward_risk = tuple(reward / risk_distance for reward in rewards)
+        if reward_risk[0] < 1.5 or reward_risk[1] < 2.0 or reward_risk[2] < 2.5:
             return None
         symbol = str(row.get("symbol") or "").strip().upper()
         if not symbol:
             return None
 
         with self._lock:
-            if any(p.status == "OPEN" and p.symbol == symbol for p in self.positions):
+            open_positions = [p for p in self.positions if p.status == "OPEN"]
+            if len(open_positions) >= 3:
+                return None
+            if any(p.symbol == symbol for p in open_positions):
                 return None
             try:
                 requested_cap = max_allocation_pct if allocation_pct is None else float(allocation_pct)
@@ -166,7 +185,15 @@ class PaperPortfolio:
             risk_budget = self.cash * float(risk_pct)
             risk_allocation = risk_budget / stop_move
             allocation = min(self.cash, self.cash * cap_pct, risk_allocation)
-            if allocation <= 0:
+            if not math.isfinite(allocation) or allocation <= 0:
+                return None
+
+            current_open_risk = sum(
+                p.allocation * p.remaining_fraction * abs(p.entry - p.stop) / p.entry
+                for p in open_positions if p.stop is not None and p.entry > 0
+            )
+            proposed_risk = allocation * stop_move
+            if current_open_risk + proposed_risk > self.initial_capital * 0.02 + 1e-9:
                 return None
 
             now = datetime.now(timezone.utc).isoformat()
