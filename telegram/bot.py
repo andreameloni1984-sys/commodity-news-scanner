@@ -326,7 +326,9 @@ def _command_response(command: str) -> Optional[str]:
             "🚀 AGGRESSIVE 212 — profilo aggressivo\\n"
             "🛡 SOFT 212 — profilo prudente\\n"
             "🔗 COLLEGAMENTO INVEST TRADING212 — verifica sola lettura\\n\\n"
-            "Le NEWS rilevanti avviano un'analisi immediata; l'alert viene inviato solo dopo conferma del movimento e del trigger."
+            "Monitor posizione: /monitora ORO LONG 2700 2680 2740\\n"
+            "/posizioni — elenco monitorate | /smetti ORO — disattiva monitor.\\n"
+            "Gli avvisi automatici arrivano solo su nuovi segnali rilevanti o cambi di rischio/target; nessun messaggio di stato ripetitivo."
         )
 
     if command_name in {"/aggressivo212", "/aggressive212"}:
