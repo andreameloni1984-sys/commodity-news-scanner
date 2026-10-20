@@ -127,6 +127,8 @@ def format_directional_alert(candidates: list[dict]) -> str:
             f"{'📈 POTENZIALE RIALZO' if direction == 'LONG' else '📉 POTENZIALE RIBASSO'}: "
             f"{item['commodity']} — {'potrebbe salire' if direction == 'LONG' else 'potrebbe scendere'}"
         )
+        if item.get("alert_id"):
+            lines.append(f"ID ALERT: {item['alert_id']} — valuta con /valutaalert {item['alert_id']} ESATTO oppure SBAGLIATO")
         lines.append(f"Prezzo provider: {item['price']:.6g} USD · età dato {item['age']:.0f}s · {item['provider']}")
         lines.append(
             f"Probabilità: {item['probability']:.0f} | Qualità: {item['quality']:.0f} | "
