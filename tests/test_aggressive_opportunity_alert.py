@@ -44,3 +44,15 @@ def test_no_alert_without_live_price_or_direction():
     assert find_aggressive_alerts([candidate(live=False)]) == []
     assert find_aggressive_alerts([candidate(price=None)]) == []
     assert find_aggressive_alerts([candidate(setup_direction=None, opportunity_direction=None)]) == []
+
+
+
+def test_invalidated_setup_is_classified_as_risk_not_opportunity():
+    alerts = find_aggressive_alerts([candidate(price=2675)])
+    assert len(alerts) == 1
+    assert alerts[0]["stage"] == "RISCHIO"
+
+
+def test_alert_displays_candlestick_analysis():
+    message = format_aggressive_alert([candidate()])
+    assert "Candela:" in message
