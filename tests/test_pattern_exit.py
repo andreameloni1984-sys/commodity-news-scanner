@@ -171,3 +171,13 @@ def test_doji_is_reported_as_indecision_not_a_directional_signal():
         atr=2,
     )
     assert result["candlestick_pattern"] == "DOJI — INDECISIONE"
+
+
+
+def test_live_stop_is_checked_even_when_candles_are_insufficient():
+    result = analyze_pattern_and_exit(
+        direction="LONG", closes=[100, 99], entry=100, stop=98, tp1=105,
+        current_price=97,
+    )
+    assert result["pattern"] == "DATI INSUFFICIENTI"
+    assert result["exit_action"] == "EXIT_WARNING"
