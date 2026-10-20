@@ -289,3 +289,15 @@ def test_missing_bracket_is_generated_from_atr_and_structure():
     assert candidate.stop < candidate.entry < candidate.tp1 < candidate.tp2 < candidate.tp3
     assert (candidate.rr1, candidate.rr2, candidate.rr3) == (1.5, 2.0, 2.5)
     assert "SL_TP_GENERATED_FROM_ATR_AND_STRUCTURE" in candidate.reasons
+
+
+def test_rejects_long_against_explicit_bearish_structure():
+    decision = GagarinEngine().evaluate(market(), candidate(structure_direction="SHORT"))
+    assert decision.action == "PAPER_WATCH"
+    assert decision.reason == "STRUCTURE_DIRECTION_MISMATCH"
+
+
+def test_rejects_long_against_explicit_bearish_mtf():
+    decision = GagarinEngine().evaluate(market(), candidate(mtf_direction="SHORT"))
+    assert decision.action == "PAPER_WATCH"
+    assert decision.reason == "MTF_DIRECTION_MISMATCH"
