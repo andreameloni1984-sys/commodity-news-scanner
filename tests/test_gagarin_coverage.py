@@ -89,3 +89,17 @@ def test_real_repository_universes_expose_current_runtime_gaps():
     assert coverage["european_indices"]["configured_count"] == 0
     assert report["provider_availability_verified"] is False
     assert report["broker_tradability_verified"] is False
+
+
+def test_day_report_includes_market_coverage_diagnostics(tmp_path, monkeypatch):
+    from engine import day_automation
+
+    monkeypatch.setattr(day_automation, "OUT", tmp_path / "day_report.json")
+    report = day_automation.run({"instruments": {}})
+
+    assert report["paper_only"] is True
+    assert report["send_order"] is False
+    assert report["market_coverage"]["provider_availability_verified"] is False
+    assert report["market_coverage"]["day_engine_coverage"]["stocks"]["missing_from_day_engine"] == [
+        "AAPL", "AMZN", "MSFT", "NVDA", "TSLA"
+    ]
