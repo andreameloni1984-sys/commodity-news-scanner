@@ -381,6 +381,8 @@ def main() -> None:
         {"command": "monitora", "description": "Registra una posizione per avvisi di rischio"},
         {"command": "posizioni", "description": "Elenca le posizioni monitorate"},
         {"command": "smetti", "description": "Disattiva il monitor di una posizione"},
+        {"command": "alertsera", "description": "Sondaggio serale degli alert Gagarin"},
+        {"command": "valutaalert", "description": "Registra esito manuale di un alert"},
     ]})
     print(f"Telegram commands menu | configured={'YES' if commands_ok else 'NO'}", flush=True)
 
