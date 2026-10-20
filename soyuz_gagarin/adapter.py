@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from typing import Iterable
 
 from .engine import GagarinEngine
+from .commodity_trade_plan import build_commodity_bracket
 from .models import Candidate, MarketSnapshot
 
 
@@ -67,21 +68,62 @@ def evaluate_states(states: Iterable[object]):
             getattr(state, "setup_direction", "NONE") or "NONE"
         ).upper()
 
+        entry_value = getattr(state, "entry", None)
+        stop_value = getattr(state, "stop", None)
+        tp1_value = getattr(state, "tp1", None)
+        tp2_value = getattr(state, "tp2", None)
+        tp3_value = getattr(state, "tp3", None)
+        rr1_value = getattr(state, "rr1", None)
+        rr2_value = getattr(state, "rr2", None)
+        rr3_value = getattr(state, "rr3", None)
+        bracket_generated = False
+
+        # Apply the studied structural/ATR bracket only when the source has no
+        # bracket at all. Never silently replace partially supplied levels.
+        no_existing_bracket = all(value is None for value in (
+            stop_value, tp1_value, tp2_value, tp3_value,
+        ))
+        if no_existing_bracket and entry_value is None and price > 0:
+            entry_value = price
+        if no_existing_bracket and entry_value is not None and price > 0 and atr > 0:
+            bracket = build_commodity_bracket(
+                side=side,
+                entry=entry_value,
+                atr=atr,
+                highs=getattr(state, "highs", None),
+                lows=getattr(state, "lows", None),
+            )
+            if bracket.get("ok"):
+                entry_value = bracket["entry"]
+                stop_value, tp1_value, tp2_value, tp3_value = (
+                    bracket["stop"], bracket["tp1"], bracket["tp2"], bracket["tp3"]
+                )
+                rr1_value, rr2_value, rr3_value = bracket["rr1"], bracket["rr2"], bracket["rr3"]
+                stop_atr = bracket["stop_distance_atr"]
+                bracket_generated = True
+                reasons_for_bracket = list(getattr(state, "blockers", []) or [])
+                reasons_for_bracket.append("SL_TP_GENERATED_FROM_ATR_AND_STRUCTURE")
+            else:
+                reasons_for_bracket = list(getattr(state, "blockers", []) or [])
+                reasons_for_bracket.append(str(bracket.get("reason", "BRACKET_GENERATION_FAILED")))
+        else:
+            reasons_for_bracket = list(getattr(state, "blockers", []) or [])
+
         stop_atr = _float(getattr(state, "stop_atr", 0.0))
-        if stop_atr <= 0 and price > 0 and atr > 0:
-            stop = getattr(state, "stop", None)
-            if stop is not None:
-                stop_atr = abs(price - _float(stop)) / atr
+        if bracket_generated:
+            stop_atr = _float(stop_atr)
+        elif stop_atr <= 0 and price > 0 and atr > 0 and stop_value is not None:
+            stop_atr = abs(price - _float(stop_value)) / atr
 
         rr_values = (
-            _float(getattr(state, "rr1", 0.0)),
-            _float(getattr(state, "rr2", 0.0)),
-            _float(getattr(state, "rr3", 0.0)),
+            _float(rr1_value),
+            _float(rr2_value),
+            _float(rr3_value),
         )
         rr3 = rr_values[2]
         rr = max(rr_values)
 
-        reasons = list(getattr(state, "blockers", []) or [])
+        reasons = reasons_for_bracket
 
         meta = _metadata(state)
         explicit_gates = meta.get("operational_gates", {})
@@ -148,11 +190,11 @@ def evaluate_states(states: Iterable[object]):
             mtf_direction=str(
                 getattr(state, "mtf_direction", "NONE") or "NONE"
             ).upper(),
-            entry=getattr(state, "entry", None),
-            stop=getattr(state, "stop", None),
-            tp1=getattr(state, "tp1", None),
-            tp2=getattr(state, "tp2", None),
-            tp3=getattr(state, "tp3", None),
+            entry=entry_value,
+            stop=stop_value,
+            tp1=tp1_value,
+            tp2=tp2_value,
+            tp3=tp3_value,
             rr1=rr_values[0],
             rr2=rr_values[1],
             rr3=rr3,
