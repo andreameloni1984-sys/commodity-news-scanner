@@ -138,6 +138,37 @@ def position_monitor_loop() -> None:
         try:
             states = _run_analysis()
             if states:
+                # Score old paper forecasts first, then register newly approved
+                # forecasts from this exact market snapshot. The tracker never
+                # changes the governor decision or sends routine Telegram alerts.
+                try:
+                    from engine.feedback import record_entries, summarize, update_open_outcomes
+                    decisions = evaluate_states(states)
+                    by_symbol = {decision.symbol: decision for decision in decisions}
+                    for state in states:
+                        decision = by_symbol.get(str(getattr(state, "symbol", "")).upper())
+                        metadata = getattr(state, "metadata", None)
+                        if not isinstance(metadata, dict):
+                            metadata = {}
+                            state.metadata = metadata
+                        metadata["gagarin_action"] = decision.action if decision else "WAIT"
+                        metadata["gagarin_reason"] = decision.reason if decision else "NO_DECISION"
+                    updated = update_open_outcomes(states)
+                    recorded = record_entries(states)
+                    summary = summarize()
+                    print(
+                        "GAGARIN FEEDBACK | "
+                        f"updated={updated} new={recorded} total={summary['total']} "
+                        f"closed={summary['closed']} open={summary['open']} "
+                        f"win_rate={summary['win_rate_pct']} avg_R={summary['average_r']} "
+                        f"total_R={summary['realized_r']}",
+                        flush=True,
+                    )
+                except Exception as feedback_exc:
+                    print(
+                        f"GAGARIN FEEDBACK ERROR | {type(feedback_exc).__name__}: {feedback_exc}",
+                        flush=True,
+                    )
                 # New/meaningfully changed directional forecasts only; no no-signal heartbeat.
                 run_directional_commodity_alert(states)
                 # Pattern/exit alerts run in the actual Render service, not only in GitHub Actions.
