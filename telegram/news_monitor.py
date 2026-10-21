@@ -31,7 +31,10 @@ RECHECK_SECONDS = max(300, int(os.getenv("GAGARIN_NEWS_RECHECK_SECONDS", "300"))
 PENDING_TTL_SECONDS = 4 * 60 * 60
 REQUEST_TIMEOUT_SECONDS = 8
 # Source-specific throttling: avoid hammering feeds that are timing out or rate-limiting us.
-GDELT_MIN_INTERVAL_SECONDS = max(300, int(os.getenv("GAGARIN_GDELT_MIN_INTERVAL_SECONDS", "300")))
+# GDELT is slower and less reliable than RSS; poll less often and request a smaller result set.
+GDELT_MIN_INTERVAL_SECONDS = max(300, int(os.getenv("GAGARIN_GDELT_MIN_INTERVAL_SECONDS", "600")))
+GDELT_TIMEOUT_SECONDS = max(5, int(os.getenv("GAGARIN_GDELT_TIMEOUT_SECONDS", "12")))
+PERMANENT_HTTP_BACKOFF_SECONDS = 6 * 60 * 60
 SOURCE_BACKOFF_MAX_SECONDS = 60 * 60
 _SOURCE_FAILURES: dict[str, int] = {}
 _SOURCE_RETRY_AT: dict[str, float] = {}
@@ -346,6 +349,10 @@ def _source_failed(source: str, exc: Exception) -> int:
         delay = min(SOURCE_BACKOFF_MAX_SECONDS, int(base * (2 ** min(failures - 1, 4))))
         if retry_after is not None:
             delay = min(SOURCE_BACKOFF_MAX_SECONDS, max(delay, int(retry_after)))
+        # Authentication/permission/not-found responses are not transient network
+        # errors. Back off for six hours instead of retrying the same broken endpoint.
+        if status in {401, 403, 404}:
+            delay = PERMANENT_HTTP_BACKOFF_SECONDS
         _SOURCE_RETRY_AT[source] = time.monotonic() + delay
 
     status_text = f" HTTP={status}" if status is not None else ""
@@ -396,11 +403,12 @@ def _get_gdelt_items() -> list[dict[str, Any]]:
             "mode": "ArtList",
             "format": "json",
             "sort": "DateDesc",
-            "maxrecords": 50,
-            "timespan": "15min",
+            "maxrecords": 25,
+            # Cover a broader window because the source is deliberately polled less often.
+            "timespan": "30min",
         },
         headers={"User-Agent": "Gagarin-News-Monitor/1.0"},
-        timeout=REQUEST_TIMEOUT_SECONDS,
+        timeout=GDELT_TIMEOUT_SECONDS,
     )
     response.raise_for_status()
     payload = response.json()
