@@ -92,9 +92,12 @@ def _signal_record(state, now=None):
         "tp1": _value(state, "tp1"),
         "tp2": _value(state, "tp2"),
         "tp3": _value(state, "tp3"),
+        "timeframe": str(_value(state, "timeframe")).strip().lower(),
         "bar_ts": bar_ts,
     }
-    key = "|".join(str(values[k]) for k in ("symbol", "direction", "entry", "stop", "tp1", "tp2", "tp3", "bar_ts"))
+    # Timeframe is part of forecast identity: identical levels on the same
+    # candle can represent distinct 5m and 15m hypotheses and must not collide.
+    key = "|".join(str(values[k]) for k in ("symbol", "direction", "timeframe", "entry", "stop", "tp1", "tp2", "tp3", "bar_ts"))
     signal_id = hashlib.sha256(key.encode("utf-8")).hexdigest()[:20]
     return {
         "signal_id": signal_id,
@@ -105,7 +108,7 @@ def _signal_record(state, now=None):
         "symbol": values["symbol"],
         "direction": values["direction"],
         "action": values["action"],
-        "timeframe": _value(state, "timeframe"),
+        "timeframe": values["timeframe"],
         "probability": _value(state, "probability"),
         "quality": _value(state, "quality"),
         "confidence": _value(state, "confidence"),
