@@ -28,7 +28,7 @@ from sputnik_catalyst import catalyst_watchlist
 
 POLL_SECONDS = max(30, int(os.getenv("GAGARIN_NEWS_POLL_SECONDS", "60")))
 RECHECK_SECONDS = max(300, int(os.getenv("GAGARIN_NEWS_RECHECK_SECONDS", "300")))
-PENDING_TTL_SECONDS = 45 * 60
+PENDING_TTL_SECONDS = 4 * 60 * 60
 REQUEST_TIMEOUT_SECONDS = 8
 # Source-specific throttling: avoid hammering feeds that are timing out or rate-limiting us.
 GDELT_MIN_INTERVAL_SECONDS = max(300, int(os.getenv("GAGARIN_GDELT_MIN_INTERVAL_SECONDS", "300")))
@@ -51,6 +51,93 @@ def _journal(record: dict[str, Any]) -> None:
             handle.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
     except OSError as exc:
         print(f"NEWS journal save failed | {type(exc).__name__}: {exc}", flush=True)
+
+
+def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = None) -> dict[str, Any]:
+    """Score alert direction using a later live price observation, not a keyword label."""
+    now = now or _utc_now()
+    cutoff = now - timedelta(days=7)
+    alerts = []
+    for row in rows:
+        if row.get("kind") != "NEWS_ALERT_SENT":
+            continue
+        sent_at = _parse_datetime(row.get("sent_at") or row.get("recorded_at"))
+        try:
+            price = float(row.get("price"))
+        except (TypeError, ValueError):
+            continue
+        direction = str(row.get("direction") or "").upper()
+        if sent_at and sent_at >= cutoff and price > 0 and direction in {"LONG", "SHORT"}:
+            alerts.append((row, sent_at, price, direction))
+    scored, pending = [], 0
+    for alert, sent_at, alert_price, direction in alerts:
+        observations = []
+        for row in rows:
+            if row.get("kind") != "NEWS_REACTION" or row.get("event_id") != alert.get("event_id") or row.get("asset") != alert.get("asset"):
+                continue
+            observed_at = _parse_datetime(row.get("observed_at") or row.get("recorded_at"))
+            if not observed_at or not (sent_at + timedelta(minutes=15) <= observed_at <= sent_at + timedelta(hours=4)):
+                continue
+            try:
+                price = float(row.get("current_price"))
+            except (TypeError, ValueError):
+                continue
+            if price > 0:
+                observations.append((observed_at, price))
+        if not observations:
+            pending += 1
+            continue
+        observed_at, current_price = max(observations, key=lambda item: item[0])
+        raw_pct = (current_price / alert_price - 1) * 100
+        signed_pct = raw_pct if direction == "LONG" else -raw_pct
+        scored.append({"asset": alert.get("asset"), "direction": direction, "sent_at": sent_at.isoformat(),
+                       "observed_at": observed_at.isoformat(), "signed_return_pct": round(signed_pct, 6),
+                       "correct": signed_pct > 0})
+    correct = sum(x["correct"] for x in scored)
+    return {"window_days": 7, "alerts": len(alerts), "scored": len(scored), "pending": pending,
+            "correct": correct, "incorrect": len(scored)-correct,
+            "accuracy_pct": round(correct/len(scored)*100, 2) if scored else None,
+            "mean_directional_return_pct": round(sum(x["signed_return_pct"] for x in scored)/len(scored), 4) if scored else None}
+
+
+def _maybe_send_daily_scorecard(state: dict[str, Any], send_telegram: Callable[[str], bool], now: datetime) -> bool:
+    from zoneinfo import ZoneInfo
+    local_now = now.astimezone(ZoneInfo("Europe/Rome"))
+    day_key = local_now.date().isoformat()
+    if local_now.hour < 21 or state.get("last_scorecard_date") == day_key:
+        return False
+    rows = []
+    try:
+        if JOURNAL_PATH.exists():
+            for line in JOURNAL_PATH.read_text(encoding="utf-8").splitlines()[-20000:]:
+                try:
+                    row = json.loads(line)
+                    if isinstance(row, dict):
+                        rows.append(row)
+                except (json.JSONDecodeError, TypeError):
+                    continue
+    except OSError:
+        pass
+    report = build_alert_scorecard(rows, now)
+    if report["scored"]:
+        message = ("📊 GAGARIN — VERIFICA ALERT (ultimi 7 giorni)\\n"
+                   f"Valutati: {report['scored']}/{report['alerts']} | in attesa: {report['pending']}\\n"
+                   f"Direzione corretta: {report['correct']} | errata: {report['incorrect']}\\n"
+                   f"Accuratezza direzionale: {report['accuracy_pct']:.1f}%\\n"
+                   f"Rendimento direzionale medio: {report['mean_directional_return_pct']:+.3f}%\\n"
+                   "Feed Gagarin; esclusi spread/slippage. La correlazione non prova causalità.")
+    else:
+        message = ("📊 GAGARIN — VERIFICA ALERT (ultimi 7 giorni)\\n"
+                   f"Alert inviati: {report['alerts']} | in attesa: {report['pending']}\\n"
+                   "Campione valutabile insufficiente: servono prezzi osservati almeno 15 minuti dopo l'alert.")
+    try:
+        sent = bool(send_telegram(message))
+    except Exception:
+        sent = False
+    if sent:
+        state["last_scorecard_date"] = day_key
+        _journal({"kind": "NEWS_ALERT_SCORECARD_SENT", "date_local": day_key, "report": report})
+    return sent
 
 RSS_FEEDS = (
     ("EIA", "https://www.eia.gov/rss/press_releases.xml"),
@@ -700,11 +787,12 @@ def poll_news_once(
                             "aligned_setup_count": len(matches),
                         })
                         break
-                delivered = False
-                for setup in matches:
+                delivered = bool(event.get("alert_sent"))
+                for setup in ([] if delivered else matches):
                     if send_telegram(_format_news_alert(event, setup)):
                         sent += 1
                         delivered = True
+                        event["alert_sent"] = True
                         _journal({
                             "kind": "NEWS_ALERT_SENT",
                             "event_id": event.get("event_id"),
@@ -718,13 +806,18 @@ def poll_news_once(
                             "entry": setup.get("entry"),
                             "stop": setup.get("stop"),
                             "tp1": setup.get("tp1"),
+                            "sent_at": now.isoformat(),
                         })
                         break
-                if not delivered:
+                # Keep sent alerts under observation for four hours, without resending them.
+                if event.get("alert_sent") or not delivered:
                     still_pending.append(event)
             pending = still_pending
         except Exception as exc:
             print(f"NEWS event analysis failed | {type(exc).__name__}: {exc}", flush=True)
+
+    # Daily report uses post-alert prices from the persistent event journal.
+    _maybe_send_daily_scorecard(state, send_telegram, now)
 
     # Bound state size. Fingerprints and clusters are separate to dedupe URLs and syndication.
     state["seen"] = list(seen)[-1500:]
