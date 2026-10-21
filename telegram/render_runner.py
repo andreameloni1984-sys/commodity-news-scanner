@@ -136,7 +136,7 @@ def position_monitor_loop() -> None:
     print("Gagarin market monitor | interval=15min | deduplicated forecast + position alerts", flush=True)
     while True:
         try:
-            states = _run_analysis()
+            states = _run_analysis(on_demand=False)
             if states:
                 # Score old paper forecasts first, then register newly approved
                 # forecasts from this exact market snapshot. The tracker never
