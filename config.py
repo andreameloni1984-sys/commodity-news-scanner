@@ -23,14 +23,20 @@ TELEGRAM_ENABLED = (
     os.getenv("TELEGRAM_ENABLED", "0") == "1"
 )
 
-TELEGRAM_BOT_TOKEN = os.getenv(
-    "TELEGRAM_BOT_TOKEN",
-    ""
+# Accept common Render variable names while preferring the canonical key.
+# This avoids breaking older services whose secret was stored under an alias.
+TELEGRAM_BOT_TOKEN = (
+    os.getenv("TELEGRAM_BOT_TOKEN")
+    or os.getenv("TELEGRAM_TOKEN")
+    or os.getenv("BOT_TOKEN")
+    or ""
 ).strip()
 
-TELEGRAM_CHAT_ID = os.getenv(
-    "TELEGRAM_CHAT_ID",
-    ""
+TELEGRAM_CHAT_ID = (
+    os.getenv("TELEGRAM_CHAT_ID")
+    or os.getenv("TELEGRAM_TARGET_CHAT_ID")
+    or os.getenv("CHAT_ID")
+    or ""
 ).strip()
 
 
