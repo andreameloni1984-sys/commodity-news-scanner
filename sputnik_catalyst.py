@@ -1,8 +1,8 @@
 """SPUTNIK catalyst-to-market mapping.
 
 Maps documented public-policy themes to instruments/sectors worth monitoring.
-It deliberately produces WATCH candidates, not trade directions. No company
-or private relationship is inferred from a policy event.
+It produces WATCH candidates only; direction must be confirmed by live price,
+volume, technical setup and Gagarin's existing risk/safety gates.
 """
 from __future__ import annotations
 from typing import Any
@@ -15,6 +15,8 @@ DOMAIN_INSTRUMENTS = {
     "METALS": [
         ("GOLD", "Gold / metals"),
         ("SILVER", "Silver / metals"),
+        ("PLATINUM", "Platinum / metals"),
+        ("PALLADIUM", "Palladium / metals"),
     ],
     "AGRICULTURE": [
         ("CORN", "Corn / agriculture"),
@@ -22,32 +24,35 @@ DOMAIN_INSTRUMENTS = {
         ("SUGAR", "Sugar / agriculture"),
         ("COCOA", "Cocoa / agriculture"),
         ("COFFEE", "Coffee / agriculture"),
+        ("RICE", "Rice / agriculture"),
     ],
-    "DEFENSE": [
-        ("US_DEFENSE", "US defense sector"),
-    ],
+    "DEFENSE": [("US_DEFENSE", "US defense sector")],
     "AI_TECH": [
         ("NASDAQ100", "US technology / AI"),
-        ("SEMICONDUCTORS", "Semiconductors"),
+        ("QQQ", "Nasdaq-100 ETF; verify broker symbol"),
+        ("SEMICONDUCTORS", "Semiconductor sector / ETF watch"),
     ],
-    "SPACE": [
-        ("US_AEROSPACE", "US aerospace / space"),
+    "DATA_CENTERS": [
+        ("NASDAQ100", "US technology / AI"),
+        ("QQQ", "Nasdaq-100 ETF; verify broker symbol"),
+        ("SEMICONDUCTORS", "Semiconductor sector / ETF watch"),
+        ("POWER_INFRASTRUCTURE", "Power equipment, grid and electrical infrastructure"),
     ],
-    "CRYPTO": [
-        ("BTCUSD", "Bitcoin"),
+    "POWER_INFRA": [
+        ("POWER_INFRASTRUCTURE", "Power equipment, grid and electrical infrastructure"),
+        ("COPPER", "Copper; verify provider and broker symbol"),
+        ("NATGAS", "Natural gas; verify provider and broker symbol"),
     ],
-    "MEDIA": [
-        ("MEDIA", "US media sector"),
-    ],
-    "REAL_ESTATE": [
-        ("US_REIT", "US real estate / REIT"),
-    ],
-    # These are watch candidates only: headline direction must be confirmed by
-    # live price/volume before GAGARIN can consider an entry.
+    "SPACE": [("US_AEROSPACE", "US aerospace / space")],
+    "CRYPTO": [("BTCUSD", "Bitcoin")],
+    "MEDIA": [("MEDIA", "US media sector")],
+    "REAL_ESTATE": [("US_REIT", "US real estate / REIT")],
     "TRADE_POLICY": [
         ("NASDAQ100", "US technology / growth equities"),
         ("GOLD", "Gold / defensive asset"),
         ("USD", "US dollar"),
+        ("WTI", "Crude oil; only if the policy affects energy trade"),
+        ("BRENT", "Brent crude; only if the policy affects energy trade"),
     ],
     "RATES_MACRO": [
         ("GOLD", "Gold / metals"),
@@ -56,11 +61,11 @@ DOMAIN_INSTRUMENTS = {
     ],
 }
 
-PRIMARY_SOURCES = {"WHITE_HOUSE", "OGE", "SEC"}
+PRIMARY_SOURCES = {"WHITE_HOUSE", "OGE", "SEC", "WHITE_HOUSE_RSS", "SPUTNIK / WHITE HOUSE"}
 
 
 def catalyst_watchlist(findings: list[dict[str, Any]], limit: int = 10) -> list[dict[str, Any]]:
-    """Return deduplicated WATCH candidates from documented public findings."""
+    """Return deduplicated WATCH candidates; never infer a trade direction."""
     if limit <= 0:
         return []
 
@@ -73,8 +78,7 @@ def catalyst_watchlist(findings: list[dict[str, Any]], limit: int = 10) -> list[
         for domain in domains:
             domain = str(domain).upper()
             for instrument, description in DOMAIN_INSTRUMENTS.get(domain, []):
-                key = instrument
-                row = merged.setdefault(key, {
+                row = merged.setdefault(instrument, {
                     "instrument": instrument,
                     "description": description,
                     "status": "WATCH",
@@ -99,13 +103,15 @@ def catalyst_watchlist(findings: list[dict[str, Any]], limit: int = 10) -> list[
         result.append({
             "instrument": row["instrument"],
             "description": row["description"],
-            "status": row["status"],
+            "status": "WATCH",
             "score": score,
             "sources": sorted(row["sources"]),
             "events": len(row["events"]),
             "domains": sorted(row["domains"]),
             "primary_source": row["primary_source"],
+            "evidence": sorted(set(row["evidence"])),
             "reason": "Catalizzatore pubblico da verificare; nessuna direzione BUY/SELL inferita.",
+            "execution_authorized": False,
         })
     result.sort(key=lambda x: (-x["score"], x["instrument"]))
     return result[:limit]
