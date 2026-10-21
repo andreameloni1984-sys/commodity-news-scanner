@@ -150,7 +150,7 @@ def _hourly_status_message(position: dict, price: float, age: float, action: str
         "TIGHTEN_STOP": "attenzione: valutare protezione del rischio",
         "TAKE_PROFIT_WATCH": "attenzione: area TP1 raggiunta",
     }.get(action, action)
-    return "\\n".join([
+    return "\n".join([
         f"GAGARIN — AGGIORNAMENTO ORARIO: {position['commodity']} {direction}",
         f"Quotazione provider: {price:g} USD · dato vecchio di {age:.0f}s",
         f"Entry: {entry:g} | SL: {stop:g} | TP1: {tp1:g}",
