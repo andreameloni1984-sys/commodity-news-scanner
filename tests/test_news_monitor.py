@@ -169,6 +169,8 @@ def test_sputnik_historical_action_reaction_is_attached_to_gagarin_news():
     assert "china_tariff_escalation_2025_10" in historical["historical_matches"]
     assert historical["historical_directions"]["NASDAQ"] == "DOWN"
     assert historical["evidence"] == "HISTORICAL_ANALOGUE"
+    assert result["sputnik_watch_candidates"]
+    assert all(row["status"] == "WATCH" for row in result["sputnik_watch_candidates"])
 
 
 def test_sputnik_does_not_invent_historical_direction_without_analogue():
