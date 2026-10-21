@@ -139,18 +139,31 @@ def record_entries(results, path=FEEDBACK_FILE):
     tutti i gate e sono diventati ENTRY.
     """
 
+    existing = load_feedback(path)
+    fingerprints = {
+        (row.get("symbol"), row.get("direction"), row.get("setup"),
+         row.get("entry"), row.get("stop"), row.get("tp1"), row.get("tp2"), row.get("tp3"))
+        for row in existing
+    }
     count = 0
 
     for state in results:
-
         if getattr(state, "final_decision", "") != "ENTRY":
             continue
-
-        append_signal(
-            state,
-            path=path,
-        )
-
+        record = build_signal_record(state)
+        fingerprint = (record["symbol"], record["direction"], record["setup"],
+                       str(record["entry"]), str(record["stop"]), str(record["tp1"]),
+                       str(record["tp2"]), str(record["tp3"]))
+        if fingerprint in fingerprints:
+            continue
+        # Write the prebuilt snapshot so the fingerprint and saved values match.
+        exists = Path(path).exists()
+        with Path(path).open("a", newline="", encoding="utf-8") as file:
+            writer = csv.DictWriter(file, fieldnames=FIELDS)
+            if not exists:
+                writer.writeheader()
+            writer.writerow(record)
+        fingerprints.add(fingerprint)
         count += 1
 
     return count
