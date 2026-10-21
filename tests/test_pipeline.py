@@ -838,3 +838,34 @@ def test_breakout_trigger_rejects_conflicting_breakout_direction():
 
     assert state.trigger_confirmed is False
     assert state.trigger == "NOT_CONFIRMED"
+
+
+# SAFETY NUMERIC INTEGRITY / PRICE-DERIVED R:R
+
+def test_safety_blocks_non_finite_numeric_scores_and_rr():
+    for field, value in (("probability", float("nan")), ("quality", float("inf")), ("rr3", float("nan"))):
+        state = _prepare_directional_state("LONG")
+        apply_setup(state)
+        apply_risk(state)
+        state.trigger_confirmed = True
+        state.trigger_direction = "LONG"
+        setattr(state, field, value)
+        apply_safety(state)
+        assert state.safety == "BLOCKED"
+        assert state.final_decision == "WAIT"
+        assert "NUMERIC_FIELD_NON_FINITE" in state.blockers
+
+
+def test_safety_recomputes_rr_from_actual_bracket_prices():
+    state = _prepare_directional_state("LONG")
+    apply_setup(state)
+    apply_risk(state)
+    state.trigger_confirmed = True
+    state.trigger_direction = "LONG"
+    state.entry, state.stop = 100.0, 99.0
+    state.tp1, state.tp2, state.tp3 = 101.5, 102.0, 102.0
+    state.rr1, state.rr2, state.rr3 = 1.5, 2.0, 2.5
+    apply_safety(state)
+    assert state.safety == "BLOCKED"
+    assert "RR_GEOMETRY_MISMATCH" in state.blockers
+    assert "RR_FAIL" in state.blockers
