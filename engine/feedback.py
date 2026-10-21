@@ -214,12 +214,31 @@ def update_open_outcomes(results, path=FEEDBACK_FILE):
     rows = load_feedback(path)
     if not rows:
         return 0
-    states = {str(getattr(s, "symbol", "")).upper(): s for s in results}
+    # Prefer exact symbol + timeframe matching. A symbol-only map silently
+    # overwrites candles when multiple timeframe states for one instrument are
+    # passed in the same scan, which can mis-score historical forecasts.
+    states_by_key = {}
+    states_by_symbol = {}
+    for state_item in results:
+        symbol = str(getattr(state_item, "symbol", "") or "").upper()
+        timeframe = str(getattr(state_item, "timeframe", "") or "").lower()
+        if not symbol:
+            continue
+        states_by_key[(symbol, timeframe)] = state_item
+        states_by_symbol.setdefault(symbol, []).append(state_item)
     changed = 0
     for row in rows:
         if row.get("outcome", "OPEN") != "OPEN":
             continue
-        state = states.get(str(row.get("symbol", "")).upper())
+        symbol = str(row.get("symbol", "") or "").upper()
+        timeframe = str(row.get("timeframe", "") or "").lower()
+        state = states_by_key.get((symbol, timeframe))
+        if state is None:
+            # Safe compatibility fallback only when exactly one state exists
+            # for the symbol; never guess between competing timeframes.
+            candidates = states_by_symbol.get(symbol, [])
+            if len(candidates) == 1:
+                state = candidates[0]
         if state is None:
             continue
         side = str(row.get("direction", "")).upper()
