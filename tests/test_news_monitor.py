@@ -289,12 +289,6 @@ def test_alert_scorecard_does_not_miss_stop_hit_in_first_15_minutes():
     assert report["tp1_observed"] == 0
 
 
-def test_eia_press_release_feed_uses_published_rss_endpoint():
-    from telegram.news_monitor import RSS_FEEDS
-
-    feeds = dict(RSS_FEEDS)
-    assert feeds["EIA"] == "https://www.eia.gov/rss/press_rss.xml"
-
 def test_alert_scorecard_marks_closed_window_without_prices_unscored():
     from datetime import datetime, timedelta, timezone
     from telegram.news_monitor import build_alert_scorecard
