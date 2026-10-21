@@ -19,6 +19,7 @@ Inventario operativo e stato iniziale di ciascun punto: [`docs/gagarin-100-point
 | RISK-006 | Non aprire due posizioni contemporanee sullo stesso simbolo | `paper_portfolio.py` | Test del portafoglio |
 | RISK-007 | Massimo tre posizioni aperte contemporaneamente | `paper_portfolio.py` | Test di regressione |
 | RISK-008 | Rischio aggregato degli stop aperti massimo 2% del capitale iniziale | `paper_portfolio.py` | Test di regressione; misura rischio teorico al prezzo di stop |
+| RISK-011 | Il preflight PAPER rifiuta rapporti R/R calcolati non finiti anche quando i prezzi d'origine sono finiti | `engine/order_preflight.py` (`validate_paper_signal`) | Test aggiunto per overflow del rapporto premio/rischio; esecuzione locale/CI ancora da confermare |
 | RISK-010 | Il motore rischio rifiuta prezzo/ATR non finiti e non espone bracket con target overflow; swing strutturali non finiti vengono ignorati e si usa fallback ATR | `engine/risk.py` (`_finite_float`, controlli precondizioni e integrità bracket) | Test aggiunti per NaN/Inf, swing invalido e overflow target; esecuzione locale/CI ancora da confermare |
 | RISK-009 | Blocco di nuove posizioni dopo perdita realizzata giornaliera del 2,5% del capitale iniziale | `paper_portfolio.py` | Stato giornaliero UTC esportato/ripristinato; test di regressione |
 | EXIT-001 | Se il prezzo campionato supera lo stop, lo stop prevale sui target | `paper_portfolio.py` | Usa snapshot di prezzo, non ricostruisce la sequenza intrabar OHLC |
