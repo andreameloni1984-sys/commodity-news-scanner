@@ -18,7 +18,7 @@ def forex_windows(now: datetime | None = None) -> tuple[tuple[int, int], ...]:
     """Morning 08-11; afternoon 14-18, or 13-18 during US/EU DST mismatch."""
     local = _rome_time(now)
     ny = local.astimezone(NEW_YORK)
-    dst_mismatch = local.utcoffset() != ny.utcoffset()
+    dst_mismatch = local.dst() != ny.dst()
     afternoon_start = 13 * 60 if dst_mismatch else 14 * 60
     return ((8 * 60, 11 * 60), (afternoon_start, 18 * 60))
 
