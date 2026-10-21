@@ -33,6 +33,7 @@ from config import (
 )
 
 from engine.gagarin import analyze_universe
+from engine.forex_session import filter_forex_for_session
 
 from paper_trade_journal import (
     record_entries,
@@ -444,8 +445,13 @@ def run():
     # UNIVERSE
     # --------------------------------------------------------
 
-    commodities = (
+    commodities = filter_forex_for_session(
         enabled_commodities()
+    )
+
+    print(
+        "FOREX SESSION: automatic 08:00-11:00 and 14:00-18:00 Europe/Rome; "
+        "manual runs bypass the time gate."
     )
 
     if not commodities:
