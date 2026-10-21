@@ -253,3 +253,12 @@ def test_alert_scorecard_tracks_observed_tp1_and_stop_loss():
     assert report["tp1_observed"] == 1
     assert report["sl_observed"] == 1
     assert report["open_at_last_check"] == 0
+
+
+def test_asset_matches_support_silver_and_palladium_symbols():
+    from telegram.news_monitor import _asset_matches
+
+    assert _asset_matches("Argento", SimpleNamespace(commodity="Silver", symbol="XAGUSD"))
+    assert _asset_matches("Argento", SimpleNamespace(commodity="Argento spot", symbol=""))
+    assert _asset_matches("Palladio", SimpleNamespace(commodity="Palladium", symbol="XPDUSD"))
+    assert _asset_matches("Palladio", SimpleNamespace(commodity="Palladio spot", symbol=""))
