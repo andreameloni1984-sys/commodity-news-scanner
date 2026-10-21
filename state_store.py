@@ -58,3 +58,63 @@ def save_state(key: str, value: Any) -> bool:
         return True
     finally:
         conn.close()
+
+
+def _ensure_event_journal_schema(cur) -> None:
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS gagarin_event_journal (
+            id BIGSERIAL PRIMARY KEY,
+            record JSONB NOT NULL,
+            recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    """)
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_gagarin_event_journal_recorded_at
+        ON gagarin_event_journal(recorded_at)
+    """)
+
+
+def append_event_journal(record: dict[str, Any]) -> bool:
+    """Append one audit event to durable PostgreSQL storage when configured."""
+    conn = _connect()
+    if conn is None:
+        return False
+    try:
+        encoded = json.dumps(record, ensure_ascii=False, allow_nan=False, default=str)
+        with conn:
+            with conn.cursor() as cur:
+                _ensure_event_journal_schema(cur)
+                cur.execute(
+                    "INSERT INTO gagarin_event_journal(record, recorded_at) VALUES (%s::jsonb, NOW())",
+                    (encoded,),
+                )
+        return True
+    except Exception as exc:
+        print(f"EVENT journal database save failed | {type(exc).__name__}: {exc}", flush=True)
+        return False
+    finally:
+        conn.close()
+
+
+def load_event_journal(limit: int = 20000) -> list[dict[str, Any]] | None:
+    """Read the newest audit events; None means PostgreSQL is not usable."""
+    conn = _connect()
+    if conn is None:
+        return None
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                _ensure_event_journal_schema(cur)
+                cur.execute(
+                    "SELECT record FROM gagarin_event_journal ORDER BY id DESC LIMIT %s",
+                    (max(1, min(int(limit), 100000)),),
+                )
+                rows = cur.fetchall()
+        records = [row[0] for row in rows if isinstance(row[0], dict)]
+        records.reverse()
+        return records
+    except Exception as exc:
+        print(f"EVENT journal database read failed | {type(exc).__name__}: {exc}", flush=True)
+        return None
+    finally:
+        conn.close()
