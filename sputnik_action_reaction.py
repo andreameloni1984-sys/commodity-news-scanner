@@ -59,6 +59,19 @@ HISTORICAL_PATTERNS = [
 def _normalise(text: str) -> str:
     return " ".join(str(text or "").lower().split())
 
+def _contains_keyword(body: str, keyword: str) -> bool:
+    """Match whole words/phrases so singular and plural forms do not overlap."""
+    normalized = str(body or "").lower()
+    for punctuation in ",.!?;:()[]{}\"'":
+        normalized = normalized.replace(punctuation, " ")
+    normalized = " " + " ".join(normalized.split()) + " "
+    target = str(keyword or "").lower()
+    for punctuation in ",.!?;:()[]{}\"'":
+        target = target.replace(punctuation, " ")
+    target = " " + " ".join(target.split()) + " "
+    return bool(target.strip()) and target in normalized
+
+
 def classify_event(text: str) -> str:
     body = _normalise(text)
     if any(k in body for k in ("tariff", "tariffs", "trade war", "china", "xi")):
@@ -76,7 +89,7 @@ def match_historical_reactions(text: str, limit: int = 3) -> list[dict[str, Any]
     event_type = classify_event(body)
     matches: list[dict[str, Any]] = []
     for pattern in HISTORICAL_PATTERNS:
-        keyword_hits = sum(1 for k in pattern["keywords"] if k in body)
+        keyword_hits = sum(1 for k in pattern["keywords"] if _contains_keyword(body, k))
         type_match = pattern["event_type"] == event_type
         # A broad event-type match alone is not enough: it caused unrelated
         # China/energy headlines to inherit every historical trade reaction.
@@ -85,7 +98,7 @@ def match_historical_reactions(text: str, limit: int = 3) -> list[dict[str, Any]
             "massive increase", "help china", "not hurt", "support china",
             "soften", "softening", "90 days",
         }
-        has_strong_phrase = any(phrase in body for phrase in strong_phrases if phrase in pattern["keywords"])
+        has_strong_phrase = any(_contains_keyword(body, phrase) for phrase in strong_phrases if phrase in pattern["keywords"])
         min_hits = 1 if has_strong_phrase else 2
         if keyword_hits < min_hits:
             continue
