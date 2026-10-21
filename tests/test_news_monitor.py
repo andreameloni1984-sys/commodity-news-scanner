@@ -14,7 +14,7 @@ def test_oil_inventory_draw_is_provisional_bullish_for_crude():
 def test_hawkish_fed_headline_is_provisional_bearish_for_metals():
     result = classify_event("Federal Reserve signals hawkish policy and a rate hike")
     assert "Oro" in result["assets"]
-    assert "Argento" not in result["assets"]  # excluded from this selected commodity universe
+    assert "Argento" in result["assets"]
     assert result["impact"]["Oro"] == "RIBASSISTA"
 
 
@@ -151,10 +151,10 @@ def test_selected_agricultural_commodities_are_classified_by_crop_catalyst():
     assert sugar["impact"]["Zucchero"] == "RIBASSISTA"
 
 
-def test_platinum_supported_but_silver_excluded_from_selected_universe():
+def test_platinum_and_silver_are_supported_in_selected_universe():
     result = classify_event("Platinum rises as the Federal Reserve signals rate cuts")
     assert "Platino" in result["assets"]
-    assert "Argento" not in result["assets"]
+    assert "Argento" in result["assets"]
 
 
 def test_agricultural_mixed_catalysts_remain_mixed():
@@ -192,3 +192,43 @@ def test_sputnik_tariff_pause_does_not_match_escalation_pattern():
 
     matches = match_historical_reactions("Trump announces a 90 days pause on tariffs")
     assert [item["id"] for item in matches] == ["tariff_pause_2025_04"]
+
+
+def test_alert_scorecard_scores_only_prices_observed_after_alert():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 21, 18, 0, tzinfo=timezone.utc)
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "evt-1", "asset": "WTI", "direction": "LONG",
+         "price": 80.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "evt-1", "asset": "WTI",
+         "current_price": 80.2, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+        {"kind": "NEWS_ALERT_SENT", "event_id": "evt-2", "asset": "Oro", "direction": "SHORT",
+         "price": 4000.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "evt-2", "asset": "Oro",
+         "current_price": 4010.0, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "evt-2", "asset": "Oro",
+         "current_price": 3990.0, "observed_at": (sent + timedelta(minutes=5)).isoformat()},
+    ]
+    report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
+    assert report["alerts"] == 2
+    assert report["scored"] == 2
+    assert report["correct"] == 1
+    assert report["incorrect"] == 1
+    assert report["accuracy_pct"] == 50.0
+    assert report["pending"] == 0
+
+
+def test_alert_scorecard_marks_alert_pending_without_later_observation():
+    from datetime import datetime, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 21, 18, 0, tzinfo=timezone.utc)
+    report = build_alert_scorecard([{
+        "kind": "NEWS_ALERT_SENT", "event_id": "evt-1", "asset": "WTI",
+        "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat(),
+    }], now=sent)
+    assert report["alerts"] == 1
+    assert report["scored"] == 0
+    assert report["pending"] == 1
