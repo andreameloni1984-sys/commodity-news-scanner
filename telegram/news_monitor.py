@@ -165,7 +165,7 @@ def _parse_datetime(value: Any) -> datetime | None:
 
 
 def _normalise_title(title: str) -> str:
-    text = re.sub(r"[^a-z0-9 ]+", " ", (title or "").lower())
+    text = " ".join((title or "").lower().split())
     stop = {"the", "and", "for", "with", "from", "after", "before", "says", "said", "over", "into", "its"}
     tokens = [t for t in text.split() if len(t) > 2 and t not in stop]
     return " ".join(tokens[:16])
