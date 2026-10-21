@@ -17,8 +17,8 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
       - name: Run Gagarin and universe tests
-        run: python -m pytest -q tests/test_gagarin_core.py tests/test_market_universe.py tests/test_market_structure.py tests/test_structure_safety.py
+        run: python -m pytest -q tests/
       - name: Compile modified Python modules
-        run: python -m py_compile telegram/bot.py engine/data.py engine/market_structure.py market_universe.py forex/universe.py
+        run: python -m py_compile telegram/bot.py engine/data.py engine/market_structure.py engine/structure.py engine/safety.py engine/feedback.py market_universe.py forex/universe.py
       - name: Run paper-only smoke test
         run: python -m soyuz_gagarin.main
