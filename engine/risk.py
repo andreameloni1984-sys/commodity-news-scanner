@@ -9,6 +9,8 @@ Risk engine:
 - detailed diagnostics for Safety
 """
 
+from math import isfinite
+
 from engine.state import SoyuzState
 
 
@@ -19,6 +21,20 @@ MAX_STOP_ATR = 2.50
 TP1_RR = 1.50
 TP2_RR = 2.00
 TP3_RR = 2.50
+
+
+def _finite_float(value):
+    """Convert to a finite float; reject NaN, infinities and invalid values."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return number if isfinite(number) else None
+
+
+def _is_finite_positive(value):
+    number = _finite_float(value)
+    return number is not None and number > 0
 
 
 def _reset_risk(state: SoyuzState) -> SoyuzState:
@@ -65,16 +81,14 @@ def _calculate_long_stop(state: SoyuzState):
     entry = state.entry
     atr = state.atr
 
-    if entry is None or atr is None or atr <= 0:
+    if not _is_finite_positive(entry) or not _is_finite_positive(atr):
         return None, "NONE"
 
-    if state.last_swing_low is not None:
-        stop = (
-            state.last_swing_low
-            - atr * STRUCTURE_BUFFER_ATR
-        )
+    swing_low = _finite_float(state.last_swing_low)
+    if swing_low is not None:
+        stop = swing_low - atr * STRUCTURE_BUFFER_ATR
 
-        if entry > stop:
+        if isfinite(stop) and entry > stop:
             return stop, "STRUCTURE"
 
     distance = atr * max(1.20, MIN_STOP_ATR)
@@ -89,13 +103,11 @@ def _calculate_short_stop(state: SoyuzState):
     if entry is None or atr is None or atr <= 0:
         return None, "NONE"
 
-    if state.last_swing_high is not None:
-        stop = (
-            state.last_swing_high
-            + atr * STRUCTURE_BUFFER_ATR
-        )
+    swing_high = _finite_float(state.last_swing_high)
+    if swing_high is not None:
+        stop = swing_high + atr * STRUCTURE_BUFFER_ATR
 
-        if stop > entry:
+        if isfinite(stop) and stop > entry:
             return stop, "STRUCTURE"
 
     distance = atr * max(1.20, MIN_STOP_ATR)
@@ -118,22 +130,27 @@ def _build_targets(state: SoyuzState, distance: float):
 def apply_risk(state: SoyuzState) -> SoyuzState:
     _reset_risk(state)
 
+    price = _finite_float(state.price)
+    atr = _finite_float(state.atr)
     if (
-        state.price is None
-        or state.atr is None
-        or state.atr <= 0
+        price is None
+        or price <= 0
+        or atr is None
+        or atr <= 0
         or state.setup_direction not in {"LONG", "SHORT"}
     ):
         state.metadata["risk_diagnostics"] = {
             "status": "PRECONDITION_FAILED",
             "price": state.price,
             "atr": state.atr,
+            "reason": "NON_FINITE_OR_NON_POSITIVE_PRICE_OR_ATR",
             "direction": state.setup_direction,
         }
         return state
 
     # ENTRY
-    state.entry = state.price
+    state.entry = price
+    state.atr = atr
 
     # INITIAL STOP
     if state.setup_direction == "LONG":
@@ -255,6 +272,17 @@ def apply_risk(state: SoyuzState) -> SoyuzState:
     state.rr1 = TP1_RR
     state.rr2 = TP2_RR
     state.rr3 = TP3_RR
+
+    # Final numeric integrity gate: do not expose a bracket containing
+    # overflow, NaN, infinity or non-positive prices.
+    bracket = (state.entry, state.stop, state.tp1, state.tp2, state.tp3)
+    if not all(_is_finite_positive(value) for value in bracket):
+        _reset_risk(state)
+        state.metadata["risk_diagnostics"] = {
+            "status": "NON_FINITE_OR_NON_POSITIVE_BRACKET",
+            "direction": state.setup_direction,
+        }
+        return state
 
     # ---------------------------------------------------------
     # VALID
