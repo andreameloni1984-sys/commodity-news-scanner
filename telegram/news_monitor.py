@@ -32,7 +32,7 @@ PENDING_TTL_SECONDS = 4 * 60 * 60
 REQUEST_TIMEOUT_SECONDS = 8
 # Source-specific throttling: avoid hammering feeds that are timing out or rate-limiting us.
 # GDELT is slower and less reliable than RSS; poll less often and request a smaller result set.
-GDELT_MIN_INTERVAL_SECONDS = max(300, int(os.getenv("GAGARIN_GDELT_MIN_INTERVAL_SECONDS", "600")))
+GDELT_MIN_INTERVAL_SECONDS = max(900, int(os.getenv("GAGARIN_GDELT_MIN_INTERVAL_SECONDS", "900")))
 GDELT_TIMEOUT_SECONDS = max(5, int(os.getenv("GAGARIN_GDELT_TIMEOUT_SECONDS", "12")))
 PERMANENT_HTTP_BACKOFF_SECONDS = 6 * 60 * 60
 SOURCE_BACKOFF_MAX_SECONDS = 60 * 60
