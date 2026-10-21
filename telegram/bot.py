@@ -20,6 +20,7 @@ import requests
 
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 from engine.gagarin import analyze_universe
+from engine.forex_session import filter_forex_for_session
 from commodities.universe import enabled_commodities, get_commodity_by_name
 from engine.invest import (
     analyze_invest_universe,
@@ -112,8 +113,8 @@ def _reply(chat_id, text: str, reply_markup: Optional[dict] = None) -> bool:
     ok, _ = _api("sendMessage", payload)
     return ok
 
-def _run_analysis(commodity=None):
-    commodities = enabled_commodities()
+def _run_analysis(commodity=None, *, on_demand=True):
+    commodities = filter_forex_for_session(enabled_commodities(), on_demand=on_demand)
     if commodity is not None:
         commodities = [c for c in commodities if c.name.lower() == commodity.name.lower()]
     if not commodities:
