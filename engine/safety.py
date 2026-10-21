@@ -1,3 +1,5 @@
+from math import isfinite
+
 from engine.state import SoyuzState
 from soyuz_gagarin.config import GagarinConfig
 
@@ -49,6 +51,14 @@ from soyuz_gagarin.config import GagarinConfig
 # ============================================================
 
 
+def _finite_number(value) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return number if isfinite(number) else None
+
+
 def _has_value(value) -> bool:
     """
     Verifica semplice della presenza di un valore.
@@ -66,6 +76,15 @@ def apply_safety(
 
     cfg = GagarinConfig()
     blockers = []
+
+    # NaN bypasses ordinary threshold comparisons; fail closed on invalid numerics.
+    numeric_fields = ("price", "atr", "entry", "stop", "tp1", "tp2", "tp3", "stop_atr", "rr1", "rr2", "rr3", "probability", "quality", "confidence")
+    invalid_numeric_fields = [name for name in numeric_fields if getattr(state, name, None) is not None and _finite_number(getattr(state, name)) is None]
+    if invalid_numeric_fields:
+        blockers.append("NUMERIC_FIELD_NON_FINITE")
+        state.metadata["safety_numeric_diagnostics"] = {"status": "REJECTED_NON_FINITE", "fields": invalid_numeric_fields}
+    else:
+        state.metadata["safety_numeric_diagnostics"] = {"status": "FINITE_OR_MISSING"}
 
     # ========================================================
     # 1. DATA
