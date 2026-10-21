@@ -288,3 +288,9 @@ def test_alert_scorecard_does_not_miss_stop_hit_in_first_15_minutes():
     assert report["sl_observed"] == 1
     assert report["tp1_observed"] == 0
 
+
+def test_eia_press_release_feed_uses_published_rss_endpoint():
+    from telegram.news_monitor import RSS_FEEDS
+
+    feeds = dict(RSS_FEEDS)
+    assert feeds["EIA"] == "https://www.eia.gov/rss/press_rss.xml"
