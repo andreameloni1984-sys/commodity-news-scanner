@@ -113,6 +113,30 @@ def test_watch_forecast_upgrades_to_entry_without_duplicate(tmp_path):
     assert len(rows) == 1
     assert rows[0]["action"] == "PAPER_ENTRY"
 
+def test_outcome_matching_uses_timeframe_when_symbol_is_shared(tmp_path):
+    path = tmp_path / "feedback.csv"
+    five_min = state([
+        {"timestamp": 1000, "high": 101, "low": 99},
+    ])
+    five_min.timeframe = "5min"
+    append_signal(five_min, path=path)
+
+    fifteen_min = state([
+        {"timestamp": 1000, "high": 101, "low": 99},
+    ])
+    fifteen_min.timeframe = "15min"
+    fifteen_min.entry = 100.0
+    fifteen_min.stop = 95.0
+    fifteen_min.tp1 = 110.0
+    fifteen_min.tp2 = 115.0
+    fifteen_min.tp3 = 120.0
+    fifteen_min.metadata["gagarin_action"] = "PAPER_WATCH"
+    # The 15-minute candles hit a stop, but must not be used for the 5-minute row.
+    fifteen_min.candles.append({"timestamp": 2000, "high": 101, "low": 97})
+    assert update_open_outcomes([fifteen_min], path=path) == 0
+    assert load_feedback(path)[0]["outcome"] == "OPEN"
+
+
 def test_summary_reports_probability_calibration_and_regime_breakdown(tmp_path):
     path = tmp_path / "feedback.csv"
     s0 = state([{"timestamp": 1000, "high": 101, "low": 99}])
