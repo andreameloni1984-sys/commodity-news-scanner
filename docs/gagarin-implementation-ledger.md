@@ -48,3 +48,6 @@ Inventario operativo e stato iniziale di ciascun punto: [`docs/gagarin-100-point
 ## Regola di manutenzione
 
 Una lezione è marcata **IMPLEMENTATA** solo se è tradotta in una regola non ambigua, applicata nel percorso effettivo del bot e coperta da un test riproducibile. Una nota, una ricerca o una funzione non chiamata dal percorso operativo non contano come implementazione completa.
+
+
+| CFG-001 | Gli override delle soglie sono accettati solo entro intervalli validi; valori fuori range ricadono sul profilo attivo | `soyuz_gagarin/config.py` (`_bounded_env_float`) | Range probabilità/qualità/confidenza 0–100; R/R strettamente positivo; stop ATR non inferiore al minimo configurato. Test di regressione da aggiungere e CI da verificare. |
