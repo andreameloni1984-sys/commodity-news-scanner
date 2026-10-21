@@ -2,6 +2,10 @@
 
 Aggiornato: 2026-10-21. Questo registro distingue ciò che è nel codice e ha test automatici da ciò che è ancora da verificare. Non certifica che tutte le oltre 100 nozioni studiate in precedenza siano state trascritte: per farlo serve un inventario puntuale delle singole fonti/lezioni.
 
+## Catalogo dei 100 punti
+
+Inventario operativo e stato iniziale di ciascun punto: [`docs/gagarin-100-point-implementation-plan.md`](./gagarin-100-point-implementation-plan.md). Il catalogo distingue regole già presenti, parziali e da implementare; non prova che sia stata recuperata la lista storica originale parola per parola. I punti marcati da implementare non devono essere considerati attivi finché non esistono codice e test.
+
 ## Regole implementate e coperte da test
 
 | ID | Regola | Implementazione | Verifica / limite |
