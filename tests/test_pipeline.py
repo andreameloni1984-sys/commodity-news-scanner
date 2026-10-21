@@ -667,3 +667,31 @@ def test_cosa_compro_uses_daily_forecast_result(monkeypatch):
     assert "GAGARIN — OGGI" in text
     assert "Oro" in text
     assert "PREVISIONE: SALE" in text
+
+
+def test_volatility_diagnostics_detect_expansion_and_contraction():
+    from engine.regime import _volatility_diagnostics
+
+    state = _make_state("LONG")
+    state.highs = [100.1] * 4 + [101.0] * 4
+    state.lows = [99.9] * 4 + [99.0] * 4
+    expansion = _volatility_diagnostics(state)
+    assert expansion["status"] == "EXPANDING"
+    assert expansion["recent_to_older_ratio"] >= 1.25
+
+    state.highs = [101.0] * 4 + [100.1] * 4
+    state.lows = [99.0] * 4 + [99.9] * 4
+    contraction = _volatility_diagnostics(state)
+    assert contraction["status"] == "CONTRACTING"
+    assert contraction["recent_to_older_ratio"] <= 0.80
+
+
+def test_volatility_diagnostics_fail_closed_with_insufficient_data():
+    from engine.regime import _volatility_diagnostics
+
+    state = _make_state("LONG")
+    state.highs = [101.0, 102.0]
+    state.lows = [99.0, 100.0]
+    result = _volatility_diagnostics(state)
+    assert result["status"] == "UNKNOWN"
+    assert result["reason"] == "INSUFFICIENT_VALID_RANGES"
