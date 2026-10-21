@@ -174,7 +174,7 @@ def test_sputnik_historical_action_reaction_is_attached_to_gagarin_news():
 
 
 def test_sputnik_does_not_invent_historical_direction_without_analogue():
-    result = classify_event("Local company announces a new office")
+    result = classify_event("OPEC announces routine production meeting with no oil price change")
     historical = result["historical_action_reaction"]
     assert historical["evidence"] == "NO_ANALOGUE"
     assert historical["historical_directions"] == {}
