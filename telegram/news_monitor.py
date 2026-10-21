@@ -31,7 +31,7 @@ RECHECK_SECONDS = max(300, int(os.getenv("GAGARIN_NEWS_RECHECK_SECONDS", "300"))
 PENDING_TTL_SECONDS = 4 * 60 * 60
 REQUEST_TIMEOUT_SECONDS = 8
 # Source-specific throttling: avoid hammering feeds that are timing out or rate-limiting us.
-GDELT_MIN_INTERVAL_SECONDS = max(300, int(os.getenv("GAGARIN_GDELT_MIN_INTERVAL_SECONDS", "300")))
+GDELT_MIN_INTERVAL_SECONDS = max(900, int(os.getenv("GAGARIN_GDELT_MIN_INTERVAL_SECONDS", "900")))
 SOURCE_BACKOFF_MAX_SECONDS = 60 * 60
 _SOURCE_FAILURES: dict[str, int] = {}
 _SOURCE_RETRY_AT: dict[str, float] = {}
@@ -172,10 +172,10 @@ def _maybe_send_daily_scorecard(state: dict[str, Any], send_telegram: Callable[[
 
 RSS_FEEDS = (
     ("EIA", "https://www.eia.gov/rss/press_rss.xml"),
+    ("EIA / TODAY IN ENERGY", "https://www.eia.gov/rss/todayinenergy.xml"),
     ("Federal Reserve", "https://www.federalreserve.gov/feeds/press_all.xml"),
     # These are the same public primary-source feeds watched by SPUTNIK.
     ("SPUTNIK / WHITE HOUSE", "https://www.whitehouse.gov/news/feed/"),
-    ("SPUTNIK / TRUTH ARCHIVE", "https://www.trumpstruth.org/feed"),
 )
 GDELT_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
 GDELT_QUERY = '(oil OR crude OR WTI OR Brent OR gold OR silver OR OPEC OR sanctions OR Trump OR "Federal Reserve" OR Iran OR Hormuz OR energy OR inflation)'
@@ -434,7 +434,7 @@ def fetch_news_items() -> list[dict[str, Any]]:
         except Exception as exc:
             _source_failed(source, exc)
 
-    # GDELT was returning timeouts/429s; limit healthy polling to once per 5 minutes.
+    # GDELT has returned timeouts/429s; default to a 15-minute minimum interval.
     if _source_allowed("GDELT", min_interval=GDELT_MIN_INTERVAL_SECONDS):
         try:
             gdelt_items = _get_gdelt_items()
