@@ -746,3 +746,50 @@ def test_volatility_diagnostics_ignore_non_finite_ranges():
 
     assert result["samples"] == len(state.highs) - 2
     assert result["status"] in {"EXPANDING", "CONTRACTING", "STABLE", "UNKNOWN"}
+
+
+# ============================================================
+# RISK ENGINE NUMERIC INTEGRITY
+# ============================================================
+
+
+def test_risk_rejects_non_finite_price_and_atr():
+    for field, value in (
+        ("price", float("nan")),
+        ("price", float("inf")),
+        ("atr", float("nan")),
+        ("atr", float("inf")),
+        ("atr", 0.0),
+    ):
+        state = _prepare_directional_state("LONG")
+        setattr(state, field, value)
+        apply_risk(state)
+        assert state.entry is None
+        assert state.stop is None
+        assert state.tp1 is None
+        assert state.metadata["risk_diagnostics"]["status"] == "PRECONDITION_FAILED"
+
+
+def test_risk_ignores_non_finite_structural_swing_and_uses_atr_fallback():
+    state = _prepare_directional_state("LONG")
+    state.last_swing_low = float("nan")
+    apply_risk(state)
+
+    assert state.entry is not None
+    assert state.stop is not None
+    assert state.metadata["risk_diagnostics"]["stop_source"] == "ATR_FALLBACK"
+    assert state.metadata["risk_diagnostics"]["status"] == "RISK_VALID"
+
+
+def test_risk_clears_overflowed_target_bracket():
+    state = _prepare_directional_state("LONG")
+    state.price = 1e308
+    state.atr = 1e308
+    apply_risk(state)
+
+    assert state.entry is None
+    assert state.stop is None
+    assert state.tp1 is None
+    assert state.tp2 is None
+    assert state.tp3 is None
+    assert state.metadata["risk_diagnostics"]["status"] == "NON_FINITE_OR_NON_POSITIVE_BRACKET"
