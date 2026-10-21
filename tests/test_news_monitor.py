@@ -269,3 +269,10 @@ def test_asset_matches_support_silver_and_palladium_symbols():
     assert _asset_matches("Argento", SimpleNamespace(commodity="Argento spot", symbol=""))
     assert _asset_matches("Palladio", SimpleNamespace(commodity="Palladium", symbol="XPDUSD"))
     assert _asset_matches("Palladio", SimpleNamespace(commodity="Palladio spot", symbol=""))
+
+
+def test_eia_press_release_feed_uses_published_rss_endpoint():
+    from telegram.news_monitor import RSS_FEEDS
+
+    feeds = dict(RSS_FEEDS)
+    assert feeds["EIA"] == "https://www.eia.gov/rss/press_rss.xml"
