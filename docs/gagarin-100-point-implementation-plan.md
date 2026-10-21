@@ -73,7 +73,7 @@ Stati: **PRESENTE** = esiste una parte nel codice; **PARZIALE** = mancano verifi
 53. Evitare doppio conteggio della stessa informazione fra score diversi. — DA IMPLEMENTARE.
 54. Rendere spiegabile ogni punteggio con fattori e penalità. — PARZIALE.
 55. Applicare soglie per profilo senza bypassare i controlli di sicurezza. — PARZIALE.
-56. Penalizzare setup tardivi con rapporto rendimento/rischio residuo insufficiente. — DA IMPLEMENTARE.
+56. Penalizzare setup tardivi con rapporto rendimento/rischio residuo insufficiente. — PARZIALE: Safety ricalcola R/R dalla geometria effettiva e blocca valori dichiarati incoerenti; costi e penalizzazione dinamica restano da implementare.
 57. Bloccare segnali se il prezzo è già oltre il livello d'invalidazione. — PARZIALE: breakout oltre 0,75 ATR dal livello viene rifiutato come ingresso tardivo; altre invalidazioni di setup da completare.
 58. Distinguere WATCH, opportunità e PAPER_SIGNAL con semantica stabile. — PARZIALE.
 59. Sopprimere duplicati senza sopprimere un cambiamento materiale del setup. — PRESENTE/PARZIALE.
@@ -82,7 +82,7 @@ Stati: **PRESENTE** = esiste una parte nel codice; **PARZIALE** = mancano verifi
 ## F. Stop loss, target e gestione rischio (61–72)
 
 61. Verificare geometria corretta di entry/SL/TP per LONG e SHORT. — PRESENTE.
-62. Calcolare R dai prezzi reali dei livelli, non fidarsi di R/R dichiarato. — PRESENTE.
+62. Calcolare R dai prezzi reali dei livelli, non fidarsi di R/R dichiarato. — PARZIALE: preflight e Safety confrontano R/R dichiarato con i livelli; spread/slippage non inclusi.
 63. Richiedere TP1 ≥ 1,5R, TP2 ≥ 2R, TP3 ≥ 2,5R. — PRESENTE.
 64. Usare ATR e struttura per evitare stop troppo stretti o larghi. — PARZIALE.
 65. Impedire stop oltre il limite ATR configurato. — PARZIALE.
