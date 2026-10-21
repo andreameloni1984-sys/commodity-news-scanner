@@ -134,7 +134,6 @@ def _valid_levels(item: dict) -> bool:
     if risk / atr > MAX_CONFIRMED_STOP_ATR:
         return False
     return True
-    return False
 
 
 def _stage(item: dict) -> str | None:
