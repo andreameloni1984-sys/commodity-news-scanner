@@ -54,7 +54,7 @@ def _journal(record: dict[str, Any]) -> None:
     try:
         JOURNAL_PATH.parent.mkdir(parents=True, exist_ok=True)
         with JOURNAL_PATH.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(row, ensure_ascii=False, default=str) + "\\n")
+            handle.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
     except OSError as exc:
         print(f"NEWS journal save failed | {type(exc).__name__}: {exc}", flush=True)
 
