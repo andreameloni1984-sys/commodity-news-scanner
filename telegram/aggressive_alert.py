@@ -297,7 +297,7 @@ def run_aggressive_alert(states: Iterable[Any]) -> bool:
                 last_sent = datetime.fromisoformat(str(prior.get("last_sent_at", "")))
                 if last_sent.tzinfo is None:
                     last_sent = last_sent.replace(tzinfo=timezone.utc)
-                reminder_due = (now - last_sent).total_seconds() >= 4 * 60 * 60
+                reminder_due = (now - last_sent).total_seconds() >= 60 * 60
             except (TypeError, ValueError):
                 reminder_due = True
             if changed or reminder_due:
