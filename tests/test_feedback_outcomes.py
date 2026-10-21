@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from engine.feedback import append_signal, load_feedback, record_forecasts, summarize, update_open_outcomes
+from engine.feedback import _candles, _timestamp, append_signal, load_feedback, record_forecasts, summarize, update_open_outcomes
 
 
 def state(candles):
@@ -172,3 +172,23 @@ def test_forecast_identity_includes_timeframe(tmp_path):
     assert len(rows) == 2
     assert {row["timeframe"] for row in rows} == {"5min", "15min"}
     assert len({row["signal_id"] for row in rows}) == 2
+
+
+
+def test_naive_iso_timestamp_is_interpreted_as_utc():
+    naive = _timestamp("2026-10-21T08:00:00")
+    aware = _timestamp("2026-10-21T08:00:00+00:00")
+    assert naive == aware
+
+
+def test_candles_are_sorted_deduplicated_and_invalid_ranges_rejected():
+    s = state([
+        {"timestamp": 3000, "high": 103, "low": 101},
+        {"timestamp": 2000, "high": 99, "low": 100},  # invalid OHLC range
+        {"timestamp": 1000, "high": 101, "low": 99},
+        {"timestamp": 3000, "high": 104, "low": 102},  # later update wins
+    ])
+    assert _candles(s) == [
+        (1000.0, 101.0, 99.0),
+        (3000.0, 104.0, 102.0),
+    ]
