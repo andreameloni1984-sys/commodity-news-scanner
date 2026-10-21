@@ -175,6 +175,45 @@ def _single_move(state: SoyuzState):
     )
 
 
+
+VOLATILITY_RANGE_LOOKBACK = 8
+VOLATILITY_EXPANSION_RATIO = 1.25
+VOLATILITY_CONTRACTION_RATIO = 0.80
+
+
+def _volatility_diagnostics(state: SoyuzState):
+    """Classify recent candle-range expansion using medians; diagnostic only."""
+    atr = _safe_float(getattr(state, "atr", None))
+    if atr is None or atr <= 0:
+        return {"status": "UNKNOWN", "reason": "INVALID_ATR"}
+    ranges = []
+    for high, low in zip(getattr(state, "highs", []) or [], getattr(state, "lows", []) or []):
+        high, low = _safe_float(high), _safe_float(low)
+        if high is not None and low is not None and high >= low:
+            ranges.append((high - low) / atr)
+    ranges = ranges[-VOLATILITY_RANGE_LOOKBACK:]
+    if len(ranges) < 6:
+        return {"status": "UNKNOWN", "reason": "INSUFFICIENT_VALID_RANGES", "samples": len(ranges)}
+    midpoint = len(ranges) // 2
+    older, recent = sorted(ranges[:midpoint]), sorted(ranges[midpoint:])
+    old_median = older[len(older) // 2]
+    recent_median = recent[len(recent) // 2]
+    ratio = recent_median / old_median if old_median > 0 else None
+    status = "UNKNOWN" if ratio is None else (
+        "EXPANDING" if ratio >= VOLATILITY_EXPANSION_RATIO else
+        "CONTRACTING" if ratio <= VOLATILITY_CONTRACTION_RATIO else "STABLE"
+    )
+    return {
+        "status": status, "samples": len(ranges),
+        "older_median_range_atr": round(old_median, 6),
+        "recent_median_range_atr": round(recent_median, 6),
+        "recent_to_older_ratio": round(ratio, 6) if ratio is not None else None,
+        "expansion_ratio_threshold": VOLATILITY_EXPANSION_RATIO,
+        "contraction_ratio_threshold": VOLATILITY_CONTRACTION_RATIO,
+    }
+
+
+
 # ============================================================
 # MAIN
 # ============================================================
@@ -271,6 +310,8 @@ def apply_regime(
 
     state.normalized_move_atr = (
         normalized_move
+
+    state.metadata["volatility_diagnostics"] = _volatility_diagnostics(state)
     )
 
     # ========================================================
