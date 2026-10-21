@@ -418,7 +418,7 @@ def main() -> None:
     # l'analisi Gagarin fuori ciclo solo per eventi nuovi e rilevanti.
     threading.Thread(
         target=news_monitor_loop,
-        args=(send_telegram, _run_analysis),
+        args=(send_telegram, lambda: _run_analysis(on_demand=False)),
         name="gagarin-news-monitor",
         daemon=True,
     ).start()
