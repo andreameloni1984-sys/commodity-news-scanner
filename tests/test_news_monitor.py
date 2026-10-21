@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from telegram.news_monitor import classify_event, _confirmed_setups
+from telegram.news_monitor import classify_event, _confirmed_setups  # selected commodity universe is authoritative
 
 
 def test_oil_inventory_draw_is_provisional_bullish_for_crude():
