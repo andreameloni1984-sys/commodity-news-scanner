@@ -12,6 +12,11 @@ FOREX_PAIRS = [
     Commodity(name="Forex NZD/USD", symbol="NZD/USD", category="Forex", priority=5),
     Commodity(name="Forex USD/CAD", symbol="USD/CAD", category="Forex", priority=6),
     Commodity(name="Forex USD/CHF", symbol="USD/CHF", category="Forex", priority=7),
+    Commodity(name="Forex EUR/JPY", symbol="EUR/JPY", category="Forex", priority=8),
+    Commodity(name="Forex GBP/JPY", symbol="GBP/JPY", category="Forex", priority=9),
+    Commodity(name="Forex EUR/GBP", symbol="EUR/GBP", category="Forex", priority=10),
+    Commodity(name="Forex AUD/JPY", symbol="AUD/JPY", category="Forex", priority=11),
+    Commodity(name="Forex EUR/CHF", symbol="EUR/CHF", category="Forex", priority=12),
 ]
 
 
