@@ -139,16 +139,16 @@ def _maybe_send_daily_scorecard(state: dict[str, Any], send_telegram: Callable[[
         pass
     report = build_alert_scorecard(rows, now)
     if report["scored"]:
-        message = ("📊 GAGARIN — VERIFICA ALERT (ultimi 7 giorni)\\n"
-                   f"Valutati: {report['scored']}/{report['alerts']} | in attesa: {report['pending']}\\n"
-                   f"Direzione corretta: {report['correct']} | errata: {report['incorrect']}\\n"
-                   f"Accuratezza direzionale: {report['accuracy_pct']:.1f}%\\n"
-                   f"Rendimento direzionale medio: {report['mean_directional_return_pct']:+.3f}%\\n"
-                   f"TP1 osservato: {report['tp1_observed']} | SL osservato: {report['sl_observed']} | ancora aperti: {report['open_at_last_check']}\\n"
+        message = ("📊 GAGARIN — VERIFICA ALERT (ultimi 7 giorni)\n"
+                   f"Valutati: {report['scored']}/{report['alerts']} | in attesa: {report['pending']}\n"
+                   f"Direzione corretta: {report['correct']} | errata: {report['incorrect']}\n"
+                   f"Accuratezza direzionale: {report['accuracy_pct']:.1f}%\n"
+                   f"Rendimento direzionale medio: {report['mean_directional_return_pct']:+.3f}%\n"
+                   f"TP1 osservato: {report['tp1_observed']} | SL osservato: {report['sl_observed']} | ancora aperti: {report['open_at_last_check']}\n"
                    "TP/SL sono attraversamenti osservati ai controlli periodici, non tick intrabar. Feed Gagarin; esclusi spread/slippage.")
     else:
-        message = ("📊 GAGARIN — VERIFICA ALERT (ultimi 7 giorni)\\n"
-                   f"Alert inviati: {report['alerts']} | in attesa: {report['pending']}\\n"
+        message = ("📊 GAGARIN — VERIFICA ALERT (ultimi 7 giorni)\n"
+                   f"Alert inviati: {report['alerts']} | in attesa: {report['pending']}\n"
                    "Campione valutabile insufficiente: servono prezzi osservati almeno 15 minuti dopo l'alert.")
     try:
         sent = bool(send_telegram(message))
@@ -522,8 +522,12 @@ def _asset_matches(asset: str, state: Any) -> bool:
         return "brent" in name or "BRENT" in symbol or symbol in {"BRENT/USD", "UKOIL"}
     if asset == "Oro":
         return "oro" in name or "gold" in name or "XAU" in symbol
+    if asset == "Argento":
+        return "argento" in name or "silver" in name or "XAG" in symbol
     if asset == "Platino":
         return "platino" in name or "platinum" in name or "XPT" in symbol
+    if asset == "Palladio":
+        return "palladio" in name or "palladium" in name or "XPD" in symbol
     if asset == "Caffè":
         return "caff" in name or "coffee" in name
     if asset == "Cacao":
