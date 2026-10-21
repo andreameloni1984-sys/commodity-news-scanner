@@ -159,3 +159,16 @@ def test_summary_reports_probability_calibration_and_regime_breakdown(tmp_path):
     assert summary["by_regime"]["TREND_UP"]["closed"] == 1
     assert summary["by_setup"]["TREND_CONTINUATION"]["average_r"] == 1.5
     assert summary["max_drawdown_r_sequential"] == 0.0
+
+
+def test_forecast_identity_includes_timeframe(tmp_path):
+    path = tmp_path / "feedback.csv"
+    five_min = state([{"timestamp": 1000, "high": 101, "low": 99}])
+    fifteen_min = state([{"timestamp": 1000, "high": 101, "low": 99}])
+    fifteen_min.timeframe = "15min"
+
+    assert record_forecasts([five_min, fifteen_min], path=path) == 2
+    rows = load_feedback(path)
+    assert len(rows) == 2
+    assert {row["timeframe"] for row in rows} == {"5min", "15min"}
+    assert len({row["signal_id"] for row in rows}) == 2
