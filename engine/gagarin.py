@@ -14,6 +14,7 @@ from engine.research_validation import annotate
 from engine.energy_confluence import stamp_energy
 from engine.energy_chain import stamp_paper
 from engine.research_controls import attach_research_controls
+from engine.mtf_roles import annotate_mtf_roles
 
 STRONG_MOVE_ATR = 1.5
 OPPORTUNITY_MOVE_PCT_24H = 1.0
@@ -187,6 +188,7 @@ def analyze_one(commodity: Commodity) -> SoyuzState:
     state = scan_market_opportunity(state)
     state = apply_regime(state)
     state = apply_structure(state)
+    state = annotate_mtf_roles(state)
     state = apply_setup(state)
     state = apply_trigger(state)
     state = calculate_quality(state)
