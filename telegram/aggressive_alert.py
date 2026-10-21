@@ -24,6 +24,10 @@ POTENTIAL_MIN_CONFIDENCE = 25.0
 AGGRESSIVE_MIN_PROBABILITY = 50.0
 AGGRESSIVE_MIN_QUALITY = 40.0
 AGGRESSIVE_MIN_CONFIDENCE = 45.0
+# Recovered Gagarin risk rules: a confirmed setup must offer >=2.5R
+# to its furthest supplied target and keep the stop within 2.5 ATR.
+MIN_CONFIRMED_RR = 2.5
+MAX_CONFIRMED_STOP_ATR = 2.5
 _STATE_FILE = Path(os.getenv("GAGARIN_AGGRESSIVE_ALERT_STATE", "data/gagarin_aggressive_alert_state.json"))
 _STATE_LOCK = threading.RLock()
 
@@ -106,15 +110,30 @@ def _valid_levels(item: dict) -> bool:
             return False
         if tp3 is not None and not tp2 < tp3:
             return False
-        return True
-    if item["direction"] == "SHORT":
+        furthest_target = tp3 if tp3 is not None else tp2 if tp2 is not None else tp1
+        risk = entry - stop
+        reward = furthest_target - entry
+    elif item["direction"] == "SHORT":
         if not tp1 < entry < stop:
             return False
         if tp2 is not None and not tp2 < tp1:
             return False
         if tp3 is not None and not tp3 < tp2:
             return False
-        return True
+        furthest_target = tp3 if tp3 is not None else tp2 if tp2 is not None else tp1
+        risk = stop - entry
+        reward = entry - furthest_target
+    else:
+        return False
+
+    # A confirmed entry cannot pass without a usable ATR and risk geometry.
+    # Missing ATR is not replaced with a guessed volatility estimate.
+    atr = _number(item.get("atr"))
+    if atr is None or risk <= 0 or reward / risk < MIN_CONFIRMED_RR:
+        return False
+    if risk / atr > MAX_CONFIRMED_STOP_ATR:
+        return False
+    return True
     return False
 
 
@@ -160,10 +179,16 @@ def _stage(item: dict) -> str | None:
         return "PROFITTO"
     if scores_ok and pattern_analysis.get("exit_action") == "TIGHTEN_STOP":
         return "ATTENZIONE"
-    confirmed = (
+    entry_claimed = (
         decision in {"PAPER_ENTRY", "PAPER_SIGNAL", "ENTRY"}
         and item["trigger_confirmed"]
-        and _valid_levels(item)
+    )
+    levels_valid = _valid_levels(item)
+    if entry_claimed and not levels_valid:
+        return "RISCHIO"
+    confirmed = (
+        entry_claimed
+        and levels_valid
         and probability >= AGGRESSIVE_MIN_PROBABILITY
         and quality >= AGGRESSIVE_MIN_QUALITY
         and confidence >= AGGRESSIVE_MIN_CONFIDENCE
