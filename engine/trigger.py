@@ -295,7 +295,16 @@ def _price_breakout_confirmation(
     if state.breakout_level is None:
         return False
 
-    if state.atr is None or state.atr <= 0:
+    try:
+        atr = float(state.atr)
+        level = float(state.breakout_level)
+        live_price = float(state.price)
+    except (TypeError, ValueError, OverflowError):
+        return False
+    if not all(isfinite(value) for value in (atr, level, live_price)) or atr <= 0 or live_price <= 0:
+        return False
+
+    if state.breakout_direction != state.setup_direction:
         return False
 
     current = _get_last_closed_candle(state)
@@ -304,10 +313,12 @@ def _price_breakout_confirmation(
 
     try:
         close = float(current["close"])
-    except (KeyError, TypeError, ValueError):
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return False
+    if not isfinite(close):
         return False
 
-    buffer = state.atr * BREAKOUT_BUFFER_ATR
+    buffer = atr * BREAKOUT_BUFFER_ATR
 
     if not _breakout_rejection_ok(state):
         return False
