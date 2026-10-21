@@ -40,6 +40,7 @@ from commodities.universe import enabled_commodities
 from soyuz_gagarin.adapter import evaluate_states
 from engine.profile import get_profile, set_profile
 from forex.universe import enabled_forex_pairs
+from market_universe import enabled_market_instruments
 
 
 API_BASE = "https://api.telegram.org"
@@ -720,7 +721,8 @@ def _command_response(
             "━━━━━━━━━━━━━━━━━━━━\n"
             "🧪 PAPER ONLY\n\n"
             "/classifica — classifica completa\n"
-            "/forex — analizza le 7 coppie nelle finestre migliori\n"
+            "/forex — analizza le 12 coppie nelle finestre migliori\n"
+            "/mercati — analizza indici, ETF e futures aggiuntivi su richiesta\n"
             "/setup — setup e trigger\n"
             "/analisi — analisi completa\n"
             "/analisi oro — analisi singola\n"
@@ -743,7 +745,7 @@ def _command_response(
     if command_name == "/forex":
         allowed, session_label = _forex_session_status()
         if not allowed:
-            return "GAGARIN FOREX\\n" + session_label
+            return "GAGARIN FOREX\n" + session_label
 
         pairs = enabled_forex_pairs()
         if not pairs:
@@ -751,15 +753,32 @@ def _command_response(
         try:
             results = analyze_universe(pairs)
             return (
-                "GAGARIN FOREX - ANALISI SU RICHIESTA\\n"
+                "GAGARIN FOREX - ANALISI SU RICHIESTA\n"
                 + session_label
-                + "\\nPAPER ONLY - nessun ordine inviato\\n\\n"
+                + "\nPAPER ONLY - nessun ordine inviato\n\n"
                 + _format_classifica(results)
             )
         except Exception as exc:
             return f"ERRORE ANALISI FOREX: {type(exc).__name__}: {exc}"
 
     # --------------------------------------------------------
+    # INDICI, ETF E FUTURES AGGIUNTIVI — SU RICHIESTA
+    # --------------------------------------------------------
+    if command_name == "/mercati":
+        instruments = enabled_market_instruments()
+        if not instruments:
+            return "Universo mercati vuoto: nessuno strumento configurato."
+        try:
+            results = analyze_universe(instruments)
+            return (
+                "GAGARIN — MERCATI AGGIUNTIVI\n"
+                "Indici, ETF e futures | analisi su richiesta\n"
+                "PAPER ONLY — nessun ordine inviato\n\n"
+                + _format_classifica(results)
+            )
+        except Exception as exc:
+            return f"ERRORE ANALISI MERCATI: {type(exc).__name__}: {exc}"
+
     # GAGARIN V1 GOVERNOR
     # --------------------------------------------------------
 
