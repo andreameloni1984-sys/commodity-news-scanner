@@ -43,7 +43,7 @@ jobs:
           from engine.forex_session import filter_forex_for_session
           from telegram.aggressive_alert import format_aggressive_alert, run_aggressive_alert
 
-          instruments = filter_forex_for_session(enabled_commodities())
+          instruments = filter_forex_for_session(enabled_commodities(), on_demand=False)
           print(f"FOREX SESSION GATE: {len(instruments)} instruments selected; manual dispatch bypasses gate.")
           states = analyze_universe(instruments)
           message = format_aggressive_alert(states)
