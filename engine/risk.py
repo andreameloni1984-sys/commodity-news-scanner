@@ -100,7 +100,7 @@ def _calculate_short_stop(state: SoyuzState):
     entry = state.entry
     atr = state.atr
 
-    if entry is None or atr is None or atr <= 0:
+    if not _is_finite_positive(entry) or not _is_finite_positive(atr):
         return None, "NONE"
 
     swing_high = _finite_float(state.last_swing_high)
