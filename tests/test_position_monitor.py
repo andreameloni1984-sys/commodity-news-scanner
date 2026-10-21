@@ -50,6 +50,36 @@ def test_stale_quotes_do_not_trigger_position_alerts(monkeypatch, tmp_path):
     register(monkeypatch, tmp_path)
     assert monitor.evaluate_positions([state(price=97, age=999)]) == []
 
+def test_hourly_status_update_is_sent_after_one_hour(monkeypatch, tmp_path):
+    register(monkeypatch, tmp_path)
+    positions = monitor._read()
+    position = positions["XAUUSD"]
+    from datetime import datetime, timedelta, timezone
+    position["last_hourly_update_at"] = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    monitor._write(positions)
+    monkeypatch.setattr(
+        monitor, "analyze_pattern_and_exit",
+        lambda **kwargs: {"exit_action": "HOLD", "candlestick_pattern": "NONE", "pattern": "RANGE",
+                          "reversal_status": "NONE", "reason": "no invalidation"},
+    )
+
+    messages = monitor.evaluate_positions([state(price=101)])
+    assert len(messages) == 1
+    assert "AGGIORNAMENTO ORARIO" in messages[0]
+    assert "Quotazione provider: 101 USD" in messages[0]
+    assert "non Trading 212 Bid/Ask" in messages[0]
+    assert monitor.evaluate_positions([state(price=101)]) == []
+
+
+def test_hourly_status_waits_one_hour_after_registration(monkeypatch, tmp_path):
+    register(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        monitor, "analyze_pattern_and_exit",
+        lambda **kwargs: {"exit_action": "HOLD", "candlestick_pattern": "NONE", "pattern": "RANGE",
+                          "reversal_status": "NONE", "reason": "no invalidation"},
+    )
+    assert monitor.evaluate_positions([state(price=101)]) == []
+
 
 def test_remove_position_stops_monitoring(monkeypatch, tmp_path):
     register(monkeypatch, tmp_path)
