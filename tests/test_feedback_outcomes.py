@@ -112,3 +112,26 @@ def test_watch_forecast_upgrades_to_entry_without_duplicate(tmp_path):
     rows = load_feedback(path)
     assert len(rows) == 1
     assert rows[0]["action"] == "PAPER_ENTRY"
+
+def test_summary_reports_probability_calibration_and_regime_breakdown(tmp_path):
+    path = tmp_path / "feedback.csv"
+    s0 = state([{"timestamp": 1000, "high": 101, "low": 99}])
+    append_signal(s0, path=path)
+    s1 = state([
+        {"timestamp": 1000, "high": 101, "low": 99},
+        {"timestamp": 2000, "high": 103.5, "low": 99.5},
+    ])
+    update_open_outcomes([s1], path=path)
+    summary = summarize(path=path)
+    calibration = summary["probability_calibration"]
+    assert calibration["samples"] == 1
+    assert calibration["brier_score"] == 0.0841
+    assert calibration["bins"] == [{
+        "range_pct": "70-80",
+        "count": 1,
+        "mean_predicted_pct": 71.0,
+        "observed_win_rate_pct": 100.0,
+    }]
+    assert summary["by_regime"]["TREND_UP"]["closed"] == 1
+    assert summary["by_setup"]["TREND_CONTINUATION"]["average_r"] == 1.5
+    assert summary["max_drawdown_r_sequential"] == 0.0
