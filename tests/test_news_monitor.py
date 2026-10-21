@@ -310,3 +310,20 @@ def test_alert_scorecard_marks_closed_window_without_prices_unscored():
     assert report["unscored_expired"] == 1
     assert report["coverage_pct"] == 0.0
 
+
+
+
+def test_forbidden_news_source_is_cooled_down_for_six_hours(monkeypatch):
+    from types import SimpleNamespace
+    import telegram.news_monitor as monitor
+
+    source = "TEST_FORBIDDEN_SOURCE"
+    monkeypatch.setitem(monitor._SOURCE_FAILURES, source, 0)
+    monkeypatch.setitem(monitor._SOURCE_RETRY_AT, source, 0.0)
+    error = RuntimeError("forbidden")
+    error.response = SimpleNamespace(status_code=403, headers={})
+    delay = monitor._source_failed(source, error)
+
+    assert delay == 6 * 60 * 60
+    assert monitor._SOURCE_RETRY_AT[source] > 0
+    assert not monitor._source_allowed(source)
