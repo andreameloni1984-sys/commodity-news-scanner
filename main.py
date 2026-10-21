@@ -46,10 +46,7 @@ from engine.feedback import (
     update_open_outcomes,
 )
 
-from telegram.bot import (
-    format_report,
-    send_telegram,
-)
+from telegram.bot import send_telegram
 from telegram.signals import format_signal_board
 from soyuz_gagarin.adapter import evaluate_states
 from execution.router import execute_state
@@ -575,9 +572,8 @@ def run():
     # TELEGRAM
     # --------------------------------------------------------
 
-    report = format_report(
-        results
-    )
+    # Telegram signal output is formatted by telegram.signals.format_signal_board.
+    # Avoid importing a removed legacy formatter from telegram.bot.
 
     # The Telegram channel is fed by the same canonical decisions
     # stamped above; legacy final_decision is not a second governor.
