@@ -754,20 +754,21 @@ def test_volatility_diagnostics_ignore_non_finite_ranges():
 
 
 def test_risk_rejects_non_finite_price_and_atr():
-    for field, value in (
-        ("price", float("nan")),
-        ("price", float("inf")),
-        ("atr", float("nan")),
-        ("atr", float("inf")),
-        ("atr", 0.0),
-    ):
-        state = _prepare_directional_state("LONG")
-        setattr(state, field, value)
-        apply_risk(state)
-        assert state.entry is None
-        assert state.stop is None
-        assert state.tp1 is None
-        assert state.metadata["risk_diagnostics"]["status"] == "PRECONDITION_FAILED"
+    for direction in ("LONG", "SHORT"):
+        for field, value in (
+            ("price", float("nan")),
+            ("price", float("inf")),
+            ("atr", float("nan")),
+            ("atr", float("inf")),
+            ("atr", 0.0),
+        ):
+            state = _prepare_directional_state(direction)
+            setattr(state, field, value)
+            apply_risk(state)
+            assert state.entry is None
+            assert state.stop is None
+            assert state.tp1 is None
+            assert state.metadata["risk_diagnostics"]["status"] == "PRECONDITION_FAILED"
 
 
 def test_risk_ignores_non_finite_structural_swing_and_uses_atr_fallback():
