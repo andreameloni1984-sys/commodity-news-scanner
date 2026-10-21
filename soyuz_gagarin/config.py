@@ -15,10 +15,23 @@ def _env_float(name: str, default: float) -> float:
     return value if isfinite(value) else float(default)
 
 
+def _bounded_env_float(
+    name: str,
+    default: float,
+    minimum: float,
+    maximum: float | None = None,
+) -> float:
+    """Accept an environment override only when it stays inside safe bounds."""
+    value = _env_float(name, default)
+    if value < minimum or (maximum is not None and value > maximum):
+        return float(default)
+    return value
+
+
 def _env_int(name: str, default: int) -> int:
     try:
         return int(os.getenv(name, str(default)))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return int(default)
 
 
@@ -70,23 +83,23 @@ class GagarinConfig:
         profile = _resolve_profile(self.profile_name)
         self.profile_name = profile.name
         self.min_probability = (
-            _env_float("MIN_ENTRY_PROBABILITY", profile.min_probability)
+            _bounded_env_float("MIN_ENTRY_PROBABILITY", profile.min_probability, 0.0, 100.0)
             if "MIN_ENTRY_PROBABILITY" in os.environ else profile.min_probability
         )
         self.min_quality = (
-            _env_float("MIN_ENTRY_QUALITY", profile.min_quality)
+            _bounded_env_float("MIN_ENTRY_QUALITY", profile.min_quality, 0.0, 100.0)
             if "MIN_ENTRY_QUALITY" in os.environ else profile.min_quality
         )
         self.min_confidence = (
-            _env_float("MIN_ENTRY_CONFIDENCE", profile.min_confidence)
+            _bounded_env_float("MIN_ENTRY_CONFIDENCE", profile.min_confidence, 0.0, 100.0)
             if "MIN_ENTRY_CONFIDENCE" in os.environ else profile.min_confidence
         )
         self.min_rr = (
-            _env_float("MIN_ENTRY_RR", profile.min_rr)
+            _bounded_env_float("MIN_ENTRY_RR", profile.min_rr, 0.000001)
             if "MIN_ENTRY_RR" in os.environ else profile.min_rr
         )
         self.max_stop_atr = (
-            _env_float("MAX_ENTRY_STOP_ATR", profile.max_stop_atr)
+            _bounded_env_float("MAX_ENTRY_STOP_ATR", profile.max_stop_atr, self.sl_min_atr)
             if "MAX_ENTRY_STOP_ATR" in os.environ else profile.max_stop_atr
         )
 
