@@ -323,11 +323,49 @@ def load_feedback(path=FEEDBACK_FILE):
         return list(csv.DictReader(file))
 
 
+def _calibration_metrics(rows):
+    """Descriptive probability calibration on closed outcomes; not a guarantee of future accuracy."""
+    samples = []
+    for row in rows:
+        if (row.get("outcome", "OPEN") or "OPEN") == "OPEN":
+            continue
+        probability = _number(row.get("probability"))
+        realized_r = _number(row.get("r_multiple"))
+        if probability is None or not 0.0 <= probability <= 100.0 or realized_r is None:
+            continue
+        samples.append((probability / 100.0, 1.0 if realized_r > 0 else 0.0))
+
+    if not samples:
+        return {"samples": 0, "brier_score": None, "bins": []}
+
+    brier = sum((p - outcome) ** 2 for p, outcome in samples) / len(samples)
+    buckets = {}
+    for probability, outcome in samples:
+        lower = min(90, int(probability * 10) * 10)
+        bucket = buckets.setdefault(lower, {"count": 0, "probability_sum": 0.0, "wins": 0})
+        bucket["count"] += 1
+        bucket["probability_sum"] += probability
+        bucket["wins"] += int(outcome > 0.0)
+    bins = []
+    for lower, bucket in sorted(buckets.items()):
+        count = bucket["count"]
+        bins.append({
+            "range_pct": f"{lower}-{lower + 10}",
+            "count": count,
+            "mean_predicted_pct": round(100.0 * bucket["probability_sum"] / count, 2),
+            "observed_win_rate_pct": round(100.0 * bucket["wins"] / count, 2),
+        })
+    return {"samples": len(samples), "brier_score": round(brier, 6), "bins": bins}
+
+
 def summarize(path=FEEDBACK_FILE):
     rows = load_feedback(path)
     outcomes = {}
     realized_r = []
     groups = {}
+    by_regime = {}
+    by_setup = {}
+    by_action = {}
     for row in rows:
         outcome = row.get("outcome", "OPEN") or "OPEN"
         outcomes[outcome] = outcomes.get(outcome, 0) + 1
@@ -340,17 +378,37 @@ def summarize(path=FEEDBACK_FILE):
         group["closed"] += 1
         group["wins"] += int(value > 0)
         group["realized_r"] += value
+        for target, label in ((by_regime, "regime"), (by_setup, "setup"), (by_action, "action")):
+            name = str(row.get(label, "") or "UNKNOWN")
+            item = target.setdefault(name, {"closed": 0, "wins": 0, "realized_r": 0.0})
+            item["closed"] += 1
+            item["wins"] += int(value > 0)
+            item["realized_r"] += value
+
+    def finish_groups(source):
+        result = {}
+        for name, item in source.items():
+            count = item["closed"]
+            result[name] = {
+                "closed": count,
+                "win_rate_pct": round(100.0 * item["wins"] / count, 2) if count else None,
+                "average_r": round(item["realized_r"] / count, 4) if count else None,
+                "realized_r": round(item["realized_r"], 4),
+            }
+        return result
+
     closed = len(realized_r)
     wins = sum(value > 0 for value in realized_r)
-    by_symbol_direction = {}
-    for (symbol, direction), group in groups.items():
-        count = group["closed"]
-        by_symbol_direction[f"{symbol} {direction}"] = {
-            "closed": count,
-            "win_rate_pct": round(100.0 * group["wins"] / count, 2),
-            "average_r": round(group["realized_r"] / count, 4),
-            "realized_r": round(group["realized_r"], 4),
-        }
+    by_symbol_direction = finish_groups({
+        f"{symbol} {direction}": group for (symbol, direction), group in groups.items()
+    })
+    # The drawdown is calculated in the recorded outcome order. It is a diagnostic,
+    # not a portfolio equity curve, because concurrent exposure is not modelled here.
+    equity = peak = max_drawdown = 0.0
+    for value in realized_r:
+        equity += value
+        peak = max(peak, equity)
+        max_drawdown = max(max_drawdown, peak - equity)
     return {
         "total": len(rows),
         "open": outcomes.get("OPEN", 0),
@@ -359,9 +417,13 @@ def summarize(path=FEEDBACK_FILE):
         "win_rate_pct": round(100.0 * wins / closed, 2) if closed else None,
         "average_r": round(sum(realized_r) / closed, 4) if closed else None,
         "realized_r": round(sum(realized_r), 4) if closed else 0.0,
+        "max_drawdown_r_sequential": round(max_drawdown, 4),
         "by_symbol_direction": by_symbol_direction,
+        "by_regime": finish_groups(by_regime),
+        "by_setup": finish_groups(by_setup),
+        "by_action": finish_groups(by_action),
+        "probability_calibration": _calibration_metrics(rows),
     }
-
 
 def format_summary(summary):
     win_rate = "N/D" if summary.get("win_rate_pct") is None else f"{summary['win_rate_pct']:.1f}%"
