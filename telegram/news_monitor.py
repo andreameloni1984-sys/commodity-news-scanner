@@ -333,7 +333,7 @@ def fetch_news_items() -> list[dict[str, Any]]:
 
 def classify_event(title: str) -> dict[str, Any]:
     """Heuristic event mapping. It is interpretation, never a fact or trade by itself."""
-    text = re.sub(r"\\s+", " ", (title or "").lower()).strip()
+    text = " ".join((title or "").lower().split())
     has_oil = any(term in text for term in OIL_TERMS)
     has_metals = any(term in text for term in METAL_TERMS) or any(term in text for term in {"gold", "oro", "xau"})
     has_macro = any(term in text for term in MACRO_TERMS)
