@@ -160,3 +160,19 @@ def test_platinum_supported_but_silver_excluded_from_selected_universe():
 def test_agricultural_mixed_catalysts_remain_mixed():
     result = classify_event("Coffee harvest improves but drought threatens supply")
     assert result["impact"]["Caffè"] == "MISTA"
+
+
+def test_sputnik_historical_action_reaction_is_attached_to_gagarin_news():
+    result = classify_event("Trump threatens massive increase in China tariffs")
+    historical = result["historical_action_reaction"]
+    assert historical["event_type"] == "TRADE_ESCALATION"
+    assert "china_tariff_escalation_2025_10" in historical["historical_matches"]
+    assert historical["historical_directions"]["NASDAQ"] == "DOWN"
+    assert historical["evidence"] == "HISTORICAL_ANALOGUE"
+
+
+def test_sputnik_does_not_invent_historical_direction_without_analogue():
+    result = classify_event("Local company announces a new office")
+    historical = result["historical_action_reaction"]
+    assert historical["evidence"] == "NO_ANALOGUE"
+    assert historical["historical_directions"] == {}
