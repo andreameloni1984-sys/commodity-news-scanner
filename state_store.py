@@ -4,6 +4,9 @@ import json
 import os
 from typing import Any
 
+_EVENT_JOURNAL_SCHEMA_READY = False
+
+
 def _connect():
     dsn = os.getenv("DATABASE_URL", "").strip()
     if not dsn:
@@ -61,6 +64,9 @@ def save_state(key: str, value: Any) -> bool:
 
 
 def _ensure_event_journal_schema(cur) -> None:
+    global _EVENT_JOURNAL_SCHEMA_READY
+    if _EVENT_JOURNAL_SCHEMA_READY:
+        return
     cur.execute("""
         CREATE TABLE IF NOT EXISTS gagarin_event_journal (
             id BIGSERIAL PRIMARY KEY,
@@ -72,6 +78,7 @@ def _ensure_event_journal_schema(cur) -> None:
         CREATE INDEX IF NOT EXISTS idx_gagarin_event_journal_recorded_at
         ON gagarin_event_journal(recorded_at)
     """)
+    _EVENT_JOURNAL_SCHEMA_READY = True
 
 
 def append_event_journal(record: dict[str, Any]) -> bool:
