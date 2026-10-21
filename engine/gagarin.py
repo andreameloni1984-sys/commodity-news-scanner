@@ -13,7 +13,7 @@ from engine.predictive import evaluate_pre_move
 from engine.research_validation import annotate
 from engine.energy_confluence import stamp_energy
 from engine.energy_chain import stamp_paper
-from engine.research_controls import attach_research_controls
+from engine.research_controls import attach_research_controls, ema16_32_pullback_diagnostic
 from engine.mtf_roles import annotate_mtf_roles
 
 STRONG_MOVE_ATR = 1.5
@@ -184,6 +184,7 @@ def analyze_one(commodity: Commodity) -> SoyuzState:
 
     state = load_data(state, commodity)
     state = attach_research_controls(state)
+    state.metadata["ema16_32_diagnostic"] = ema16_32_pullback_diagnostic(state.closes)
     state = evaluate_pre_move(state)
     state = scan_market_opportunity(state)
     state = apply_regime(state)
