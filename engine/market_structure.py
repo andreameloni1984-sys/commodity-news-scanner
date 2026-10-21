@@ -54,7 +54,8 @@ def analyze_market_structure(candles: Sequence[Mapping[str, Any]], *,
         "swing_highs": highs[-2:],
         "swing_lows": lows[-2:],
         "last_close": _num(candles[-1], "close") if candles else None,
-        "reasons": [],\n        "no_trade_bias": True,
+        "reasons": [],
+        "no_trade_bias": True,
     }
     if len(highs) < min_swings or len(lows) < min_swings:
         result["reasons"].append("Non ci sono abbastanza swing confermati.")
