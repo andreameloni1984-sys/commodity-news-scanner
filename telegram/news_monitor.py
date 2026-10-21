@@ -143,16 +143,25 @@ def _maybe_send_daily_scorecard(state: dict[str, Any], send_telegram: Callable[[
         return False
     rows = []
     try:
-        if JOURNAL_PATH.exists():
-            for line in JOURNAL_PATH.read_text(encoding="utf-8").splitlines()[-20000:]:
-                try:
-                    row = json.loads(line)
-                    if isinstance(row, dict):
-                        rows.append(row)
-                except (json.JSONDecodeError, TypeError):
-                    continue
-    except OSError:
-        pass
+        from state_store import load_event_journal
+        durable_rows = load_event_journal(limit=20000)
+    except Exception as exc:
+        print(f"NEWS journal database read unavailable | {type(exc).__name__}: {exc}", flush=True)
+        durable_rows = None
+    if durable_rows is not None:
+        rows = durable_rows
+    else:
+        try:
+            if JOURNAL_PATH.exists():
+                for line in JOURNAL_PATH.read_text(encoding="utf-8").splitlines()[-20000:]:
+                    try:
+                        row = json.loads(line)
+                        if isinstance(row, dict):
+                            rows.append(row)
+                    except (json.JSONDecodeError, TypeError):
+                        continue
+        except OSError:
+            pass
     report = build_alert_scorecard(rows, now)
     if report["scored"]:
         message = ("📊 GAGARIN — VERIFICA ALERT (ultimi 7 giorni)\n"
