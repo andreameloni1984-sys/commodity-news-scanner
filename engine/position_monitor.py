@@ -119,6 +119,48 @@ def _match_state(position: dict, states: Iterable[Any]) -> Any:
     return None
 
 
+def _hourly_update_due(position: dict, now: datetime) -> bool:
+    """Return true once an hour after registration or the previous status update."""
+    raw = position.get("last_hourly_update_at") or position.get("created_at")
+    try:
+        previous = datetime.fromisoformat(str(raw))
+        if previous.tzinfo is None:
+            previous = previous.replace(tzinfo=timezone.utc)
+        return (now - previous).total_seconds() >= 3600
+    except (TypeError, ValueError):
+        return False
+
+
+def _hourly_status_message(position: dict, price: float, age: float, action: str) -> str:
+    direction = str(position.get("direction") or "").upper()
+    entry = float(position["entry"])
+    stop = float(position["stop"])
+    tp1 = float(position["tp1"])
+    if direction == "LONG":
+        move_pct = (price - entry) / entry * 100
+        stop_distance_pct = (price - stop) / price * 100
+        tp1_distance_pct = (tp1 - price) / price * 100
+    else:
+        move_pct = (entry - price) / entry * 100
+        stop_distance_pct = (stop - price) / price * 100
+        tp1_distance_pct = (price - tp1) / price * 100
+    state_label = {
+        "HOLD": "nessuna invalidazione rilevata",
+        "EXIT_WARNING": "ATTENZIONE: possibile invalidazione",
+        "TIGHTEN_STOP": "attenzione: valutare protezione del rischio",
+        "TAKE_PROFIT_WATCH": "attenzione: area TP1 raggiunta",
+    }.get(action, action)
+    return "\n".join([
+        f"GAGARIN — AGGIORNAMENTO ORARIO: {position['commodity']} {direction}",
+        f"Quotazione provider: {price:g} USD · dato vecchio di {age:.0f}s",
+        f"Entry: {entry:g} | SL: {stop:g} | TP1: {tp1:g}",
+        f"Variazione teorica dall'entry: {move_pct:+.2f}%",
+        f"Distanza dal livello SL: {stop_distance_pct:+.2f}% · distanza da TP1: {tp1_distance_pct:+.2f}%",
+        f"Stato tecnico: {state_label}",
+        "Aggiornamento informativo, non ordine. Prezzo provider Gagarin, non Trading 212 Bid/Ask.",
+    ])
+
+
 def evaluate_positions(states: Iterable[Any]) -> list[str]:
     """Evaluate positions and emit messages only on meaningful state transitions."""
     states = list(states or [])
@@ -148,12 +190,22 @@ def evaluate_positions(states: Iterable[Any]) -> list[str]:
                 atr=getattr(state, "atr", None), current_price=price,
             )
             action = str(result.get("exit_action") or "HOLD")
+            now = datetime.now(timezone.utc)
+            hourly_due = _hourly_update_due(position, now)
             if action == "HOLD":
                 if position.get("last_alert_action") is not None:
                     position["last_alert_action"] = None
                     changed = True
+                if hourly_due:
+                    messages.append(_hourly_status_message(position, price, age, action))
+                    position["last_hourly_update_at"] = now.isoformat()
+                    changed = True
                 continue
             if action == position.get("last_alert_action"):
+                if hourly_due:
+                    messages.append(_hourly_status_message(position, price, age, action))
+                    position["last_hourly_update_at"] = now.isoformat()
+                    changed = True
                 continue
             labels = {
                 "EXIT_WARNING": "🔴 RISCHIO / POSSIBILE INVALIDAZIONE",
@@ -176,7 +228,8 @@ def evaluate_positions(states: Iterable[Any]) -> list[str]:
             ]
             messages.append("\n".join(message))
             position["last_alert_action"] = action
-            position["last_alert_at"] = datetime.now(timezone.utc).isoformat()
+            position["last_alert_at"] = now.isoformat()
+            position["last_hourly_update_at"] = now.isoformat()
             changed = True
         if changed:
             _write(positions)
