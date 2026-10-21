@@ -44,6 +44,7 @@ jobs:
       CFTC_ENABLED: "1"
       EIA_ENABLED: "1"
       SOLE24_ENABLED: "1"
+      GAGARIN_FOREX_ON_DEMAND: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
 
     steps:
 
