@@ -6,6 +6,8 @@ from typing import Any
 import threading
 import math
 
+from engine.order_preflight import validate_paper_signal
+
 INITIAL_CAPITAL = 100.0
 PAPER_ENTRY_ACTIONS = {"PAPER_ENTRY", "PAPER_SIGNAL"}
 TARGET_FRACTION = 1.0 / 3.0
@@ -150,6 +152,9 @@ class PaperPortfolio:
         max_allocation_pct: float = 0.25,
     ) -> dict[str, Any] | None:
         if str(row.get("action") or "").upper() not in PAPER_ENTRY_ACTIONS:
+            return None
+        preflight_ok, _preflight_reason = validate_paper_signal(row)
+        if not preflight_ok:
             return None
         try:
             entry = float(row.get("entry"))
