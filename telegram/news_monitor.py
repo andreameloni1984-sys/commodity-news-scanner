@@ -733,7 +733,7 @@ def poll_news_once(
     if fetched:
         state["initialized"] = True
 
-    # Expire pending items after 45 minutes to avoid stale headlines.
+    # Expire pending items after their configured reaction window.
     valid_pending = []
     for event in pending:
         expires = _parse_datetime(event.get("expires_at"))
@@ -817,6 +817,10 @@ def poll_news_once(
                         sent += 1
                         delivered = True
                         event["alert_sent"] = True
+                        event["alert_sent_at"] = now.isoformat()
+                        # Measure the full four-hour reaction window from delivery,
+                        # not from the original headline detection.
+                        event["expires_at"] = (now + timedelta(seconds=PENDING_TTL_SECONDS)).isoformat()
                         _journal({
                             "kind": "NEWS_ALERT_SENT",
                             "event_id": event.get("event_id"),
