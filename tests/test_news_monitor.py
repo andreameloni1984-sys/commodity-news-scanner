@@ -294,3 +294,19 @@ def test_eia_press_release_feed_uses_published_rss_endpoint():
 
     feeds = dict(RSS_FEEDS)
     assert feeds["EIA"] == "https://www.eia.gov/rss/press_rss.xml"
+
+def test_alert_scorecard_marks_closed_window_without_prices_unscored():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 21, 12, 0, tzinfo=timezone.utc)
+    report = build_alert_scorecard([{
+        "kind": "NEWS_ALERT_SENT", "event_id": "missing-data", "asset": "WTI",
+        "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat(),
+    }], now=sent + timedelta(hours=5))
+    assert report["alerts"] == 1
+    assert report["scored"] == 0
+    assert report["pending"] == 0
+    assert report["unscored_expired"] == 1
+    assert report["coverage_pct"] == 0.0
+
