@@ -155,7 +155,7 @@ OIL_TERMS = {
     "oil inventories", "oil stocks", "energy supply", "hormuz",
     "iran", "russia", "sanctions", "eia", "barrel", "barrels",
 }
-METAL_TERMS = {"gold", "bullion", "precious metal", "precious metals", "xau", "platinum", "platino", "xpt"}
+METAL_TERMS = {"gold", "bullion", "precious metal", "precious metals", "xau", "silver", "argento", "platinum", "platino", "xpt", "palladium", "palladio", "xag", "xpd"}
 AGRI_TERMS = {
     "coffee", "arabica", "robusta", "caffè", "caffe", "cocoa", "cacao",
     "rice", "riso", "sugar", "zucchero", "raw sugar", "white sugar",
