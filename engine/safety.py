@@ -7,6 +7,7 @@ from config import (
 )
 
 from engine.state import SoyuzState
+from engine.profile import get_profile
 
 
 # ============================================================
@@ -70,6 +71,12 @@ def apply_safety(
     Valuta tutti i principali cancelli di sicurezza
     sullo stato canonico.
     """
+
+    profile = get_profile()
+    min_probability = 55.0 if profile == "AGGRESSIVE" else MIN_PROBABILITY
+    min_quality = 40.0 if profile == "AGGRESSIVE" else MIN_QUALITY
+    min_confidence = 45.0 if profile == "AGGRESSIVE" else MIN_CONFIDENCE
+    min_rr = 2.0 if profile == "AGGRESSIVE" else MIN_RR
 
     blockers = []
 
@@ -396,7 +403,7 @@ def apply_safety(
 
     else:
 
-        if state.rr3 < MIN_RR:
+        if state.rr3 < min_rr:
 
             blockers.append(
                 "RR_FAIL"
@@ -408,7 +415,7 @@ def apply_safety(
 
     if (
         state.probability
-        < MIN_PROBABILITY
+        < min_probability
     ):
 
         blockers.append(
@@ -421,7 +428,7 @@ def apply_safety(
 
     if (
         state.quality
-        < MIN_QUALITY
+        < min_quality
     ):
 
         blockers.append(
@@ -434,7 +441,7 @@ def apply_safety(
 
     if (
         state.confidence
-        < MIN_CONFIDENCE
+        < min_confidence
     ):
 
         blockers.append(
@@ -483,11 +490,11 @@ def apply_safety(
         and state.stop_atr is not None
         and state.rr3 is not None
         and state.probability
-        >= MIN_PROBABILITY
+        >= min_probability
         and state.quality
-        >= MIN_QUALITY
+        >= min_quality
         and state.confidence
-        >= MIN_CONFIDENCE
+        >= min_confidence
     ):
 
         pass
