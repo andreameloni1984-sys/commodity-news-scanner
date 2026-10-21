@@ -42,6 +42,41 @@ def _epoch(value: Any) -> float | None:
 
 
 
+
+
+def ema16_32_pullback_diagnostic(closes: list[float]) -> dict:
+    """Measure EMA16/EMA32 alignment and proximity; diagnostic, not a signal.
+
+    Requires at least 32 valid closes. No entry or direction is authorized here.
+    Pullback proximity is reported relative to the latest close as a percentage.
+    """
+    try:
+        values = [float(x) for x in (closes or [])]
+    except (TypeError, ValueError):
+        values = []
+    if len(values) < 32 or any(not math.isfinite(x) or x <= 0 for x in values):
+        return {"status": "INSUFFICIENT_DATA", "paper_only": True,
+                "direction_created": False, "ema16": None, "ema32": None}
+
+    def ema(series: list[float], period: int) -> float:
+        current = statistics.mean(series[:period])
+        alpha = 2.0 / (period + 1.0)
+        for value in series[period:]:
+            current = alpha * value + (1.0 - alpha) * current
+        return current
+
+    e16, e32, latest = ema(values, 16), ema(values, 32), values[-1]
+    direction = "LONG_BIAS" if e16 > e32 else "SHORT_BIAS" if e16 < e32 else "NEUTRAL"
+    distance_pct = abs(latest - e16) / latest * 100.0
+    return {
+        "status": "OBSERVATION", "paper_only": True, "direction_created": False,
+        "ema16": e16, "ema32": e32, "latest_close": latest,
+        "alignment": direction, "distance_from_ema16_pct": distance_pct,
+        "near_ema16_within_0_25pct": distance_pct <= 0.25,
+        "observations": len(values),
+    }
+
+
 def multi_timeframe_role_diagnostic(series_by_role: dict[str, list[float]]) -> dict:
     """Describe HTF regime / MTF setup / LTF trigger independently.
 
