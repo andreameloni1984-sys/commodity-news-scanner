@@ -173,6 +173,86 @@ def calculate_quality(state: SoyuzState) -> SoyuzState:
     return state
 
 
+
+# Public-source intelligence bridge: news can adjust context, never bypass triggers/safety.
+def apply_sputnik_intelligence(state):
+    try:
+        from engine.sputnik_bridge import fetch_sputnik_state, extract_active_domains
+        from telegram.news_monitor import classify_event
+        from datetime import datetime, timezone
+        import re
+
+        payload = fetch_sputnik_state(timeout=5)
+        if not payload:
+            state.metadata["sputnik_intelligence"] = {"status": "UNAVAILABLE"}
+            return state
+
+        history = payload.get("intelligence_history") or {}
+        cutoff = datetime.now(timezone.utc).timestamp() - 72 * 3600
+        matches = []
+        name = str(getattr(state, "commodity", "") or "").lower()
+        symbol = str(getattr(state, "symbol", "") or "").upper()
+        for event_id, event in history.items():
+            if not isinstance(event, dict):
+                continue
+            detected = event.get("detected_at")
+            try:
+                ts = datetime.fromisoformat(str(detected).replace("Z", "+00:00")).timestamp()
+            except Exception:
+                continue
+            if ts < cutoff:
+                continue
+            domains = [str(x).upper() for x in (event.get("domains") or [])]
+            text = " ".join(str(event.get(k) or "") for k in ("title", "text", "summary", "excerpt"))
+            classified = classify_event(text) if text.strip() else {"assets": [], "impact": {}, "relevant": False, "reason": "no event text"}
+            assets = classified.get("assets") or []
+            # Match only explicitly mapped commodity exposure; AI/media are contextual,
+            # not assumed to move every commodity.
+            match = False
+            for asset in assets:
+                a = str(asset).lower()
+                if (asset == "WTI" and ("wti" in name or "wti" in symbol or symbol == "USOIL")) or \
+                   (asset == "Brent" and ("brent" in name or "brent" in symbol or symbol == "UKOIL")) or \
+                   (asset == "Oro" and ("gold" in name or "oro" in name or "XAU" in symbol)) or \
+                   (asset == "Platino" and ("platino" in name or "platinum" in name or "XPT" in symbol)) or \
+                   (asset == "Caffè" and ("caff" in name or "coffee" in name)) or \
+                   (asset == "Cacao" and ("cacao" in name or "cocoa" in name)) or \
+                   (asset == "Riso" and ("riso" in name or "rice" in name)) or \
+                   (asset == "Zucchero" and ("zucchero" in name or "sugar" in name)):
+                    match = True
+            domain_match = (
+                ("AI_TECH" in domains and any(x in name or x in symbol for x in ("nasdaq", "qqq", "tech", "nvda", "msft", "aapl"))) or
+                ("ENERGY" in domains and any(x in name or x in symbol for x in ("wti", "brent", "oil", "energy"))) or
+                ("MEDIA" in domains and any(x in name or x in symbol for x in ("media", "communication", "spy")))
+            )
+            if match or domain_match:
+                matches.append({
+                    "event_id": str(event_id), "source": event.get("source", "TRUTH_ARCHIVE"),
+                    "domains": domains, "detected_at": detected,
+                    "assets": assets, "impact": classified.get("impact", {}),
+                    "directional_text_found": bool(classified.get("relevant") and any(v in {"RIALZISTA", "RIBASSISTA"} for v in (classified.get("impact") or {}).values())),
+                    "reason": classified.get("reason", "domain match; direction unconfirmed"),
+                })
+
+        state.metadata["sputnik_intelligence"] = {
+            "status": "MATCHED" if matches else "NO_RELEVANT_MATCH",
+            "events": matches[:5],
+            "window_hours": 72,
+            "source": "SPUTNIK/TRUTH_ARCHIVE",
+        }
+        # Only directional, asset-specific news changes model scores. Ambiguous
+        # domain mentions are logged as context and never fabricate LONG/SHORT.
+        directional = [m for m in matches if m.get("directional_text_found")]
+        if directional:
+            state.metadata["news_context_active"] = True
+            state.metadata["news_context_count"] = len(directional)
+            state.metadata["news_context_note"] = "Sputnik public-source event matched; technical trigger and safety gates remain mandatory."
+        return state
+    except Exception as exc:
+        state.metadata["sputnik_intelligence"] = {"status": "ERROR", "error": type(exc).__name__}
+        return state
+
+
 def analyze_one(commodity: Commodity) -> SoyuzState:
     state = SoyuzState(
         commodity=commodity.name,
@@ -182,6 +262,7 @@ def analyze_one(commodity: Commodity) -> SoyuzState:
 
     state = load_data(state, commodity)
     state = evaluate_pre_move(state)
+    state = apply_sputnik_intelligence(state)
     state = scan_market_opportunity(state)
     state = apply_regime(state)
     state = apply_structure(state)
