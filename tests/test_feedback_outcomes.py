@@ -133,7 +133,7 @@ def test_outcome_matching_uses_timeframe_when_symbol_is_shared(tmp_path):
     fifteen_min.metadata["gagarin_action"] = "PAPER_WATCH"
     # The 15-minute candles hit a stop, but must not be used for the 5-minute row.
     fifteen_min.candles.append({"timestamp": 2000, "high": 101, "low": 97})
-    assert update_open_outcomes([fifteen_min], path=path) == 0
+    assert update_open_outcomes([five_min, fifteen_min], path=path) == 0
     assert load_feedback(path)[0]["outcome"] == "OPEN"
 
 
