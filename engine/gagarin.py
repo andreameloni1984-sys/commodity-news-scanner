@@ -338,7 +338,7 @@ def apply_sputnik_intelligence(state):
                     break
             # A domain-only match is retained as context but cannot score direction.
             domain_match = bool(set(intel.get("domains") or []) & {
-                "ENERGY", "METALS", "AGRICULTURE", "TRADE_POLICY", "RATES_MACRO", "GEOPOLITICS"
+                "ENERGY", "METALS", "AGRICULTURE", "TRADE_POLICY", "RATES_MACRO", "GEOPOLITICS", "AI_TECH", "DATA_CENTERS", "POWER_INFRA"
             })
             if asset_match or domain_match:
                 action_reaction = build_action_reaction_record(
