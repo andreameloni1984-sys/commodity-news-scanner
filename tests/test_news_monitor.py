@@ -178,3 +178,12 @@ def test_sputnik_does_not_invent_historical_direction_without_analogue():
     historical = result["historical_action_reaction"]
     assert historical["evidence"] == "NO_ANALOGUE"
     assert historical["historical_directions"] == {}
+
+def test_sputnik_does_not_match_broad_china_headline_to_trade_analogue():
+    from sputnik_action_reaction import match_historical_reactions
+
+    matches = match_historical_reactions(
+        "China discusses semiconductor exports at a routine meeting"
+    )
+    assert matches == []
+
