@@ -179,6 +179,20 @@ def apply_safety(
             )
 
     # ========================================================
+    # 6B. INDEPENDENT MARKET-STRUCTURE CROSS-CHECK
+    # ========================================================
+    crosscheck = state.metadata.get("market_structure_check", {})
+    cross_direction = crosscheck.get("direction")
+    if (
+        state.setup_direction == "LONG"
+        and cross_direction == "BEARISH"
+    ) or (
+        state.setup_direction == "SHORT"
+        and cross_direction == "BULLISH"
+    ):
+        blockers.append("STRUCTURE_CROSSCHECK_OPPOSITE")
+
+    # ========================================================
     # 7. MTF ALIGNMENT
     # ========================================================
     #
