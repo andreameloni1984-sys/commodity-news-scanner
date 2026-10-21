@@ -31,7 +31,8 @@ def classify(text):
     )
     power_terms = (
         "power grid", "electric grid", "electricity supply", "generate their own power",
-        "generate its own power", "self-generate electricity", "power generation",
+        "generate its own power", "self-generate electricity", "produce their own electricity",
+        "producing their own electricity", "sell excess power", "excess electricity", "power generation",
         "electricity generation", "grid connection", "energy infrastructure",
     )
     ai_terms = ("artificial intelligence", " ai ", "semiconductor", "semiconductors", "gpu", "data center", "data centre", "datacenter")
