@@ -1,3 +1,5 @@
+import math
+
 from engine.state import SoyuzState
 
 
@@ -68,12 +70,10 @@ def _safe_float(value):
     """
 
     try:
-        return float(value)
-    except (
-        TypeError,
-        ValueError,
-    ):
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
         return None
+    return number if math.isfinite(number) else None
 
 
 def _recent_net_move(state: SoyuzState):
