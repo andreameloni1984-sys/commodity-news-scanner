@@ -44,7 +44,12 @@ def _timestamp(value):
             return float(value)
         text = str(value).strip()
         try:
-            return datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp()
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+            # Provider timestamps without an explicit offset are treated as UTC,
+            # never as the host machine's local timezone.
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed.astimezone(timezone.utc).timestamp()
         except ValueError:
             return float(text)
     except (TypeError, ValueError, OverflowError):
@@ -60,19 +65,28 @@ def _candles(state):
         ts = _timestamp(candle.get("timestamp", candle.get("time")))
         high = _number(candle.get("high", candle.get("h")))
         low = _number(candle.get("low", candle.get("l")))
-        if ts is not None and high is not None and low is not None:
+        if ts is not None and high is not None and low is not None and high >= low:
             parsed.append((ts, high, low))
     if parsed:
-        return sorted(parsed)
+        # Providers may resend/update a candle with the same timestamp.
+        # Keep the last valid observation for that timestamp so a duplicate
+        # bar cannot be counted twice in forward-outcome scoring.
+        deduplicated = {}
+        for ts, high, low in parsed:
+            deduplicated[ts] = (ts, high, low)
+        return [deduplicated[ts] for ts in sorted(deduplicated)]
     # Some data providers expose parallel OHLC/timestamp arrays instead.
     timestamps = list(getattr(state, "timestamps", []) or [])
     highs = list(getattr(state, "highs", []) or [])
     lows = list(getattr(state, "lows", []) or [])
     for ts, high, low in zip(timestamps, highs, lows):
         ts, high, low = _timestamp(ts), _number(high), _number(low)
-        if ts is not None and high is not None and low is not None:
+        if ts is not None and high is not None and low is not None and high >= low:
             parsed.append((ts, high, low))
-    return sorted(parsed)
+    deduplicated = {}
+    for ts, high, low in parsed:
+        deduplicated[ts] = (ts, high, low)
+    return [deduplicated[ts] for ts in sorted(deduplicated)]
 
 
 def _signal_record(state, now=None):
