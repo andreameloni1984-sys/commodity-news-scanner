@@ -507,6 +507,31 @@ def _run_analysis(
         commodities
     )
 
+    # PAPER feedback lifecycle: resolve old entries before recording fresh ones.
+    candles_by_symbol = {}
+    for state in results:
+        mtf = getattr(state, "mtf_data", {}) or {}
+        candles = mtf.get("5min", [])
+        if isinstance(candles, list) and candles:
+            candles_by_symbol[state.symbol] = candles
+
+    try:
+        resolved = evaluate_open_signals(candles_by_symbol)
+        recorded = record_feedback_entries(results)
+        print(
+            "GAGARIN PAPER FEEDBACK | "
+            f"resolved={resolved} recorded={recorded} "
+            f"summary={format_feedback_summary(summarize_feedback())}",
+            flush=True,
+        )
+    except Exception as exc:
+        # Feedback failure must never turn a market analysis into a failure.
+        print(
+            "GAGARIN PAPER FEEDBACK ERROR | "
+            f"{type(exc).__name__}: {exc}",
+            flush=True,
+        )
+
     set_last_results(
         results
     )
@@ -838,6 +863,22 @@ def _command_response(
 
     # PING
     # --------------------------------------------------------
+
+    # --------------------------------------------------------
+    # PAPER FEEDBACK SUMMARY
+    # --------------------------------------------------------
+
+    if command_name == "/feedback":
+        try:
+            return (
+                "📊 GAGARIN — FEEDBACK PAPER\\n"
+                "━━━━━━━━━━━━━━━━━━━━\\n"
+                + format_feedback_summary(summarize_feedback())
+                + "\\nEsiti calcolati da candele successive; se stop e target "
+                  "sono toccati nella stessa candela, prevale lo stop."
+            )
+        except Exception as exc:
+            return f"❌ FEEDBACK ERROR: {type(exc).__name__}: {exc}"
 
     if command_name == "/ping":
 
