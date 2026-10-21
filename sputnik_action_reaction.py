@@ -78,7 +78,16 @@ def match_historical_reactions(text: str, limit: int = 3) -> list[dict[str, Any]
     for pattern in HISTORICAL_PATTERNS:
         keyword_hits = sum(1 for k in pattern["keywords"] if k in body)
         type_match = pattern["event_type"] == event_type
-        if keyword_hits == 0 and not type_match:
+        # A broad event-type match alone is not enough: it caused unrelated
+        # China/energy headlines to inherit every historical trade reaction.
+        # Require explicit overlap with this analogue's own evidence keywords.
+        strong_phrases = {
+            "massive increase", "help china", "not hurt", "support china",
+            "soften", "softening", "90 days",
+        }
+        has_strong_phrase = any(phrase in body for phrase in strong_phrases if phrase in pattern["keywords"])
+        min_hits = 1 if has_strong_phrase else 2
+        if keyword_hits < min_hits:
             continue
         matches.append({
             **pattern,
