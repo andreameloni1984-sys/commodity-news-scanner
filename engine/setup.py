@@ -1,4 +1,5 @@
 from engine.state import SoyuzState
+from engine.profile import get_profile
 
 
 # ============================================================
@@ -72,6 +73,8 @@ def _build_long_setup(state: SoyuzState) -> None:
 
     if state.regime == "TREND_UP":
         quality += 10.0
+    elif get_profile() == "AGGRESSIVE" and state.regime == "RANGE":
+        quality += 4.0
     else:
         return
 
@@ -81,7 +84,7 @@ def _build_long_setup(state: SoyuzState) -> None:
 
     if (
         state.mtf_direction == "LONG"
-        and state.mtf_alignment >= MIN_MTF_ALIGNMENT
+        and state.mtf_alignment >= (35.0 if get_profile() == "AGGRESSIVE" else MIN_MTF_ALIGNMENT)
     ):
         quality += 10.0
     else:
@@ -143,6 +146,8 @@ def _build_short_setup(state: SoyuzState) -> None:
 
     if state.regime == "TREND_DOWN":
         quality += 10.0
+    elif get_profile() == "AGGRESSIVE" and state.regime == "RANGE":
+        quality += 4.0
     else:
         return
 
