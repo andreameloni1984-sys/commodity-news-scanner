@@ -116,6 +116,13 @@ def test_new_news_triggers_immediate_analysis_then_waits_for_price_confirmation(
     assert "Reazione dal rilevamento" in messages[0]
     assert "PAPER/DEMO" in messages[0]
 
+    # The observation window starts when Telegram delivery succeeds.
+    import json
+    saved = json.loads((tmp_path / "news_state.json").read_text(encoding="utf-8"))
+    sent_event = next(event for event in saved["pending"] if event.get("alert_sent"))
+    assert sent_event["alert_sent_at"] == (now + timedelta(minutes=5)).isoformat()
+    assert sent_event["expires_at"] == (now + timedelta(minutes=5, hours=4)).isoformat()
+
 
 
 def test_oil_supply_risk_headlines_are_classified_bullish():
