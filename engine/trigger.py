@@ -324,10 +324,18 @@ def _price_breakout_confirmation(
         return False
 
     if state.setup_direction == "LONG":
-        return close > state.breakout_level + buffer
+        extension_atr = (live_price - level) / atr
+        return (
+            close > level + buffer
+            and 0 <= extension_atr <= MAX_BREAKOUT_ENTRY_EXTENSION_ATR
+        )
 
     if state.setup_direction == "SHORT":
-        return close < state.breakout_level - buffer
+        extension_atr = (level - live_price) / atr
+        return (
+            close < level - buffer
+            and 0 <= extension_atr <= MAX_BREAKOUT_ENTRY_EXTENSION_ATR
+        )
 
     return False
 
