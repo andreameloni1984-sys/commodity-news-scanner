@@ -253,7 +253,12 @@ def _command_response(command: str) -> Optional[str]:
     if command_name == "/monitora":
         parts = raw.split()
         if len(parts) < 6 or len(parts) > 8:
-            return "Uso: /monitora ORO LONG 2700 2680 2740 [TP2] [TP3]"
+            return (
+                "Uso: /monitora ORO LONG ENTRY SL TP1 [TP2] [TP3]\n"
+                "ATTENZIONE: i numeri 2700 2680 2740 sono solo un esempio, NON quotazioni live.\n"
+                "Prima usa /analisi oro per vedere il prezzo provider attuale; inserisci poi i livelli della tua posizione.\n"
+                "I prezzi inseriti sono confrontati con il feed provider Gagarin, non con il Bid/Ask Trading 212."
+            )
         commodity = _resolve_commodity(parts[1])
         if commodity is None:
             return "Commodity non riconosciuta o non abilitata. Usa oro, wti, brent, cacao, caffe, platino, riso o zucchero."
@@ -321,13 +326,14 @@ def _command_response(command: str) -> Optional[str]:
 
     if command_name in {"/start", "/help", "/menu"}:
         return (
-            "🚀 GAGARIN — MENU SEMPLICE\\n"
-            "🧪 PAPER/DEMO — nessun ordine reale.\\n\\n"
-            "🚀 AGGRESSIVE 212 — profilo aggressivo\\n"
-            "🛡 SOFT 212 — profilo prudente\\n"
-            "🔗 COLLEGAMENTO INVEST TRADING212 — verifica sola lettura\\n\\n"
-            "Monitor posizione: /monitora ORO LONG 2700 2680 2740\\n"
-            "/posizioni — elenco monitorate | /smetti ORO — disattiva monitor.\\n"
+            "🚀 GAGARIN — MENU SEMPLICE\n"
+            "🧪 PAPER/DEMO — nessun ordine reale.\n\n"
+            "🚀 AGGRESSIVE 212 — profilo aggressivo\n"
+            "🛡 SOFT 212 — profilo prudente\n"
+            "🔗 COLLEGAMENTO INVEST TRADING212 — verifica sola lettura\n\n"
+            "Monitor posizione: /monitora ORO LONG ENTRY SL TP1 [TP2] [TP3]\n"
+            "2700/2680/2740 nell'esempio sono valori fittizi: controlla prima /analisi oro.\n"
+            "/posizioni — elenco monitorate | /smetti ORO — disattiva monitor.\n"
             "Gli avvisi automatici arrivano solo su nuovi segnali rilevanti o cambi di rischio/target; nessun messaggio di stato ripetitivo."
         )
 
