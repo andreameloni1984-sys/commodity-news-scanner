@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from commodities.universe import enabled_commodities, validate_universe
 from engine.gagarin import analyze_universe
+from engine.forex_session import filter_forex_for_session
 from soyuz_gagarin.adapter import evaluate_states
 from paper_portfolio import PaperPortfolio
 from engine.day_registry import load as load_day_registry, run as run_day_registry, summary as day_summary
@@ -77,12 +78,12 @@ def _state_json(state):
     }
 
 
-def _run_gagarin():
+def _run_gagarin(*, on_demand: bool = False):
     errors = validate_universe()
     if errors:
         raise RuntimeError("CONFIGURATION_BLOCKED: " + ", ".join(errors))
 
-    commodities = enabled_commodities()
+    commodities = filter_forex_for_session(enabled_commodities(), on_demand=on_demand)
     results = analyze_universe(commodities)
     decisions = evaluate_states(results)
     by_symbol = {d.symbol: d for d in decisions}
@@ -207,7 +208,7 @@ def monitor():
     if not RUN_LOCK.acquire(blocking=False):
         raise HTTPException(status_code=409, detail="Analysis already running")
     try:
-        return _run_gagarin()
+        return _run_gagarin(on_demand=False)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}")
     finally:
@@ -245,7 +246,7 @@ def run_analysis(x_api_key: str | None = Header(default=None)):
     if not RUN_LOCK.acquire(blocking=False):
         raise HTTPException(status_code=409, detail="Analysis already running")
     try:
-        return _run_gagarin()
+        return _run_gagarin(on_demand=True)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}")
     finally:
