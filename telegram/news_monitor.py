@@ -450,8 +450,7 @@ def classify_event(title: str) -> dict[str, Any]:
     if has_oil:
         assets.extend(["WTI", "Brent"])
     if has_metals or has_macro:
-        # Match the configured commodity universe: silver and palladium are not enabled here.
-        assets.extend(["Oro", "Platino"])
+        assets.extend(["Oro", "Argento", "Platino", "Palladio"])
     if has_agri:
         for asset, terms in {
             "Caffè": {"coffee", "arabica", "robusta", "caffè", "caffe"},
