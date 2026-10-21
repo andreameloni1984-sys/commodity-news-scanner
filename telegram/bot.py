@@ -720,6 +720,7 @@ def _command_response(
             "━━━━━━━━━━━━━━━━━━━━\n"
             "🧪 PAPER ONLY\n\n"
             "/classifica — classifica completa\n"
+            "/forex — analizza le 7 coppie nelle finestre migliori\n"
             "/setup — setup e trigger\n"
             "/analisi — analisi completa\n"
             "/analisi oro — analisi singola\n"
@@ -734,6 +735,29 @@ def _command_response(
             "/id — chat ID\n"
             "/gagarin — nuovo Risk Governor PAPER\n/profilo — mostra profilo attivo\n/profilo soft — profilo selettivo\n/profilo aggressive — profilo anticipatore"
         )
+
+    # --------------------------------------------------------
+    # FOREX ON-DEMAND
+    # --------------------------------------------------------
+
+    if command_name == "/forex":
+        allowed, session_label = _forex_session_status()
+        if not allowed:
+            return "GAGARIN FOREX\\n" + session_label
+
+        pairs = enabled_forex_pairs()
+        if not pairs:
+            return "Universo Forex vuoto: nessuna coppia configurata."
+        try:
+            results = analyze_universe(pairs)
+            return (
+                "GAGARIN FOREX - ANALISI SU RICHIESTA\\n"
+                + session_label
+                + "\\nPAPER ONLY - nessun ordine inviato\\n\\n"
+                + _format_classifica(results)
+            )
+        except Exception as exc:
+            return f"ERRORE ANALISI FOREX: {type(exc).__name__}: {exc}"
 
     # --------------------------------------------------------
     # GAGARIN V1 GOVERNOR
