@@ -310,3 +310,29 @@ def test_alert_scorecard_marks_closed_window_without_prices_unscored():
     assert report["unscored_expired"] == 1
     assert report["coverage_pct"] == 0.0
 
+def test_news_monitor_prefers_durable_state_and_event_journal(tmp_path, monkeypatch):
+    import json
+    import state_store
+    import telegram.news_monitor as monitor
+
+    local_state = tmp_path / "local_state.json"
+    local_journal = tmp_path / "local_journal.jsonl"
+    monkeypatch.setattr(monitor, "STATE_PATH", local_state)
+    monkeypatch.setattr(monitor, "JOURNAL_PATH", local_journal)
+
+    durable_state = {"seen": ["durable-fingerprint"], "clusters": [], "pending": [], "initialized": True}
+    saved_states = []
+    journal_records = []
+    monkeypatch.setattr(state_store, "load_state", lambda key: durable_state if key == "gagarin_news_monitor" else None)
+    monkeypatch.setattr(state_store, "save_state", lambda key, value: saved_states.append((key, value)) or True)
+    monkeypatch.setattr(state_store, "append_event_journal", lambda record: journal_records.append(record) or True)
+    monkeypatch.setattr(state_store, "load_event_journal", lambda limit=20000: [{"kind": "DURABLE_TEST"}])
+
+    assert monitor._load_state()["seen"] == ["durable-fingerprint"]
+    monitor._save_state({"seen": ["updated"], "clusters": [], "pending": []})
+    monitor._journal({"kind": "TEST_EVENT"})
+    assert saved_states[0][0] == "gagarin_news_monitor"
+    assert journal_records[0]["kind"] == "TEST_EVENT"
+    assert not local_journal.exists()
+    assert state_store.load_event_journal(limit=10) == [{"kind": "DURABLE_TEST"}]
+
