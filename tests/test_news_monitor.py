@@ -14,7 +14,7 @@ def test_oil_inventory_draw_is_provisional_bullish_for_crude():
 def test_hawkish_fed_headline_is_provisional_bearish_for_metals():
     result = classify_event("Federal Reserve signals hawkish policy and a rate hike")
     assert "Oro" in result["assets"]
-    assert "Argento" not in result["assets"]  # excluded from this selected commodity universe
+    assert "Argento" in result["assets"]  # silver is enabled in Gagarin's metals universe
     assert result["impact"]["Oro"] == "RIBASSISTA"
 
 
@@ -151,10 +151,10 @@ def test_selected_agricultural_commodities_are_classified_by_crop_catalyst():
     assert sugar["impact"]["Zucchero"] == "RIBASSISTA"
 
 
-def test_platinum_supported_but_silver_excluded_from_selected_universe():
+def test_platinum_and_silver_are_supported_in_selected_universe():
     result = classify_event("Platinum rises as the Federal Reserve signals rate cuts")
     assert "Platino" in result["assets"]
-    assert "Argento" not in result["assets"]
+    assert "Argento" in result["assets"]
 
 
 def test_agricultural_mixed_catalysts_remain_mixed():
