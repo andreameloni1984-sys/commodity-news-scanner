@@ -51,6 +51,19 @@ class ResearchControlsTests(unittest.TestCase):
         out = ema16_32_pullback_diagnostic([100 + i for i in range(31)])
         self.assertEqual(out["status"], "INSUFFICIENT_DATA")
 
+    def test_ema16_32_flat_series_is_neutral_and_observational(self):
+        out = ema16_32_pullback_diagnostic([100.0] * 40)
+        self.assertEqual(out["status"], "OBSERVATION")
+        self.assertEqual(out["alignment"], "NEUTRAL")
+        self.assertAlmostEqual(out["distance_from_ema16_pct"], 0.0)
+        self.assertTrue(out["near_ema16_within_0_25pct"])
+        self.assertFalse(out["direction_created"])
+
+    def test_ema16_32_rejects_invalid_close_series(self):
+        out = ema16_32_pullback_diagnostic([100.0] * 39 + [float("nan")])
+        self.assertEqual(out["status"], "INSUFFICIENT_DATA")
+        self.assertFalse(out["direction_created"])
+
     def test_valid_snapshot_passes(self):
         s = self.state()
         report = validate_market_snapshot(s, now=datetime(2026, 9, 30, 12, tzinfo=timezone.utc))
