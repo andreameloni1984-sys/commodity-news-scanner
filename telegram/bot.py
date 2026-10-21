@@ -24,6 +24,8 @@ PAPER ONLY.
 from __future__ import annotations
 
 import time
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from typing import Callable, Optional
 
 import requests
@@ -37,6 +39,7 @@ from engine.gagarin import analyze_universe
 from commodities.universe import enabled_commodities
 from soyuz_gagarin.adapter import evaluate_states
 from engine.profile import get_profile, set_profile
+from forex.universe import enabled_forex_pairs
 
 
 API_BASE = "https://api.telegram.org"
