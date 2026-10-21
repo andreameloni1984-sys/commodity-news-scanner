@@ -442,9 +442,7 @@ def run():
     # UNIVERSE
     # --------------------------------------------------------
 
-    commodities = filter_forex_for_session(
-        enabled_commodities()
-    )
+    commodities = filter_forex_for_session(enabled_commodities(), on_demand=False)
 
     print(
         "FOREX SESSION: automatic 08:00-11:00 and 14:00-18:00 Europe/Rome; "
