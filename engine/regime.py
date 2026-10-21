@@ -310,9 +310,9 @@ def apply_regime(
 
     state.normalized_move_atr = (
         normalized_move
+    )
 
     state.metadata["volatility_diagnostics"] = _volatility_diagnostics(state)
-    )
 
     # ========================================================
     # DIAGNOSTICA
