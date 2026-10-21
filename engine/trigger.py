@@ -446,6 +446,12 @@ def apply_trigger(
 
         return state
 
+    # A breakout flag with conflicting direction is stale/inconsistent
+    # metadata; do not let the generic MTF fallback bypass this rejection.
+    if state.breakout and state.breakout_direction != state.setup_direction:
+        state.trigger = "NOT_CONFIRMED"
+        return state
+
     # ========================================================
     # MTF GATE
     # ========================================================
@@ -524,6 +530,14 @@ def apply_trigger(
         state.trigger = "MOMENTUM_CONFIRMATION"
         state.trigger_direction = state.setup_direction
         state.trigger_confirmed = True
+        return state
+
+    # If an explicitly flagged breakout failed confirmation, do not
+    # re-label the same failed setup as a generic MTF momentum trigger.
+    if state.breakout:
+        state.trigger = "NOT_CONFIRMED"
+        state.trigger_direction = "NONE"
+        state.trigger_confirmed = False
         return state
 
     # ========================================================
