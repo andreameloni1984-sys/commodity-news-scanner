@@ -193,6 +193,30 @@ YAHOO_SYMBOLS = {
     "NZD/USD": "NZDUSD=X",
     "USD/CAD": "CAD=X",
     "USD/CHF": "CHF=X",
+
+    # Additional FX crosses (explicit Yahoo Finance mappings).
+    "EUR/JPY": "EURJPY=X",
+    "GBP/JPY": "GBPJPY=X",
+    "EUR/GBP": "EURGBP=X",
+    "AUD/JPY": "AUDJPY=X",
+    "EUR/CHF": "EURCHF=X",
+
+    # Equity indices, commodity futures and listed ETFs.
+    "INDEX:NASDAQ100": "^NDX",
+    "INDEX:SP500": "^GSPC",
+    "INDEX:DAX40": "^GDAXI",
+    "INDEX:EUROSTOXX50": "^STOXX50E",
+    "INDEX:FTSEMIB": "FTSEMIB.MI",
+    "COPPER/USD": "HG=F",
+    "NATGAS/USD": "NG=F",
+    "RBOB/USD": "RB=F",
+    "HEATINGOIL/USD": "HO=F",
+    "ETF:SPY": "SPY",
+    "ETF:QQQ": "QQQ",
+    "ETF:IWM": "IWM",
+    "ETF:GLD": "GLD",
+    "ETF:SLV": "SLV",
+    "ETF:USO": "USO",
 }
 
 
@@ -295,6 +319,30 @@ PROVIDER_ORDER = {
     "NZD/USD": ("TWELVE_DATA", "YAHOO"),
     "USD/CAD": ("TWELVE_DATA", "YAHOO"),
     "USD/CHF": ("TWELVE_DATA", "YAHOO"),
+
+    # Crosses: keep them separate from the major-pair universe.
+    "EUR/JPY": ("TWELVE_DATA", "YAHOO"),
+    "GBP/JPY": ("TWELVE_DATA", "YAHOO"),
+    "EUR/GBP": ("TWELVE_DATA", "YAHOO"),
+    "AUD/JPY": ("TWELVE_DATA", "YAHOO"),
+    "EUR/CHF": ("TWELVE_DATA", "YAHOO"),
+
+    # Non-commodity instruments use explicit Yahoo symbols only.
+    "INDEX:NASDAQ100": ("YAHOO",),
+    "INDEX:SP500": ("YAHOO",),
+    "INDEX:DAX40": ("YAHOO",),
+    "INDEX:EUROSTOXX50": ("YAHOO",),
+    "INDEX:FTSEMIB": ("YAHOO",),
+    "COPPER/USD": ("YAHOO",),
+    "NATGAS/USD": ("YAHOO",),
+    "RBOB/USD": ("YAHOO",),
+    "HEATINGOIL/USD": ("YAHOO",),
+    "ETF:SPY": ("YAHOO",),
+    "ETF:QQQ": ("YAHOO",),
+    "ETF:IWM": ("YAHOO",),
+    "ETF:GLD": ("YAHOO",),
+    "ETF:SLV": ("YAHOO",),
+    "ETF:USO": ("YAHOO",),
 }
 
 
