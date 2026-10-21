@@ -71,22 +71,27 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
             alerts.append((row, sent_at, price, direction))
     scored, pending = [], 0
     for alert, sent_at, alert_price, direction in alerts:
-        observations = []
+        reaction_observations = []
         for row in rows:
             if row.get("kind") != "NEWS_REACTION" or row.get("event_id") != alert.get("event_id") or row.get("asset") != alert.get("asset"):
                 continue
             observed_at = _parse_datetime(row.get("observed_at") or row.get("recorded_at"))
-            if not observed_at or not (sent_at + timedelta(minutes=15) <= observed_at <= sent_at + timedelta(hours=4)):
+            if not observed_at or not (sent_at <= observed_at <= sent_at + timedelta(hours=4)):
                 continue
             try:
                 price = float(row.get("current_price"))
             except (TypeError, ValueError):
                 continue
             if price > 0:
-                observations.append((observed_at, price))
+                reaction_observations.append((observed_at, price))
+        # Directional accuracy uses a minimum 15-minute horizon to avoid
+        # treating immediate noise as a forecast result. TP/SL, however,
+        # must include every post-delivery observation, including the first 15m.
+        observations = [item for item in reaction_observations if item[0] >= sent_at + timedelta(minutes=15)]
         if not observations:
             pending += 1
             continue
+        reaction_observations.sort(key=lambda item: item[0])
         observations.sort(key=lambda item: item[0])
         observed_at, current_price = observations[-1]
         raw_pct = (current_price / alert_price - 1) * 100
@@ -98,7 +103,7 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
             stop, tp1 = None, None
         outcome = "OPEN_AT_LAST_CHECK"
         if stop is not None and tp1 is not None:
-            for _, observed_price in observations:
+            for _, observed_price in reaction_observations:
                 if (direction == "LONG" and observed_price <= stop) or (direction == "SHORT" and observed_price >= stop):
                     outcome = "SL_OBSERVED"
                     break
