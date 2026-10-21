@@ -663,6 +663,29 @@ def _format_single_analysis(
 
 
 # ============================================================
+# FOREX SESSION GATE
+# ============================================================
+
+def _forex_session_status():
+    """Allow Forex analysis only on request during selected liquid sessions."""
+    now_utc = datetime.now(timezone.utc)
+    rome = now_utc.astimezone(ZoneInfo("Europe/Rome"))
+    if 8 <= rome.hour < 11:
+        return True, "Sessione europea 08:00-11:00 ora italiana"
+
+    london = now_utc.astimezone(ZoneInfo("Europe/London"))
+    new_york = now_utc.astimezone(ZoneInfo("America/New_York"))
+    if 8 <= london.hour < 17 and 8 <= new_york.hour < 17:
+        return True, "Overlap Londra-New York (ora legale gestita automaticamente)"
+
+    return False, (
+        "Finestra Forex non attiva. Analisi consentita solo 08:00-11:00 "
+        "ora italiana oppure durante l'overlap Londra-New York. "
+        "Riprova con /forex nella prossima finestra."
+    )
+
+
+# ============================================================
 # COMMAND RESPONSE
 # ============================================================
 
