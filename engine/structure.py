@@ -1,4 +1,5 @@
 from engine.state import SoyuzState
+from engine.market_structure import analyze_market_structure
 
 
 # ============================================================
@@ -639,6 +640,22 @@ def apply_structure(
         "direction",
         "NONE",
     )
+
+    # Independent diagnostic from closed OHLC bars. Existing structure logic
+    # remains the decision source; disagreements are recorded, not overridden.
+    primary_candles = state.mtf_data.get("5min", [])
+    structure_check = analyze_market_structure(primary_candles)
+    state.metadata["market_structure_check"] = structure_check
+    if structure_check.get("direction") == "INSUFFICIENT":
+        state.metadata.setdefault("structure_diagnostics", {})
+        state.metadata["structure_diagnostics"]["market_structure_check"] = "INSUFFICIENT_CONFIRMED_SWINGS"
+    elif (
+        structure_check.get("direction") == "BULLISH" and primary_direction != "LONG"
+    ) or (
+        structure_check.get("direction") == "BEARISH" and primary_direction != "SHORT"
+    ):
+        state.metadata.setdefault("structure_diagnostics", {})
+        state.metadata["structure_diagnostics"]["market_structure_check"] = "DIRECTION_DISAGREEMENT"
 
     # --------------------------------------------------------
     # MTF
