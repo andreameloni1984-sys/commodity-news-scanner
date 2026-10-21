@@ -165,7 +165,7 @@ def _maybe_send_daily_scorecard(state: dict[str, Any], send_telegram: Callable[[
     return sent
 
 RSS_FEEDS = (
-    ("EIA", "https://www.eia.gov/rss/press_releases.xml"),
+    ("EIA", "https://www.eia.gov/rss/press_rss.xml"),
     ("Federal Reserve", "https://www.federalreserve.gov/feeds/press_all.xml"),
     # These are the same public primary-source feeds watched by SPUTNIK.
     ("SPUTNIK / WHITE HOUSE", "https://www.whitehouse.gov/news/feed/"),
