@@ -69,7 +69,7 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         direction = str(row.get("direction") or "").upper()
         if sent_at and sent_at >= cutoff and price > 0 and direction in {"LONG", "SHORT"}:
             alerts.append((row, sent_at, price, direction))
-    scored, pending = [], 0
+    scored, pending, unscored_expired = [], 0, 0
     for alert, sent_at, alert_price, direction in alerts:
         reaction_observations = []
         for row in rows:
@@ -89,7 +89,11 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         # must include every post-delivery observation, including the first 15m.
         observations = [item for item in reaction_observations if item[0] >= sent_at + timedelta(minutes=15)]
         if not observations:
-            pending += 1
+            if now <= sent_at + timedelta(hours=4):
+                pending += 1
+            else:
+                # Closed evaluation window with missing prices is unscored, not pending or a loss.
+                unscored_expired += 1
             continue
         reaction_observations.sort(key=lambda item: item[0])
         observations.sort(key=lambda item: item[0])
@@ -118,6 +122,8 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
     sl_observed = sum(x["outcome"] == "SL_OBSERVED" for x in scored)
     open_count = sum(x["outcome"] == "OPEN_AT_LAST_CHECK" for x in scored)
     return {"window_days": 7, "alerts": len(alerts), "scored": len(scored), "pending": pending,
+            "unscored_expired": unscored_expired,
+            "coverage_pct": round(len(scored)/len(alerts)*100, 2) if alerts else None,
             "correct": correct, "incorrect": len(scored)-correct,
             "accuracy_pct": round(correct/len(scored)*100, 2) if scored else None,
             "mean_directional_return_pct": round(sum(x["signed_return_pct"] for x in scored)/len(scored), 4) if scored else None,
@@ -145,7 +151,7 @@ def _maybe_send_daily_scorecard(state: dict[str, Any], send_telegram: Callable[[
     report = build_alert_scorecard(rows, now)
     if report["scored"]:
         message = ("📊 GAGARIN — VERIFICA ALERT (ultimi 7 giorni)\n"
-                   f"Valutati: {report['scored']}/{report['alerts']} | in attesa: {report['pending']}\n"
+                   f"Valutati: {report['scored']}/{report['alerts']} | copertura: {report['coverage_pct']:.1f}% | in attesa: {report['pending']} | senza dati a finestra chiusa: {report['unscored_expired']}\n"
                    f"Direzione corretta: {report['correct']} | errata: {report['incorrect']}\n"
                    f"Accuratezza direzionale: {report['accuracy_pct']:.1f}%\n"
                    f"Rendimento direzionale medio: {report['mean_directional_return_pct']:+.3f}%\n"
@@ -153,7 +159,7 @@ def _maybe_send_daily_scorecard(state: dict[str, Any], send_telegram: Callable[[
                    "TP/SL sono attraversamenti osservati ai controlli periodici, non tick intrabar. Feed Gagarin; esclusi spread/slippage.")
     else:
         message = ("📊 GAGARIN — VERIFICA ALERT (ultimi 7 giorni)\n"
-                   f"Alert inviati: {report['alerts']} | in attesa: {report['pending']}\n"
+                   f"Alert inviati: {report['alerts']} | in attesa: {report['pending']} | senza dati a finestra chiusa: {report['unscored_expired']}\n"
                    "Campione valutabile insufficiente: servono prezzi osservati almeno 15 minuti dopo l'alert.")
     try:
         sent = bool(send_telegram(message))
