@@ -223,3 +223,84 @@ def format_summary(summary):
         f"closed={summary['closed']} "
         f"outcomes={summary['outcomes']}"
     )
+
+def _parse_timestamp(value):
+    """Parse ISO timestamps, normalizing naive timestamps to UTC."""
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _hit_outcome(row, candles):
+    """Resolve the first stop/target hit conservatively from later OHLC candles.
+
+    If stop and target are both touched in one candle, stop wins because
+    OHLC data cannot establish intrabar ordering.
+    """
+    direction = str(row.get("direction", "")).upper()
+    try:
+        entry, stop = float(row["entry"]), float(row["stop"])
+        targets = [(f"TP{i}", float(row[f"tp{i}"]), i)
+                   for i in (1, 2, 3) if row.get(f"tp{i}") not in ("", None)]
+    except (KeyError, TypeError, ValueError):
+        return None
+    if direction not in {"LONG", "SHORT"} or entry == stop or not targets:
+        return None
+    risk = abs(entry - stop)
+    opened = _parse_timestamp(row.get("timestamp_utc"))
+    if opened is None:
+        return None
+    for candle in candles:
+        stamp = _parse_timestamp(candle.get("timestamp", candle.get("datetime")))
+        if stamp is None or stamp <= opened:
+            continue
+        try:
+            high, low = float(candle["high"]), float(candle["low"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        stop_hit = low <= stop if direction == "LONG" else high >= stop
+        hit_targets = [item for item in targets
+                       if (high >= item[1] if direction == "LONG" else low <= item[1])]
+        if stop_hit:
+            return {"outcome": "STOP", "r_multiple": -1.0, "closed_at": stamp.isoformat()}
+        if hit_targets:
+            name, target_price, _ = max(hit_targets, key=lambda item: item[2])
+            reward = target_price - entry if direction == "LONG" else entry - target_price
+            return {"outcome": name, "r_multiple": round(reward / risk, 4),
+                    "closed_at": stamp.isoformat()}
+    return None
+
+
+def evaluate_open_signals(candles_by_symbol, path=FEEDBACK_FILE):
+    """Resolve OPEN rows against later chronological OHLC candles.
+
+    candles_by_symbol maps symbols to candle mappings with timestamp/datetime,
+    high, and low. Updates the CSV; it never submits orders or changes decisions.
+    """
+    rows = load_feedback(path)
+    if not rows:
+        return 0
+    changed = 0
+    for row in rows:
+        if (row.get("outcome") or "OPEN") != "OPEN":
+            continue
+        result = _hit_outcome(row, candles_by_symbol.get(row.get("symbol"), []))
+        if result is None:
+            continue
+        row["outcome"] = result["outcome"]
+        row["r_multiple"] = result["r_multiple"]
+        row["closed_at_utc"] = result["closed_at"]
+        changed += 1
+    if changed:
+        fields = list(FIELDS)
+        if any("closed_at_utc" in row for row in rows):
+            fields.append("closed_at_utc")
+        with Path(path).open("w", newline="", encoding="utf-8") as file:
+            writer = csv.DictWriter(file, fieldnames=fields, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(rows)
+    return changed
