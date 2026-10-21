@@ -2,7 +2,7 @@ import unittest
 from datetime import datetime, timezone
 
 from engine.research_controls import (
-    anti_edge_validation, attach_research_controls, brier_score, multi_timeframe_role_diagnostic,
+    anti_edge_validation, attach_research_controls, brier_score, ema16_32_pullback_diagnostic, multi_timeframe_role_diagnostic,
     combinatorial_pbo, cost_adjusted_edge, deflated_sharpe_probability,
     expected_shortfall, utility_weighted_score, validate_market_snapshot,
 )
@@ -39,6 +39,17 @@ class ResearchControlsTests(unittest.TestCase):
         out = multi_timeframe_role_diagnostic({"regime_htf": [100, 101]})
         self.assertEqual(out["status"], "INCOMPLETE")
         self.assertEqual(out["roles"]["setup_mtf"]["status"], "INSUFFICIENT_DATA")
+
+    def test_ema16_32_diagnostic_is_observational(self):
+        out = ema16_32_pullback_diagnostic([100 + i for i in range(40)])
+        self.assertEqual(out["status"], "OBSERVATION")
+        self.assertEqual(out["alignment"], "LONG_BIAS")
+        self.assertFalse(out["direction_created"])
+        self.assertTrue(out["paper_only"])
+
+    def test_ema16_32_requires_at_least_32_closes(self):
+        out = ema16_32_pullback_diagnostic([100 + i for i in range(31)])
+        self.assertEqual(out["status"], "INSUFFICIENT_DATA")
 
     def test_valid_snapshot_passes(self):
         s = self.state()
