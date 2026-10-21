@@ -1,4 +1,5 @@
 from engine.state import SoyuzState
+from engine.profile import get_profile
 
 
 # ============================================================
@@ -162,9 +163,10 @@ def _momentum_direction(
     # BODY / ATR
     # --------------------------------------------------------
 
+    min_momentum_atr = 0.10 if get_profile() == "AGGRESSIVE" else MIN_MOMENTUM_ATR
     if body < (
         state.atr
-        * MIN_MOMENTUM_ATR
+        * min_momentum_atr
     ):
         return "NONE"
 
@@ -177,7 +179,8 @@ def _momentum_direction(
         / candle_range
     )
 
-    if body_ratio < MIN_BODY_RATIO:
+    min_body_ratio = 0.40 if get_profile() == "AGGRESSIVE" else MIN_BODY_RATIO
+    if body_ratio < min_body_ratio:
         return "NONE"
 
     # --------------------------------------------------------
@@ -224,9 +227,10 @@ def _price_breakout_confirmation(
     ):
         return False
 
+    breakout_buffer_atr = 0.02 if get_profile() == "AGGRESSIVE" else BREAKOUT_BUFFER_ATR
     buffer = (
         state.atr
-        * BREAKOUT_BUFFER_ATR
+        * breakout_buffer_atr
     )
 
     if state.setup_direction == "LONG":
@@ -336,9 +340,10 @@ def apply_trigger(
 
         return state
 
+    min_mtf_alignment = 35.0 if get_profile() == "AGGRESSIVE" else MIN_MTF_ALIGNMENT
     if (
         state.mtf_alignment
-        < MIN_MTF_ALIGNMENT
+        < min_mtf_alignment
     ):
 
         state.trigger = "NOT_CONFIRMED"
@@ -426,7 +431,7 @@ def apply_trigger(
 
     if (
         state.mtf_alignment
-        >= STRONG_MTF_ALIGNMENT
+        >= (60.0 if get_profile() == "AGGRESSIVE" else STRONG_MTF_ALIGNMENT)
         and state.structure_direction
         == state.setup_direction
         and state.structure
