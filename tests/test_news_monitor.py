@@ -336,3 +336,20 @@ def test_news_monitor_prefers_durable_state_and_event_journal(tmp_path, monkeypa
     assert not local_journal.exists()
     assert state_store.load_event_journal(limit=10) == [{"kind": "DURABLE_TEST"}]
 
+
+
+
+def test_forbidden_news_source_is_cooled_down_for_six_hours(monkeypatch):
+    from types import SimpleNamespace
+    import telegram.news_monitor as monitor
+
+    source = "TEST_FORBIDDEN_SOURCE"
+    monkeypatch.setitem(monitor._SOURCE_FAILURES, source, 0)
+    monkeypatch.setitem(monitor._SOURCE_RETRY_AT, source, 0.0)
+    error = RuntimeError("forbidden")
+    error.response = SimpleNamespace(status_code=403, headers={})
+    delay = monitor._source_failed(source, error)
+
+    assert delay == 6 * 60 * 60
+    assert monitor._SOURCE_RETRY_AT[source] > 0
+    assert not monitor._source_allowed(source)
