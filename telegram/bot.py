@@ -36,6 +36,7 @@ from config import (
 from engine.gagarin import analyze_universe
 from commodities.universe import enabled_commodities
 from soyuz_gagarin.adapter import evaluate_states
+from engine.profile import get_profile, set_profile
 
 
 API_BASE = "https://api.telegram.org"
@@ -705,7 +706,7 @@ def _command_response(
             "/status — stato bot\n"
             "/ping — verifica collegamento\n"
             "/id — chat ID\n"
-            "/gagarin — nuovo Risk Governor PAPER"
+            "/gagarin — nuovo Risk Governor PAPER\n/profilo — mostra profilo attivo\n/profilo soft — profilo selettivo\n/profilo aggressive — profilo anticipatore"
         )
 
     # --------------------------------------------------------
@@ -737,6 +738,34 @@ def _command_response(
             )
 
     # --------------------------------------------------------
+    # PROFILE SELECTOR
+    # --------------------------------------------------------
+
+    if command_name == "/profilo":
+        if not argument:
+            current = get_profile()
+            return (
+                "🎛 GAGARIN — PROFILO ATTIVO\\n"
+                f"Profilo: {current}\\n"
+                "Modalità: PAPER ONLY\\n\\n"
+                "Comandi: /profilo soft oppure /profilo aggressive"
+            )
+        selected = argument.strip().upper()
+        aliases = {"AGGRESSIVE": "AGGRESSIVE", "AGGRESSIVO": "AGGRESSIVE", "SOFT": "SOFT", "MORBIDO": "SOFT"}
+        if selected not in aliases:
+            return "Profilo non riconosciuto. Usa /profilo soft oppure /profilo aggressive."
+        try:
+            profile = set_profile(aliases[selected])
+            return (
+                f"✅ PROFILO GAGARIN IMPOSTATO: {profile}\\n"
+                "🧪 PAPER ONLY — nessun ordine reale.\\n"
+                + ("Soglie più permissive e setup anticipati; i controlli su dati, direzione, stop e target restano attivi."
+                   if profile == "AGGRESSIVE"
+                   else "Selezione prudente con conferme più rigorose.")
+            )
+        except Exception as exc:
+            return f"❌ Errore cambio profilo: {type(exc).__name__}: {exc}"
+
     # PING
     # --------------------------------------------------------
 
