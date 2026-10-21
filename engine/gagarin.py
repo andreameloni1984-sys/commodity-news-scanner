@@ -138,6 +138,47 @@ def calculate_quality(state: SoyuzState) -> SoyuzState:
         quality += 15.0
         confidence += 20.0
 
+    # News is a small, auditable confluence factor only when the mapped asset
+    # and the technical setup agree. It never creates a direction or bypasses
+    # trigger, risk, or safety gates.
+    intelligence = (getattr(state, "metadata", {}) or {}).get("sputnik_intelligence", {})
+    news_events = intelligence.get("events", []) if isinstance(intelligence, dict) else []
+    news_direction = None
+    asset_name = str(getattr(state, "commodity", "") or "").lower()
+    symbol = str(getattr(state, "symbol", "") or "").upper()
+    for event in news_events:
+        impacts = event.get("impact", {}) or {}
+        for asset, impact in impacts.items():
+            asset_l = str(asset).lower()
+            matches_asset = (
+                (asset == "WTI" and ("wti" in asset_name or "wti" in symbol or symbol == "USOIL")) or
+                (asset == "Brent" and ("brent" in asset_name or "brent" in symbol or symbol == "UKOIL")) or
+                (asset == "Oro" and ("oro" in asset_name or "gold" in asset_name or "XAU" in symbol)) or
+                (asset == "Platino" and ("platino" in asset_name or "platinum" in asset_name or "XPT" in symbol)) or
+                (asset == "Caffè" and ("caff" in asset_name or "coffee" in asset_name)) or
+                (asset == "Cacao" and ("cacao" in asset_name or "cocoa" in asset_name)) or
+                (asset == "Riso" and ("riso" in asset_name or "rice" in asset_name)) or
+                (asset == "Zucchero" and ("zucchero" in asset_name or "sugar" in asset_name))
+            )
+            if matches_asset and impact in {"RIALZISTA", "RIBASSISTA"}:
+                news_direction = "LONG" if impact == "RIALZISTA" else "SHORT"
+                break
+        if news_direction:
+            break
+    if news_direction and state.setup_direction in {"LONG", "SHORT"}:
+        if news_direction == state.setup_direction:
+            probability += 3.0
+            quality += 2.0
+            confidence += 2.0
+            state.metadata["sputnik_confluence"] = "ALIGNED"
+        else:
+            probability -= 4.0
+            quality -= 3.0
+            confidence -= 3.0
+            state.metadata["sputnik_confluence"] = "CONFLICT"
+    elif news_events:
+        state.metadata["sputnik_confluence"] = "CONTEXT_ONLY_NO_DIRECTIONAL_MATCH"
+
     if state.opportunity_type in {"MEAN_REVERSION", "REVERSAL"}:
         quality += 10.0
         confidence += 5.0
