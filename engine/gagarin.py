@@ -216,81 +216,171 @@ def calculate_quality(state: SoyuzState) -> SoyuzState:
 
 
 # Public-source intelligence bridge: news can adjust context, never bypass triggers/safety.
+# Embedded public-news intelligence: no runtime dependency on the separate SPUTNIK service.
+_GAGARIN_NEWS_CACHE = {"loaded_at": 0.0, "events": []}
+
+
 def apply_sputnik_intelligence(state):
+    """Apply copied SPUTNIK-style intelligence locally from Gagarin's news engine.
+
+    Reads the local event journal first; if it has no usable recent events,
+    reuses Gagarin's own public RSS/GDELT fetcher. This is context/scoring only:
+    it cannot create a setup or bypass trigger, risk, or safety.
+    """
+    import json
+    import os
+    import time
+    from datetime import datetime, timezone
+    from pathlib import Path
+
     try:
-        from engine.sputnik_bridge import fetch_sputnik_state, extract_active_domains
-        from telegram.news_monitor import classify_event
-        from datetime import datetime, timezone
-        import re
+        from telegram.news_monitor import classify_event, fetch_news_items
+        from sputnik_action_reaction import build_action_reaction_record
+        from sputnik_catalyst import catalyst_watchlist
+        from engine.public_event_brain import classify as classify_public_intelligence
 
-        payload = fetch_sputnik_state(timeout=5)
-        if not payload:
-            state.metadata["sputnik_intelligence"] = {"status": "UNAVAILABLE"}
-            return state
+        now = time.time()
+        if now - float(_GAGARIN_NEWS_CACHE.get("loaded_at", 0.0)) > 300:
+            recent = []
+            journal_path = Path(os.getenv("GAGARIN_NEWS_JOURNAL_PATH", "data/news_event_journal.jsonl"))
+            cutoff = now - 72 * 3600
+            try:
+                if journal_path.exists():
+                    for line in journal_path.read_text(encoding="utf-8").splitlines()[-500:]:
+                        try:
+                            row = json.loads(line)
+                        except (json.JSONDecodeError, TypeError):
+                            continue
+                        if row.get("kind") != "NEWS_DETECTED" or not row.get("title"):
+                            continue
+                        stamp = row.get("first_seen_at") or row.get("published_at") or row.get("recorded_at")
+                        try:
+                            dt = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
+                            if dt.tzinfo is None:
+                                dt = dt.replace(tzinfo=timezone.utc)
+                            if dt.timestamp() < cutoff:
+                                continue
+                        except (TypeError, ValueError, OverflowError):
+                            continue
+                        recent.append({
+                            "event_id": str(row.get("event_id") or ""),
+                            "source": str(row.get("source") or "GAGARIN_NEWS_JOURNAL"),
+                            "title": str(row.get("title") or ""),
+                            "url": str(row.get("url") or ""),
+                            "detected_at": str(stamp or ""),
+                            "evidence": "LOCAL_NEWS_JOURNAL",
+                        })
+            except OSError:
+                pass
 
-        history = payload.get("intelligence_history") or {}
-        cutoff = datetime.now(timezone.utc).timestamp() - 72 * 3600
-        matches = []
+            # Self-contained fallback: use Gagarin's own public-source collector,
+            # not the separate SPUTNIK service or its remote state endpoint.
+            if not recent:
+                try:
+                    for item in fetch_news_items()[:80]:
+                        title = str(item.get("title") or "").strip()
+                        if not title:
+                            continue
+                        published = str(item.get("published_at") or "")
+                        try:
+                            dt = datetime.fromisoformat(published.replace("Z", "+00:00"))
+                            if dt.tzinfo is None:
+                                dt = dt.replace(tzinfo=timezone.utc)
+                            if dt.timestamp() < cutoff:
+                                continue
+                        except (TypeError, ValueError, OverflowError):
+                            continue
+                        recent.append({
+                            "event_id": str(item.get("url") or title),
+                            "source": str(item.get("source") or "PUBLIC_RSS"),
+                            "title": title,
+                            "url": str(item.get("url") or ""),
+                            "detected_at": published,
+                            "evidence": "PUBLIC_RSS_ITEM",
+                        })
+                except Exception:
+                    pass
+
+            # De-duplicate on event identity and title; newest/recent item wins.
+            deduped = {}
+            for item in recent:
+                key = item.get("event_id") or item.get("title")
+                deduped[str(key)] = item
+            _GAGARIN_NEWS_CACHE["events"] = list(deduped.values())[-100:]
+            _GAGARIN_NEWS_CACHE["loaded_at"] = now
+
         name = str(getattr(state, "commodity", "") or "").lower()
         symbol = str(getattr(state, "symbol", "") or "").upper()
-        for event_id, event in history.items():
-            if not isinstance(event, dict):
-                continue
-            detected = event.get("detected_at")
-            try:
-                ts = datetime.fromisoformat(str(detected).replace("Z", "+00:00")).timestamp()
-            except Exception:
-                continue
-            if ts < cutoff:
-                continue
-            domains = [str(x).upper() for x in (event.get("domains") or [])]
-            text = " ".join(str(event.get(k) or "") for k in ("title", "text", "summary", "excerpt"))
-            classified = classify_event(text) if text.strip() else {"assets": [], "impact": {}, "relevant": False, "reason": "no event text"}
+        matches = []
+        for item in _GAGARIN_NEWS_CACHE.get("events", []):
+            title = str(item.get("title") or "")
+            classified = classify_event(title)
+            intel = classify_public_intelligence(title)
             assets = classified.get("assets") or []
-            # Match only explicitly mapped commodity exposure; AI/media are contextual,
-            # not assumed to move every commodity.
-            match = False
+            impact = classified.get("impact") or {}
+            asset_match = False
             for asset in assets:
-                a = str(asset).lower()
-                if (asset == "WTI" and ("wti" in name or "wti" in symbol or symbol == "USOIL")) or \
-                   (asset == "Brent" and ("brent" in name or "brent" in symbol or symbol == "UKOIL")) or \
-                   (asset == "Oro" and ("gold" in name or "oro" in name or "XAU" in symbol)) or \
-                   (asset == "Platino" and ("platino" in name or "platinum" in name or "XPT" in symbol)) or \
-                   (asset == "Caffè" and ("caff" in name or "coffee" in name)) or \
-                   (asset == "Cacao" and ("cacao" in name or "cocoa" in name)) or \
-                   (asset == "Riso" and ("riso" in name or "rice" in name)) or \
+                if (asset == "WTI" and ("wti" in name or "wti" in symbol or symbol == "USOIL")) or \\
+                   (asset == "Brent" and ("brent" in name or "brent" in symbol or symbol == "UKOIL")) or \\
+                   (asset == "Oro" and ("oro" in name or "gold" in name or "XAU" in symbol)) or \\
+                   (asset == "Platino" and ("platino" in name or "platinum" in name or "XPT" in symbol)) or \\
+                   (asset == "Caffè" and ("caff" in name or "coffee" in name)) or \\
+                   (asset == "Cacao" and ("cacao" in name or "cocoa" in name)) or \\
+                   (asset == "Riso" and ("riso" in name or "rice" in name)) or \\
                    (asset == "Zucchero" and ("zucchero" in name or "sugar" in name)):
-                    match = True
-            domain_match = (
-                ("AI_TECH" in domains and any(x in name or x in symbol for x in ("nasdaq", "qqq", "tech", "nvda", "msft", "aapl"))) or
-                ("ENERGY" in domains and any(x in name or x in symbol for x in ("wti", "brent", "oil", "energy"))) or
-                ("MEDIA" in domains and any(x in name or x in symbol for x in ("media", "communication", "spy")))
-            )
-            if match or domain_match:
+                    asset_match = True
+                    break
+            # A domain-only match is retained as context but cannot score direction.
+            domain_match = bool(set(intel.get("domains") or []) & {
+                "ENERGY", "METALS", "AGRICULTURE", "TRADE_POLICY", "RATES_MACRO", "GEOPOLITICS"
+            })
+            if asset_match or domain_match:
+                action_reaction = build_action_reaction_record(
+                    {"event_id": item.get("event_id"), "domains": intel.get("domains") or []},
+                    title,
+                )
+                candidates = catalyst_watchlist([{
+                    "source": item.get("source", "PUBLIC_RSS"),
+                    "event_id": item.get("event_id", ""),
+                    "domains": intel.get("domains") or [],
+                    "evidence": item.get("evidence", "PUBLIC_RSS_ITEM"),
+                }], limit=8)
                 matches.append({
-                    "event_id": str(event_id), "source": event.get("source", "TRUTH_ARCHIVE"),
-                    "domains": domains, "detected_at": detected,
-                    "assets": assets, "impact": classified.get("impact", {}),
-                    "directional_text_found": bool(classified.get("relevant") and any(v in {"RIALZISTA", "RIBASSISTA"} for v in (classified.get("impact") or {}).values())),
-                    "reason": classified.get("reason", "domain match; direction unconfirmed"),
+                    "event_id": item.get("event_id", ""),
+                    "source": item.get("source", "PUBLIC_RSS"),
+                    "title": title[:300],
+                    "url": item.get("url", ""),
+                    "detected_at": item.get("detected_at", ""),
+                    "domains": intel.get("domains") or [],
+                    "assets": assets,
+                    "impact": impact,
+                    "confidence_score": classified.get("confidence_score", 0),
+                    "historical_action_reaction": action_reaction,
+                    "watch_candidates": candidates,
+                    "directional_text_found": any(v in {"RIALZISTA", "RIBASSISTA"} for v in impact.values()),
+                    "evidence": item.get("evidence", "PUBLIC_RSS_ITEM"),
                 })
 
         state.metadata["sputnik_intelligence"] = {
-            "status": "MATCHED" if matches else "NO_RELEVANT_MATCH",
-            "events": matches[:5],
+            "status": "MATCHED" if matches else ("NO_RELEVANT_MATCH" if _GAGARIN_NEWS_CACHE.get("events") else "NO_RECENT_NEWS"),
+            "events": matches[:8],
             "window_hours": 72,
-            "source": "SPUTNIK/TRUTH_ARCHIVE",
+            "source": "GAGARIN_EMBEDDED_PUBLIC_INTELLIGENCE",
+            "runtime_sputnik_dependency": False,
+            "cache_age_seconds": max(0, int(now - float(_GAGARIN_NEWS_CACHE.get("loaded_at", now)))),
         }
-        # Only directional, asset-specific news changes model scores. Ambiguous
-        # domain mentions are logged as context and never fabricate LONG/SHORT.
         directional = [m for m in matches if m.get("directional_text_found")]
         if directional:
             state.metadata["news_context_active"] = True
             state.metadata["news_context_count"] = len(directional)
-            state.metadata["news_context_note"] = "Sputnik public-source event matched; technical trigger and safety gates remain mandatory."
+            state.metadata["news_context_note"] = "Embedded public-news intelligence; technical trigger, risk and safety remain mandatory."
         return state
     except Exception as exc:
-        state.metadata["sputnik_intelligence"] = {"status": "ERROR", "error": type(exc).__name__}
+        state.metadata["sputnik_intelligence"] = {
+            "status": "ERROR",
+            "error": type(exc).__name__,
+            "runtime_sputnik_dependency": False,
+        }
         return state
 
 
