@@ -2,7 +2,7 @@ import unittest
 from datetime import datetime, timezone
 
 from engine.research_controls import (
-    anti_edge_validation, attach_research_controls, brier_score,
+    anti_edge_validation, attach_research_controls, brier_score, multi_timeframe_role_diagnostic,
     combinatorial_pbo, cost_adjusted_edge, deflated_sharpe_probability,
     expected_shortfall, utility_weighted_score, validate_market_snapshot,
 )
@@ -21,6 +21,24 @@ class ResearchControlsTests(unittest.TestCase):
             candles=candles, closes=[101, 102], data_age_seconds=30,
             metadata={},
         )
+
+
+    def test_mtf_role_diagnostic_keeps_roles_separate_and_does_not_create_trade(self):
+        out = multi_timeframe_role_diagnostic({
+            "regime_htf": [100, 105],
+            "setup_mtf": [50, 49],
+            "trigger_ltf": [10, 10.2],
+        })
+        self.assertEqual(out["roles"]["regime_htf"]["direction"], "LONG")
+        self.assertEqual(out["roles"]["setup_mtf"]["direction"], "SHORT")
+        self.assertEqual(out["roles"]["trigger_ltf"]["direction"], "LONG")
+        self.assertFalse(out["direction_created"])
+        self.assertTrue(out["paper_only"])
+
+    def test_mtf_role_diagnostic_marks_missing_timeframe_incomplete(self):
+        out = multi_timeframe_role_diagnostic({"regime_htf": [100, 101]})
+        self.assertEqual(out["status"], "INCOMPLETE")
+        self.assertEqual(out["roles"]["setup_mtf"]["status"], "INSUFFICIENT_DATA")
 
     def test_valid_snapshot_passes(self):
         s = self.state()
