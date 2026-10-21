@@ -25,7 +25,7 @@
 # ============================================================
 
 from engine.state import SoyuzState
-from engine.regime import apply_regime
+from engine.regime import apply_regime, _safe_float, _rsi_wilder, _volatility_diagnostics
 from engine.structure import apply_structure
 from engine.setup import apply_setup
 from engine.trigger import apply_trigger
@@ -710,3 +710,39 @@ def test_rsi_wilder_rejects_invalid_values():
     from engine.regime import _rsi_wilder
 
     assert _rsi_wilder([100.0, "bad", 102.0], 2) is None
+
+
+# ============================================================
+# NON-FINITE NUMERIC INPUTS
+# ============================================================
+
+
+def test_safe_float_rejects_nan_and_infinity():
+    import math
+
+    assert _safe_float(float("nan")) is None
+    assert _safe_float(float("inf")) is None
+    assert _safe_float(float("-inf")) is None
+    assert _safe_float("not-a-number") is None
+    assert _safe_float("12.5") == 12.5
+
+
+def test_rsi_wilder_fails_closed_on_non_finite_closes():
+    closes = [float(i) for i in range(15)]
+    closes[-1] = float("nan")
+    assert _rsi_wilder(closes) is None
+    closes[-1] = float("inf")
+    assert _rsi_wilder(closes) is None
+
+
+def test_volatility_diagnostics_ignore_non_finite_ranges():
+    state = _make_state("LONG")
+    state.highs = [float(value) for value in state.highs]
+    state.lows = [float(value) for value in state.lows]
+    state.highs[-1] = float("nan")
+    state.lows[-2] = float("inf")
+
+    result = _volatility_diagnostics(state)
+
+    assert result["samples"] == len(state.highs) - 2
+    assert result["status"] in {"EXPANDING", "CONTRACTING", "STABLE", "UNKNOWN"}
