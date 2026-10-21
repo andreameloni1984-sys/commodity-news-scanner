@@ -87,17 +87,36 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         if not observations:
             pending += 1
             continue
-        observed_at, current_price = max(observations, key=lambda item: item[0])
+        observations.sort(key=lambda item: item[0])
+        observed_at, current_price = observations[-1]
         raw_pct = (current_price / alert_price - 1) * 100
         signed_pct = raw_pct if direction == "LONG" else -raw_pct
+        try:
+            stop = float(alert.get("stop"))
+            tp1 = float(alert.get("tp1"))
+        except (TypeError, ValueError):
+            stop, tp1 = None, None
+        outcome = "OPEN_AT_LAST_CHECK"
+        if stop is not None and tp1 is not None:
+            for _, observed_price in observations:
+                if (direction == "LONG" and observed_price <= stop) or (direction == "SHORT" and observed_price >= stop):
+                    outcome = "SL_OBSERVED"
+                    break
+                if (direction == "LONG" and observed_price >= tp1) or (direction == "SHORT" and observed_price <= tp1):
+                    outcome = "TP1_OBSERVED"
+                    break
         scored.append({"asset": alert.get("asset"), "direction": direction, "sent_at": sent_at.isoformat(),
                        "observed_at": observed_at.isoformat(), "signed_return_pct": round(signed_pct, 6),
-                       "correct": signed_pct > 0})
+                       "correct": signed_pct > 0, "outcome": outcome})
     correct = sum(x["correct"] for x in scored)
+    tp1_observed = sum(x["outcome"] == "TP1_OBSERVED" for x in scored)
+    sl_observed = sum(x["outcome"] == "SL_OBSERVED" for x in scored)
+    open_count = sum(x["outcome"] == "OPEN_AT_LAST_CHECK" for x in scored)
     return {"window_days": 7, "alerts": len(alerts), "scored": len(scored), "pending": pending,
             "correct": correct, "incorrect": len(scored)-correct,
             "accuracy_pct": round(correct/len(scored)*100, 2) if scored else None,
-            "mean_directional_return_pct": round(sum(x["signed_return_pct"] for x in scored)/len(scored), 4) if scored else None}
+            "mean_directional_return_pct": round(sum(x["signed_return_pct"] for x in scored)/len(scored), 4) if scored else None,
+            "tp1_observed": tp1_observed, "sl_observed": sl_observed, "open_at_last_check": open_count}
 
 
 def _maybe_send_daily_scorecard(state: dict[str, Any], send_telegram: Callable[[str], bool], now: datetime) -> bool:
@@ -125,7 +144,8 @@ def _maybe_send_daily_scorecard(state: dict[str, Any], send_telegram: Callable[[
                    f"Direzione corretta: {report['correct']} | errata: {report['incorrect']}\\n"
                    f"Accuratezza direzionale: {report['accuracy_pct']:.1f}%\\n"
                    f"Rendimento direzionale medio: {report['mean_directional_return_pct']:+.3f}%\\n"
-                   "Feed Gagarin; esclusi spread/slippage. La correlazione non prova causalità.")
+                   f"TP1 osservato: {report['tp1_observed']} | SL osservato: {report['sl_observed']} | ancora aperti: {report['open_at_last_check']}\\n"
+                   "TP/SL sono attraversamenti osservati ai controlli periodici, non tick intrabar. Feed Gagarin; esclusi spread/slippage.")
     else:
         message = ("📊 GAGARIN — VERIFICA ALERT (ultimi 7 giorni)\\n"
                    f"Alert inviati: {report['alerts']} | in attesa: {report['pending']}\\n"
