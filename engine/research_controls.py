@@ -40,6 +40,37 @@ def _epoch(value: Any) -> float | None:
         return None
 
 
+
+
+def multi_timeframe_role_diagnostic(series_by_role: dict[str, list[float]]) -> dict:
+    """Describe HTF regime / MTF setup / LTF trigger independently.
+
+    Diagnostic only: it does not synthesize a trade direction or modify Gagarin
+    state. Caller must supply chronological close series for the named roles.
+    """
+    role_names = ("regime_htf", "setup_mtf", "trigger_ltf")
+    result = {"status": "OBSERVATION", "paper_only": True,
+              "direction_created": False, "roles": {}}
+    for role in role_names:
+        raw = series_by_role.get(role) if isinstance(series_by_role, dict) else None
+        try:
+            values = [float(x) for x in (raw or [])]
+        except (TypeError, ValueError):
+            values = []
+        if len(values) < 2 or any(not math.isfinite(x) or x <= 0 for x in values):
+            result["roles"][role] = {"status": "INSUFFICIENT_DATA", "direction": "NONE"}
+            result["status"] = "INCOMPLETE"
+            continue
+        delta = values[-1] - values[0]
+        direction = "LONG" if delta > 0 else "SHORT" if delta < 0 else "NEUTRAL"
+        result["roles"][role] = {
+            "status": "OBSERVATION", "direction": direction,
+            "change_pct": (values[-1] / values[0] - 1.0) * 100.0,
+            "observations": len(values),
+        }
+    return result
+
+
 def validate_market_snapshot(state: Any, now: datetime | None = None) -> dict:
     """Fail closed on malformed OHLC/timestamps; do not infer a direction.
 
