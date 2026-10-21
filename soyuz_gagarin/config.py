@@ -1,5 +1,6 @@
 """Single source of truth for Gagarin operational thresholds."""
 import os
+from math import isfinite
 from dataclasses import dataclass, field
 from typing import Optional, Tuple
 
@@ -8,9 +9,10 @@ from .trading_profiles import get_profile
 
 def _env_float(name: str, default: float) -> float:
     try:
-        return float(os.getenv(name, str(default)))
-    except (TypeError, ValueError):
+        value = float(os.getenv(name, str(default)))
+    except (TypeError, ValueError, OverflowError):
         return float(default)
+    return value if isfinite(value) else float(default)
 
 
 def _env_int(name: str, default: int) -> int:
