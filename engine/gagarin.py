@@ -320,15 +320,17 @@ def apply_sputnik_intelligence(state):
             impact = classified.get("impact") or {}
             asset_match = False
             for asset in assets:
-                if (asset == "WTI" and ("wti" in name or "wti" in symbol or symbol == "USOIL")) or \\
-                   (asset == "Brent" and ("brent" in name or "brent" in symbol or symbol == "UKOIL")) or \\
-                   (asset == "Oro" and ("oro" in name or "gold" in name or "XAU" in symbol)) or \\
-                   (asset == "Platino" and ("platino" in name or "platinum" in name or "XPT" in symbol)) or \\
-                   (asset == "Caffè" and ("caff" in name or "coffee" in name)) or \\
-                   (asset == "Cacao" and ("cacao" in name or "cocoa" in name)) or \\
-                   (asset == "Riso" and ("riso" in name or "rice" in name)) or \\
-                   (asset == "Zucchero" and ("zucchero" in name or "sugar" in name)):
-                    asset_match = True
+                asset_match = (
+                    (asset == 'WTI' and ('wti' in name or 'wti' in symbol or symbol == 'USOIL'))
+                    or (asset == 'Brent' and ('brent' in name or 'brent' in symbol or symbol == 'UKOIL'))
+                    or (asset == 'Oro' and ('oro' in name or 'gold' in name or 'XAU' in symbol))
+                    or (asset == 'Platino' and ('platino' in name or 'platinum' in name or 'XPT' in symbol))
+                    or (asset == 'Caffè' and ('caff' in name or 'coffee' in name))
+                    or (asset == 'Cacao' and ('cacao' in name or 'cocoa' in name))
+                    or (asset == 'Riso' and ('riso' in name or 'rice' in name))
+                    or (asset == 'Zucchero' and ('zucchero' in name or 'sugar' in name))
+                )
+                if asset_match:
                     break
             # A domain-only match is retained as context but cannot score direction.
             domain_match = bool(set(intel.get("domains") or []) & {
