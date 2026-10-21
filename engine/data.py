@@ -184,6 +184,15 @@ YAHOO_SYMBOLS = {
     "SUGAR/USD": "SB=F",
     "COCOA/USD": "CC=F",
     "COFFEE/USD": "KC=F",
+
+    # Yahoo Finance FX spot symbols (explicit mappings).
+    "EUR/USD": "EURUSD=X",
+    "GBP/USD": "GBPUSD=X",
+    "USD/JPY": "JPY=X",
+    "AUD/USD": "AUDUSD=X",
+    "NZD/USD": "NZDUSD=X",
+    "USD/CAD": "CAD=X",
+    "USD/CHF": "CHF=X",
 }
 
 
@@ -277,6 +286,15 @@ PROVIDER_ORDER = {
         "YAHOO",
         "TWELVE_DATA",
     ),
+
+    # Forex: prefer Twelve Data's explicit FX pair, Yahoo as fallback.
+    "EUR/USD": ("TWELVE_DATA", "YAHOO"),
+    "GBP/USD": ("TWELVE_DATA", "YAHOO"),
+    "USD/JPY": ("TWELVE_DATA", "YAHOO"),
+    "AUD/USD": ("TWELVE_DATA", "YAHOO"),
+    "NZD/USD": ("TWELVE_DATA", "YAHOO"),
+    "USD/CAD": ("TWELVE_DATA", "YAHOO"),
+    "USD/CHF": ("TWELVE_DATA", "YAHOO"),
 }
 
 
