@@ -166,7 +166,7 @@ def test_sputnik_historical_action_reaction_is_attached_to_gagarin_news():
     result = classify_event("Trump threatens massive increase in China tariffs")
     historical = result["historical_action_reaction"]
     assert historical["event_type"] == "TRADE_ESCALATION"
-    assert "china_tariff_escalation_2025_10" in historical["historical_matches"]
+    assert historical["historical_matches"] == ["china_tariff_escalation_2025_10"]
     assert historical["historical_directions"]["NASDAQ"] == "DOWN"
     assert historical["evidence"] == "HISTORICAL_ANALOGUE"
     assert result["sputnik_watch_candidates"]
@@ -187,3 +187,8 @@ def test_sputnik_does_not_match_broad_china_headline_to_trade_analogue():
     )
     assert matches == []
 
+def test_sputnik_tariff_pause_does_not_match_escalation_pattern():
+    from sputnik_action_reaction import match_historical_reactions
+
+    matches = match_historical_reactions("Trump announces a 90 days pause on tariffs")
+    assert [item["id"] for item in matches] == ["tariff_pause_2025_04"]
