@@ -176,6 +176,43 @@ def _single_move(state: SoyuzState):
 
 
 
+RSI_WILDER_PERIOD = 14
+
+
+def _rsi_wilder(closes, period=RSI_WILDER_PERIOD):
+    """Return Wilder RSI from closes; None if there are too few valid values."""
+    try:
+        period = int(period)
+    except (TypeError, ValueError):
+        return None
+    if period < 1:
+        return None
+    values = []
+    for value in closes or []:
+        number = _safe_float(value)
+        if number is None:
+            return None
+        values.append(number)
+    if len(values) < period + 1:
+        return None
+    changes = [values[i] - values[i - 1] for i in range(1, len(values))]
+    gains = [max(change, 0.0) for change in changes]
+    losses = [max(-change, 0.0) for change in changes]
+    avg_gain = sum(gains[:period]) / period
+    avg_loss = sum(losses[:period]) / period
+    for gain, loss in zip(gains[period:], losses[period:]):
+        avg_gain = ((period - 1) * avg_gain + gain) / period
+        avg_loss = ((period - 1) * avg_loss + loss) / period
+    if avg_gain == 0 and avg_loss == 0:
+        return 50.0
+    if avg_loss == 0:
+        return 100.0
+    if avg_gain == 0:
+        return 0.0
+    relative_strength = avg_gain / avg_loss
+    return 100.0 - (100.0 / (1.0 + relative_strength))
+
+
 VOLATILITY_RANGE_LOOKBACK = 8
 VOLATILITY_EXPANSION_RATIO = 1.25
 VOLATILITY_CONTRACTION_RATIO = 0.80
@@ -313,6 +350,7 @@ def apply_regime(
     )
 
     state.metadata["volatility_diagnostics"] = _volatility_diagnostics(state)
+    state.metadata["rsi_wilder_14"] = _rsi_wilder(state.closes)
 
     # ========================================================
     # DIAGNOSTICA
