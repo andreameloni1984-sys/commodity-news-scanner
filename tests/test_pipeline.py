@@ -793,3 +793,47 @@ def test_risk_clears_overflowed_target_bracket():
     assert state.tp2 is None
     assert state.tp3 is None
     assert state.metadata["risk_diagnostics"]["status"] == "NON_FINITE_OR_NON_POSITIVE_BRACKET"
+
+
+
+# ============================================================
+# LATE BREAKOUT / DIRECTION CONSISTENCY
+# ============================================================
+
+
+def test_breakout_trigger_rejects_late_entry_after_extended_move():
+    state = _prepare_directional_state("LONG")
+    state.breakout = True
+    state.breakout_direction = "LONG"
+    state.price = 101.0
+    state.breakout_level = 100.20
+    state.mtf_data = {
+        "5min": [
+            {"open": 100.0, "high": 100.2, "low": 99.9, "close": 100.15, "timestamp": "2026-01-01T01:50:00Z"},
+            {"open": 100.15, "high": 100.90, "low": 100.10, "close": 100.80, "timestamp": "2026-01-01T01:55:00Z"},
+        ]
+    }
+    apply_setup(state)
+    apply_trigger(state)
+
+    assert state.trigger_confirmed is False
+    assert state.trigger == "NOT_CONFIRMED"
+
+
+def test_breakout_trigger_rejects_conflicting_breakout_direction():
+    state = _prepare_directional_state("LONG")
+    state.breakout = True
+    state.breakout_direction = "SHORT"
+    state.price = 100.38
+    state.breakout_level = 100.20
+    state.mtf_data = {
+        "5min": [
+            {"open": 100.0, "high": 100.2, "low": 99.9, "close": 100.15, "timestamp": "2026-01-01T01:50:00Z"},
+            {"open": 100.15, "high": 100.40, "low": 100.10, "close": 100.38, "timestamp": "2026-01-01T01:55:00Z"},
+        ]
+    }
+    apply_setup(state)
+    apply_trigger(state)
+
+    assert state.trigger_confirmed is False
+    assert state.trigger == "NOT_CONFIRMED"
