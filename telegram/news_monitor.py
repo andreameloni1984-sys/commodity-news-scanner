@@ -42,16 +42,21 @@ JOURNAL_PATH = Path(os.getenv("GAGARIN_NEWS_JOURNAL_PATH", "data/news_event_jour
 
 
 def _journal(record: dict[str, Any]) -> None:
-    """Append a durable audit record for news, baseline, reaction and forecast."""
+    """Append an audit record to PostgreSQL when configured, with file fallback."""
     row = dict(record)
     row.setdefault("recorded_at", _utc_now().isoformat())
     try:
+        from state_store import append_event_journal
+        if append_event_journal(row):
+            return
+    except Exception as exc:
+        print(f"NEWS journal database unavailable | {type(exc).__name__}: {exc}", flush=True)
+    try:
         JOURNAL_PATH.parent.mkdir(parents=True, exist_ok=True)
         with JOURNAL_PATH.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
+            handle.write(json.dumps(row, ensure_ascii=False, default=str) + "\\n")
     except OSError as exc:
         print(f"NEWS journal save failed | {type(exc).__name__}: {exc}", flush=True)
-
 
 def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = None) -> dict[str, Any]:
     """Score alert direction using a later live price observation, not a keyword label."""
@@ -657,6 +662,18 @@ def _format_news_alert(event: dict[str, Any], setup: dict[str, Any]) -> str:
 
 def _load_state() -> dict[str, Any]:
     try:
+        from state_store import load_state
+        payload = load_state("gagarin_news_monitor")
+        if isinstance(payload, dict):
+            payload.setdefault("seen", [])
+            payload.setdefault("clusters", [])
+            payload.setdefault("pending", [])
+            payload.setdefault("last_analysis_at", 0)
+            payload.setdefault("initialized", False)
+            return payload
+    except Exception as exc:
+        print(f"NEWS state database read failed | {type(exc).__name__}: {exc}", flush=True)
+    try:
         payload = json.loads(STATE_PATH.read_text(encoding="utf-8"))
         if isinstance(payload, dict):
             payload.setdefault("seen", [])
@@ -672,13 +689,17 @@ def _load_state() -> dict[str, Any]:
 
 def _save_state(state: dict[str, Any]) -> None:
     try:
+        from state_store import save_state
+        save_state("gagarin_news_monitor", state)
+    except Exception as exc:
+        print(f"NEWS state database save failed | {type(exc).__name__}: {exc}", flush=True)
+    try:
         STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
         tmp = STATE_PATH.with_suffix(".tmp")
         tmp.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp.replace(STATE_PATH)
     except OSError as exc:
         print(f"NEWS state save failed | {type(exc).__name__}: {exc}", flush=True)
-
 
 def poll_news_once(
     send_telegram: Callable[[str], bool],
