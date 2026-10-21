@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from math import isfinite
 
 from engine.state import SoyuzState
 
@@ -57,6 +58,7 @@ STRONG_MTF_ALIGNMENT = 75.0
 
 # Buffer minimo oltre il livello di breakout.
 BREAKOUT_BUFFER_ATR = 0.05
+MAX_BREAKOUT_ENTRY_EXTENSION_ATR = 0.75
 
 # Massimo wick di rigetto sul lato opposto al breakout.
 # Serve a filtrare breakout che chiudono con forte rejection.
