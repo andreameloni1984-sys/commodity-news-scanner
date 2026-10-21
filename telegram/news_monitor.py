@@ -24,6 +24,7 @@ import requests
 
 from engine.public_event_brain import classify as classify_public_intelligence
 from sputnik_action_reaction import build_action_reaction_record
+from sputnik_catalyst import catalyst_watchlist
 
 POLL_SECONDS = max(30, int(os.getenv("GAGARIN_NEWS_POLL_SECONDS", "60")))
 RECHECK_SECONDS = max(300, int(os.getenv("GAGARIN_NEWS_RECHECK_SECONDS", "300")))
@@ -395,7 +396,13 @@ def classify_event(title: str) -> dict[str, Any]:
             {"title": title, "domains": classify_public_intelligence(title).get("domains", [])},
             title,
         ),
-        "reason": "keyword heuristic; not a calibrated probability; historical analogues are descriptive; price confirmation required",
+        "sputnik_watch_candidates": catalyst_watchlist([{
+            "source": "GAGARIN_NEWS",
+            "event_id": hashlib.sha256(title.encode("utf-8")).hexdigest()[:16],
+            "domains": classify_public_intelligence(title).get("domains", []),
+            "evidence": "PUBLIC_NEWS_HEADLINE",
+        }]),
+        "reason": "keyword heuristic; not a calibrated probability; historical analogues are descriptive; watch candidates require live price confirmation",
     }
 
 
@@ -606,6 +613,7 @@ def poll_news_once(
             "impact": event.get("impact"),
             "political_intelligence": classified.get("political_intelligence"),
             "historical_action_reaction": classified.get("historical_action_reaction"),
+            "sputnik_watch_candidates": classified.get("sputnik_watch_candidates"),
             "classification_reason": classified.get("reason"),
         })
         pending.append(event)
