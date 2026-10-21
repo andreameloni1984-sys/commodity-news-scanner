@@ -695,3 +695,18 @@ def test_volatility_diagnostics_fail_closed_with_insufficient_data():
     result = _volatility_diagnostics(state)
     assert result["status"] == "UNKNOWN"
     assert result["reason"] == "INSUFFICIENT_VALID_RANGES"
+
+
+def test_rsi_wilder_handles_up_down_flat_and_insufficient_series():
+    from engine.regime import _rsi_wilder
+
+    assert _rsi_wilder(list(range(15)), 14) == 100.0
+    assert _rsi_wilder(list(range(15, 0, -1)), 14) == 0.0
+    assert _rsi_wilder([100.0] * 15, 14) == 50.0
+    assert _rsi_wilder([1.0, 2.0, 3.0], 14) is None
+
+
+def test_rsi_wilder_rejects_invalid_values():
+    from engine.regime import _rsi_wilder
+
+    assert _rsi_wilder([100.0, "bad", 102.0], 2) is None
