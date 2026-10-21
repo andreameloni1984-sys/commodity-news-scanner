@@ -29,6 +29,7 @@ def _state(analysis_time, candle_time):
         atr=2.0,
         price=100.0,
         breakout=True,
+        breakout_direction="LONG",
         breakout_level=100.5,
         setup_direction="LONG",
     )
