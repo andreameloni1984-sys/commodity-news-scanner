@@ -41,3 +41,15 @@ def test_rejects_declared_rr_that_disagrees_with_bracket():
 def test_paper_only_and_action_are_mandatory():
     assert validate_paper_signal(signal(paper_only=False))[1] == "PAPER_ONLY_REQUIRED"
     assert validate_paper_signal(signal(action="LIVE_ORDER"))[1] == "NOT_A_PAPER_ENTRY"
+
+
+
+def test_rejects_non_finite_computed_rr_even_when_prices_are_finite():
+    row = signal(
+        entry=1e-300,
+        stop=1e-308,
+        tp1=1.0,
+        tp2=1e100,
+        tp3=1e308,
+    )
+    assert validate_paper_signal(row) == (False, "RR_CALCULATION_NON_FINITE")
