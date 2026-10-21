@@ -290,10 +290,15 @@ def test_alert_scorecard_does_not_miss_stop_hit_in_first_15_minutes():
 
 
 def test_eia_press_release_feed_uses_published_rss_endpoint():
-    from telegram.news_monitor import RSS_FEEDS
+    from telegram.news_monitor import RSS_FEEDS, GDELT_MIN_INTERVAL_SECONDS
 
     feeds = dict(RSS_FEEDS)
     assert feeds["EIA"] == "https://www.eia.gov/rss/press_rss.xml"
+    assert feeds["EIA / TODAY IN ENERGY"] == "https://www.eia.gov/rss/todayinenergy.xml"
+    assert feeds["Federal Reserve"] == "https://www.federalreserve.gov/feeds/press_all.xml"
+    assert feeds["SPUTNIK / WHITE HOUSE"] == "https://www.whitehouse.gov/news/feed/"
+    assert len(feeds) == 4
+    assert GDELT_MIN_INTERVAL_SECONDS >= 900
 
 def test_alert_scorecard_marks_closed_window_without_prices_unscored():
     from datetime import datetime, timedelta, timezone
@@ -309,4 +314,3 @@ def test_alert_scorecard_marks_closed_window_without_prices_unscored():
     assert report["pending"] == 0
     assert report["unscored_expired"] == 1
     assert report["coverage_pct"] == 0.0
-
