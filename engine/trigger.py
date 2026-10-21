@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from math import isfinite
 
 from engine.state import SoyuzState
 
@@ -57,6 +58,7 @@ STRONG_MTF_ALIGNMENT = 75.0
 
 # Buffer minimo oltre il livello di breakout.
 BREAKOUT_BUFFER_ATR = 0.05
+MAX_BREAKOUT_ENTRY_EXTENSION_ATR = 0.75
 
 # Massimo wick di rigetto sul lato opposto al breakout.
 # Serve a filtrare breakout che chiudono con forte rejection.
@@ -293,7 +295,16 @@ def _price_breakout_confirmation(
     if state.breakout_level is None:
         return False
 
-    if state.atr is None or state.atr <= 0:
+    try:
+        atr = float(state.atr)
+        level = float(state.breakout_level)
+        live_price = float(state.price)
+    except (TypeError, ValueError, OverflowError):
+        return False
+    if not all(isfinite(value) for value in (atr, level, live_price)) or atr <= 0 or live_price <= 0:
+        return False
+
+    if state.breakout_direction != state.setup_direction:
         return False
 
     current = _get_last_closed_candle(state)
@@ -302,19 +313,29 @@ def _price_breakout_confirmation(
 
     try:
         close = float(current["close"])
-    except (KeyError, TypeError, ValueError):
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return False
+    if not isfinite(close):
         return False
 
-    buffer = state.atr * BREAKOUT_BUFFER_ATR
+    buffer = atr * BREAKOUT_BUFFER_ATR
 
     if not _breakout_rejection_ok(state):
         return False
 
     if state.setup_direction == "LONG":
-        return close > state.breakout_level + buffer
+        extension_atr = (live_price - level) / atr
+        return (
+            close > level + buffer
+            and 0 <= extension_atr <= MAX_BREAKOUT_ENTRY_EXTENSION_ATR
+        )
 
     if state.setup_direction == "SHORT":
-        return close < state.breakout_level - buffer
+        extension_atr = (level - live_price) / atr
+        return (
+            close < level - buffer
+            and 0 <= extension_atr <= MAX_BREAKOUT_ENTRY_EXTENSION_ATR
+        )
 
     return False
 
@@ -425,6 +446,12 @@ def apply_trigger(
 
         return state
 
+    # A breakout flag with conflicting direction is stale/inconsistent
+    # metadata; do not let the generic MTF fallback bypass this rejection.
+    if state.breakout and state.breakout_direction != state.setup_direction:
+        state.trigger = "NOT_CONFIRMED"
+        return state
+
     # ========================================================
     # MTF GATE
     # ========================================================
@@ -503,6 +530,14 @@ def apply_trigger(
         state.trigger = "MOMENTUM_CONFIRMATION"
         state.trigger_direction = state.setup_direction
         state.trigger_confirmed = True
+        return state
+
+    # If an explicitly flagged breakout failed confirmation, do not
+    # re-label the same failed setup as a generic MTF momentum trigger.
+    if state.breakout:
+        state.trigger = "NOT_CONFIRMED"
+        state.trigger_direction = "NONE"
+        state.trigger_confirmed = False
         return state
 
     # ========================================================

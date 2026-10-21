@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from engine.feedback import append_signal, load_feedback, record_forecasts, summarize, update_open_outcomes
+from engine.feedback import _candles, _timestamp, append_signal, load_feedback, record_forecasts, summarize, update_open_outcomes
 
 
 def state(candles):
@@ -112,3 +112,83 @@ def test_watch_forecast_upgrades_to_entry_without_duplicate(tmp_path):
     rows = load_feedback(path)
     assert len(rows) == 1
     assert rows[0]["action"] == "PAPER_ENTRY"
+
+def test_outcome_matching_uses_timeframe_when_symbol_is_shared(tmp_path):
+    path = tmp_path / "feedback.csv"
+    five_min = state([
+        {"timestamp": 1000, "high": 101, "low": 99},
+    ])
+    five_min.timeframe = "5min"
+    append_signal(five_min, path=path)
+
+    fifteen_min = state([
+        {"timestamp": 1000, "high": 101, "low": 99},
+    ])
+    fifteen_min.timeframe = "15min"
+    fifteen_min.entry = 100.0
+    fifteen_min.stop = 95.0
+    fifteen_min.tp1 = 110.0
+    fifteen_min.tp2 = 115.0
+    fifteen_min.tp3 = 120.0
+    fifteen_min.metadata["gagarin_action"] = "PAPER_WATCH"
+    # The 15-minute candles hit a stop, but must not be used for the 5-minute row.
+    fifteen_min.candles.append({"timestamp": 2000, "high": 101, "low": 97})
+    assert update_open_outcomes([five_min, fifteen_min], path=path) == 0
+    assert load_feedback(path)[0]["outcome"] == "OPEN"
+
+
+def test_summary_reports_probability_calibration_and_regime_breakdown(tmp_path):
+    path = tmp_path / "feedback.csv"
+    s0 = state([{"timestamp": 1000, "high": 101, "low": 99}])
+    append_signal(s0, path=path)
+    s1 = state([
+        {"timestamp": 1000, "high": 101, "low": 99},
+        {"timestamp": 2000, "high": 103.5, "low": 99.5},
+    ])
+    update_open_outcomes([s1], path=path)
+    summary = summarize(path=path)
+    calibration = summary["probability_calibration"]
+    assert calibration["samples"] == 1
+    assert calibration["brier_score"] == 0.0841
+    assert calibration["bins"] == [{
+        "range_pct": "70-80",
+        "count": 1,
+        "mean_predicted_pct": 71.0,
+        "observed_win_rate_pct": 100.0,
+    }]
+    assert summary["by_regime"]["TREND_UP"]["closed"] == 1
+    assert summary["by_setup"]["TREND_CONTINUATION"]["average_r"] == 1.5
+    assert summary["max_drawdown_r_sequential"] == 0.0
+
+
+def test_forecast_identity_includes_timeframe(tmp_path):
+    path = tmp_path / "feedback.csv"
+    five_min = state([{"timestamp": 1000, "high": 101, "low": 99}])
+    fifteen_min = state([{"timestamp": 1000, "high": 101, "low": 99}])
+    fifteen_min.timeframe = "15min"
+
+    assert record_forecasts([five_min, fifteen_min], path=path) == 2
+    rows = load_feedback(path)
+    assert len(rows) == 2
+    assert {row["timeframe"] for row in rows} == {"5min", "15min"}
+    assert len({row["signal_id"] for row in rows}) == 2
+
+
+
+def test_naive_iso_timestamp_is_interpreted_as_utc():
+    naive = _timestamp("2026-10-21T08:00:00")
+    aware = _timestamp("2026-10-21T08:00:00+00:00")
+    assert naive == aware
+
+
+def test_candles_are_sorted_deduplicated_and_invalid_ranges_rejected():
+    s = state([
+        {"timestamp": 3000, "high": 103, "low": 101},
+        {"timestamp": 2000, "high": 99, "low": 100},  # invalid OHLC range
+        {"timestamp": 1000, "high": 101, "low": 99},
+        {"timestamp": 3000, "high": 104, "low": 102},  # later update wins
+    ])
+    assert _candles(s) == [
+        (1000.0, 101.0, 99.0),
+        (3000.0, 104.0, 102.0),
+    ]

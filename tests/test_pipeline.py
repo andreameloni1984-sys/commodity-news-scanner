@@ -25,7 +25,7 @@
 # ============================================================
 
 from engine.state import SoyuzState
-from engine.regime import apply_regime
+from engine.regime import apply_regime, _safe_float, _rsi_wilder, _volatility_diagnostics
 from engine.structure import apply_structure
 from engine.setup import apply_setup
 from engine.trigger import apply_trigger
@@ -667,3 +667,207 @@ def test_cosa_compro_uses_daily_forecast_result(monkeypatch):
     assert "GAGARIN — OGGI" in text
     assert "Oro" in text
     assert "PREVISIONE: SALE" in text
+
+
+def test_volatility_diagnostics_detect_expansion_and_contraction():
+    from engine.regime import _volatility_diagnostics
+
+    state = _make_state("LONG")
+    state.highs = [100.1] * 4 + [101.0] * 4
+    state.lows = [99.9] * 4 + [99.0] * 4
+    expansion = _volatility_diagnostics(state)
+    assert expansion["status"] == "EXPANDING"
+    assert expansion["recent_to_older_ratio"] >= 1.25
+
+    state.highs = [101.0] * 4 + [100.1] * 4
+    state.lows = [99.0] * 4 + [99.9] * 4
+    contraction = _volatility_diagnostics(state)
+    assert contraction["status"] == "CONTRACTING"
+    assert contraction["recent_to_older_ratio"] <= 0.80
+
+
+def test_volatility_diagnostics_fail_closed_with_insufficient_data():
+    from engine.regime import _volatility_diagnostics
+
+    state = _make_state("LONG")
+    state.highs = [101.0, 102.0]
+    state.lows = [99.0, 100.0]
+    result = _volatility_diagnostics(state)
+    assert result["status"] == "UNKNOWN"
+    assert result["reason"] == "INSUFFICIENT_VALID_RANGES"
+
+
+def test_rsi_wilder_handles_up_down_flat_and_insufficient_series():
+    from engine.regime import _rsi_wilder
+
+    assert _rsi_wilder(list(range(15)), 14) == 100.0
+    assert _rsi_wilder(list(range(15, 0, -1)), 14) == 0.0
+    assert _rsi_wilder([100.0] * 15, 14) == 50.0
+    assert _rsi_wilder([1.0, 2.0, 3.0], 14) is None
+
+
+def test_rsi_wilder_rejects_invalid_values():
+    from engine.regime import _rsi_wilder
+
+    assert _rsi_wilder([100.0, "bad", 102.0], 2) is None
+
+
+# ============================================================
+# NON-FINITE NUMERIC INPUTS
+# ============================================================
+
+
+def test_safe_float_rejects_nan_and_infinity():
+    import math
+
+    assert _safe_float(float("nan")) is None
+    assert _safe_float(float("inf")) is None
+    assert _safe_float(float("-inf")) is None
+    assert _safe_float("not-a-number") is None
+    assert _safe_float("12.5") == 12.5
+
+
+def test_rsi_wilder_fails_closed_on_non_finite_closes():
+    closes = [float(i) for i in range(15)]
+    closes[-1] = float("nan")
+    assert _rsi_wilder(closes) is None
+    closes[-1] = float("inf")
+    assert _rsi_wilder(closes) is None
+
+
+def test_volatility_diagnostics_ignore_non_finite_ranges():
+    state = _make_state("LONG")
+    state.highs = [float(value) for value in state.highs]
+    state.lows = [float(value) for value in state.lows]
+    state.highs[-1] = float("nan")
+    state.lows[-2] = float("inf")
+
+    result = _volatility_diagnostics(state)
+
+    assert result["samples"] == 8
+    assert result["status"] in {"EXPANDING", "CONTRACTING", "STABLE", "UNKNOWN"}
+
+
+# ============================================================
+# RISK ENGINE NUMERIC INTEGRITY
+# ============================================================
+
+
+def test_risk_rejects_non_finite_price_and_atr():
+    for direction in ("LONG", "SHORT"):
+        for field, value in (
+            ("price", float("nan")),
+            ("price", float("inf")),
+            ("atr", float("nan")),
+            ("atr", float("inf")),
+            ("atr", 0.0),
+        ):
+            state = _prepare_directional_state(direction)
+            setattr(state, field, value)
+            apply_risk(state)
+            assert state.entry is None
+            assert state.stop is None
+            assert state.tp1 is None
+            assert state.metadata["risk_diagnostics"]["status"] == "PRECONDITION_FAILED"
+
+
+def test_risk_ignores_non_finite_structural_swing_and_uses_atr_fallback():
+    state = _prepare_directional_state("LONG")
+    state.last_swing_low = float("nan")
+    apply_setup(state)
+    apply_risk(state)
+
+    assert state.entry is not None
+    assert state.stop is not None
+    assert state.metadata["risk_diagnostics"]["stop_source"] == "ATR_FALLBACK"
+    assert state.metadata["risk_diagnostics"]["status"] == "RISK_VALID"
+
+
+def test_risk_clears_overflowed_target_bracket():
+    state = _prepare_directional_state("LONG")
+    state.price = 1e308
+    state.atr = 1e308
+    apply_setup(state)
+    apply_risk(state)
+
+    assert state.entry is None
+    assert state.stop is None
+    assert state.tp1 is None
+    assert state.tp2 is None
+    assert state.tp3 is None
+    assert state.metadata["risk_diagnostics"]["status"] == "NON_FINITE_OR_NON_POSITIVE_BRACKET"
+
+
+
+# ============================================================
+# LATE BREAKOUT / DIRECTION CONSISTENCY
+# ============================================================
+
+
+def test_breakout_trigger_rejects_late_entry_after_extended_move():
+    state = _prepare_directional_state("LONG")
+    state.breakout = True
+    state.breakout_direction = "LONG"
+    state.price = 101.0
+    state.breakout_level = 100.20
+    state.mtf_data = {
+        "5min": [
+            {"open": 100.0, "high": 100.2, "low": 99.9, "close": 100.15, "timestamp": "2026-01-01T01:50:00Z"},
+            {"open": 100.15, "high": 100.90, "low": 100.10, "close": 100.80, "timestamp": "2026-01-01T01:55:00Z"},
+        ]
+    }
+    apply_setup(state)
+    apply_trigger(state)
+
+    assert state.trigger_confirmed is False
+    assert state.trigger == "NOT_CONFIRMED"
+
+
+def test_breakout_trigger_rejects_conflicting_breakout_direction():
+    state = _prepare_directional_state("LONG")
+    state.breakout = True
+    state.breakout_direction = "SHORT"
+    state.price = 100.38
+    state.breakout_level = 100.20
+    state.mtf_data = {
+        "5min": [
+            {"open": 100.0, "high": 100.2, "low": 99.9, "close": 100.15, "timestamp": "2026-01-01T01:50:00Z"},
+            {"open": 100.15, "high": 100.40, "low": 100.10, "close": 100.38, "timestamp": "2026-01-01T01:55:00Z"},
+        ]
+    }
+    apply_setup(state)
+    apply_trigger(state)
+
+    assert state.trigger_confirmed is False
+    assert state.trigger == "NOT_CONFIRMED"
+
+
+# SAFETY NUMERIC INTEGRITY / PRICE-DERIVED R:R
+
+def test_safety_blocks_non_finite_numeric_scores_and_rr():
+    for field, value in (("probability", float("nan")), ("quality", float("inf")), ("rr3", float("nan"))):
+        state = _prepare_directional_state("LONG")
+        apply_setup(state)
+        apply_risk(state)
+        state.trigger_confirmed = True
+        state.trigger_direction = "LONG"
+        setattr(state, field, value)
+        apply_safety(state)
+        assert state.safety == "BLOCKED"
+        assert state.final_decision == "WAIT"
+        assert "NUMERIC_FIELD_NON_FINITE" in state.blockers
+
+
+def test_safety_recomputes_rr_from_actual_bracket_prices():
+    state = _prepare_directional_state("LONG")
+    apply_setup(state)
+    apply_risk(state)
+    state.trigger_confirmed = True
+    state.trigger_direction = "LONG"
+    state.entry, state.stop = 100.0, 99.0
+    state.tp1, state.tp2, state.tp3 = 101.5, 102.0, 102.0
+    state.rr1, state.rr2, state.rr3 = 1.5, 2.0, 2.5
+    apply_safety(state)
+    assert state.safety == "BLOCKED"
+    assert "RR_GEOMETRY_MISMATCH" in state.blockers
+    assert "RR_FAIL" in state.blockers

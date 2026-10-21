@@ -2,6 +2,10 @@
 
 Aggiornato: 2026-10-21. Questo registro distingue ciò che è nel codice e ha test automatici da ciò che è ancora da verificare. Non certifica che tutte le oltre 100 nozioni studiate in precedenza siano state trascritte: per farlo serve un inventario puntuale delle singole fonti/lezioni.
 
+## Catalogo dei 100 punti
+
+Inventario operativo e stato iniziale di ciascun punto: [`docs/gagarin-100-point-implementation-plan.md`](./gagarin-100-point-implementation-plan.md). Il catalogo distingue regole già presenti, parziali e da implementare; non prova che sia stata recuperata la lista storica originale parola per parola. I punti marcati da implementare non devono essere considerati attivi finché non esistono codice e test.
+
 ## Regole implementate e coperte da test
 
 | ID | Regola | Implementazione | Verifica / limite |
@@ -15,10 +19,17 @@ Aggiornato: 2026-10-21. Questo registro distingue ciò che è nel codice e ha te
 | RISK-006 | Non aprire due posizioni contemporanee sullo stesso simbolo | `paper_portfolio.py` | Test del portafoglio |
 | RISK-007 | Massimo tre posizioni aperte contemporaneamente | `paper_portfolio.py` | Test di regressione |
 | RISK-008 | Rischio aggregato degli stop aperti massimo 2% del capitale iniziale | `paper_portfolio.py` | Test di regressione; misura rischio teorico al prezzo di stop |
+| TRIGGER-004 | Il breakout richiede direzione coerente, candela chiusa oltre il livello e prezzo live non esteso oltre 0,75 ATR dal livello | `engine/trigger.py` (`_price_breakout_confirmation`) | Test aggiunti per ingresso tardivo e direzione discordante; test non eseguiti localmente e CI non confermata |
+| SAFE-002 | Safety rifiuta valori numerici non finiti e ricalcola R/R dai prezzi effettivi di entry, stop e target, confrontandolo con i valori dichiarati | `engine/safety.py` | Test aggiunti per NaN/Inf e incoerenza R/R; esecuzione locale/CI non confermata; costi e slippage esclusi |
+| RISK-011 | Il preflight PAPER rifiuta rapporti R/R calcolati non finiti anche quando i prezzi d'origine sono finiti | `engine/order_preflight.py` (`validate_paper_signal`) | Test aggiunto per overflow del rapporto premio/rischio; esecuzione locale/CI ancora da confermare |
+| RISK-010 | Il motore rischio rifiuta prezzo/ATR non finiti e non espone bracket con target overflow; swing strutturali non finiti vengono ignorati e si usa fallback ATR | `engine/risk.py` (`_finite_float`, controlli precondizioni e integrità bracket) | Test aggiunti per NaN/Inf, swing invalido e overflow target; esecuzione locale/CI ancora da confermare |
 | RISK-009 | Blocco di nuove posizioni dopo perdita realizzata giornaliera del 2,5% del capitale iniziale | `paper_portfolio.py` | Stato giornaliero UTC esportato/ripristinato; test di regressione |
 | EXIT-001 | Se il prezzo campionato supera lo stop, lo stop prevale sui target | `paper_portfolio.py` | Usa snapshot di prezzo, non ricostruisce la sequenza intrabar OHLC |
 | EXIT-002 | Uscite parziali di un terzo a TP1, TP2 e TP3 | `paper_portfolio.py` | Test LONG/SHORT; non simula riempimenti parziali reali |
 | DATA-001 | Non valutare posizioni con quotazioni stale, mancanti o non live | `engine/position_monitor.py` | Soglia da `LIVE_MAX_AGE_SECONDS`; dipende dalla qualità dei timestamp del provider |
+| DATA-002 | Normalizzare timestamp senza fuso come UTC, ordinare e deduplicare barre e rifiutare range OHLC impossibili nel feedback | `engine/feedback.py` (`_timestamp`, `_candles`) | Test aggiunti per UTC, deduplica e `high < low`; CI non ancora osservata |
+| REGIME-002 | Diagnosticare espansione/contrazione della volatilità confrontando mediane delle ampiezze recenti normalizzate per ATR | `engine/regime.py` (`_volatility_diagnostics`) | Test sintetici per espansione, contrazione e dati insufficienti; informativo, non direzionale; CI non ancora osservata |
+| IND-001 | Calcolare RSI con smoothing di Wilder e gestire serie insufficienti o non valide | `engine/regime.py` (`_rsi_wilder`), salvato in `metadata.rsi_wilder_14` | Test sintetici per salita, discesa, serie piatta e input non validi; solo diagnostico, non altera il segnale; CI non ancora osservata |\n| DATA-003 | Rifiutare NaN e ±infinito nei valori numerici del regime, RSI e diagnostica volatilità | `engine/regime.py` (`_safe_float`) | Test aggiunti per NaN/±Inf, RSI fail-closed e range OHLC non finiti; test non ancora eseguiti localmente e CI non confermata |
 | ALERT-001 | Gli alert direzionali richiedono prezzo live e fresco e superamento delle soglie minime | `telegram/commodity_direction_alert.py` | Soglie correnti: probabilità 55, qualità 45, confidenza 50; non sono probabilità calibrate |
 | ALERT-002 | Soppressione dei duplicati e alert su cambi significativi | `telegram/commodity_direction_alert.py`, `telegram/aggressive_alert.py` | I test verificano il riuso della valutazione e la soppressione dei duplicati |
 | ALERT-003 | Aggiornamento orario delle posizioni monitorate, con alert immediati sui cambi di rischio | `engine/position_monitor.py`, `telegram/render_runner.py` | Richiede servizio Render attivo e una quotazione live/fresca; test automatici non provano la consegna Telegram reale |
@@ -37,3 +48,6 @@ Aggiornato: 2026-10-21. Questo registro distingue ciò che è nel codice e ha te
 ## Regola di manutenzione
 
 Una lezione è marcata **IMPLEMENTATA** solo se è tradotta in una regola non ambigua, applicata nel percorso effettivo del bot e coperta da un test riproducibile. Una nota, una ricerca o una funzione non chiamata dal percorso operativo non contano come implementazione completa.
+
+
+| CFG-001 | Gli override delle soglie sono accettati solo entro intervalli validi; valori fuori range ricadono sul profilo attivo | `soyuz_gagarin/config.py` (`_bounded_env_float`) | Range probabilità/qualità/confidenza 0–100; R/R strettamente positivo; stop ATR non inferiore al minimo configurato. Test di regressione da aggiungere e CI da verificare. |

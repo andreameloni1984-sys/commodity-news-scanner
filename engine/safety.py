@@ -1,3 +1,5 @@
+from math import isfinite
+
 from engine.state import SoyuzState
 from soyuz_gagarin.config import GagarinConfig
 
@@ -49,6 +51,14 @@ from soyuz_gagarin.config import GagarinConfig
 # ============================================================
 
 
+def _finite_number(value) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return number if isfinite(number) else None
+
+
 def _has_value(value) -> bool:
     """
     Verifica semplice della presenza di un valore.
@@ -66,6 +76,15 @@ def apply_safety(
 
     cfg = GagarinConfig()
     blockers = []
+
+    # NaN bypasses ordinary threshold comparisons; fail closed on invalid numerics.
+    numeric_fields = ("price", "atr", "entry", "stop", "tp1", "tp2", "tp3", "stop_atr", "rr1", "rr2", "rr3", "probability", "quality", "confidence")
+    invalid_numeric_fields = [name for name in numeric_fields if getattr(state, name, None) is not None and _finite_number(getattr(state, name)) is None]
+    if invalid_numeric_fields:
+        blockers.append("NUMERIC_FIELD_NON_FINITE")
+        state.metadata["safety_numeric_diagnostics"] = {"status": "REJECTED_NON_FINITE", "fields": invalid_numeric_fields}
+    else:
+        state.metadata["safety_numeric_diagnostics"] = {"status": "FINITE_OR_MISSING"}
 
     # ========================================================
     # 1. DATA
@@ -376,14 +395,30 @@ def apply_safety(
 
     else:
 
-        if state.rr1 < 1.5:
-            blockers.append("RR1_FAIL")
-
-        if state.rr2 < 2.0:
-            blockers.append("RR2_FAIL")
-
-        if state.rr3 < cfg.min_rr:
-            blockers.append("RR_FAIL")
+        if all(_finite_number(getattr(state, name)) is not None for name in ("entry", "stop", "tp1", "tp2", "tp3")):
+            entry = _finite_number(state.entry)
+            stop = _finite_number(state.stop)
+            targets = tuple(_finite_number(getattr(state, name)) for name in ("tp1", "tp2", "tp3"))
+            risk = entry - stop if state.setup_direction == "LONG" else stop - entry
+            if risk <= 0:
+                blockers.append("RR_PRICE_GEOMETRY_INVALID")
+            else:
+                rewards = tuple(target - entry if state.setup_direction == "LONG" else entry - target for target in targets)
+                actual_rr = tuple(reward / risk for reward in rewards)
+                if not all(isfinite(value) for value in (*rewards, *actual_rr)):
+                    blockers.append("RR_CALCULATION_NON_FINITE")
+                else:
+                    declared_rr = tuple(_finite_number(getattr(state, name)) for name in ("rr1", "rr2", "rr3"))
+                    if any(value is None or abs(value - actual) > max(0.01, abs(actual) * 0.01) for value, actual in zip(declared_rr, actual_rr)):
+                        blockers.append("RR_GEOMETRY_MISMATCH")
+                    if actual_rr[0] < 1.5:
+                        blockers.append("RR1_FAIL")
+                    if actual_rr[1] < 2.0:
+                        blockers.append("RR2_FAIL")
+                    if actual_rr[2] < cfg.min_rr:
+                        blockers.append("RR_FAIL")
+        else:
+            blockers.append("RR_PRICE_GEOMETRY_INVALID")
 
     # ========================================================
     # 17. PROBABILITY

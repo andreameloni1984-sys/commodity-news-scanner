@@ -46,6 +46,8 @@ def validate_paper_signal(row: dict) -> tuple[bool, str]:
     if risk <= 0:
         return False, "STOP_RISK_INVALID"
     r_multiples = tuple(reward / risk for reward in rewards)
+    if not isfinite(risk) or not all(isfinite(value) for value in (*rewards, *r_multiples)):
+        return False, "RR_CALCULATION_NON_FINITE"
     if r_multiples[0] < 1.5 or r_multiples[1] < 2.0 or r_multiples[2] < 2.5:
         return False, "RR_TIERS_BELOW_MINIMUM"
 

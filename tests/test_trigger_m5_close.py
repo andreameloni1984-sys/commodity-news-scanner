@@ -29,6 +29,7 @@ def _state(analysis_time, candle_time):
         atr=2.0,
         price=100.0,
         breakout=True,
+        breakout_direction="LONG",
         breakout_level=100.5,
         setup_direction="LONG",
     )
@@ -56,7 +57,7 @@ def test_breakout_uses_closed_m5_close_not_live_price():
     candle_time = datetime(2026, 10, 7, 2, 0, tzinfo=timezone.utc)
     state = _state(candle_time + timedelta(seconds=300), candle_time)
 
-    state.price = 100.0
+    state.price = 100.6
 
     assert _price_breakout_confirmation(state) is True
 
