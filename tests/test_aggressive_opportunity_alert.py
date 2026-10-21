@@ -146,3 +146,35 @@ def test_short_stop_crossing_with_insufficient_ohlc_is_risk_and_provider_only():
     assert "Stop superato sul prezzo provider: SÌ — verificare lato broker" in message
     assert "Freschezza quotazione: NON VERIFICATA (timestamp provider assente)" in message
     assert "LONG Sell/Bid; SHORT Buy/Ask. Prezzo broker non acquisito." in message
+
+
+def test_confirmed_entry_rejected_when_reward_risk_is_below_2_5():
+    item = candidate(
+        probability=80, quality=80, confidence=80,
+        trigger_confirmed=True, final_decision="PAPER_ENTRY",
+        entry=2700, stop=2680, tp1=2730, tp2=2740, tp3=None, atr=10,
+    )
+    alerts = find_aggressive_alerts([item])
+    assert len(alerts) == 1
+    assert alerts[0]["stage"] == "RISCHIO"
+
+
+def test_confirmed_entry_rejected_when_stop_exceeds_2_5_atr():
+    item = candidate(
+        probability=80, quality=80, confidence=80,
+        trigger_confirmed=True, final_decision="PAPER_ENTRY",
+        entry=2700, stop=2660, tp1=2800, tp2=2820, tp3=None, atr=10,
+    )
+    alerts = find_aggressive_alerts([item])
+    assert len(alerts) == 1
+    assert alerts[0]["stage"] == "RISCHIO"
+
+
+def test_confirmed_entry_requires_real_atr_not_a_guessed_value():
+    item = candidate(
+        probability=80, quality=80, confidence=80,
+        trigger_confirmed=True, final_decision="PAPER_ENTRY", atr=None,
+    )
+    alerts = find_aggressive_alerts([item])
+    assert len(alerts) == 1
+    assert alerts[0]["stage"] == "RISCHIO"
