@@ -41,6 +41,7 @@ from soyuz_gagarin.adapter import evaluate_states
 from engine.profile import get_profile, set_profile
 from forex.universe import enabled_forex_pairs
 from market_universe import enabled_market_instruments
+from engine.feedback import record_entries as record_feedback_entries, evaluate_open_signals, summarize as summarize_feedback, format_summary as format_feedback_summary
 
 
 API_BASE = "https://api.telegram.org"
