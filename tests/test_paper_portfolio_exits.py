@@ -46,7 +46,7 @@ class PaperPortfolioExitTests(unittest.TestCase):
         self.assertEqual(len(self.portfolio.snapshot()["open_positions"]), 0)
 
     def test_stop_closes_remaining_fraction_after_tp1(self):
-        self.portfolio.evaluate_exits({"WTI/USD": 110.0})
+        self.portfolio.evaluate_exits({"WTI/USD": 115.0})
         closed = self.portfolio.evaluate_exits({"WTI/USD": 90.0})
         self.assertEqual(len(closed), 1)
         pos = self.portfolio.positions[0]
@@ -86,6 +86,26 @@ class PaperPortfolioExitTests(unittest.TestCase):
         self.assertIsNotNone(p.open_signal(signal(symbol="A"), risk_pct=0.01))
         self.assertIsNotNone(p.open_signal(signal(symbol="B"), risk_pct=0.01))
         self.assertIsNone(p.open_signal(signal(symbol="C"), risk_pct=0.01))
+
+    def test_daily_realized_loss_breaker_blocks_new_positions(self):
+        p = PaperPortfolio(1000.0)
+        first = signal(symbol="LOSS-A")
+        self.assertIsNotNone(p.open_signal(first, risk_pct=0.015))
+        p.evaluate_exits({"LOSS-A": 90.0})
+        second = signal(symbol="LOSS-B")
+        self.assertIsNotNone(p.open_signal(second, risk_pct=0.015))
+        p.evaluate_exits({"LOSS-B": 90.0})
+        self.assertLessEqual(p.daily_realized_pnl, -25.0)
+        self.assertIsNone(p.open_signal(signal(symbol="LOSS-C"), risk_pct=0.005))
+        self.assertTrue(p.snapshot()["daily_loss_breaker_active"])
+
+    def test_daily_loss_state_survives_restore_on_same_utc_day(self):
+        p = PaperPortfolio(1000.0)
+        p.daily_realized_pnl = -12.5
+        state = p.export_state()
+        restored = PaperPortfolio(1000.0)
+        restored.restore_state(state)
+        self.assertEqual(restored.daily_realized_pnl, -12.5)
 
 
 if __name__ == "__main__":

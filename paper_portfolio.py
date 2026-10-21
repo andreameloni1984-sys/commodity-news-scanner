@@ -50,7 +50,15 @@ class PaperPortfolio:
         self.cash = float(capital)
         self.positions: list[Position] = []
         self.history: list[dict[str, Any]] = []
+        self.daily_pnl_date = datetime.now(timezone.utc).date().isoformat()
+        self.daily_realized_pnl = 0.0
         self._lock = threading.Lock()
+
+    def _roll_daily_pnl_day(self) -> None:
+        today = datetime.now(timezone.utc).date().isoformat()
+        if self.daily_pnl_date != today:
+            self.daily_pnl_date = today
+            self.daily_realized_pnl = 0.0
 
     @staticmethod
     def _move(direction: str, entry: float, price: float) -> float:
@@ -81,6 +89,8 @@ class PaperPortfolio:
                 "cash": self.cash,
                 "positions": [asdict(p) for p in self.positions],
                 "history": list(self.history),
+                "daily_pnl_date": self.daily_pnl_date,
+                "daily_realized_pnl": self.daily_realized_pnl,
             }
 
     def restore_state(self, state: dict[str, Any] | None) -> None:
@@ -92,6 +102,10 @@ class PaperPortfolio:
             cash = float(state.get("cash", initial_capital))
             positions = [Position(**item) for item in state.get("positions", [])]
             history = list(state.get("history", []))
+            saved_pnl_date = str(state.get("daily_pnl_date", ""))
+            saved_daily_pnl = float(state.get("daily_realized_pnl", 0.0))
+            if not math.isfinite(saved_daily_pnl):
+                return
         except (TypeError, ValueError, KeyError):
             return
         with self._lock:
@@ -99,6 +113,9 @@ class PaperPortfolio:
             self.cash = cash
             self.positions = positions
             self.history = history
+            today = datetime.now(timezone.utc).date().isoformat()
+            self.daily_pnl_date = saved_pnl_date if saved_pnl_date == today else today
+            self.daily_realized_pnl = saved_daily_pnl if saved_pnl_date == today else 0.0
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
@@ -110,9 +127,13 @@ class PaperPortfolio:
                 p.allocation * p.remaining_fraction
                 for p in self.positions if p.status == "OPEN"
             )
+            self._roll_daily_pnl_day()
             return {
                 "initial_capital": self.initial_capital,
                 "cash": round(self.cash, 2),
+                "daily_realized_pnl": round(self.daily_realized_pnl, 2),
+                "daily_loss_limit": round(self.initial_capital * 0.025, 2),
+                "daily_loss_breaker_active": self.daily_realized_pnl <= -self.initial_capital * 0.025,
                 "realized_pnl": round(realized, 2),
                 "unrealized_pnl": round(unrealized, 2),
                 "open_positions": open_positions,
@@ -172,6 +193,9 @@ class PaperPortfolio:
             return None
 
         with self._lock:
+            self._roll_daily_pnl_day()
+            if self.daily_realized_pnl <= -self.initial_capital * 0.025:
+                return None
             open_positions = [p for p in self.positions if p.status == "OPEN"]
             if len(open_positions) >= 3:
                 return None
@@ -220,6 +244,8 @@ class PaperPortfolio:
             return
         notional = p.allocation * fraction
         realized_piece = round(notional * self._move(p.direction, p.entry, exit_price), 2)
+        self._roll_daily_pnl_day()
+        self.daily_realized_pnl = round(self.daily_realized_pnl + realized_piece, 2)
         self.cash = round(self.cash + notional + realized_piece, 2)
         p.pnl = round(p.pnl + realized_piece, 2)
         p.remaining_fraction = max(0.0, round(p.remaining_fraction - fraction, 8))
