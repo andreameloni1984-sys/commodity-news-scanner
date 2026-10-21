@@ -744,7 +744,7 @@ def test_volatility_diagnostics_ignore_non_finite_ranges():
 
     result = _volatility_diagnostics(state)
 
-    assert result["samples"] == len(state.highs) - 2
+    assert result["samples"] == 8
     assert result["status"] in {"EXPANDING", "CONTRACTING", "STABLE", "UNKNOWN"}
 
 
@@ -774,6 +774,7 @@ def test_risk_rejects_non_finite_price_and_atr():
 def test_risk_ignores_non_finite_structural_swing_and_uses_atr_fallback():
     state = _prepare_directional_state("LONG")
     state.last_swing_low = float("nan")
+    apply_setup(state)
     apply_risk(state)
 
     assert state.entry is not None
@@ -786,6 +787,7 @@ def test_risk_clears_overflowed_target_bracket():
     state = _prepare_directional_state("LONG")
     state.price = 1e308
     state.atr = 1e308
+    apply_setup(state)
     apply_risk(state)
 
     assert state.entry is None
