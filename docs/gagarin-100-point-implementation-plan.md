@@ -40,12 +40,12 @@ Stati: **PRESENTE** = esiste una parte nel codice; **PARZIALE** = mancano verifi
 26. Richiedere timeframe e timestamp coerenti nel confronto MTF. — PARZIALE.
 27. Non fondere candele di timeframe diversi nella valutazione degli esiti. — CORRETTO nel ramo di lavoro; test aggiunto.
 28. Identificare supporti e resistenze da swing verificati. — PARZIALE.
-29. Distinguere rottura confermata da semplice spike intrabar. — DA IMPLEMENTARE.
+29. Distinguere rottura confermata da semplice spike intrabar. — PARZIALE: `engine/trigger.py` richiede candela chiusa oltre il livello, direzione coerente e limite di estensione; serve validazione storica.
 30. Attendere retest quando il setup lo richiede. — DA IMPLEMENTARE.
 31. Identificare pullback in trend senza inseguire il prezzo. — PARZIALE.
 32. Rilevare falsi breakout e rientro nel range. — DA IMPLEMENTARE.
 33. Valutare candele di rifiuto e chiusure relative al range. — DA IMPLEMENTARE.
-34. Evitare segnali basati su candela non ancora chiusa quando il setup richiede conferma. — DA IMPLEMENTARE.
+34. Evitare segnali basati su candela non ancora chiusa quando il setup richiede conferma. — PARZIALE: trigger M5 usa timestamp per selezionare l'ultima candela chiusa; copertura provider end-to-end da verificare.
 35. Calcolare distanza del prezzo da supporto/resistenza in unità di ATR. — DA IMPLEMENTARE.
 36. Registrare trigger osservato e condizione d'invalidazione. — PARZIALE.
 
@@ -74,7 +74,7 @@ Stati: **PRESENTE** = esiste una parte nel codice; **PARZIALE** = mancano verifi
 54. Rendere spiegabile ogni punteggio con fattori e penalità. — PARZIALE.
 55. Applicare soglie per profilo senza bypassare i controlli di sicurezza. — PARZIALE.
 56. Penalizzare setup tardivi con rapporto rendimento/rischio residuo insufficiente. — DA IMPLEMENTARE.
-57. Bloccare segnali se il prezzo è già oltre il livello d'invalidazione. — DA IMPLEMENTARE.
+57. Bloccare segnali se il prezzo è già oltre il livello d'invalidazione. — PARZIALE: breakout oltre 0,75 ATR dal livello viene rifiutato come ingresso tardivo; altre invalidazioni di setup da completare.
 58. Distinguere WATCH, opportunità e PAPER_SIGNAL con semantica stabile. — PARZIALE.
 59. Sopprimere duplicati senza sopprimere un cambiamento materiale del setup. — PRESENTE/PARZIALE.
 60. Mostrare motivi di esclusione specifici, non messaggi generici. — PARZIALE.
