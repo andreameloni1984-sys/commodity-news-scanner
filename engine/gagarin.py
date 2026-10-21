@@ -154,7 +154,9 @@ def calculate_quality(state: SoyuzState) -> SoyuzState:
                 (asset == "WTI" and ("wti" in asset_name or "wti" in symbol or symbol == "USOIL")) or
                 (asset == "Brent" and ("brent" in asset_name or "brent" in symbol or symbol == "UKOIL")) or
                 (asset == "Oro" and ("oro" in asset_name or "gold" in asset_name or "XAU" in symbol)) or
+                (asset == "Argento" and ("argento" in asset_name or "silver" in asset_name or "XAG" in symbol)) or
                 (asset == "Platino" and ("platino" in asset_name or "platinum" in asset_name or "XPT" in symbol)) or
+                (asset == "Palladio" and ("palladio" in asset_name or "palladium" in asset_name or "XPD" in symbol)) or
                 (asset == "Caffè" and ("caff" in asset_name or "coffee" in asset_name)) or
                 (asset == "Cacao" and ("cacao" in asset_name or "cocoa" in asset_name)) or
                 (asset == "Riso" and ("riso" in asset_name or "rice" in asset_name)) or
@@ -324,7 +326,9 @@ def apply_sputnik_intelligence(state):
                     (asset == 'WTI' and ('wti' in name or 'wti' in symbol or symbol == 'USOIL'))
                     or (asset == 'Brent' and ('brent' in name or 'brent' in symbol or symbol == 'UKOIL'))
                     or (asset == 'Oro' and ('oro' in name or 'gold' in name or 'XAU' in symbol))
+                    or (asset == 'Argento' and ('argento' in name or 'silver' in name or 'XAG' in symbol))
                     or (asset == 'Platino' and ('platino' in name or 'platinum' in name or 'XPT' in symbol))
+                    or (asset == 'Palladio' and ('palladio' in name or 'palladium' in name or 'XPD' in symbol))
                     or (asset == 'Caffè' and ('caff' in name or 'coffee' in name))
                     or (asset == 'Cacao' and ('cacao' in name or 'cocoa' in name))
                     or (asset == 'Riso' and ('riso' in name or 'rice' in name))
