@@ -1,6 +1,6 @@
 {
   "paper_only": true,
-  "read_at": "2026-10-21T12:29:53Z",
+  "read_at": "2026-10-22T12:33:33Z",
   "sources": {
     "us_crude_stocks": "EIA WCRSTUS1 (api -> public page)",
     "us_natgas_storage": "EIA NW2_EPG0_SWO_R48_BCF (api -> public page)",
@@ -33,9 +33,9 @@
     },
     "real_rate_10y": {
       "series_id": "DFII10",
-      "value": 2.8,
-      "date": "2026-10-19",
-      "previous": 2.74,
+      "value": 2.77,
+      "date": "2026-10-20",
+      "previous": 2.8,
       "source": "fred_csv",
       "error": null
     },
@@ -61,7 +61,7 @@
     "supply_shock": "UNKNOWN",
     "refined": "UNKNOWN",
     "dollar": "DOWN",
-    "real_rates": "UP",
+    "real_rates": "DOWN",
     "systematic_flow": "UNKNOWN",
     "weather": "UNKNOWN",
     "harvest": "UNKNOWN",
