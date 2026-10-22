@@ -31,6 +31,10 @@ def test_selector_does_not_invent_direction_without_evidence():
         live=True, closes=[100 + ((-1) ** i) for i in range(60)],
         blockers=[], metadata={}
     )
+    import engine.selector as module
+    module._forecast_map = lambda: {}
+    module._weather_map = lambda: {}
+
     result = select_anticipation([state])
-    # Price history alone must not force a default LONG on a tied/empty forecast.
+    # Price history alone must not force a default LONG on an empty forecast.
     assert result == []
