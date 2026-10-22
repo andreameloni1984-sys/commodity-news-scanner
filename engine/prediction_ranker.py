@@ -46,7 +46,7 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
         # an independently generated opportunity direction. Pre-move/momentum
         # alone is not sufficient to manufacture a LONG/SHORT candidate.
         direction = next(
-            (d for d in (directions[1], directions[2], directions[3], directions[4]) if d != "NONE"),
+            (d for d in (directions[1], directions[2], directions[3]) if d != "NONE"),
             "NONE",
         )
         if direction == "NONE":
