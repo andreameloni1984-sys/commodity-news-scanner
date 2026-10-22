@@ -65,6 +65,9 @@ def _state_json(state):
         "rr3": getattr(state, "rr3", None),
         "data_source": getattr(state, "data_source", None),
         "data_status": meta.get("data_status", "UNKNOWN"),
+        "live": meta.get("live") is True,
+        "volume_confirmed": meta.get("volume_confirmed") is True,
+        "relative_volume": meta.get("relative_volume"),
         "opportunity_alert": getattr(state, "opportunity_alert", "NONE"),
         "opportunity_direction": getattr(state, "opportunity_direction", "NONE"),
         "opportunity_score": getattr(state, "opportunity_score", 0.0),
@@ -196,6 +199,103 @@ def _run_gagarin(*, on_demand: bool = False):
         "aggressive_closed": aggressive_closed,
         "day_registry": day_snap,
     }
+
+
+# Sputnik is a catalyst/context layer, never an order generator.
+from engine.sputnik_intelligence import match_event_instruments, historical_analogues
+
+
+def _is_sputnik_setup_confirmed(row: dict) -> bool:
+    """Fail closed unless live data, explicit volume confirmation and coherent levels exist."""
+    if not isinstance(row, dict) or str(row.get("data_status") or "").upper() != "LIVE":
+        return False
+    if row.get("live") is not True or row.get("volume_confirmed") is not True:
+        return False
+    try:
+        price = float(row.get("price"))
+        stop = float(row.get("stop"))
+        target = float(row.get("tp1"))
+        relative_volume = float(row.get("relative_volume"))
+    except (TypeError, ValueError):
+        return False
+    if price <= 0 or relative_volume < 1.0:
+        return False
+    direction = str(row.get("direction") or "").upper()
+    if direction == "LONG":
+        return stop < price < target
+    if direction == "SHORT":
+        return target < price < stop
+    return False
+
+
+def _run_sputnik_confirmation(events: list[dict]) -> dict:
+    """Refresh Gagarin analysis and contextualize Sputnik public events."""
+    errors = validate_universe()
+    if errors:
+        raise RuntimeError("CONFIGURATION_BLOCKED: " + ", ".join(errors))
+    results = analyze_universe(enabled_commodities())
+    decisions = evaluate_states(results)
+    by_symbol = {str(getattr(d, "symbol", "")).upper(): d for d in decisions}
+    for state in results:
+        symbol = str(getattr(state, "symbol", "")).upper()
+        decision = by_symbol.get(symbol)
+        metadata = getattr(state, "metadata", None)
+        if not isinstance(metadata, dict):
+            metadata = {}
+            state.metadata = metadata
+        metadata["gagarin_action"] = getattr(decision, "action", "WAIT")
+        metadata["gagarin_reason"] = getattr(decision, "reason", "NO_DECISION")
+    rows = [_state_json(state) for state in results]
+    output = []
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        domains = event.get("domains") if isinstance(event.get("domains"), list) else []
+        matched = match_event_instruments(rows, domains)
+        eligible = [
+            row for row in matched
+            if row.get("action") in {"PAPER_ENTRY", "PAPER_SIGNAL"}
+            and _is_sputnik_setup_confirmed(row)
+        ]
+        output.append({
+            "event_id": str(event.get("event_id") or "")[:200],
+            "title": str(event.get("title") or "")[:300],
+            "source_url": str(event.get("url") or "")[:1000],
+            "published": str(event.get("published") or "")[:100],
+            "domains": [str(x).upper() for x in domains],
+            "historical_analogues": historical_analogues(str(event.get("title") or "")),
+            "status": "GAGARIN_SETUP_CONFIRMED" if eligible else (
+                "NO_MATCHING_INSTRUMENT" if not matched else "WATCH_ONLY"
+            ),
+            "matched_instruments": matched[:10],
+            "eligible_setups": eligible[:5],
+            "trade_placed": False,
+        })
+    return {
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        "mode": "PAPER ONLY",
+        "analysis_type": "SPUTNIK_CATALYST_CONFIRMATION",
+        "trade_placed": False,
+        "events": output,
+    }
+
+
+@app.post("/api/sputnik/confirm")
+def confirm_sputnik_catalysts(payload: dict, x_api_key: str | None = Header(default=None)):
+    _authorize(x_api_key)
+    events = payload.get("events") if isinstance(payload, dict) else None
+    if not isinstance(events, list) or not events:
+        raise HTTPException(status_code=422, detail="Payload must contain a non-empty events list")
+    if len(events) > 20:
+        raise HTTPException(status_code=422, detail="At most 20 catalyst events per request")
+    if not RUN_LOCK.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="Analysis already running")
+    try:
+        return _run_sputnik_confirmation(events)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}")
+    finally:
+        RUN_LOCK.release()
 
 
 @app.get("/health")
