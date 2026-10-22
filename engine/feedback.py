@@ -194,12 +194,18 @@ def update_open_outcomes(results, path=FEEDBACK_FILE):
             continue
         active_targets = [(i, target) for i, target in enumerate(targets) if target is not None]
         start_ts = _timestamp(row.get("entry_bar_timestamp"))
-        candles = [c for c in _candles(state) if start_ts is not None and c[0] > start_ts]
+        checked_ts = _timestamp(row.get("last_checked_timestamp"))
+        checkpoint = max(ts for ts in (start_ts, checked_ts) if ts is not None) if any(
+            ts is not None for ts in (start_ts, checked_ts)
+        ) else None
+        candles = [c for c in _candles(state) if checkpoint is not None and c[0] > checkpoint]
+        # Do not rewrite or recount an open signal when no genuinely new bar arrived.
         if not candles:
             continue
-        mfe, mae = 0.0, 0.0
-        last_ts = start_ts
-        bars = 0
+        mfe = _number(row.get("mfe_r")) or 0.0
+        mae = _number(row.get("mae_r")) or 0.0
+        last_ts = checkpoint
+        bars = int(_number(row.get("bars_held")) or 0)
         for ts, high, low in candles:
             last_ts = ts
             bars += 1
