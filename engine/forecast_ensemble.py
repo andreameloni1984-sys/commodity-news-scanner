@@ -33,6 +33,7 @@ def forecast_ensemble(candles):
         "version": "causal-ensemble-1.0", "status": "INSUFFICIENT_DATA",
         "direction": "NONE", "score": 0.0, "regime": "UNKNOWN",
         "continuation_score": 0.0, "reversal_risk": 0.0,
+        "prebreakout_direction": "NONE", "prebreakout_score": 0.0,
         "features": {}, "caveat": "Heuristic score, not calibrated probability; PAPER only.",
     }
     if len(rows) < 35:
