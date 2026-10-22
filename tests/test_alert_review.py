@@ -112,7 +112,7 @@ def test_forward_outcome_resolves_with_only_tp1(tmp_path):
         saved = next(csv.DictReader(handle))
     assert saved["outcome"] == "TP1"
     assert float(saved["r_multiple"]) == 1.0
-    assert saved["last_checked_timestamp"] == "200"
+    assert float(saved["last_checked_timestamp"]) == 200.0
 
 
 def test_forward_outcome_rejects_malformed_supplied_optional_target(tmp_path):
