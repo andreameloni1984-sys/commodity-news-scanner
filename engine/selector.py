@@ -376,9 +376,36 @@ def select_anticipation(states: Iterable[Any]) -> list[dict[str, Any]]:
 
         trigger_confirmed = bool(getattr(state, "trigger_confirmed", False))
         final_decision = _norm(getattr(state, "final_decision", "WAIT"))
-        stage = "ENTRY" if final_decision == "ENTRY" and trigger_confirmed else "EARLY WATCH"
+        metadata = getattr(state, "metadata", {}) or {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+
+        # Do not call a move "early" if a provider-supplied recent return says
+        # the move is already extended. Threshold is configurable per instrument;
+        # if absent, use a conservative default and label it as a heuristic.
+        recent_move = _float(
+            getattr(state, "move_4h_pct", metadata.get("move_4h_pct", 0.0)),
+            0.0,
+        )
+        late_threshold = abs(_float(metadata.get("late_move_threshold_pct", 2.5), 2.5))
+        move_is_extended = late_threshold > 0 and (
+            (direction == "SHORT" and recent_move <= -late_threshold)
+            or (direction == "LONG" and recent_move >= late_threshold)
+        )
+        if final_decision == "ENTRY" and trigger_confirmed:
+            stage = "ENTRY"
+        elif move_is_extended:
+            stage = "LATE SHORT" if direction == "SHORT" else "LATE LONG"
+        else:
+            stage = "EARLY WARNING"
+        if move_is_extended:
+            technical_reasons.append(
+                f"movimento 4h già esteso ({recent_move:.2f}%; soglia euristica {late_threshold:.2f}%)"
+            )
 
         blockers = list(getattr(state, "blockers", []) or [])
+        if move_is_extended:
+            blockers.append("possibile ingresso tardivo: non inseguire il movimento")
         if not trigger_confirmed:
             blockers.append("trigger non confermato")
         if not getattr(state, "live", False):
