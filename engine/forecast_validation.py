@@ -12,16 +12,18 @@ def _pct(numerator, denominator):
     return round(numerator / denominator * 100.0, 2) if denominator else None
 
 
-def walk_forward_evaluate(candles, horizon=4, start=40, min_move_pct=0.05):
+def walk_forward_evaluate(candles, horizon=4, start=40, min_move_pct=0.05, step=None):
     rows = list(candles or [])
     horizon = max(1, int(horizon))
     start = max(35, int(start))
+    # Default to non-overlapping outcome windows to reduce dependence between samples.
+    step = max(1, int(step if step is not None else horizon))
     if len(rows) <= start + horizon:
         return {"status": "INSUFFICIENT_DATA", "observations": 0,
                 "accuracy_pct": None, "coverage_pct": None,
                 "mean_signed_return_pct": None, "benchmark_accuracy_pct": None}
     predictions = []
-    for origin in range(start, len(rows) - horizon + 1):
+    for origin in range(start, len(rows) - horizon + 1, step):
         past = rows[:origin]
         future = rows[origin:origin + horizon]
         try:
@@ -86,7 +88,7 @@ def walk_forward_evaluate(candles, horizon=4, start=40, min_move_pct=0.05):
         "mean_signed_return_pct": round(sum(p["signed_return_pct"] for p in predictions) / len(predictions), 5),
         "benchmark_accuracy_pct": round(baseline, 2),
         "regime_breakdown": regime_stats,
-        "horizon_bars": horizon, "start_index": start,
+        "horizon_bars": horizon, "step_bars": step, "start_index": start,
         "min_move_pct": float(min_move_pct),
-        "note": "Gross diagnostic only; excludes fees, spread, slippage, intrabar path and overlapping-horizon dependence. Walk-forward outcomes are not proof of live profitability.",
+        "note": "Gross diagnostic only; excludes fees, spread, slippage and intrabar path. Default step equals horizon to reduce overlapping outcome windows; this is not proof of live profitability.",
     }
