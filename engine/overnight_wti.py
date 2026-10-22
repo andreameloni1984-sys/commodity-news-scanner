@@ -128,3 +128,210 @@ def evaluate_directional_edge(
         "promotion_gate": "Require costs, chronological walk-forward/OOS, regime/event "
                           "splits, and stable results before considering any signal change.",
     }
+
+
+
+def collect_wti_overnight_sessions(
+    *,
+    period: str = "60d",
+    interval: str = "5m",
+    request_get=None,
+    now_utc=None,
+) -> dict:
+    """Fetch public Yahoo continuous WTI futures bars and group ET overnight sessions.
+
+    Session date D is defined explicitly as 18:00 ET on D-1 through 09:00 ET on D.
+    Bars are retained with UTC and America/New_York timestamps and volume where
+    supplied. This is a research proxy on CL=F, not executable-contract data.
+    Network access is only used when this function is explicitly called.
+    """
+    from datetime import datetime, timezone, timedelta
+    from zoneinfo import ZoneInfo
+
+    try:
+        import requests
+    except ImportError:
+        return {"status": "UNAVAILABLE", "source": "Yahoo Finance CL=F",
+                "error": "requests package unavailable", "sessions": []}
+
+    getter = request_get or requests.get
+    eastern = ZoneInfo("America/New_York")
+    url = "https://query1.finance.yahoo.com/v8/finance/chart/CL=F"
+    try:
+        response = getter(
+            url,
+            params={"range": period, "interval": interval, "events": "history"},
+            headers={"User-Agent": "Mozilla/5.0 Gagarin-WTI-Overnight/1.0"},
+            timeout=10,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        chart = payload.get("chart") or {}
+        if chart.get("error"):
+            raise ValueError(str(chart["error"]))
+        result_list = chart.get("result") or []
+        if not result_list:
+            raise ValueError("Yahoo returned no chart data")
+        result = result_list[0]
+        timestamps = result.get("timestamp") or []
+        quotes = (result.get("indicators", {}).get("quote") or [{}])
+        quote = quotes[0] if quotes else {}
+        sessions = {}
+        rejected = 0
+        for index, stamp in enumerate(timestamps):
+            try:
+                stamp = int(stamp)
+                o, h, low, close = (
+                    _num((quote.get(key) or [])[index])
+                    for key in ("open", "high", "low", "close")
+                )
+                raw_volume = (quote.get("volume") or [])
+                volume = _num(raw_volume[index]) if index < len(raw_volume) else None
+                if None in (o, h, low, close) or min(o, h, low, close) <= 0:
+                    rejected += 1
+                    continue
+                if h < max(o, close, low) or low > min(o, close) or low > h:
+                    rejected += 1
+                    continue
+                utc_dt = datetime.fromtimestamp(stamp, tz=timezone.utc)
+                et_dt = utc_dt.astimezone(eastern)
+                minute = et_dt.hour * 60 + et_dt.minute
+                # Session D comprises 18:00-23:59 ET on D-1 and 00:00-08:59 ET on D.
+                if minute >= 18 * 60:
+                    session_date = (et_dt.date() + timedelta(days=1)).isoformat()
+                elif minute < 9 * 60:
+                    session_date = et_dt.date().isoformat()
+                else:
+                    continue
+                row = {
+                    "timestamp": stamp, "timestamp_utc": utc_dt.isoformat(),
+                    "timestamp_et": et_dt.isoformat(), "session_date": session_date,
+                    "open": o, "high": h, "low": low, "close": close,
+                    "volume": volume,
+                }
+                sessions.setdefault(session_date, []).append(row)
+            except (IndexError, TypeError, ValueError, OverflowError):
+                rejected += 1
+                continue
+
+        output = []
+        for session_date, bars in sorted(sessions.items()):
+            bars.sort(key=lambda row: row["timestamp"])
+            # Reject duplicate timestamps deterministically; keep first valid record.
+            deduped = []
+            seen = set()
+            for bar in bars:
+                if bar["timestamp"] in seen:
+                    continue
+                seen.add(bar["timestamp"])
+                deduped.append(bar)
+            if not deduped:
+                continue
+            summary = summarize_overnight(deduped)
+            summary.update({
+                "session_date": session_date,
+                "source": "Yahoo Finance continuous futures CL=F",
+                "interval": interval,
+                "first_bar_utc": deduped[0]["timestamp_utc"],
+                "last_bar_utc": deduped[-1]["timestamp_utc"],
+                "bars": deduped,
+                "volume_coverage": (
+                    sum(bar["volume"] is not None for bar in deduped) / len(deduped)
+                ),
+            })
+            output.append(summary)
+        current = now_utc or datetime.now(timezone.utc)
+        return {
+            "status": "OK" if output else "INSUFFICIENT_DATA",
+            "paper_only": True,
+            "source": "Yahoo Finance continuous futures CL=F",
+            "period_requested": period, "interval": interval,
+            "timezone": "America/New_York",
+            "session_definition": "18:00 ET previous calendar day through 08:59 ET session date",
+            "retrieved_at_utc": current.astimezone(timezone.utc).isoformat(),
+            "rejected_bars": rejected, "sessions": output,
+            "limitations": [
+                "Continuous futures data can include roll effects and is not a specific tradable contract.",
+                "Yahoo timestamps/volume availability and history may be incomplete; verify coverage before analysis.",
+                "No bid/ask, commission or slippage data are provided by this feed.",
+                "This collector does not schedule EIA/OPEC events or produce trading signals.",
+            ],
+        }
+    except Exception as exc:
+        return {
+            "status": "FETCH_ERROR", "paper_only": True,
+            "source": "Yahoo Finance continuous futures CL=F",
+            "error": f"{type(exc).__name__}: {str(exc)[:200]}",
+            "sessions": [],
+        }
+
+
+def evaluate_cost_adjusted_directional_edge(
+    observations: Iterable[Mapping],
+    *,
+    round_trip_cost_bps: float,
+    minimum_samples: int = 30,
+) -> dict:
+    """Descriptive sign-following test with explicit round-trip cost deduction.
+
+    next_session_return_pct is a percentage return (e.g. 0.4 means +0.4%).
+    Cost is in basis points of notional. This is not a strategy backtest because
+    it does not model entry prices, fills, stop/target logic, or market impact.
+    """
+    cost_bps = _num(round_trip_cost_bps)
+    if cost_bps is None or cost_bps < 0:
+        return {"paper_only": True, "status": "INVALID_COST", "samples": 0,
+                "directional_edge_validated": False}
+    cost_pct = cost_bps / 100.0
+    pairs = []
+    for row in observations:
+        overnight = _num(row.get("overnight_return_pct"))
+        forward = _num(row.get("next_session_return_pct"))
+        if overnight is None or forward is None or overnight == 0:
+            continue
+        # Hypothetical sign-following exposure: long for positive overnight,
+        # short for negative overnight. Costs deducted once per round trip.
+        gross = forward if overnight > 0 else -forward
+        pairs.append((gross, gross - cost_pct))
+    count = len(pairs)
+    if not count:
+        return {"paper_only": True, "status": "INSUFFICIENT_DATA", "samples": 0,
+                "gross_mean_pct": None, "net_mean_pct": None,
+                "net_positive_rate_pct": None, "directional_edge_validated": False}
+    net = [item[1] for item in pairs]
+    enough = count >= minimum_samples
+    return {
+        "paper_only": True, "status": "RESEARCH_ONLY" if enough else "INSUFFICIENT_SAMPLE",
+        "samples": count, "round_trip_cost_bps": cost_bps,
+        "gross_mean_pct": mean(item[0] for item in pairs),
+        "net_mean_pct": mean(net),
+        "net_median_pct": sorted(net)[count // 2],
+        "net_positive_rate_pct": sum(value > 0 for value in net) / count * 100,
+        "directional_edge_validated": False,
+        "warning": "Costs are a user-supplied scenario, not measured bid/ask or broker fees.",
+    }
+
+
+def chronological_walk_forward(
+    observations: Sequence[Mapping],
+    *,
+    train_fraction: float = 0.60,
+    validation_fraction: float = 0.20,
+) -> dict:
+    """Partition already chronologically ordered observations without shuffling."""
+    n = len(observations)
+    if not 0 < train_fraction < 1 or not 0 < validation_fraction < 1:
+        return {"paper_only": True, "status": "INVALID_SPLIT"}
+    if train_fraction + validation_fraction >= 1:
+        return {"paper_only": True, "status": "INVALID_SPLIT"}
+    train_end = int(n * train_fraction)
+    validation_end = int(n * (train_fraction + validation_fraction))
+    if train_end < 1 or validation_end <= train_end or validation_end >= n:
+        return {"paper_only": True, "status": "INSUFFICIENT_DATA", "samples": n}
+    return {
+        "paper_only": True, "status": "PARTITIONED_NOT_EVALUATED", "samples": n,
+        "train": list(observations[:train_end]),
+        "validation": list(observations[train_end:validation_end]),
+        "out_of_sample": list(observations[validation_end:]),
+        "warning": "Input must be sorted by session date before splitting; no shuffling or leakage checks are inferred.",
+    }
