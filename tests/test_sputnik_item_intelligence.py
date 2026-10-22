@@ -49,6 +49,8 @@ class SputnikItemIntelligenceTests(unittest.TestCase):
         self.assertTrue(rows)
         self.assertTrue(all(row["status"] == "WATCH" for row in rows))
         self.assertTrue(all("LONG" not in row["status"] and "BUY" not in row["status"] for row in rows))
+        self.assertTrue(all(row["catalyst_timing"] == "TIME_UNVERIFIED" for row in rows))
+        self.assertTrue(all(row["execution_authorized"] is False for row in rows))
 
 
     def test_gagarin_handoff_is_disabled_without_credentials(self):
