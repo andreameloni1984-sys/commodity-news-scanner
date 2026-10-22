@@ -13,6 +13,7 @@ from engine.predictive import evaluate_pre_move
 from engine.research_validation import annotate
 from engine.energy_confluence import stamp_energy
 from engine.energy_chain import stamp_paper
+from engine.early_warning import compute_market_early_warning
 
 STRONG_MOVE_ATR = 1.5
 OPPORTUNITY_MOVE_PCT_24H = 1.0
@@ -93,6 +94,14 @@ def scan_market_opportunity(state: SoyuzState) -> SoyuzState:
     state.metadata["expected_move_duration_hours"] = state.expected_move_duration_hours
     state.metadata["continuation_score"] = state.continuation_score
     state.metadata["reversal_score"] = state.reversal_score
+
+    # Research-inspired early warning: timestamped intraday data only.
+    # This is an advisory ranking index, not a calibrated probability or entry.
+    early_warning = compute_market_early_warning(closes, timestamps, atr)
+    state.metadata["early_warning"] = early_warning
+    state.metadata["early_warning_stage"] = early_warning.get("stage", "INSUFFICIENT_DATA")
+    state.metadata["early_warning_direction"] = early_warning.get("direction", "NONE")
+    state.metadata["early_warning_score"] = early_warning.get("score", 0.0)
     return state
 
 
