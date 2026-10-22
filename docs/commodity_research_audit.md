@@ -19,8 +19,12 @@ Run `load_ohlc_csv(path)`, then `audit_missed_moves(candles, horizon=4,
 threshold_pct=...)`. Thresholds must be calibrated per asset/timeframe using
 training data only. Compare parameters on a later untouched holdout period.
 The audit reports high/low excursions, missed directions, false directional
-signals and directional hit rate. Horizons overlap, so windows are not
-independent observations; raw percentages are not confidence estimates.
+signals and directional hit rate. It also groups forecast windows by the
+ensemble's contemporaneous regime (by_regime), including counts of missed
+moves and false signals. This helps identify which contexts deserve later
+holdout analysis; it does not prove that a regime predicts future moves.
+Horizons overlap, so windows are not independent observations; raw percentages
+are not confidence estimates.
 
 ## Ambiguous OHLC windows
 When both up and down excursion thresholds are crossed within the same forecast
