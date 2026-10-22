@@ -24,6 +24,9 @@ def test_quiet_series_does_not_invent_events():
     assert report["status"] == "CALCULATED"
     assert report["up_event_windows"] == report["down_event_windows"] == 0
     assert report["missed_rate_pct"] is None
+    assert report["by_regime"]
+    assert sum(x["forecast_windows"] for x in report["by_regime"].values()) == report["forecasts"]
+    assert sum(x["up_events"] for x in report["by_regime"].values()) == report["up_event_windows"]
 
 
 def test_both_barriers_touched_are_marked_ambiguous():
