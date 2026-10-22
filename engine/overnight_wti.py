@@ -313,6 +313,27 @@ def collect_wti_overnight_sessions(
                 ),
             })
             output.append(summary)
+        # Classify each session using only earlier complete overnight ranges.
+        # This avoids look-ahead from future sessions into historical labels.
+        prior_ranges = []
+        for item in sorted(output, key=lambda row: row["session_date"]):
+            current_range = _num(item.get("range_pct"))
+            valid_history = sorted(value for value in prior_ranges if value is not None and value >= 0)
+            if current_range is None:
+                item["regime"] = "UNKNOWN"
+            elif len(valid_history) < 20:
+                item["regime"] = "UNCLASSIFIED_INSUFFICIENT_HISTORY"
+            elif current_range >= _percentile(valid_history, 0.90):
+                item["regime"] = "SHOCK"
+            elif current_range >= _percentile(valid_history, 0.75):
+                item["regime"] = "EXPANDED"
+            elif current_range <= _percentile(valid_history, 0.25):
+                item["regime"] = "QUIET"
+            else:
+                item["regime"] = "NORMAL"
+            if item.get("overnight_coverage_complete") and current_range is not None:
+                prior_ranges.append(current_range)
+
         current = now_utc or datetime.now(timezone.utc)
         return {
             "status": "OK" if output else "INSUFFICIENT_DATA",
