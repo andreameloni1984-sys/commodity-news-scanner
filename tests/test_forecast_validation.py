@@ -49,3 +49,28 @@ def test_missed_move_rate_is_none_when_no_directional_outcomes():
     assert result["status"] == "CALCULATED"
     assert result["actual_directional_moves"] == 0
     assert result["missed_move_rate_pct"] is None
+
+def test_universe_validation_keeps_symbols_separate():
+    from engine.forecast_universe_validation import evaluate_universe
+
+    history = {
+        "BRENT": make_candles([70 + i * 0.15 for i in range(80)]),
+        "XAUUSD": make_candles([2000 - i * 0.2 for i in range(80)]),
+    }
+    result = evaluate_universe(history, horizon=3, start=40)
+    assert result["status"] == "CALCULATED"
+    assert result["instrument_count"] == 2
+    assert result["valid_instrument_count"] == 2
+    assert set(result["instruments"]) == {"BRENT", "XAUUSD"}
+    assert result["total_observations"] == sum(
+        metrics["observations"] for metrics in result["instruments"].values()
+    )
+
+
+def test_universe_validation_handles_insufficient_history():
+    from engine.forecast_universe_validation import evaluate_universe
+
+    result = evaluate_universe({"BRENT": make_candles([70 + i for i in range(20)])})
+    assert result["status"] == "NO_VALID_INSTRUMENTS"
+    assert result["total_observations"] == 0
+    assert result["aggregate_missed_move_rate_pct"] is None
