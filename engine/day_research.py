@@ -83,6 +83,17 @@ def _now():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _is_valid_timestamp(value: object) -> bool:
+    """Return whether a stored timestamp is an ISO-8601 value with a timezone."""
+    if not isinstance(value, str) or not value.strip():
+        return False
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return parsed.tzinfo is not None and parsed.utcoffset() is not None
+
+
 def build() -> dict:
     return {
         "paper_only": True,
@@ -104,8 +115,14 @@ def run() -> dict:
         except (OSError, json.JSONDecodeError):
             previous = {}
         stable_keys = ("notes", "status", "next_step", "paper_only", "promoted")
-        if all(previous.get(key) == report.get(key) for key in stable_keys):
-            report["updated_at"] = previous.get("updated_at", report["updated_at"])
+        # A syntactically valid JSON file can still have the wrong shape or a
+        # missing/invalid timestamp. Rebuild it rather than preserving bad audit data.
+        if isinstance(previous, dict) and all(
+            previous.get(key) == report.get(key) for key in stable_keys
+        ):
+            previous_timestamp = previous.get("updated_at")
+            if _is_valid_timestamp(previous_timestamp):
+                report["updated_at"] = previous_timestamp
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     return report
