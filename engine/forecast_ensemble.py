@@ -5,6 +5,7 @@ Scores are heuristic rankings, NOT calibrated probabilities. All calculations
 use only the supplied candles; no external model or future data is accessed.
 """
 from __future__ import annotations
+import math
 from statistics import mean
 
 
@@ -17,6 +18,10 @@ def forecast_ensemble(candles):
     for c in candles or []:
         try:
             o, h, l, close = (float(c[k]) for k in ("open", "high", "low", "close"))
+            # Reject non-finite inputs before comparisons; NaN can bypass
+            # ordinary OHLC inequalities and poison downstream indicators.
+            if not all(math.isfinite(value) for value in (o, h, l, close)):
+                continue
             # Reject malformed OHLC bars: high/low must contain both open and close.
             if (min(o, h, l, close) <= 0 or h < l
                     or h < max(o, close) or l > min(o, close)):
