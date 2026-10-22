@@ -5,13 +5,14 @@ Scores are transparent heuristic selection scores, NOT calibrated probabilities.
 """
 from __future__ import annotations
 
+from math import isfinite
 from typing import Any, Iterable
 
 
 def _num(value: Any, default: float = 0.0) -> float:
     try:
         number = float(value)
-        return number if number == number else default
+        return number if isfinite(number) else default
     except (TypeError, ValueError):
         return default
 
@@ -40,27 +41,14 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
             _direction(getattr(state, "mtf_direction", "NONE")),
             _direction(getattr(state, "opportunity_direction", "NONE")),
         ]
-        # The most recent confirmed setup takes priority; otherwise use the
-        # pre-move model and then structural/MTF context.
-        direction = next((d for d in directions[1:2] if d != "NONE"), "NONE")
-        if direction == "NONE":
-            direction = next((d for d in (directions[0], directions[2], directions[3], directions[4]) if d != "NONE"), "NONE")
-        if direction == "NONE":
-            # Always produce a directional candidate when the current market
-            # series supplies momentum; this is a lower-evidence fallback.
-            move24 = _num(getattr(state, "move_24h_pct", 0))
-            move4 = _num(getattr(state, "move_4h_pct", 0))
-            if move24 != 0:
-                direction = "LONG" if move24 > 0 else "SHORT"
-            elif move4 != 0:
-                direction = "LONG" if move4 > 0 else "SHORT"
-            else:
-                closes = getattr(state, "closes", []) or []
-                try:
-                    if len(closes) >= 2 and float(closes[-1]) != float(closes[0]):
-                        direction = "LONG" if float(closes[-1]) > float(closes[0]) else "SHORT"
-                except (TypeError, ValueError):
-                    pass
+        # Direction requires explicit directional evidence. Prefer a validated
+        # setup, then market structure, multi-timeframe alignment, and finally
+        # an independently generated opportunity direction. Pre-move/momentum
+        # alone is not sufficient to manufacture a LONG/SHORT candidate.
+        direction = next(
+            (d for d in (directions[1], directions[2], directions[3], directions[4]) if d != "NONE"),
+            "NONE",
+        )
         if direction == "NONE":
             continue
 
