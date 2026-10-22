@@ -91,6 +91,7 @@ def audit_missed_moves(
         "correct_direction_windows": 0, "missed_rate_pct": None,
         "false_signal_rate_pct": None, "directional_hit_rate_pct": None,
         "overlapping_windows": True, "paper_only": True,
+        "by_regime": {},
     }
     if len(rows) <= start + horizon:
         return report
@@ -112,36 +113,52 @@ def audit_missed_moves(
         if forecast.get("status") != "CALCULATED":
             continue
         direction = forecast.get("direction", "NONE")
+        regime = str(forecast.get("regime") or "UNKNOWN")
+        bucket = report["by_regime"].setdefault(regime, {
+            "forecast_windows": 0, "up_events": 0, "down_events": 0,
+            "missed_up": 0, "missed_down": 0, "ambiguous_windows": 0,
+            "directional_scored": 0, "correct_direction": 0, "false_signals": 0,
+        })
         up = max(highs) / entry - 1 >= threshold_pct / 100
         down = min(lows) / entry - 1 <= -threshold_pct / 100
         report["forecasts"] += 1
+        bucket["forecast_windows"] += 1
         if up:
             report["up_event_windows"] += 1
+            bucket["up_events"] += 1
             if direction == "LONG":
                 report["anticipated_up_windows"] += 1
             else:
                 report["missed_up_windows"] += 1
+                bucket["missed_up"] += 1
         if down:
             report["down_event_windows"] += 1
+            bucket["down_events"] += 1
             if direction == "SHORT":
                 report["anticipated_down_windows"] += 1
             else:
                 report["missed_down_windows"] += 1
+                bucket["missed_down"] += 1
         if up and down:
             report["ambiguous_windows"] += 1
+            bucket["ambiguous_windows"] += 1
         if direction in ("LONG", "SHORT"):
             report["directional_forecast_windows"] += 1
             # Do not score direction as right/wrong when both barriers were
             # touched: OHLC alone cannot reveal which happened first.
             if not (up and down):
                 report["scored_directional_windows"] += 1
+                bucket["directional_scored"] += 1
                 matched = (direction == "LONG" and up) or (direction == "SHORT" and down)
                 if matched:
                     report["correct_direction_windows"] += 1
+                    bucket["correct_direction"] += 1
                 elif direction == "LONG":
                     report["false_long_windows"] += 1
+                    bucket["false_signals"] += 1
                 else:
                     report["false_short_windows"] += 1
+                    bucket["false_signals"] += 1
     events = report["up_event_windows"] + report["down_event_windows"]
     missed = report["missed_up_windows"] + report["missed_down_windows"]
     scored = report["scored_directional_windows"]
