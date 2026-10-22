@@ -180,12 +180,19 @@ def update_open_outcomes(results, path=FEEDBACK_FILE):
             continue
         side = str(row.get("direction", "")).upper()
         entry, stop = _number(row.get("entry")), _number(row.get("stop"))
-        targets = [_number(row.get(f"tp{i}")) for i in (1, 2, 3)]
-        if side not in {"LONG", "SHORT"} or entry is None or stop is None or any(t is None for t in targets):
+        # TP1 is required to define a valid tracked setup; TP2/TP3 are
+        # optional. Older rows and valid one-target setups must still resolve.
+        raw_targets = [row.get(f"tp{i}") for i in (1, 2, 3)]
+        targets = [_number(value) if value not in (None, "") else None for value in raw_targets]
+        if side not in {"LONG", "SHORT"} or entry is None or stop is None or targets[0] is None:
+            continue
+        # A supplied but malformed target is not silently ignored.
+        if any(raw not in (None, "") and parsed is None for raw, parsed in zip(raw_targets, targets)):
             continue
         risk = entry - stop if side == "LONG" else stop - entry
         if risk <= 0:
             continue
+        active_targets = [(i, target) for i, target in enumerate(targets) if target is not None]
         start_ts = _timestamp(row.get("entry_bar_timestamp"))
         candles = [c for c in _candles(state) if start_ts is not None and c[0] > start_ts]
         if not candles:
