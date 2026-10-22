@@ -38,3 +38,17 @@ def test_future_candles_do_not_change_past_forecast():
     after = forecast_ensemble(history + candles([80, 70, 60]))
     assert before == forecast_ensemble(history)
     assert after["status"] == "CALCULATED"
+
+def test_malformed_ohlc_bars_are_ignored():
+    valid = candles([100 + i * 0.3 for i in range(45)])
+    malformed = {"open": 105, "high": 101, "low": 99, "close": 104, "timestamp": 999}
+    clean_result = forecast_ensemble(valid)
+    filtered_result = forecast_ensemble(valid[:20] + [malformed] + valid[20:])
+    assert filtered_result == clean_result
+
+
+def test_invalid_bars_cannot_make_history_look_sufficient():
+    valid = candles([100 + i * 0.3 for i in range(20)])
+    malformed = {"open": 105, "high": 101, "low": 99, "close": 104}
+    result = forecast_ensemble(valid + [malformed] * 20)
+    assert result["status"] == "INSUFFICIENT_DATA"
