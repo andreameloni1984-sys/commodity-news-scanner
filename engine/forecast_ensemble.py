@@ -17,7 +17,9 @@ def forecast_ensemble(candles):
     for c in candles or []:
         try:
             o, h, l, close = (float(c[k]) for k in ("open", "high", "low", "close"))
-            if min(o, h, l, close) <= 0 or h < l:
+            # Reject malformed OHLC bars: high/low must contain both open and close.
+            if (min(o, h, l, close) <= 0 or h < l
+                    or h < max(o, close) or l > min(o, close)):
                 continue
             rows.append((o, h, l, close))
         except (KeyError, TypeError, ValueError):
@@ -31,7 +33,6 @@ def forecast_ensemble(candles):
     if len(rows) < 35:
         return result
     closes = [r[3] for r in rows]
-    ranges = [r[1] - r[2] for r in rows]
     trs = []
     for i, r in enumerate(rows):
         trs.append(max(r[1]-r[2], abs(r[1]-closes[i-1]) if i else 0,
