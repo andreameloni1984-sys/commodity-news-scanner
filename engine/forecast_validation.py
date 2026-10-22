@@ -5,6 +5,7 @@ outcomes use later candles. Scores are not probabilities and results do not
 guarantee future performance.
 """
 from __future__ import annotations
+import math
 from engine.forecast_ensemble import forecast_ensemble
 
 
@@ -31,7 +32,10 @@ def walk_forward_evaluate(candles, horizon=4, start=40, min_move_pct=0.05, step=
             exit_price = float(future[-1]["close"])
         except (KeyError, TypeError, ValueError, IndexError):
             continue
-        if entry <= 0 or exit_price <= 0:
+        # A NaN passes ordinary <= comparisons; exclude non-finite prices
+        # before classifying outcomes so invalid data cannot count as FLAT.
+        if (not math.isfinite(entry) or not math.isfinite(exit_price)
+                or entry <= 0 or exit_price <= 0):
             continue
         result = forecast_ensemble(past)
         if result.get("status") != "CALCULATED":
