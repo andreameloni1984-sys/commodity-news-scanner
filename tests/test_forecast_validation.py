@@ -74,3 +74,19 @@ def test_universe_validation_handles_insufficient_history():
     assert result["status"] == "NO_VALID_INSTRUMENTS"
     assert result["total_observations"] == 0
     assert result["aggregate_missed_move_rate_pct"] is None
+
+def test_walk_forward_defaults_to_non_overlapping_horizons():
+    rows = make_candles([100 + i * 0.2 for i in range(80)])
+    result = walk_forward_evaluate(rows, horizon=4, start=40)
+    assert result["status"] == "CALCULATED"
+    assert result["step_bars"] == 4
+    assert result["observations"] == 10
+
+
+def test_walk_forward_allows_explicit_step_for_signal_frequency_study():
+    rows = make_candles([100 + i * 0.2 for i in range(80)])
+    sparse = walk_forward_evaluate(rows, horizon=4, start=40, step=4)
+    dense = walk_forward_evaluate(rows, horizon=4, start=40, step=1)
+    assert sparse["observations"] > 0
+    assert dense["observations"] > sparse["observations"]
+    assert dense["step_bars"] == 1
