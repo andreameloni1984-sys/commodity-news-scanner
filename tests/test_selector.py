@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 from engine.selector import select_anticipation
 
+
 def test_selector_prefers_coherent_direction():
     state = SimpleNamespace(
         commodity="Oro", symbol="XAU/USD",
@@ -18,6 +19,7 @@ def test_selector_prefers_coherent_direction():
     assert result[0]["stage"] == "EARLY WARNING"
     assert result[0]["direction"] == "LONG"
     assert result[0]["score"] > 40
+
 
 def test_selector_does_not_invent_direction_without_evidence():
     state = SimpleNamespace(
@@ -55,7 +57,7 @@ def test_selector_marks_short_as_late_when_recent_move_is_extended():
     )
     import engine.selector as module
     module._forecast_map = lambda: {}
-    module._weather_map = lambda {}
+    module._weather_map = lambda: {}
 
     result = select_anticipation([state])
     assert result
