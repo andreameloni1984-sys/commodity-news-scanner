@@ -139,7 +139,10 @@ def _direction(state: Any, forecast: dict | None) -> str:
         confidence = _float(item.get("confidence"))
         if direction in votes:
             votes[direction] += max(1.0, confidence)
-    return "LONG" if votes["LONG"] >= votes["SHORT"] else "SHORT"
+    # No evidence or a tied forecast is not a directional forecast.
+    if votes["LONG"] == votes["SHORT"]:
+        return "NONE"
+    return "LONG" if votes["LONG"] > votes["SHORT"] else "SHORT"
 
 
 def _technical_component(state: Any, direction: str) -> tuple[float, list[str]]:
@@ -354,6 +357,10 @@ def select_anticipation(states: Iterable[Any]) -> list[dict[str, Any]]:
         weather = weather_data.get(name)
 
         direction = _direction(state, forecast)
+        # Do not manufacture an early LONG/SHORT when technical and forecast
+        # evidence are absent or contradictory.
+        if direction not in {"LONG", "SHORT"}:
+            continue
         technical, technical_reasons = _technical_component(state, direction)
         history, history_reasons = _history_component(state, direction)
         long_term, forecast_reasons = _forecast_component(forecast, direction)
