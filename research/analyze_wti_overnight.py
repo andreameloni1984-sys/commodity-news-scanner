@@ -64,7 +64,7 @@ def main():
     report["cost_assumption_note"] = "Hypothetical scenario only; replace with realistic measured spread/fees/slippage."
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\\n", encoding="utf-8")
+    output_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps({
         "paper_only": True, "status": report["status"],
         "input_file": str(input_path), "output_file": str(output_path),
