@@ -59,6 +59,29 @@ def energy_event(moves: list[dict]) -> dict:
     }
 
 
+def format_energy_alert(event: dict) -> str:
+    """Format a dedicated Telegram alert for energy complex shocks."""
+    if event.get("event") != "STRONG_MOVE_ENERGY":
+        return ""
+    lines = [
+        "🔥 STRONG MOVE — ENERGY",
+        "PAPER ONLY — evento di complesso, non è un ingresso automatico",
+        "",
+        f"Direzione: {event.get('direction', 'NONE')}",
+        f"Confluenza: {event.get('confluence', 'BASSA')}",
+        "",
+        "Gambe confermate:",
+    ]
+    for leg in event.get("legs", []):
+        lines.append(f"• {leg.get('family')}: {leg.get('name')} {leg.get('pct', 0):+.2f}%")
+    lines.extend([
+        "",
+        "Da verificare: struttura → trigger → rischio → continuazione/reversal",
+        "Non abbassare le soglie. Controllare il complesso prima di un PAPER.",
+    ])
+    return "\n".join(lines)
+
+
 def stamp_energy(states: list) -> dict:
     moves = []
     for state in states:
