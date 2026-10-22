@@ -207,12 +207,12 @@ def update_open_outcomes(results, path=FEEDBACK_FILE):
                 mfe = max(mfe, (high - entry) / risk)
                 mae = min(mae, (low - entry) / risk)
                 stop_hit = low <= stop
-                hit_targets = [i for i, target in enumerate(targets) if high >= target]
+                hit_targets = [i for i, target in active_targets if high >= target]
             else:
                 mfe = max(mfe, (entry - low) / risk)
                 mae = min(mae, (entry - high) / risk)
                 stop_hit = high >= stop
-                hit_targets = [i for i, target in enumerate(targets) if low <= target]
+                hit_targets = [i for i, target in active_targets if low <= target]
             if stop_hit:
                 row.update(outcome="STOP", r_multiple=-1.0)
                 break
