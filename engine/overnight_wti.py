@@ -269,8 +269,23 @@ def collect_wti_overnight_sessions(
                 regular_open = regular[0]["open"]
                 regular_close = regular[-1]["close"]
                 next_session_return = ((regular_close / regular_open) - 1) * 100 if regular_open > 0 else None
+                regular_high = max(bar["high"] for bar in regular)
+                regular_low = min(bar["low"] for bar in regular)
+                next_session_range_pct = ((regular_high - regular_low) / regular_open) * 100 if regular_open > 0 else None
+                regular_closes = [bar["close"] for bar in regular]
+                regular_log_returns = [
+                    log(regular_closes[i] / regular_closes[i - 1])
+                    for i in range(1, len(regular_closes))
+                    if regular_closes[i] > 0 and regular_closes[i - 1] > 0
+                ]
+                next_session_realized_volatility_pct = (
+                    sqrt(sum(value * value for value in regular_log_returns)) * 100
+                    if regular_log_returns else None
+                )
             else:
                 next_session_return = None
+                next_session_range_pct = None
+                next_session_realized_volatility_pct = None
             overnight_first_et = datetime.fromtimestamp(deduped[0]["timestamp"], tz=timezone.utc).astimezone(eastern)
             overnight_last_et = datetime.fromtimestamp(deduped[-1]["timestamp"], tz=timezone.utc).astimezone(eastern)
             overnight_complete = (
@@ -282,6 +297,8 @@ def collect_wti_overnight_sessions(
                 "session_date": session_date,
                 "overnight_coverage_complete": overnight_complete,
                 "next_session_return_pct": next_session_return,
+                "next_session_range_pct": next_session_range_pct,
+                "next_session_realized_volatility_pct": next_session_realized_volatility_pct,
                 "us_session_coverage_complete": regular_complete,
                 "us_session_bar_count": len(regular),
                 "us_session_first_bar_utc": regular[0]["timestamp_utc"] if regular else None,
