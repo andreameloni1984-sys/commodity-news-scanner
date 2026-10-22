@@ -19,7 +19,7 @@ def test_selector_prefers_coherent_direction():
     assert result[0]["direction"] == "LONG"
     assert result[0]["score"] > 40
 
-def test_selector_does_not_require_entry():
+def test_selector_does_not_invent_direction_without_evidence():
     state = SimpleNamespace(
         commodity="Petrolio WTI", symbol="WTI/USD",
         regime="UNKNOWN", structure="RANGE",
@@ -32,5 +32,5 @@ def test_selector_does_not_require_entry():
         blockers=[], metadata={}
     )
     result = select_anticipation([state])
-    assert result
-    assert result[0]["stage"] == "EARLY WATCH"
+    # Price history alone must not force a default LONG on a tied/empty forecast.
+    assert result == []
