@@ -236,15 +236,37 @@ def collect_wti_overnight_sessions(
             summary = summarize_overnight(deduped)
             regular = sorted(us_sessions.get(session_date, []), key=lambda row: row["timestamp"])
             regular = list({row["timestamp"]: row for row in regular}.values())
-            if regular:
+            # For 5-minute bars, 09:00-14:29 ET should contain 66 bars.
+            regular_first_minute = (
+                datetime.fromtimestamp(regular[0]["timestamp"], tz=timezone.utc)
+                .astimezone(eastern).hour * 60
+                + datetime.fromtimestamp(regular[0]["timestamp"], tz=timezone.utc)
+                .astimezone(eastern).minute
+            ) if regular else None
+            regular_last_et = datetime.fromtimestamp(regular[-1]["timestamp"], tz=timezone.utc).astimezone(eastern) if regular else None
+            regular_last_minute = regular_last_et.hour * 60 + regular_last_et.minute if regular_last_et else None
+            regular_complete = (
+                len(regular) >= 53 and regular_first_minute == 9 * 60
+                and regular_last_minute == 14 * 60 + 25
+            )
+            if regular_complete:
                 regular_open = regular[0]["open"]
                 regular_close = regular[-1]["close"]
                 next_session_return = ((regular_close / regular_open) - 1) * 100 if regular_open > 0 else None
             else:
                 next_session_return = None
+            overnight_first_et = datetime.fromtimestamp(deduped[0]["timestamp"], tz=timezone.utc).astimezone(eastern)
+            overnight_last_et = datetime.fromtimestamp(deduped[-1]["timestamp"], tz=timezone.utc).astimezone(eastern)
+            overnight_complete = (
+                overnight_first_et.hour * 60 + overnight_first_et.minute == 18 * 60
+                and overnight_last_et.hour * 60 + overnight_last_et.minute == 8 * 60 + 55
+                and len(deduped) >= 180
+            )
             summary.update({
                 "session_date": session_date,
+                "overnight_coverage_complete": overnight_complete,
                 "next_session_return_pct": next_session_return,
+                "us_session_coverage_complete": regular_complete,
                 "us_session_bar_count": len(regular),
                 "us_session_first_bar_utc": regular[0]["timestamp_utc"] if regular else None,
                 "us_session_last_bar_utc": regular[-1]["timestamp_utc"] if regular else None,
@@ -270,6 +292,7 @@ def collect_wti_overnight_sessions(
             "retrieved_at_utc": current.astimezone(timezone.utc).isoformat(),
             "rejected_bars": rejected, "sessions": output,
             "limitations": [
+                "Incomplete sessions are retained for inspection but the forward return is null unless first/last US bars and minimum coverage are present.",
                 "Continuous futures data can include roll effects and is not a specific tradable contract.",
                 "Yahoo timestamps/volume availability and history may be incomplete; verify coverage before analysis.",
                 "No bid/ask, commission or slippage data are provided by this feed.",
