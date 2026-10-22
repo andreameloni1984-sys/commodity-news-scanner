@@ -1,4 +1,6 @@
+import csv
 from datetime import datetime
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 from engine.feedback import (
@@ -7,6 +9,8 @@ from engine.feedback import (
     pending_alert_reviews,
     review_alert,
     format_alert_review,
+    FIELDS,
+    update_open_outcomes,
 )
 from engine.alert_review_scheduler import daily_alert_review_tick
 
@@ -71,3 +75,144 @@ def test_nightly_review_sends_once_at_21_italy_and_never_in_tests_by_itself(tmp_
     outside = datetime(2026, 10, 20, 20, 55, tzinfo=ZoneInfo("Europe/Rome"))
     assert daily_alert_review_tick(lambda message: True, now=outside,
                                    marker_path=tmp_path / "other.json") is False
+
+
+
+def test_forward_outcome_resolves_with_only_tp1(tmp_path):
+    path = tmp_path / "feedback.csv"
+    row = {field: "" for field in FIELDS}
+    row.update({
+        "signal_id": "one-target",
+        "symbol": "XAUUSD",
+        "direction": "LONG",
+        "entry": "100",
+        "stop": "90",
+        "tp1": "110",
+        "tp2": "",
+        "tp3": "",
+        "entry_bar_timestamp": "100",
+        "last_checked_timestamp": "100",
+        "outcome": "OPEN",
+        "r_multiple": "",
+    })
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=FIELDS)
+        writer.writeheader()
+        writer.writerow(row)
+
+    state = SimpleNamespace(
+        symbol="XAUUSD",
+        candles=[
+            {"timestamp": 100, "high": 101, "low": 99},
+            {"timestamp": 200, "high": 112, "low": 105},
+        ],
+    )
+    assert update_open_outcomes([state], path=path) == 1
+    with path.open("r", newline="", encoding="utf-8") as handle:
+        saved = next(csv.DictReader(handle))
+    assert saved["outcome"] == "TP1"
+    assert float(saved["r_multiple"]) == 1.0
+    assert float(saved["last_checked_timestamp"]) == 200.0
+
+
+def test_forward_outcome_rejects_malformed_supplied_optional_target(tmp_path):
+    path = tmp_path / "feedback.csv"
+    row = {field: "" for field in FIELDS}
+    row.update({
+        "signal_id": "bad-target",
+        "symbol": "XAUUSD",
+        "direction": "LONG",
+        "entry": "100",
+        "stop": "90",
+        "tp1": "110",
+        "tp2": "not-a-price",
+        "tp3": "",
+        "entry_bar_timestamp": "100",
+        "outcome": "OPEN",
+    })
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=FIELDS)
+        writer.writeheader()
+        writer.writerow(row)
+    state = SimpleNamespace(
+        symbol="XAUUSD",
+        candles=[
+            {"timestamp": 100, "high": 101, "low": 99},
+            {"timestamp": 200, "high": 112, "low": 105},
+        ],
+    )
+    assert update_open_outcomes([state], path=path) == 0
+
+
+def test_open_outcome_ignores_already_checked_candles(tmp_path):
+    path = tmp_path / "feedback.csv"
+    row = {field: "" for field in FIELDS}
+    row.update({
+        "signal_id": "no-new-bars",
+        "symbol": "XAUUSD",
+        "direction": "LONG",
+        "entry": "100",
+        "stop": "90",
+        "tp1": "120",
+        "entry_bar_timestamp": "100",
+        "last_checked_timestamp": "200",
+        "outcome": "OPEN",
+        "mfe_r": "0.4",
+        "mae_r": "-0.2",
+        "bars_held": "1",
+    })
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=FIELDS)
+        writer.writeheader()
+        writer.writerow(row)
+    state = SimpleNamespace(
+        symbol="XAUUSD",
+        candles=[
+            {"timestamp": 100, "high": 101, "low": 99},
+            {"timestamp": 200, "high": 104, "low": 98},
+        ],
+    )
+    assert update_open_outcomes([state], path=path) == 0
+    with path.open("r", newline="", encoding="utf-8") as handle:
+        saved = next(csv.DictReader(handle))
+    assert float(saved["mfe_r"]) == 0.4
+    assert float(saved["mae_r"]) == -0.2
+    assert saved["bars_held"] == "1"
+
+
+def test_open_outcome_accumulates_metrics_from_new_bars_only(tmp_path):
+    path = tmp_path / "feedback.csv"
+    row = {field: "" for field in FIELDS}
+    row.update({
+        "signal_id": "incremental-bars",
+        "symbol": "XAUUSD",
+        "direction": "LONG",
+        "entry": "100",
+        "stop": "90",
+        "tp1": "120",
+        "entry_bar_timestamp": "100",
+        "last_checked_timestamp": "200",
+        "outcome": "OPEN",
+        "mfe_r": "0.4",
+        "mae_r": "-0.2",
+        "bars_held": "1",
+    })
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=FIELDS)
+        writer.writeheader()
+        writer.writerow(row)
+    state = SimpleNamespace(
+        symbol="XAUUSD",
+        candles=[
+            {"timestamp": 100, "high": 101, "low": 99},
+            {"timestamp": 200, "high": 104, "low": 98},
+            {"timestamp": 300, "high": 106, "low": 97},
+        ],
+    )
+    assert update_open_outcomes([state], path=path) == 1
+    with path.open("r", newline="", encoding="utf-8") as handle:
+        saved = next(csv.DictReader(handle))
+    assert float(saved["mfe_r"]) == 0.6
+    assert float(saved["mae_r"]) == -0.3
+    assert saved["bars_held"] == "2"
+    assert float(saved["last_checked_timestamp"]) == 300.0

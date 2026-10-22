@@ -180,19 +180,32 @@ def update_open_outcomes(results, path=FEEDBACK_FILE):
             continue
         side = str(row.get("direction", "")).upper()
         entry, stop = _number(row.get("entry")), _number(row.get("stop"))
-        targets = [_number(row.get(f"tp{i}")) for i in (1, 2, 3)]
-        if side not in {"LONG", "SHORT"} or entry is None or stop is None or any(t is None for t in targets):
+        # TP1 is required to define a valid tracked setup; TP2/TP3 are
+        # optional. Older rows and valid one-target setups must still resolve.
+        raw_targets = [row.get(f"tp{i}") for i in (1, 2, 3)]
+        targets = [_number(value) if value not in (None, "") else None for value in raw_targets]
+        if side not in {"LONG", "SHORT"} or entry is None or stop is None or targets[0] is None:
+            continue
+        # A supplied but malformed target is not silently ignored.
+        if any(raw not in (None, "") and parsed is None for raw, parsed in zip(raw_targets, targets)):
             continue
         risk = entry - stop if side == "LONG" else stop - entry
         if risk <= 0:
             continue
+        active_targets = [(i, target) for i, target in enumerate(targets) if target is not None]
         start_ts = _timestamp(row.get("entry_bar_timestamp"))
-        candles = [c for c in _candles(state) if start_ts is not None and c[0] > start_ts]
+        checked_ts = _timestamp(row.get("last_checked_timestamp"))
+        checkpoint = max(ts for ts in (start_ts, checked_ts) if ts is not None) if any(
+            ts is not None for ts in (start_ts, checked_ts)
+        ) else None
+        candles = [c for c in _candles(state) if checkpoint is not None and c[0] > checkpoint]
+        # Do not rewrite or recount an open signal when no genuinely new bar arrived.
         if not candles:
             continue
-        mfe, mae = 0.0, 0.0
-        last_ts = start_ts
-        bars = 0
+        mfe = _number(row.get("mfe_r")) or 0.0
+        mae = _number(row.get("mae_r")) or 0.0
+        last_ts = checkpoint
+        bars = int(_number(row.get("bars_held")) or 0)
         for ts, high, low in candles:
             last_ts = ts
             bars += 1
@@ -200,12 +213,12 @@ def update_open_outcomes(results, path=FEEDBACK_FILE):
                 mfe = max(mfe, (high - entry) / risk)
                 mae = min(mae, (low - entry) / risk)
                 stop_hit = low <= stop
-                hit_targets = [i for i, target in enumerate(targets) if high >= target]
+                hit_targets = [i for i, target in active_targets if high >= target]
             else:
                 mfe = max(mfe, (entry - low) / risk)
                 mae = min(mae, (entry - high) / risk)
                 stop_hit = high >= stop
-                hit_targets = [i for i, target in enumerate(targets) if low <= target]
+                hit_targets = [i for i, target in active_targets if low <= target]
             if stop_hit:
                 row.update(outcome="STOP", r_multiple=-1.0)
                 break
