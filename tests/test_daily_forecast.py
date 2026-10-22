@@ -122,3 +122,24 @@ def test_daily_forecast_does_not_wait_for_intraday_entry_confirmation(monkeypatc
     assert result is not None
     assert result["direction"] == "LONG"
     assert result["paper_only"] is True
+
+
+def test_daily_forecast_abstains_on_tied_directional_votes(monkeypatch):
+    import engine.daily_forecast as module
+
+    monkeypatch.setattr(
+        module,
+        "_forecast_map",
+        lambda: {"Test": {"horizons": {
+            "30": {"direction": "LONG", "historical_samples": 25, "confidence": 50.0},
+            "90": {"direction": "SHORT", "historical_samples": 25, "confidence": 50.0},
+        }}},
+    )
+    monkeypatch.setattr(module, "_load", lambda path, default: default)
+
+    state = _state("Test", direction="NONE")
+    state.setup_direction = "NONE"
+    state.structure_direction = "NONE"
+    state.mtf_direction = "NONE"
+    assert module.predict_today([state]) is None
+
