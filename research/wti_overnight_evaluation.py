@@ -139,8 +139,9 @@ def evaluate_direction_by_regime(observations: Iterable[Mapping], *, round_trip_
 
 def build_wti_research_report(observations: Iterable[Mapping], *, round_trip_cost_bps=5, minimum_samples=30):
     """Create an auditable, split-by-question report; never promotes a signal."""
-    rows = _clean_rows(observations)
-    total = len(list(observations)) if not isinstance(observations, (list, tuple)) else len(observations)
+    raw_rows = list(observations)
+    rows = _clean_rows(raw_rows)
+    total = len(raw_rows)
     complete = len(rows)
     dates = [str(row.get("session_date", "")) for row in rows]
     duplicates = len(dates) - len(set(dates))
