@@ -96,6 +96,16 @@ def build() -> dict:
 
 def run() -> dict:
     report = build()
+    # The scheduled workflow runs hourly. Do not make an unchanged research
+    # snapshot look like new work just because the clock advanced.
+    if OUT.exists():
+        try:
+            previous = json.loads(OUT.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            previous = {}
+        stable_keys = ("notes", "status", "next_step", "paper_only", "promoted")
+        if all(previous.get(key) == report.get(key) for key in stable_keys):
+            report["updated_at"] = previous.get("updated_at", report["updated_at"])
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     return report
