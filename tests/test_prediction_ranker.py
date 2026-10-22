@@ -43,6 +43,32 @@ class PredictionRankerTests(unittest.TestCase):
                                                  pre_move_direction="NONE",
                                                  opportunity_direction="NONE")]), [])
 
+    def test_momentum_alone_does_not_create_direction(self):
+        candidate = state(
+            "MOMENTUM_ONLY",
+            setup_direction="NONE",
+            structure_direction="NONE",
+            mtf_direction="NONE",
+            opportunity_direction="NONE",
+            pre_move_direction="NONE",
+            move_24h_pct=3.0,
+            move_4h_pct=1.0,
+            closes=[100.0, 105.0],
+        )
+        self.assertEqual(rank_predictions([candidate]), [])
+
+    def test_non_finite_price_or_atr_is_rejected(self):
+        self.assertEqual(rank_predictions([
+            state("BAD_PRICE", price=float("inf")),
+            state("BAD_ATR", atr=float("nan")),
+        ]), [])
+
+    def test_non_finite_scores_are_sanitized(self):
+        ranked = rank_predictions([state("VALID", pre_move_score=float("inf"))])
+        self.assertEqual(len(ranked), 1)
+        self.assertEqual(ranked[0]["commodity"], "VALID")
+        self.assertTrue(ranked[0]["paper_only"])
+
     def test_message_returns_single_best_pick(self):
         message = format_best_prediction([state("WTI"), state("GOLD", pre_move_score=10)])
         self.assertIn("SCELTA #1: WTI", message)
