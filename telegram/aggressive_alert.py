@@ -68,6 +68,7 @@ def _item_from_state(state: Any) -> dict:
         "closes": getattr(state, "closes", []),
         "highs": getattr(state, "highs", []),
         "lows": getattr(state, "lows", []),
+        "early_warning": (getattr(state, "metadata", {}) or {}).get("early_warning", {}),
     }
 
 
@@ -220,6 +221,13 @@ def format_aggressive_alerts(alerts: Iterable[dict]) -> str:
             "POSSIBILE": "🟡 POSSIBILE OPPORTUNITÀ — in attesa di conferma",
         }.get(item["stage"], item["stage"])
         lines.append("STATO: %s" % status_label)
+        early = item.get("early_warning") or {}
+        if isinstance(early, dict) and early.get("stage"):
+            lines.append(
+                "EARLY WARNING: %s | direzione %s | indice euristico %s/100"
+                % (early.get("stage"), early.get("direction", "NONE"), early.get("score", 0))
+            )
+            lines.append("Evidenze: %s" % "; ".join(early.get("reasons", [])[:3]))
         price = _number(item.get("price"))
         lines.append("Quotazione provider: %.6g (valuta da verificare per strumento)" % price if price is not None else "Quotazione: N/D")
         try:
