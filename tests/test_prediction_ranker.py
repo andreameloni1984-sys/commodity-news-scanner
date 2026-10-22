@@ -24,10 +24,11 @@ def state(name, **overrides):
 class PredictionRankerTests(unittest.TestCase):
     def test_ranks_stronger_confluence_first(self):
         strong = state("WTI")
-        weak = state("GOLD", regime="RANGE", structure="UNKNOWN",
-                      structure_direction="NONE", mtf_direction="NONE",
+        weak = state("GOLD", regime="TREND_DOWN", structure="BEARISH",
+                      structure_direction="SHORT", mtf_direction="NONE",
                       setup_direction="NONE", trigger_confirmed=False,
                       pre_move_score=20, pre_move_direction="LONG",
+                      opportunity_direction="LONG",
                       opportunity_score=10, continuation_score=10,
                       confidence=20, quality=20)
         ranked = rank_predictions([weak, strong])
