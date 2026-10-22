@@ -72,6 +72,14 @@ NOTES = {
         "description": "Candele giapponesi e Fibonacci: etichette, non segnali",
         "evidence": "studi su engulfing S&P 500: potere predittivo vicino a zero dopo i costi",
     },
+    "wti_overnight_regime": {
+        "description": "PAPER ONLY: misurare rendimento, range, volatilita realizzata, gap e volume overnight WTI; classificare QUIET/NORMAL/EXPANDED/SHOCK usando solo storico precedente.",
+        "module": "engine/overnight_wti.py",
+        "event_context": "Passare flag EIA/OPEC verificati; non inventare calendari e non inferire causalita.",
+        "directional_test": "Confrontare segno overnight con rendimento sessione USA successiva; richiedere costi, split eventi e walk-forward/OOS.",
+        "evidence_boundary": "La ricerca sostiene l'utilita predittiva per la volatilita successiva; non dimostra un rialzo overnight persistente o un vantaggio LONG/SHORT.",
+        "status": "RESEARCH_ONLY_NOT_CONNECTED_TO_FINAL_DECISION",
+    },
     "near_miss": {
         "description": "Diagnosi: elenco condizioni mancanti e flag near quando manca una sola",
         "purpose": "il filtro non resta muto; Telegram/dashboard possono mostrare i candidati vicini",
