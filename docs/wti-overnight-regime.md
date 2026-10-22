@@ -67,3 +67,31 @@ must sort by session date and evaluate each slice independently.
 - Supply realistic spread, commission and slippage scenarios.
 - Check EIA/OPEC release timestamps from official calendars; event flags remain caller-supplied.
 - Review the saved JSON and out-of-sample statistics before any downstream use.
+
+
+## Separate volatility-versus-direction evaluation
+The collector now also stores the next US session's high-low range and
+close-to-close realized volatility, but only when the session passes the
+coverage gate. The collector assigns historical QUIET/NORMAL/EXPANDED/SHOCK
+labels using only prior complete overnight ranges; the first 20 eligible
+sessions remain unclassified, avoiding look-ahead in regime labels.
+
+`research/wti_overnight_evaluation.py` reports the association between
+overnight range and next-session realized volatility separately from a
+hypothetical sign-following directional diagnostic. It reports Pearson and
+Spearman association, descriptive regime splits, and a user-specified
+round-trip cost scenario. These are descriptive statistics, not calibrated
+forecasts, a profitable strategy claim, or a signal promotion.
+
+Run from the repository root against an existing archive:
+```sh
+python -m research.analyze_wti_overnight --input data/wti_overnight_sessions.json --cost-bps 5
+```
+To explicitly fetch fresh public Yahoo CL=F data before evaluating:
+```sh
+python -m research.analyze_wti_overnight --fetch --cost-bps 5
+```
+The CLI writes `data/wti_overnight_evaluation.json`. Network access is opt-in
+and collection is not scheduled. No tests were run during this change, per the
+manual-verification workflow. Results must be reviewed for incomplete sessions,
+roll effects, event days, and realistic costs before interpretation.
