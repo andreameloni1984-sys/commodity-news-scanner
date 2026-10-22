@@ -8,7 +8,7 @@ information is included. That does not establish a persistent overnight price
 rise or a profitable LONG/SHORT rule.
 
 ## Features
-- Overnight return versus prior close (or first bar open if absent).
+- Overnight return versus the most recent earlier US-session close when complete prior-session bars exist; otherwise the first overnight bar open is used and the fallback basis is explicitly labelled in the report.
 - Overnight high-low range as a percentage of reference price.
 - Realized volatility from intranight close-to-close log returns.
 - Gap from last overnight close to supplied US-session open.
@@ -42,7 +42,10 @@ Finance `CL=F` 5-minute bars and groups them by an America/New_York session date
 calculates a descriptive 09:00-14:29 ET open-to-close return for the same date,
 so overnight features can be paired with the following US-session outcome.
 UTC and ET timestamps are retained, duplicate timestamps are de-duplicated,
-OHLC values are sanity-checked, and volume coverage is reported.
+OHLC values are sanity-checked, and volume coverage is reported. The collector
+uses the previous available US session close as the overnight return reference
+only when its bar coverage is complete; otherwise it labels the open-price
+fallback. It also passes the first US-session open into the gap feature.
 
 `write_wti_overnight_archive()` can persist the resulting report to
 `data/wti_overnight_sessions.json`; collection and writing are explicit calls,
@@ -52,7 +55,8 @@ contract proxy and may include roll effects.
 ## Cost and validation helpers
 `evaluate_cost_adjusted_directional_edge()` applies a caller-supplied round-trip
 cost in basis points to a hypothetical sign-following diagnostic. It is a
-sensitivity analysis, not measured trading costs or a fill simulation.
+sensitivity analysis, not measured trading costs or a fill simulation. The
+reported median uses the conventional midpoint for even-sized samples.
 `chronological_walk_forward()` partitions chronologically ordered observations
 into train, validation, and untouched OOS slices without shuffling. The caller
 must sort by session date and evaluate each slice independently.
