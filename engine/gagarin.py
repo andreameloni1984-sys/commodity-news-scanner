@@ -10,6 +10,7 @@ from engine.trigger import apply_trigger
 from engine.risk import apply_risk
 from engine.safety import apply_safety
 from engine.predictive import evaluate_pre_move
+from engine.forecast_ensemble import forecast_ensemble
 from engine.research_validation import annotate
 from engine.energy_confluence import stamp_energy
 from engine.energy_chain import stamp_paper
@@ -399,6 +400,8 @@ def analyze_one(commodity: Commodity) -> SoyuzState:
 
     state = load_data(state, commodity)
     state = evaluate_pre_move(state)
+    # Independent, auditable regime/momentum ensemble; ranking context only.
+    state.metadata["forecast_ensemble"] = forecast_ensemble(state.candles)
     state = apply_sputnik_intelligence(state)
     state = scan_market_opportunity(state)
     state = apply_regime(state)
@@ -424,6 +427,7 @@ def analyze_universe(commodities):
             bool((state.metadata.get("energy") or {}).get("in_complex")),
             state.opportunity_alert == "STRONG_MOVE",
             state.opportunity_alert == "OPPORTUNITY",
+            float((state.metadata.get("forecast_ensemble") or {}).get("score", 0.0)),
             float(state.opportunity_score or 0.0),
             float(state.probability or 0.0),
             float(state.quality or 0.0),
