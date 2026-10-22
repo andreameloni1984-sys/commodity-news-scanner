@@ -22,6 +22,7 @@ I punteggi sono SCORE DI SELEZIONE, non probabilità statistiche.
 from __future__ import annotations
 
 import json
+from math import isfinite
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -36,7 +37,8 @@ WEATHER_MAX_AGE_DAYS = 45.0
 
 def _float(value: Any, default: float = 0.0) -> float:
     try:
-        return float(value)
+        number = float(value)
+        return number if isfinite(number) else default
     except (TypeError, ValueError):
         return default
 
@@ -199,7 +201,9 @@ def _history_component(state: Any, direction: str) -> tuple[float, list[str]]:
     closes = []
     for value in getattr(state, "closes", []) or []:
         try:
-            closes.append(float(value))
+            number = float(value)
+            if isfinite(number):
+                closes.append(number)
         except (TypeError, ValueError):
             pass
 
