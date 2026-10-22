@@ -15,6 +15,7 @@ It NEVER places orders. PAPER ONLY.
 from __future__ import annotations
 
 import json
+from math import isfinite
 from pathlib import Path
 from statistics import median
 from typing import Any, Iterable
@@ -39,7 +40,8 @@ def _load(path: Path, default: Any) -> Any:
 
 def _num(value: Any, default: float | None = None) -> float | None:
     try:
-        return float(value)
+        number = float(value)
+        return number if isfinite(number) else default
     except (TypeError, ValueError):
         return default
 
@@ -81,8 +83,10 @@ def _context_direction(state: Any, forecast: dict | None) -> str:
         if value in votes and samples >= MIN_SAMPLES:
             votes[value] += max(1.0, samples) * max(0.25, confidence / 100.0)
 
-    if max(votes.values()) > 0:
-        return max(votes, key=votes.get)
+    if max(votes.values()) > 0 and votes["LONG"] != votes["SHORT"]:
+        return "LONG" if votes["LONG"] > votes["SHORT"] else "SHORT"
+    if votes["LONG"] == votes["SHORT"] and votes["LONG"] > 0:
+        return "NONE"
 
     for attr in ("structure_direction", "mtf_direction", "setup_direction"):
         value = _direction(getattr(state, attr, "NONE"))
