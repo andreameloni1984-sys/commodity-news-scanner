@@ -90,3 +90,13 @@ def test_walk_forward_allows_explicit_step_for_signal_frequency_study():
     assert sparse["observations"] > 0
     assert dense["observations"] > sparse["observations"]
     assert dense["step_bars"] == 1
+
+
+def test_walk_forward_skips_non_finite_outcome_prices():
+    closes = [100 + i * 0.25 for i in range(80)]
+    rows = make_candles(closes)
+    rows[45]["close"] = float("nan")
+    result = walk_forward_evaluate(rows, horizon=3, start=40)
+    assert result["status"] == "CALCULATED"
+    assert result["observations"] > 0
+    assert result["mean_signed_return_pct"] is not None
