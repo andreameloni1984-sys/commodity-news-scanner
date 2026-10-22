@@ -52,3 +52,17 @@ def test_invalid_bars_cannot_make_history_look_sufficient():
     malformed = {"open": 105, "high": 101, "low": 99, "close": 104}
     result = forecast_ensemble(valid + [malformed] * 20)
     assert result["status"] == "INSUFFICIENT_DATA"
+
+
+def test_non_finite_ohlc_rows_are_ignored():
+    import math
+
+    rows = candles([100 + i * 0.5 for i in range(50)])
+    rows[10]["close"] = float("nan")
+    rows[20]["high"] = float("inf")
+
+    result = forecast_ensemble(rows)
+    assert result["status"] == "CALCULATED"
+    assert result["direction"] == "LONG"
+    assert all(math.isfinite(float(value)) for value in result["features"].values()
+               if isinstance(value, (int, float)))
