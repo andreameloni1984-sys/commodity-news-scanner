@@ -177,6 +177,7 @@ def collect_wti_overnight_sessions(
         quotes = (result.get("indicators", {}).get("quote") or [{}])
         quote = quotes[0] if quotes else {}
         sessions = {}
+        us_sessions = {}
         rejected = 0
         for index, stamp in enumerate(timestamps):
             try:
@@ -199,8 +200,13 @@ def collect_wti_overnight_sessions(
                 # Session D comprises 18:00-23:59 ET on D-1 and 00:00-08:59 ET on D.
                 if minute >= 18 * 60:
                     session_date = (et_dt.date() + timedelta(days=1)).isoformat()
+                    destination = sessions
                 elif minute < 9 * 60:
                     session_date = et_dt.date().isoformat()
+                    destination = sessions
+                elif 9 * 60 <= minute < 14 * 60 + 30:
+                    session_date = et_dt.date().isoformat()
+                    destination = us_sessions
                 else:
                     continue
                 row = {
@@ -209,7 +215,7 @@ def collect_wti_overnight_sessions(
                     "open": o, "high": h, "low": low, "close": close,
                     "volume": volume,
                 }
-                sessions.setdefault(session_date, []).append(row)
+                destination.setdefault(session_date, []).append(row)
             except (IndexError, TypeError, ValueError, OverflowError):
                 rejected += 1
                 continue
@@ -228,8 +234,20 @@ def collect_wti_overnight_sessions(
             if not deduped:
                 continue
             summary = summarize_overnight(deduped)
+            regular = sorted(us_sessions.get(session_date, []), key=lambda row: row["timestamp"])
+            regular = list({row["timestamp"]: row for row in regular}.values())
+            if regular:
+                regular_open = regular[0]["open"]
+                regular_close = regular[-1]["close"]
+                next_session_return = ((regular_close / regular_open) - 1) * 100 if regular_open > 0 else None
+            else:
+                next_session_return = None
             summary.update({
                 "session_date": session_date,
+                "next_session_return_pct": next_session_return,
+                "us_session_bar_count": len(regular),
+                "us_session_first_bar_utc": regular[0]["timestamp_utc"] if regular else None,
+                "us_session_last_bar_utc": regular[-1]["timestamp_utc"] if regular else None,
                 "source": "Yahoo Finance continuous futures CL=F",
                 "interval": interval,
                 "first_bar_utc": deduped[0]["timestamp_utc"],
@@ -248,6 +266,7 @@ def collect_wti_overnight_sessions(
             "period_requested": period, "interval": interval,
             "timezone": "America/New_York",
             "session_definition": "18:00 ET previous calendar day through 08:59 ET session date",
+            "forward_session_definition": "09:00-14:29 ET on the same session date; open-to-close return",
             "retrieved_at_utc": current.astimezone(timezone.utc).isoformat(),
             "rejected_bars": rejected, "sessions": output,
             "limitations": [
@@ -335,3 +354,18 @@ def chronological_walk_forward(
         "out_of_sample": list(observations[validation_end:]),
         "warning": "Input must be sorted by session date before splitting; no shuffling or leakage checks are inferred.",
     }
+
+
+
+def write_wti_overnight_archive(report: Mapping, path="data/wti_overnight_sessions.json") -> dict:
+    """Persist a fetched report as a research artifact; never used by signal logic."""
+    import json
+    from pathlib import Path
+    destination = Path(path)
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(json.dumps(dict(report), indent=2, sort_keys=True) + "\\n", encoding="utf-8")
+        return {"paper_only": True, "status": "SAVED", "path": str(destination), "sessions": len(report.get("sessions", []))}
+    except (OSError, TypeError, ValueError) as exc:
+        return {"paper_only": True, "status": "SAVE_ERROR", "path": str(destination),
+                "error": f"{type(exc).__name__}: {str(exc)[:160]}"}
