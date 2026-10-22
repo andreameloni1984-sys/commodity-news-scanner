@@ -117,6 +117,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
+import math
 import time
 
 import requests
@@ -403,6 +404,14 @@ def _normalize(
 
         v = float(volume or 0)
 
+        # Reject NaN/Infinity before comparisons: Python's min/max
+        # comparisons with NaN can otherwise let malformed provider data pass.
+        if not all(math.isfinite(value) for value in (ts, o, h, l, c, v)):
+            return None
+
+        if v < 0:
+            return None
+
         if min(o, h, l, c) <= 0:
             return None
 
@@ -625,6 +634,13 @@ def _validate_candles(
             TypeError,
             ValueError,
         ):
+            continue
+
+        # Defend the ingestion boundary even if a caller bypasses _normalize.
+        if not all(math.isfinite(value) for value in (ts, o, h, l, c, v)):
+            continue
+
+        if v < 0:
             continue
 
         if min(
