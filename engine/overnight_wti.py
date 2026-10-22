@@ -5,7 +5,7 @@ signals or alter Gagarin's final decision. Thresholds use only prior ranges.
 """
 from __future__ import annotations
 from math import log, sqrt
-from statistics import mean
+from statistics import mean, median
 from typing import Iterable, Mapping, Sequence
 
 
@@ -60,7 +60,8 @@ def summarize_overnight(
 
     first, last = parsed[0], parsed[-1]
     base = _num(previous_close)
-    if base is None:
+    return_basis = "PREVIOUS_SESSION_CLOSE" if base is not None and base > 0 else "FIRST_OVERNIGHT_BAR_OPEN_FALLBACK"
+    if base is None or base <= 0:
         base = first["open"]
     overnight_return = ((last["close"] / base) - 1) * 100 if base and base > 0 else None
     high = max(row["high"] for row in parsed)
@@ -91,8 +92,9 @@ def summarize_overnight(
     return {
         "feature": "WTI_OVERNIGHT_REGIME", "paper_only": True,
         "status": "OBSERVATION_ONLY", "bar_count": len(parsed),
-        "overnight_return_pct": overnight_return, "range_pct": range_pct,
-        "realized_volatility_pct": realized_vol, "gap_to_us_open_pct": gap,
+        "overnight_return_pct": overnight_return, "overnight_return_basis": return_basis,
+        "range_pct": range_pct, "realized_volatility_pct": realized_vol,
+        "gap_to_us_open_pct": gap,
         "volume": sum(volumes) if volumes else None, "regime": regime,
         "directional_bias": "UNTESTED", "event_flags": flags,
         "event_caution": any(bool(v) for v in flags.values()),
@@ -233,7 +235,6 @@ def collect_wti_overnight_sessions(
                 deduped.append(bar)
             if not deduped:
                 continue
-            summary = summarize_overnight(deduped)
             regular = sorted(us_sessions.get(session_date, []), key=lambda row: row["timestamp"])
             regular = list({row["timestamp"]: row for row in regular}.values())
             # For 5-minute bars, 09:00-14:29 ET should contain 66 bars.
@@ -248,6 +249,21 @@ def collect_wti_overnight_sessions(
             regular_complete = (
                 len(regular) >= 53 and regular_first_minute == 9 * 60
                 and regular_last_minute == 14 * 60 + 25
+            )
+            previous_close = None
+            prior_dates = sorted(date for date in us_sessions if date < session_date)
+            if prior_dates:
+                prior_bars = sorted(us_sessions[prior_dates[-1]], key=lambda row: row["timestamp"])
+                if prior_bars:
+                    prior_first_dt = datetime.fromtimestamp(prior_bars[0]["timestamp"], tz=timezone.utc).astimezone(eastern)
+                    prior_last_dt = datetime.fromtimestamp(prior_bars[-1]["timestamp"], tz=timezone.utc).astimezone(eastern)
+                    prior_first_minute = prior_first_dt.hour * 60 + prior_first_dt.minute
+                    prior_last_minute = prior_last_dt.hour * 60 + prior_last_dt.minute
+                    if len(prior_bars) >= 53 and prior_first_minute == 9 * 60 and prior_last_minute == 14 * 60 + 25:
+                        previous_close = prior_bars[-1]["close"]
+            summary = summarize_overnight(
+                deduped, previous_close=previous_close,
+                us_open=regular[0]["open"] if regular else None,
             )
             if regular_complete:
                 regular_open = regular[0]["open"]
@@ -347,7 +363,7 @@ def evaluate_cost_adjusted_directional_edge(
         "samples": count, "round_trip_cost_bps": cost_bps,
         "gross_mean_pct": mean(item[0] for item in pairs),
         "net_mean_pct": mean(net),
-        "net_median_pct": sorted(net)[count // 2],
+        "net_median_pct": median(net),
         "net_positive_rate_pct": sum(value > 0 for value in net) / count * 100,
         "directional_edge_validated": False,
         "warning": "Costs are a user-supplied scenario, not measured bid/ask or broker fees.",
@@ -387,7 +403,7 @@ def write_wti_overnight_archive(report: Mapping, path="data/wti_overnight_sessio
     destination = Path(path)
     try:
         destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_text(json.dumps(dict(report), indent=2, sort_keys=True) + "\\n", encoding="utf-8")
+        destination.write_text(json.dumps(dict(report), indent=2, sort_keys=True) + "\n", encoding="utf-8")
         return {"paper_only": True, "status": "SAVED", "path": str(destination), "sessions": len(report.get("sessions", []))}
     except (OSError, TypeError, ValueError) as exc:
         return {"paper_only": True, "status": "SAVE_ERROR", "path": str(destination),
