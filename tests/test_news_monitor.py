@@ -570,5 +570,5 @@ def test_capture_baseline_skips_non_finite_live_prices():
         SimpleNamespace(commodity="Gold", symbol="XAUUSD", live=True, price=float("inf")),
         SimpleNamespace(commodity="Gold", symbol="XAUUSD", live=True, price=float("nan")),
     ]
-    assert _capture_baseline({"assets": ["Oro"]}, states) == []
+    assert _capture_baseline({"assets": ["Oro"]}, states) == {}
 
