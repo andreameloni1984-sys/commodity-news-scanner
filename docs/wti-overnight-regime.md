@@ -115,3 +115,34 @@ claim that any cost level matches actual execution. EIA/OPEC splits use only
 explicit `event_flags` supplied on each observation; missing flags are shown
 as unknown rather than assumed to be non-event days. No calendar scraping,
 event inference, or signal promotion is performed.
+
+
+## Market structure staircase research (new, separate PAPER-only module)
+`research/market_structure_staircase.py` adds a descriptive detector for the
+price structure discussed in the research notes: higher highs + higher lows
+(`BULLISH_STAIRCASE`) and lower highs + lower lows (`BEARISH_STAIRCASE`).
+It accepts timestamp-ordered OHLC bars and exposes the individual swing
+comparisons and the last confirmed swing levels.
+
+Pivots use configurable left/right bars. A pivot is only available after the
+right-side confirmation bars have elapsed; the output records both the pivot
+timestamp and the confirmation timestamp/index to make look-ahead leakage
+visible. A minimum percentage swing filter is configurable. The detector also
+flags when the latest close is beyond the last confirmed swing high/low, but
+this is descriptive structure context, not an automatic reversal call.
+
+Research rationale: the staircase idea is a useful, interpretable feature to
+test, not a proven standalone forecasting edge. Technical trading-rule studies
+report mixed results across markets and rules; the feature must be evaluated
+against simple baselines, on chronological held-out data, with realistic costs.
+WTI overnight research likewise keeps volatility prediction separate from
+direction prediction: a 2026 WTI study reports out-of-sample gains from
+overnight information for volatility forecasts, while that does not establish
+a directional LONG/SHORT edge.
+
+No existing Gagarin/Sputnik alert, `final_decision`, ranking, or execution path
+was changed or connected. The module is not wired into live alerts. It has not
+been tested in this change, in accordance with the manual-verification
+workflow. Before any integration, assess pivot-confirmation timing, parameter
+sensitivity, trend/chop regimes, asset-specific results, costs/slippage, and
+out-of-sample performance. PAPER ONLY.
