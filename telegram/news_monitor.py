@@ -89,7 +89,10 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
             if row.get("kind") != "NEWS_REACTION" or row.get("event_id") != alert.get("event_id") or row.get("asset") != alert.get("asset"):
                 continue
             observed_at = _parse_datetime(row.get("observed_at") or row.get("recorded_at"))
-            if not observed_at or not (sent_at <= observed_at <= sent_at + timedelta(hours=4)):
+            # A journal row may carry a malformed/future timestamp. Never
+            # score a reaction that had not happened at the scorecard's as-of
+            # time; otherwise historical evaluation can leak future prices.
+            if not observed_at or not (sent_at <= observed_at <= min(sent_at + timedelta(hours=4), now)):
                 continue
             try:
                 price = float(row.get("current_price"))
