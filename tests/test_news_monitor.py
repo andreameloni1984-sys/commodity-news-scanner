@@ -161,8 +161,10 @@ def test_new_news_triggers_immediate_analysis_then_waits_for_price_confirmation(
     sent_row = next(row for row in journal_rows if row.get("kind") == "NEWS_ALERT_SENT")
     assert detected["catalyst_timing"] == "FRESH_CATALYST"
     assert detected["catalyst_age_minutes"] == 1.0
+    assert detected["catalyst_future_skew_minutes"] == 0.0
     assert sent_row["catalyst_timing"] == "FRESH_CATALYST"
     assert sent_row["catalyst_age_minutes"] == 6.0
+    assert sent_row["catalyst_future_skew_minutes"] == 0.0
 
     # The observation window starts when Telegram delivery succeeds.
     import json
