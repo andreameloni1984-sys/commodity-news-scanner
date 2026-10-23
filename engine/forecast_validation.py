@@ -71,6 +71,9 @@ def walk_forward_evaluate(candles, horizon=4, start=40, min_move_pct=0.05, step=
         predictions.append({
             "direction": direction, "actual": actual, "correct": correct,
             "signed_return_pct": signed_return, "net_signed_return_pct": signed_return - cost_pct,
+            "always_long_net_return_pct": realized_pct - round_trip_cost_bps / 100.0,
+            "always_short_net_return_pct": -realized_pct - round_trip_cost_bps / 100.0,
+            "always_flat_return_pct": 0.0,
             "realized_return_pct": realized_pct,
             "origin_index": origin, "regime": result.get("regime", "UNKNOWN"),
         })
@@ -117,6 +120,12 @@ def walk_forward_evaluate(candles, horizon=4, start=40, min_move_pct=0.05, step=
         "false_signal_rate_pct": _pct(len(false_signals), len(directional)),
         "mean_signed_return_pct": round(sum(p["signed_return_pct"] for p in predictions) / len(predictions), 5),
         "mean_net_signed_return_pct": round(sum(p["net_signed_return_pct"] for p in predictions) / len(predictions), 5),
+        "baseline_always_long_net_return_pct": round(sum(p["always_long_net_return_pct"] for p in predictions) / len(predictions), 5),
+        "baseline_always_short_net_return_pct": round(sum(p["always_short_net_return_pct"] for p in predictions) / len(predictions), 5),
+        "baseline_always_flat_return_pct": 0.0,
+        "net_edge_vs_always_long_pct": round(sum(p["net_signed_return_pct"] for p in predictions) / len(predictions) - sum(p["always_long_net_return_pct"] for p in predictions) / len(predictions), 5),
+        "net_edge_vs_always_short_pct": round(sum(p["net_signed_return_pct"] for p in predictions) / len(predictions) - sum(p["always_short_net_return_pct"] for p in predictions) / len(predictions), 5),
+        "net_edge_vs_always_flat_pct": round(sum(p["net_signed_return_pct"] for p in predictions) / len(predictions), 5),
         "round_trip_cost_bps": round_trip_cost_bps,
         "benchmark_accuracy_pct": round(baseline, 2),
         "regime_breakdown": regime_stats,
