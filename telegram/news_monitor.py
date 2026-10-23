@@ -322,8 +322,18 @@ def _fingerprint(item: dict[str, Any]) -> str:
 
 
 def _title_cluster(item: dict[str, Any]) -> str:
+    """Deduplicate syndicated titles within a UTC publication day, not forever.
+
+    Title-only hashes suppressed genuinely new recurrences of the same headline
+    for as long as the bounded state retained that hash. A UTC date bucket keeps
+    same-day syndication deduplication while allowing a later-day event with the
+    same normalized title to be considered independently.
+    """
     title = _normalise_title(str(item.get("title") or ""))
-    return hashlib.sha256(title.encode("utf-8")).hexdigest()[:20]
+    published = _parse_datetime(item.get("published_at"))
+    publication_day = published.date().isoformat() if published else "unknown-date"
+    key = f"{publication_day}|{title}"
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:20]
 
 
 def _source_allowed(source: str, min_interval: int = 0) -> bool:
