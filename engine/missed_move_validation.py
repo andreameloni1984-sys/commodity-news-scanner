@@ -1,5 +1,6 @@
 """PAPER-only missed-move diagnostics using future OHLC excursions."""
 from __future__ import annotations
+import math
 from engine.forecast_ensemble import forecast_ensemble
 
 
@@ -13,7 +14,7 @@ def evaluate_missed_moves(candles, horizon=4, start=40, threshold_pct=0.5):
     rows = list(candles or [])
     horizon = max(1, int(horizon))
     start = max(35, int(start))
-    threshold_pct = max(0.0, float(threshold_pct))
+    threshold_pct = float(threshold_pct)
     result = {
         "status": "INSUFFICIENT_DATA", "forecasts": 0, "important_events": 0,
         "anticipated_events": 0, "missed_events": 0, "missed_rate_pct": None,
@@ -21,6 +22,11 @@ def evaluate_missed_moves(candles, horizon=4, start=40, threshold_pct=0.5):
         "unanticipated_down": 0, "missed_no_signal": 0, "missed_wrong_direction": 0,
         "threshold_pct": threshold_pct, "horizon_bars": horizon,
     }
+    if not math.isfinite(threshold_pct):
+        result["status"] = "INVALID_PARAMETERS"
+        return result
+    threshold_pct = max(0.0, threshold_pct)
+    result["threshold_pct"] = threshold_pct
     if len(rows) <= start + horizon:
         return result
 
@@ -36,9 +42,10 @@ def evaluate_missed_moves(candles, horizon=4, start=40, threshold_pct=0.5):
             lows = [float(c["low"]) for c in future]
         except (KeyError, TypeError, ValueError, IndexError):
             continue
-        if entry <= 0 or not highs or not lows:
-            continue
-        if any(x <= 0 for x in highs + lows) or any(lo > hi for lo, hi in zip(lows, highs)):
+        # NaN passes ordinary comparisons and can silently corrupt event counts.
+        if (not math.isfinite(entry) or entry <= 0 or not highs or not lows
+                or any(not math.isfinite(x) or x <= 0 for x in highs + lows)
+                or any(lo > hi for lo, hi in zip(lows, highs))):
             continue
         forecast = forecast_ensemble(past)
         if forecast.get("status") != "CALCULATED":
