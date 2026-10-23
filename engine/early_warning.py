@@ -141,7 +141,15 @@ def compute_market_early_warning(
     returns = [(prices[i] / prices[i - 1] - 1.0) * 100.0 for i in range(1, len(prices)) if prices[i - 1] > 0]
     recent = returns[-6:]
     baseline = returns[-30:-6]
-    if len(recent) >= 3 and len(baseline) >= 8:
+    # Volatility and jump bonuses assume comparable candle intervals.
+    # A long gap compresses several minutes of movement into one return and can
+    # falsely look like an intraday volatility expansion or anomalous candle.
+    cadence_window = intervals[-30:]
+    max_gap_seconds = max(3.0 * step, 300.0)
+    cadence_ok = len(cadence_window) >= 8 and all(
+        interval <= max_gap_seconds for interval in cadence_window
+    )
+    if len(recent) >= 3 and len(baseline) >= 8 and cadence_ok:
         recent_vol = (sum(x*x for x in recent) / len(recent)) ** 0.5
         baseline_vol = (sum(x*x for x in baseline) / len(baseline)) ** 0.5
         if baseline_vol > 0 and recent_vol >= 1.5 * baseline_vol:
@@ -152,6 +160,8 @@ def compute_market_early_warning(
         if base_median > 0 and abs(latest_return) >= 3 * base_median:
             score += 10
             reasons.append("candela anomala/jump rispetto al baseline")
+    elif len(recent) >= 3 and len(baseline) >= 8 and not cadence_ok:
+        reasons.append("volatilità/jump non valutati: cadenza timestamp irregolare")
     atr_value = _finite(atr)
     extension = abs(r240) if r240 is not None else abs(r60)
     atr_pct = atr_value / prices[-1] * 100 if atr_value and atr_value > 0 else None
