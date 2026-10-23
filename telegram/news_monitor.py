@@ -636,8 +636,22 @@ def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str
             if any(v is None for v in (price, entry, stop, tp1)):
                 continue
             try:
-                price_value = float(price)
-            except (TypeError, ValueError):
+                price_value, entry_value, stop_value, tp1_value = (
+                    float(price), float(entry), float(stop), float(tp1)
+                )
+                tp2_raw = getattr(state, "tp2", None)
+                tp2_value = float(tp2_raw) if tp2_raw is not None else None
+            except (TypeError, ValueError, OverflowError):
+                continue
+            numeric_levels = [price_value, entry_value, stop_value, tp1_value]
+            if tp2_value is not None:
+                numeric_levels.append(tp2_value)
+            if not all(isfinite(value) and value > 0 for value in numeric_levels):
+                continue
+            # Never send a Telegram trade plan with impossible risk geometry.
+            risk_distance = entry_value - stop_value if direction == "LONG" else stop_value - entry_value
+            reward_distance = tp1_value - entry_value if direction == "LONG" else entry_value - tp1_value
+            if risk_distance <= 0 or reward_distance <= 0:
                 continue
             move_pct = (price_value / baseline - 1.0) * 100.0
             if impact == "RIALZISTA" and move_pct < min_reaction_pct:
@@ -649,13 +663,16 @@ def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str
                 "impact": impact,
                 "state": state,
                 "direction": direction,
-                "price": price,
-                "entry": entry,
-                "stop": stop,
-                "tp1": tp1,
-                "tp2": getattr(state, "tp2", None),
+                "price": price_value,
+                "entry": entry_value,
+                "stop": stop_value,
+                "tp1": tp1_value,
+                "tp2": tp2_value,
                 "price_source": price_source,
                 "move_pct": move_pct,
+                "risk_pct": risk_distance / entry_value * 100.0,
+                "tp1_pct": reward_distance / entry_value * 100.0,
+                "rr_tp1": reward_distance / risk_distance,
             })
     return setups
 
@@ -664,29 +681,36 @@ def _format_news_alert(event: dict[str, Any], setup: dict[str, Any]) -> str:
     published = event.get("published_at") or "timestamp non disponibile"
     timing = str(event.get("catalyst_timing") or "TIME_UNVERIFIED")
     age = event.get("catalyst_age_minutes")
-    age_label = f"{age:.1f} min" if isinstance(age, (int, float)) else "non verificabile"
+    age_label = f"{age:.1f} min" if isinstance(age, (int, float)) and isfinite(age) else "non verificabile"
+    rr = setup.get("rr_tp1")
+    rr_label = f"{float(rr):.2f}R" if isinstance(rr, (int, float)) and isfinite(rr) and rr > 0 else "N/D"
+    risk_pct = setup.get("risk_pct")
+    reward_pct = setup.get("tp1_pct")
+    risk_label = f"{float(risk_pct):.2f}%" if isinstance(risk_pct, (int, float)) and isfinite(risk_pct) else "N/D"
+    reward_label = f"{float(reward_pct):.2f}%" if isinstance(reward_pct, (int, float)) and isfinite(reward_pct) else "N/D"
     return (
-        "🛰 GAGARIN — NEWS → IMPATTO → SETUP → CONFERMA\n"
+        "🛰 GAGARIN — CATALIZZATORE → PREZZO → SETUP CONFERMATO\n"
         "🧪 PAPER/DEMO — NESSUN ORDINE\n\n"
         f"NEWS: {event.get('title', '')}\n"
         f"Fonte: {event.get('source', 'N/D')}\n"
         f"Pubblicazione UTC: {published}\n"
         f"Rilevata UTC: {event.get('first_seen_at', 'N/D')}\n"
-        f"Timing fonte: {timing} | età: {age_label}\n"
+        f"Timing fonte: {timing} | età alla conferma: {age_label}\n"
         f"Link: {event.get('url', '')}\n\n"
-        f"Strumento: {setup['asset']}\n"
-        f"Impatto ipotizzato: {setup['impact']}\n"
-        f"Reazione dal rilevamento: {float(setup.get('move_pct', 0.0)):+.3f}%\n"
-        f"Setup Gagarin: {setup['direction']} — TRIGGER CONFERMATO\n"
-        f"Feed prezzo Gagarin: {setup.get('price_source', 'N/D')}\n"
-        f"Prezzo: {float(setup['price']):.6g}\n"
+        f"🔎 STRUMENTO: {setup['asset']} | {setup['direction']}\n"
+        f"Impatto news (euristico): {setup['impact']}\n"
+        f"Variazione dal rilevamento: {float(setup.get('move_pct', 0.0)):+.3f}%\n"
+        f"Trigger Gagarin: CONFERMATO | feed: {setup.get('price_source', 'N/D')}\n\n"
+        f"Prezzo attuale: {float(setup['price']):.6g}\n"
         f"Entry indicativa: {float(setup['entry']):.6g}\n"
-        f"SL: {float(setup['stop']):.6g}\n"
-        f"TP1: {float(setup['tp1']):.6g}"
-        + (f" | TP2: {float(setup['tp2']):.6g}" if setup.get("tp2") is not None else "")
-        + "\n\nImpatto e direzione sono ipotesi. I livelli usano il feed Gagarin, non quotazioni CFD Trading 212; l'alert non invia ordini."
+        f"Stop Loss: {float(setup['stop']):.6g} (rischio teorico {risk_label})\n"
+        f"Take Profit 1: {float(setup['tp1']):.6g} (obiettivo teorico {reward_label})\n"
+        + (f"Take Profit 2: {float(setup['tp2']):.6g}\n" if setup.get("tp2") is not None else "")
+        + f"Rapporto R/R su TP1: {rr_label}\n\n"
+        "⚠️ Il catalizzatore e la direzione sono euristici, non probabilità calibrate. "
+        "Il rapporto R/R non include spread, slippage o gap. Prezzi dal feed Gagarin, "
+        "non necessariamente quotazioni CFD Trading 212. Nessun ordine viene inviato."
     )
-
 
 def _load_state() -> dict[str, Any]:
     try:
