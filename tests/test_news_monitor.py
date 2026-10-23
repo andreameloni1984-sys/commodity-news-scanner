@@ -117,14 +117,14 @@ def test_new_news_triggers_immediate_analysis_then_waits_for_price_confirmation(
     assert len(messages) == 1
     assert "Reazione dal rilevamento" in messages[0]
     assert "PAPER/DEMO" in messages[0]
-    assert "Timing fonte: FRESH_CATALYST | età: 1.0 min" in messages[0]
+    assert "Timing fonte: FRESH_CATALYST | età: 6.0 min" in messages[0]
 
     detected = next(row for row in journal_rows if row.get("kind") == "NEWS_DETECTED")
     sent_row = next(row for row in journal_rows if row.get("kind") == "NEWS_ALERT_SENT")
     assert detected["catalyst_timing"] == "FRESH_CATALYST"
     assert detected["catalyst_age_minutes"] == 1.0
     assert sent_row["catalyst_timing"] == "FRESH_CATALYST"
-    assert sent_row["catalyst_age_minutes"] == 1.0
+    assert sent_row["catalyst_age_minutes"] == 6.0
 
     # The observation window starts when Telegram delivery succeeds.
     import json
@@ -133,7 +133,7 @@ def test_new_news_triggers_immediate_analysis_then_waits_for_price_confirmation(
     assert sent_event["alert_sent_at"] == (now + timedelta(minutes=5)).isoformat()
     assert sent_event["expires_at"] == (now + timedelta(minutes=5, hours=4)).isoformat()
     assert sent_event["catalyst_timing"] == "FRESH_CATALYST"
-    assert sent_event["catalyst_age_minutes"] == 1.0
+    assert sent_event["catalyst_age_minutes"] == 6.0
 
 
 
