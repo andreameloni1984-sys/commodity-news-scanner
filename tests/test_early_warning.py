@@ -472,6 +472,29 @@ def test_lead_time_backtest_rejects_large_time_gaps_in_evaluation_window():
     assert result["execution_authorized"] is False
     assert result["method"] == "ROLLING_WALK_FORWARD_NOT_CALIBRATED"
 
+def test_four_hour_context_is_unavailable_across_historical_timestamp_gap():
+    now = 1_800_000_000.0
+    # Five-minute observations span just over four hours. A 20-minute hole
+    # sits two hours back, outside the latest-hour hard stop but inside the
+    # 4h context window; short-horizon momentum should remain measurable.
+    timestamps = []
+    closes = []
+    for i in range(49):
+        stamp = now - 4 * 3600 + i * 300
+        if i <= 24:
+            stamp -= 900
+        timestamps.append(stamp)
+        closes.append(100.0 + i * 0.02)
+
+    result = compute_market_early_warning(closes, timestamps, atr=0.5, now=now)
+
+    assert result["returns_pct"]["30m"] is not None
+    assert result["returns_pct"]["60m"] is not None
+    assert result["returns_pct"]["4h"] is None
+    assert "contesto 4h allineato" not in result["reasons"]
+    assert result["execution_authorized"] is False
+
+
 def test_market_early_warning_does_not_treat_three_hours_as_four_hour_context():
     now = 1_800_000_000.0
     # The available series is fresh and regular, but starts only three hours
