@@ -700,6 +700,7 @@ def _format_news_alert(event: dict[str, Any], setup: dict[str, Any]) -> str:
         f"🔎 STRUMENTO: {setup['asset']} | {setup['direction']}\n"
         f"Impatto news (euristico): {setup['impact']}\n"
         f"Variazione dal rilevamento: {float(setup.get('move_pct', 0.0)):+.3f}%\n"
+        "⚠️ Conferma dopo un movimento già osservato: non è una previsione anticipata del prezzo.\n"
         f"Trigger Gagarin: CONFERMATO | feed: {setup.get('price_source', 'N/D')}\n\n"
         f"Prezzo attuale: {float(setup['price']):.6g}\n"
         f"Entry indicativa: {float(setup['entry']):.6g}\n"
