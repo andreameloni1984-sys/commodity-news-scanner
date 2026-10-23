@@ -166,3 +166,29 @@ def test_high_volatility_regime_gets_transparent_ranking_penalty():
 
 if __name__ == "__main__":
     unittest.main()
+
+def test_late_move_warning_does_not_boost_directional_ranking():
+    base = state(
+        "BASE_LATE_MOVE",
+        pre_move_score=0, opportunity_score=0, continuation_score=0,
+        quality=0, confidence=0,
+    )
+    late_move = state(
+        "LATE_MOVE",
+        pre_move_score=0, opportunity_score=0, continuation_score=0,
+        quality=0, confidence=0,
+        metadata={"data_status": "OK", "early_warning": {
+            "direction": "LONG", "score": 100, "stage": "LATE_MOVE",
+            "execution_authorized": False,
+        }},
+    )
+
+    baseline_row = rank_predictions([base])[0]
+    late_row = rank_predictions([late_move])[0]
+
+    assert late_row["direction"] == "LONG"
+    assert late_row["early_warning_stage"] == "LATE_MOVE"
+    assert late_row["score"] == baseline_row["score"]
+    assert "movimento già esteso, bonus disattivato" in late_row["reasons"]
+    assert late_row["paper_only"] is True
+
