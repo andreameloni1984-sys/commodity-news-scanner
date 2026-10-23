@@ -187,7 +187,10 @@ def rank_early_warnings(states: Iterable[Any]) -> list[dict]:
         age_num = _num(age, -1.0)
         if age_num < 0 or age_num > 1800.0:
             continue
-        warning_age = _num(warning.get("latest_timestamp_age_seconds", 0), -1.0)
+        # Missing timestamp age is unknown, not fresh: fail closed.
+        if "latest_timestamp_age_seconds" not in warning:
+            continue
+        warning_age = _num(warning.get("latest_timestamp_age_seconds"), -1.0)
         if warning_age < 0 or warning_age > 1800.0:
             continue
         ranked.append({
