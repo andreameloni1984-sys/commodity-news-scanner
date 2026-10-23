@@ -182,3 +182,157 @@ def classify_catalyst_timing(finding: dict[str, Any], now: datetime | None = Non
     return {"timing": timing, "age_minutes": round(max(0.0, age), 1),
             "reason": "timing basato sul timestamp della fonte; impatto da confermare sul prezzo",
             "execution_authorized": False}
+
+
+
+def backtest_market_early_warning_lead_time(
+    candles: list[dict[str, Any]],
+    max_bars: int = 96,
+    horizon_bars: int = 12,
+) -> dict[str, Any]:
+    """Run a rolling, prefix-only historical check of early-warning lead time.
+
+    Every warning is calculated from bars available at that historical index;
+    subsequent bars are used only for outcome measurement. This is an in-sample
+    diagnostic, not a calibrated probability or a guarantee of future results.
+    """
+    horizon = max(3, min(12, int(horizon_bars)))
+    rows = []
+    dedup = {}
+    for candle in candles or []:
+        if not isinstance(candle, dict):
+            continue
+        stamp = _finite(candle.get("timestamp", candle.get("time")))
+        high = _finite(candle.get("high", candle.get("h")))
+        low = _finite(candle.get("low", candle.get("l")))
+        close = _finite(candle.get("close", candle.get("c")))
+        if stamp is None or stamp <= 0 or high is None or low is None or close is None:
+            continue
+        if low <= 0 or high < low or close <= 0 or high < close or low > close:
+            continue
+        dedup[stamp] = (stamp, high, low, close)
+    rows = [dedup[t] for t in sorted(dedup)]
+    if len(rows) < 30:
+        return {
+            "status": "INSUFFICIENT_DATA", "sample_count": 0,
+            "reason": "servono almeno 30 barre OHLC valide",
+            "execution_authorized": False,
+            "method": "ROLLING_WALK_FORWARD_NOT_CALIBRATED",
+        }
+
+    def historical_atr(end: int, period: int = 14) -> float | None:
+        start = max(0, end - period)
+        segment = rows[start:end + 1]
+        if len(segment) < period + 1:
+            return None
+        ranges = []
+        previous_close = None
+        for _, high, low, close in segment:
+            tr = high - low if previous_close is None else max(
+                high - low, abs(high - previous_close), abs(low - previous_close)
+            )
+            ranges.append(tr)
+            previous_close = close
+        return sum(ranges[-period:]) / period if len(ranges) >= period else None
+
+    limit = max(30, int(max_bars))
+    first = max(15, len(rows) - limit)
+    last = len(rows) - horizon
+    samples = []
+    last_index_by_direction = {}
+    for index in range(first, last):
+        atr_value = historical_atr(index)
+        if atr_value is None or atr_value <= 0:
+            continue
+        prefix = rows[:index + 1]
+        warning = compute_market_early_warning(
+            [bar[3] for bar in prefix],
+            [bar[0] for bar in prefix],
+            atr=atr_value,
+            now=prefix[-1][0],
+        )
+        direction = str(warning.get("direction", "NONE")).upper()
+        if warning.get("stage") != "EARLY_WARNING" or direction not in {"LONG", "SHORT"}:
+            continue
+        if index - last_index_by_direction.get(direction, -horizon) < horizon:
+            continue
+        future = rows[index + 1:index + 1 + horizon]
+        if len(future) < horizon:
+            continue
+        last_index_by_direction[direction] = index
+        entry = prefix[-1][3]
+        sign = 1.0 if direction == "LONG" else -1.0
+        first_fav = first_adv = None
+        mfe = mae = 0.0
+        for stamp, high, low, _ in future:
+            favorable = high - entry if direction == "LONG" else entry - low
+            adverse = entry - low if direction == "LONG" else high - entry
+            mfe = max(mfe, favorable)
+            mae = max(mae, adverse)
+            if first_fav is None and favorable >= 0.5 * atr_value:
+                first_fav = stamp - prefix[-1][0]
+            if first_adv is None and adverse >= 0.5 * atr_value:
+                first_adv = stamp - prefix[-1][0]
+        returns = {}
+        for bars in (3, 6, 12):
+            if bars <= horizon:
+                returns[str(bars)] = round(
+                    sign * (future[bars - 1][3] / entry - 1.0) * 100.0, 5
+                )
+        samples.append({
+            "direction": direction,
+            "score": _finite(warning.get("score")) or 0.0,
+            "lead_seconds": first_fav,
+            "first_adverse_seconds": first_adv,
+            "mfe_atr": mfe / atr_value,
+            "mae_atr": mae / atr_value,
+            "returns_pct": returns,
+        })
+
+    if not samples:
+        return {
+            "status": "NO_EARLY_WARNING_SAMPLES", "sample_count": 0,
+            "reason": "nessun early warning storico con finestra futura completa",
+            "execution_authorized": False,
+            "method": "ROLLING_WALK_FORWARD_NOT_CALIBRATED",
+        }
+
+    favorable_first = sum(
+        1 for row in samples
+        if row["lead_seconds"] is not None and (
+            row["first_adverse_seconds"] is None
+            or row["lead_seconds"] < row["first_adverse_seconds"]
+        )
+    )
+    adverse_first = sum(
+        1 for row in samples
+        if row["first_adverse_seconds"] is not None and (
+            row["lead_seconds"] is None
+            or row["first_adverse_seconds"] < row["lead_seconds"]
+        )
+    )
+    same_bar = sum(
+        1 for row in samples
+        if row["lead_seconds"] is not None
+        and row["first_adverse_seconds"] is not None
+        and row["lead_seconds"] == row["first_adverse_seconds"]
+    )
+    lead_values = [row["lead_seconds"] for row in samples if row["lead_seconds"] is not None]
+    med_returns = {}
+    for horizon_key in ("3", "6", "12"):
+        values = [row["returns_pct"][horizon_key] for row in samples if horizon_key in row["returns_pct"]]
+        med_returns[horizon_key] = round(median(values), 5) if values else None
+    return {
+        "status": "OK",
+        "sample_count": len(samples),
+        "favorable_first": favorable_first,
+        "adverse_first": adverse_first,
+        "same_bar_ambiguous": same_bar,
+        "neither_reached_0_5atr": len(samples) - favorable_first - adverse_first - same_bar,
+        "favorable_first_pct": round(100.0 * favorable_first / len(samples), 1),
+        "median_seconds_to_favorable_0_5atr": median(lead_values) if lead_values else None,
+        "median_direction_adjusted_return_pct": med_returns,
+        "samples": samples,
+        "execution_authorized": False,
+        "method": "ROLLING_WALK_FORWARD_NOT_CALIBRATED",
+    }
