@@ -189,6 +189,6 @@ def test_late_move_warning_does_not_boost_directional_ranking():
     assert late_row["direction"] == "LONG"
     assert late_row["early_warning_stage"] == "LATE_MOVE"
     assert late_row["score"] == baseline_row["score"]
-    assert "movimento già esteso, bonus disattivato" in late_row["reasons"]
+    assert "early-warning: movimento già esteso, bonus disattivato" in late_row["reasons"]
     assert late_row["paper_only"] is True
 
