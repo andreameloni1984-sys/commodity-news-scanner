@@ -231,7 +231,19 @@ def backtest_market_early_warning_lead_time(
             continue
         if low <= 0 or high < low or close <= 0 or high < close or low > close:
             continue
-        dedup[stamp] = (stamp, high, low, close)
+        candle_row = (stamp, high, low, close)
+        previous = dedup.get(stamp)
+        # Conflicting OHLC rows at one timestamp make lead-time/outcome
+        # ordering ambiguous. Reject the dataset instead of silently letting
+        # input order choose which candle becomes the historical observation.
+        if previous is not None and previous != candle_row:
+            return {
+                "status": "INVALID_DATA", "sample_count": 0,
+                "reason": "timestamp duplicati con OHLC discordanti; backtest rifiutato",
+                "execution_authorized": False,
+                "method": "ROLLING_WALK_FORWARD_NOT_CALIBRATED",
+            }
+        dedup[stamp] = candle_row
     rows = [dedup[t] for t in sorted(dedup)]
     if len(rows) < 30:
         return {
