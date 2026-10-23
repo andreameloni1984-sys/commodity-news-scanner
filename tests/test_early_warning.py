@@ -184,6 +184,13 @@ def test_lead_time_backtest_measures_favorable_move_without_authorizing_trade():
     assert result["status"] == "OK"
     assert result["sample_count"] > 0
     assert result["favorable_first"] > 0
+    assert result["favorable_0_25atr_first"] + result["adverse_0_25atr_first"] + result["same_bar_0_25atr_ambiguous"] + result["neither_reached_0_25atr"] == result["sample_count"]
+    assert result["median_warning_to_favorable_0_25atr_seconds"] is not None
+    assert all(
+        sample["warning_to_favorable_0_25atr_seconds"] is None
+        or sample["warning_to_favorable_0_25atr_seconds"] <= sample["lead_seconds"]
+        for sample in result["samples"]
+    )
     assert 0 <= result["warnings_after_prior_0_5atr_30m_move"] <= result["sample_count"]
     assert result["warnings_after_prior_0_5atr_30m_move_pct"] == round(
         100.0 * result["warnings_after_prior_0_5atr_30m_move"] / result["sample_count"], 1
