@@ -104,6 +104,12 @@ class GagarinExpansionTests(unittest.TestCase):
         for malformed_field in ("close", "timestamp"):
             with self.subTest(malformed_field=malformed_field):
                 state = state_for_move(2.0)
+                # Make the stale warning eligible for the watchlist before the
+                # malformed refresh, so this verifies the downstream filter too.
+                state.live = True
+                state.data_ok = True
+                state.data_age_seconds = 10.0
+                state.price = state.closes[-1]
                 state.move_4h_pct = 5.0
                 state.move_24h_pct = 10.0
                 state.move_atr = 3.0
@@ -146,6 +152,8 @@ class GagarinExpansionTests(unittest.TestCase):
                 self.assertEqual(state.metadata["early_warning"]["direction"], "NONE")
                 self.assertEqual(state.metadata["early_warning_score"], 0.0)
                 self.assertFalse(state.metadata["early_warning"]["execution_authorized"])
+                from engine.prediction_ranker import rank_early_warnings
+                self.assertEqual(rank_early_warnings([state]), [])
 
 
 if __name__ == "__main__":
