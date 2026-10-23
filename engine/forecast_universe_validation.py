@@ -9,8 +9,13 @@ from __future__ import annotations
 from engine.forecast_validation import walk_forward_evaluate
 
 
-def evaluate_universe(history_by_symbol, horizon=4, start=40, min_move_pct=0.05):
-    """Evaluate each instrument independently and return an aggregate summary."""
+def evaluate_universe(history_by_symbol, horizon=4, start=40, min_move_pct=0.05,
+                      round_trip_cost_bps=0.0):
+    """Evaluate each instrument independently and return an aggregate summary.
+
+    The optional cost is a hypothetical round-trip scenario passed unchanged
+    to each instrument evaluator; this is not a portfolio backtest.
+    """
     if not isinstance(history_by_symbol, dict):
         raise TypeError("history_by_symbol must be a mapping of symbol to candles")
     instruments = {}
@@ -19,7 +24,8 @@ def evaluate_universe(history_by_symbol, horizon=4, start=40, min_move_pct=0.05)
         if not key:
             continue
         instruments[key] = walk_forward_evaluate(
-            candles, horizon=horizon, start=start, min_move_pct=min_move_pct
+            candles, horizon=horizon, start=start, min_move_pct=min_move_pct,
+            round_trip_cost_bps=round_trip_cost_bps
         )
     valid = {
         symbol: metrics for symbol, metrics in instruments.items()
@@ -34,6 +40,10 @@ def evaluate_universe(history_by_symbol, horizon=4, start=40, min_move_pct=0.05)
         sum(m["mean_signed_return_pct"] * m["observations"] for m in valid.values()) / total_obs
         if total_obs else None
     )
+    weighted_net_signed = (
+        sum(m["mean_net_signed_return_pct"] * m["observations"] for m in valid.values()) / total_obs
+        if total_obs else None
+    )
     return {
         "status": "CALCULATED" if valid else "NO_VALID_INSTRUMENTS",
         "instrument_count": len(instruments),
@@ -44,6 +54,8 @@ def evaluate_universe(history_by_symbol, horizon=4, start=40, min_move_pct=0.05)
         "aggregate_false_signal_count": total_false,
         "aggregate_false_signal_rate_pct": round(total_false / total_directional * 100, 2) if total_directional else None,
         "observation_weighted_mean_signed_return_pct": round(weighted_signed, 5) if weighted_signed is not None else None,
+        "observation_weighted_mean_net_signed_return_pct": round(weighted_net_signed, 5) if weighted_net_signed is not None else None,
+        "round_trip_cost_bps": round_trip_cost_bps,
         "instruments": instruments,
         "caveat": "Per-instrument diagnostics; overlapping horizons and cross-instrument dependence mean aggregates are descriptive, not a portfolio backtest. Gross results exclude costs and do not establish profitability.",
     }
