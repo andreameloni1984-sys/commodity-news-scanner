@@ -126,8 +126,14 @@ def test_reversal_is_not_mislabeled_as_directional_acceleration():
         else:
             closes.append(100.0 + (1.0 * (i - 60) / 30.0))
     result = compute_market_early_warning(closes, timestamps, atr=0.5, now=now)
+    preceding_30m = (closes[-31] / closes[-61] - 1.0) * 100.0
+    latest_30m = (closes[-1] / closes[-31] - 1.0) * 100.0
     assert result["direction"] == "LONG"
     assert "accelerazione recente coerente con la direzione" not in result["reasons"]
+    # The reported metric is a signed change in return, not the change in
+    # absolute return magnitude; this makes reversal direction explicit.
+    assert result["acceleration_pct_points"] == round(latest_30m - preceding_30m, 4)
+    assert result["acceleration_pct_points"] > 0
     assert result["execution_authorized"] is False
 
 def test_lead_time_backtest_measures_favorable_move_without_authorizing_trade():
