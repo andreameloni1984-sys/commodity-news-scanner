@@ -100,6 +100,53 @@ class GagarinExpansionTests(unittest.TestCase):
         self.assertIsNone(state.expected_move_pct)
         self.assertEqual(state.metadata["market_move_validation"], "INVALID_INPUT")
 
+    def test_unparseable_refresh_clears_stale_opportunity_and_early_warning(self):
+        for malformed_field in ("close", "timestamp"):
+            with self.subTest(malformed_field=malformed_field):
+                state = state_for_move(2.0)
+                state.move_4h_pct = 5.0
+                state.move_24h_pct = 10.0
+                state.move_atr = 3.0
+                state.opportunity_score = 99.0
+                state.opportunity_alert = "STRONG_MOVE"
+                state.opportunity_direction = "LONG"
+                state.expected_move_pct = 5.0
+                state.expected_move_duration_hours = 8.0
+                state.continuation_score = 80.0
+                state.reversal_score = 20.0
+                state.metadata.update({
+                    "early_warning": {
+                        "stage": "EARLY_WARNING", "direction": "LONG", "score": 80,
+                        "latest_timestamp_age_seconds": 10,
+                        "execution_authorized": False,
+                    },
+                    "early_warning_stage": "EARLY_WARNING",
+                    "early_warning_direction": "LONG",
+                    "early_warning_score": 80,
+                })
+
+                if malformed_field == "close":
+                    state.closes[-1] = "not-a-price"
+                else:
+                    state.candles[-1]["timestamp"] = "not-a-timestamp"
+
+                state = scan_market_opportunity(state)
+
+                self.assertIsNone(state.move_4h_pct)
+                self.assertIsNone(state.move_24h_pct)
+                self.assertIsNone(state.move_atr)
+                self.assertEqual(state.opportunity_score, 0.0)
+                self.assertEqual(state.opportunity_alert, "NONE")
+                self.assertEqual(state.opportunity_direction, "NONE")
+                self.assertIsNone(state.expected_move_pct)
+                self.assertEqual(state.continuation_score, 0.0)
+                self.assertEqual(state.reversal_score, 0.0)
+                self.assertEqual(state.metadata["market_move_validation"], "INVALID_INPUT")
+                self.assertEqual(state.metadata["early_warning"]["stage"], "INVALID_DATA")
+                self.assertEqual(state.metadata["early_warning"]["direction"], "NONE")
+                self.assertEqual(state.metadata["early_warning_score"], 0.0)
+                self.assertFalse(state.metadata["early_warning"]["execution_authorized"])
+
 
 if __name__ == "__main__":
     unittest.main()
