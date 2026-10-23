@@ -445,6 +445,7 @@ def backtest_market_early_warning_lead_time(
         last_index_by_direction[direction] = index
         entry = prefix[-1][3]
         sign = 1.0 if direction == "LONG" else -1.0
+        first_fav_025 = first_adv_025 = None
         first_fav = first_adv = None
         mfe = mae = 0.0
         for stamp, high, low, _ in future:
@@ -452,10 +453,17 @@ def backtest_market_early_warning_lead_time(
             adverse = entry - low if direction == "LONG" else high - entry
             mfe = max(mfe, favorable)
             mae = max(mae, adverse)
+            elapsed = stamp - prefix[-1][0]
+            # 0.25 ATR is an earlier excursion marker, not a claim that the
+            # true market-move onset can be identified from OHLC bars.
+            if first_fav_025 is None and favorable >= 0.25 * atr_value:
+                first_fav_025 = elapsed
+            if first_adv_025 is None and adverse >= 0.25 * atr_value:
+                first_adv_025 = elapsed
             if first_fav is None and favorable >= 0.5 * atr_value:
-                first_fav = stamp - prefix[-1][0]
+                first_fav = elapsed
             if first_adv is None and adverse >= 0.5 * atr_value:
-                first_adv = stamp - prefix[-1][0]
+                first_adv = elapsed
         returns = {}
         for bars in (3, 6, 12):
             if bars <= horizon:
@@ -508,6 +516,8 @@ def backtest_market_early_warning_lead_time(
             "pre_warning_30m_directional_move_atr": round(pre_warning_directional_move_atr, 4) if pre_warning_directional_move_atr is not None else None,
             "move_already_underway": move_already_underway,
             "prior_move_against_warning": prior_move_against_warning,
+            "warning_to_favorable_0_25atr_seconds": first_fav_025,
+            "warning_to_adverse_0_25atr_seconds": first_adv_025,
             "lead_seconds": first_fav,
             "warning_to_favorable_seconds": first_fav,
             "first_adverse_seconds": first_adv,
@@ -547,6 +557,28 @@ def backtest_market_early_warning_lead_time(
     )
     lead_values = [row["lead_seconds"] for row in samples if row["lead_seconds"] is not None]
     adverse_values = [row["first_adverse_seconds"] for row in samples if row["first_adverse_seconds"] is not None]
+    lead_025_values = [row["warning_to_favorable_0_25atr_seconds"] for row in samples if row["warning_to_favorable_0_25atr_seconds"] is not None]
+    adverse_025_values = [row["warning_to_adverse_0_25atr_seconds"] for row in samples if row["warning_to_adverse_0_25atr_seconds"] is not None]
+    favorable_025_first = sum(
+        1 for row in samples
+        if row["warning_to_favorable_0_25atr_seconds"] is not None and (
+            row["warning_to_adverse_0_25atr_seconds"] is None
+            or row["warning_to_favorable_0_25atr_seconds"] < row["warning_to_adverse_0_25atr_seconds"]
+        )
+    )
+    adverse_025_first = sum(
+        1 for row in samples
+        if row["warning_to_adverse_0_25atr_seconds"] is not None and (
+            row["warning_to_favorable_0_25atr_seconds"] is None
+            or row["warning_to_adverse_0_25atr_seconds"] < row["warning_to_favorable_0_25atr_seconds"]
+        )
+    )
+    same_bar_025 = sum(
+        1 for row in samples
+        if row["warning_to_favorable_0_25atr_seconds"] is not None
+        and row["warning_to_adverse_0_25atr_seconds"] is not None
+        and row["warning_to_favorable_0_25atr_seconds"] == row["warning_to_adverse_0_25atr_seconds"]
+    )
     med_returns = {}
     for horizon_key in ("3", "6", "12"):
         values = [row["returns_pct"][horizon_key] for row in samples if horizon_key in row["returns_pct"]]
@@ -572,6 +604,12 @@ def backtest_market_early_warning_lead_time(
         "adverse_first_pct": round(100.0 * adverse_first / len(samples), 1),
         "favorable_first_pct_resolved": round(100.0 * favorable_first / resolved_first, 1) if resolved_first else None,
         "adverse_first_pct_resolved": round(100.0 * adverse_first / resolved_first, 1) if resolved_first else None,
+        "favorable_0_25atr_first": favorable_025_first,
+        "adverse_0_25atr_first": adverse_025_first,
+        "same_bar_0_25atr_ambiguous": same_bar_025,
+        "neither_reached_0_25atr": len(samples) - favorable_025_first - adverse_025_first - same_bar_025,
+        "median_warning_to_favorable_0_25atr_seconds": median(lead_025_values) if lead_025_values else None,
+        "median_warning_to_adverse_0_25atr_seconds": median(adverse_025_values) if adverse_025_values else None,
         "median_seconds_to_favorable_0_5atr": median(lead_values) if lead_values else None,
         "median_seconds_to_adverse_0_5atr": median(adverse_values) if adverse_values else None,
         # Explicit aliases make clear these are elapsed times from warning,
