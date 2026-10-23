@@ -182,10 +182,11 @@ def rank_early_warnings(states: Iterable[Any]) -> list[dict]:
         if price <= 0 or atr <= 0 or not bool(getattr(state, "live", False)) or not bool(getattr(state, "data_ok", False)):
             continue
         age = getattr(state, "data_age_seconds", None)
-        if age is not None:
-            age_num = _num(age, -1.0)
-            if age_num < 0 or age_num > 1800.0:
-                continue
+        if age is None:
+            continue
+        age_num = _num(age, -1.0)
+        if age_num < 0 or age_num > 1800.0:
+            continue
         warning_age = _num(warning.get("latest_timestamp_age_seconds", 0), -1.0)
         if warning_age < 0 or warning_age > 1800.0:
             continue
