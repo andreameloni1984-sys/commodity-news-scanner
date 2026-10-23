@@ -195,6 +195,8 @@ def test_lead_time_backtest_rejects_invalid_parameters_without_raising():
 
     invalid_options = [
         {"max_bars": 0},
+        {"max_bars": 1},
+        {"max_bars": 29},
         {"max_bars": -1},
         {"max_bars": "not-a-number"},
         {"max_bars": float("nan")},
