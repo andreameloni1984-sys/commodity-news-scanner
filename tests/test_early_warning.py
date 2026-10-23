@@ -140,3 +140,28 @@ def test_lead_time_backtest_measures_favorable_move_without_authorizing_trade():
     assert result["execution_authorized"] is False
     assert result["method"] == "ROLLING_WALK_FORWARD_NOT_CALIBRATED"
     assert all(sample["lead_seconds"] is not None for sample in result["samples"])
+
+
+def test_lead_time_backtest_rejects_conflicting_duplicate_ohlc_timestamps():
+    from engine.early_warning import backtest_market_early_warning_lead_time
+
+    start = 1_800_000_000.0 - 39 * 60
+    candles = []
+    for i in range(40):
+        close = 100.0 + i * 0.01
+        candles.append({
+            "timestamp": start + i * 60,
+            "high": close + 0.05,
+            "low": close - 0.05,
+            "close": close,
+        })
+    conflicting = dict(candles[10])
+    conflicting["high"] += 0.25
+    candles.append(conflicting)
+
+    result = backtest_market_early_warning_lead_time(candles)
+
+    assert result["status"] == "INVALID_DATA"
+    assert result["sample_count"] == 0
+    assert "timestamp duplicati" in result["reason"]
+    assert result["execution_authorized"] is False
