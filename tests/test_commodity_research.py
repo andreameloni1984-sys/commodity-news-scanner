@@ -76,3 +76,14 @@ def test_insufficient_history_is_explicit():
     report = audit_missed_moves(bars(40), horizon=4, start=40)
     assert report["status"] == "INSUFFICIENT_DATA"
     assert report["forecasts"] == 0
+
+
+
+def test_non_overlapping_audit_sampling_is_explicit():
+    rows = bars(100)
+    report = audit_missed_moves(rows, horizon=4, start=40, step=4)
+    assert report["status"] == "CALCULATED"
+    assert report["sample_step_bars"] == 4
+    assert report["overlapping_windows"] is False
+    with pytest.raises(ValueError, match="INVALID_AUDIT_PARAMETERS"):
+        audit_missed_moves(rows, horizon=4, start=40, step=0)
