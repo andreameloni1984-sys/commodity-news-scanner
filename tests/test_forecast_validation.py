@@ -100,3 +100,26 @@ def test_walk_forward_skips_non_finite_outcome_prices():
     assert result["status"] == "CALCULATED"
     assert result["observations"] > 0
     assert result["mean_signed_return_pct"] is not None
+
+
+def test_walk_forward_cost_adjustment_is_explicit_and_monotonic():
+    rows = make_candles([100 + i * 0.25 for i in range(80)])
+    gross = walk_forward_evaluate(rows, horizon=3, start=40)
+    zero_cost = walk_forward_evaluate(rows, horizon=3, start=40, round_trip_cost_bps=0)
+    costly = walk_forward_evaluate(rows, horizon=3, start=40, round_trip_cost_bps=10)
+    assert zero_cost["mean_net_signed_return_pct"] == gross["mean_signed_return_pct"]
+    assert costly["mean_net_signed_return_pct"] < costly["mean_signed_return_pct"]
+    assert costly["round_trip_cost_bps"] == 10
+    assert "hypothetical round-trip cost" in costly["note"]
+    for stats in costly["regime_breakdown"].values():
+        assert "mean_net_signed_return_pct" in stats
+
+
+def test_walk_forward_rejects_invalid_cost_and_move_threshold():
+    rows = make_candles([100 + i * 0.25 for i in range(80)])
+    for kwargs in ({"round_trip_cost_bps": -1},
+                   {"round_trip_cost_bps": float("inf")},
+                   {"min_move_pct": float("nan")}):
+        result = walk_forward_evaluate(rows, **kwargs)
+        assert result["status"] == "INVALID_PARAMETERS"
+        assert result["observations"] == 0
