@@ -703,3 +703,79 @@ def test_non_overlapping_outcome_selection_excludes_cross_direction_overlap():
     selected = _select_non_overlapping_outcome_samples(samples, horizon_bars=12)
 
     assert [row["warning_bar_index"] for row in selected] == [20, 32, 44]
+
+
+def test_temporal_holdout_keeps_future_outcomes_on_their_own_side_of_split(monkeypatch):
+    import engine.early_warning as early_warning
+
+    def always_warn(closes, timestamps, atr=None, now=None, **kwargs):
+        return {
+            "stage": "EARLY_WARNING",
+            "direction": "LONG",
+            "score": 75,
+            "returns_pct": {"30m": 0.1},
+        }
+
+    monkeypatch.setattr(early_warning, "compute_market_early_warning", always_warn)
+    start = 1_800_000_000.0 - 119 * 60
+    candles = []
+    for i in range(120):
+        close = 100.0 + i * 0.02
+        candles.append({
+            "timestamp": start + i * 60,
+            "high": close + 0.05,
+            "low": close - 0.05,
+            "close": close,
+        })
+
+    result = early_warning.backtest_market_early_warning_lead_time(
+        candles, max_bars=96, horizon_bars=12
+    )
+
+    assert result["status"] == "OK"
+    validation = result["temporal_validation"]
+    assert validation["status"] == "OK"
+    split_index = validation["split_start_bar_index"]
+    assert split_index is not None
+    assert (
+        validation["development_sample_count"]
+        + validation["holdout_sample_count"]
+        + validation["split_boundary_excluded_sample_count"]
+        == result["sample_count"]
+    )
+
+    for sample in result["samples"]:
+        index = sample["warning_bar_index"]
+        partition = sample["temporal_validation_partition"]
+        if partition == "DEVELOPMENT":
+            assert index + 12 < split_index
+        elif partition == "HOLDOUT":
+            assert index >= split_index
+        elif partition == "SPLIT_BOUNDARY_EXCLUDED":
+            assert index < split_index
+            assert index + 12 >= split_index
+        else:
+            raise AssertionError(f"unexpected partition for a valid split: {partition}")
+
+    for key in ("development", "holdout"):
+        summary = validation[key]
+        assert (
+            summary["favorable_first"]
+            + summary["adverse_first"]
+            + summary["same_bar_ambiguous"]
+            + summary["neither_reached_0_5atr"]
+            == summary["sample_count"]
+        )
+    assert validation["holdout_sample_count_sufficient_for_interpretation"] is False
+    assert result["execution_authorized"] is False
+
+    # A short evaluation span must not manufacture a development/holdout split.
+    short_result = early_warning.backtest_market_early_warning_lead_time(
+        candles[-40:], max_bars=30, horizon_bars=12
+    )
+    assert short_result["status"] == "OK"
+    short_validation = short_result["temporal_validation"]
+    assert short_validation["status"] == "INSUFFICIENT_DATA"
+    assert short_validation["unsplit_sample_count"] == short_result["sample_count"]
+    assert short_validation["holdout_sample_count_sufficient_for_interpretation"] is False
+    assert short_result["execution_authorized"] is False
