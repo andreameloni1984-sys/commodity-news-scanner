@@ -119,6 +119,11 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
             score -= 15; reasons.append("dati non validati")
         if not live:
             score -= 8; reasons.append("prezzi non live")
+        # High-volatility regimes increase stop-out/slippage risk. Keep the
+        # penalty explicit and modest; this is ranking only, not an entry gate.
+        if regime == "HIGH_VOLATILITY":
+            score -= 8.0
+            reasons.append("penalità regime alta volatilità")
         # Penalise disagreement between independent directional inputs.
         active = [d for d in directions if d != "NONE"]
         conflicts = sum(1 for d in active if d != direction)
