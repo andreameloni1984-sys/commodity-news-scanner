@@ -1,4 +1,6 @@
 from datetime import datetime, timezone
+from math import isfinite
+from statistics import median
 
 from commodities.universe import Commodity
 from engine.state import SoyuzState
@@ -27,25 +29,51 @@ def _clamp(value: float, minimum: float = 0.0, maximum: float = 100.0) -> float:
 def scan_market_opportunity(state: SoyuzState) -> SoyuzState:
     closes = list(getattr(state, "closes", []) or [])
     candles = list(getattr(state, "candles", []) or [])
-    timestamps = [float(x.get("timestamp", 0.0)) for x in candles]
+    try:
+        timestamps = [float(x.get("timestamp", 0.0)) for x in candles]
+    except (TypeError, ValueError, OverflowError):
+        return state
     atr = float(state.atr or 0.0)
-    if len(closes) < 2 or len(timestamps) != len(closes):
+    if (
+        len(closes) < 2
+        or len(timestamps) != len(closes)
+        or not all(isfinite(t) for t in timestamps)
+        or any(timestamps[i] <= timestamps[i - 1] for i in range(1, len(timestamps)))
+    ):
         return state
 
     latest = float(closes[-1])
     if latest <= 0:
         return state
 
-    def pct_from_hours(hours: float):
+    # Use actual time coverage, not merely the nearest available bar. A short
+    # history must not be presented as a 4h/24h move, and gaps near the target
+    # must not silently substitute a materially different observation.
+    typical_step = median(
+        timestamps[i] - timestamps[i - 1] for i in range(1, len(timestamps))
+    )
+
+    def price_from_hours(hours: float):
         target = timestamps[-1] - hours * 3600.0
+        if target < timestamps[0]:
+            return None
         idx = min(range(len(timestamps)), key=lambda i: abs(timestamps[i] - target))
+        tolerance = max(60.0, typical_step * 0.75)
+        if abs(timestamps[idx] - target) > tolerance:
+            return None
         base = float(closes[idx])
-        return ((latest / base) - 1.0) * 100.0 if base > 0 else None
+        return base if base > 0 else None
+
+    def pct_from_hours(hours: float):
+        base = price_from_hours(hours)
+        return ((latest / base) - 1.0) * 100.0 if base is not None else None
 
     move_4h = pct_from_hours(4.0)
     move_24h = pct_from_hours(24.0)
-    lookback_index = max(0, len(closes) - 49)
-    move_atr = abs(latest - float(closes[lookback_index])) / atr if atr > 0 else None
+    # Normalize the current move against the actual 4h reference price.
+    # A fixed 48-bar lookback spans very different durations across timeframes.
+    base_4h = price_from_hours(4.0)
+    move_atr = abs(latest - base_4h) / atr if atr > 0 and base_4h is not None else None
 
     direction_value = float(move_24h if move_24h is not None else move_4h or 0.0)
     direction = "LONG" if direction_value > 0 else "SHORT" if direction_value < 0 else "NONE"
