@@ -107,9 +107,6 @@ class PredictionRankerTests(unittest.TestCase):
         self.assertIn("early-warning in conflitto", row["reasons"])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 def test_early_warning_watchlist_can_surface_before_setup_but_never_authorizes():
     from engine.prediction_ranker import rank_early_warnings
@@ -139,3 +136,17 @@ def test_early_warning_watchlist_rejects_stale_and_non_live_data():
     non_live = state("NONLIVE", live=False,
                      metadata={"data_status": "OK", "early_warning": warning})
     assert rank_early_warnings([stale, non_live]) == []
+
+
+def test_early_warning_watchlist_rejects_missing_timestamp_age():
+    from engine.prediction_ranker import rank_early_warnings
+    missing_age = state("MISSING_AGE", data_age_seconds=30,
+        metadata={"data_status": "OK", "early_warning": {
+            "direction": "LONG", "score": 70, "stage": "EARLY_WARNING",
+            "reasons": ["age assente"],
+        }})
+    assert rank_early_warnings([missing_age]) == []
+
+
+if __name__ == "__main__":
+    unittest.main()
