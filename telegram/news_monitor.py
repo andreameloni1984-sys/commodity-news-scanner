@@ -801,6 +801,7 @@ def poll_news_once(
         timing = classify_catalyst_timing({"published": event.get("published_at")}, now=now)
         event["catalyst_timing"] = timing["timing"]
         event["catalyst_age_minutes"] = timing["age_minutes"]
+        event["catalyst_future_skew_minutes"] = timing.get("future_skew_minutes")
         event["catalyst_timing_reason"] = timing["reason"]
         _journal({
             "kind": "NEWS_DETECTED",
@@ -812,6 +813,7 @@ def poll_news_once(
             "first_seen_at": event.get("first_seen_at"),
             "catalyst_timing": event.get("catalyst_timing"),
             "catalyst_age_minutes": event.get("catalyst_age_minutes"),
+            "catalyst_future_skew_minutes": event.get("catalyst_future_skew_minutes"),
             "catalyst_timing_reason": event.get("catalyst_timing_reason"),
             "assets": event.get("assets"),
             "impact": event.get("impact"),
@@ -911,6 +913,7 @@ def poll_news_once(
                     timing = classify_catalyst_timing({"published": event.get("published_at")}, now=now)
                     event["catalyst_timing"] = timing["timing"]
                     event["catalyst_age_minutes"] = timing["age_minutes"]
+                    event["catalyst_future_skew_minutes"] = timing.get("future_skew_minutes")
                     event["catalyst_timing_reason"] = timing["reason"]
                     if send_telegram(_format_news_alert(event, setup)):
                         sent += 1
@@ -937,6 +940,7 @@ def poll_news_once(
                             "published_at": event.get("published_at"),
                             "catalyst_timing": event.get("catalyst_timing"),
                             "catalyst_age_minutes": event.get("catalyst_age_minutes"),
+                            "catalyst_future_skew_minutes": event.get("catalyst_future_skew_minutes"),
                         })
                         break
                 # Keep sent alerts under observation for four hours, without resending them.
