@@ -66,7 +66,7 @@ def load_ohlc_csv(path: str | Path) -> list[dict[str, float]]:
 
 def audit_missed_moves(
     candles: Iterable[dict], *, horizon: int = 4, start: int = 40,
-    threshold_pct: float = 0.5,
+    threshold_pct: float = 0.5, step: int = 1,
 ) -> dict:
     """Walk-forward excursion audit; reports ambiguity when both sides are hit.
 
@@ -77,6 +77,7 @@ def audit_missed_moves(
     rows = list(candles or [])
     if (isinstance(horizon, bool) or not isinstance(horizon, int) or horizon < 1
             or isinstance(start, bool) or not isinstance(start, int) or start < 35
+            or isinstance(step, bool) or not isinstance(step, int) or step < 1
             or not isinstance(threshold_pct, (int, float))
             or not math.isfinite(threshold_pct) or threshold_pct <= 0):
         raise ValueError("INVALID_AUDIT_PARAMETERS")
@@ -92,12 +93,13 @@ def audit_missed_moves(
         "directional_forecast_windows": 0, "scored_directional_windows": 0,
         "correct_direction_windows": 0, "missed_rate_pct": None,
         "false_signal_rate_pct": None, "directional_hit_rate_pct": None,
-        "overlapping_windows": True, "paper_only": True,
+        "sample_step_bars": step, "overlapping_windows": step < horizon,
+        "paper_only": True,
         "by_regime": {},
     }
     if len(rows) <= start + horizon:
         return report
-    for origin in range(start, len(rows) - horizon + 1):
+    for origin in range(start, len(rows) - horizon + 1, step):
         past, future = rows[:origin], rows[origin:origin + horizon]
         if not all(_valid_bar(bar) for bar in past[-35:] + future):
             continue
