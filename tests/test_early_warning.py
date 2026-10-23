@@ -169,13 +169,21 @@ def test_lead_time_backtest_measures_favorable_move_without_authorizing_trade():
     assert result["warnings_after_prior_0_5atr_30m_move_pct"] == round(
         100.0 * result["warnings_after_prior_0_5atr_30m_move"] / result["sample_count"], 1
     )
-    assert all(
-        sample["move_already_underway"] == (
-            sample["pre_warning_30m_move_atr"] is not None
-            and sample["pre_warning_30m_move_atr"] >= 0.5
+    assert 0 <= result["warnings_after_prior_opposite_0_5atr_move"] <= result["sample_count"]
+    for sample in result["samples"]:
+        prior_return = sample["pre_warning_30m_return_pct"]
+        assert prior_return is not None and prior_return > -100.0
+        prior_base = sample["entry_price"] / (1.0 + prior_return / 100.0)
+        signed_move = (
+            (sample["entry_price"] - prior_base) / sample["atr_at_warning"]
+            * (1.0 if sample["direction"] == "LONG" else -1.0)
         )
-        for sample in result["samples"]
-    )
+        assert abs(sample["pre_warning_30m_directional_move_atr"] - signed_move) < 0.00011
+        assert sample["move_already_underway"] == (signed_move >= 0.5)
+        assert sample["prior_move_against_warning"] == (signed_move <= -0.5)
+        assert abs(
+            sample["pre_warning_30m_move_atr"] - abs(signed_move)
+        ) < 0.00011
     assert result["median_seconds_to_favorable_0_5atr"] is not None
     assert result["median_warning_to_favorable_seconds"] == result["median_seconds_to_favorable_0_5atr"]
     assert result["median_warning_to_adverse_seconds"] == result["median_seconds_to_adverse_0_5atr"]
