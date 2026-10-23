@@ -75,8 +75,33 @@ def forecast_ensemble(candles):
     regime = "HIGH_VOLATILITY" if vol_ratio >= 1.5 or shock >= 3 else (
         "VOLATILITY_COMPRESSION" if vol_ratio <= 0.75 else (
         "TREND" if trend_strength >= 45 else "RANGE_OR_TRANSITION"))
+
+    # Causal pre-breakout watch: compare recent true range with the preceding
+    # range, then measure proximity to prior closing-price extremes. The current
+    # close must still be inside the range; this is a watch score, not a forecast
+    # probability or a confirmed breakout.
+    prior_trs = trs[-32:-8]
+    recent_trs = trs[-8:]
+    prior_range = max(prior) - min(prior)
+    position = (price - lower) / prior_range if prior_range > 0 else 0.5
+    compression_ratio = mean(recent_trs) / max(mean(prior_trs), 1e-9)
+    prebreakout_direction = "NONE"
+    prebreakout_score = 0.0
+    if (prior_range > 0 and compression_ratio <= 0.85 and lower <= price <= upper):
+        compression_strength = _clamp((0.85 - compression_ratio) / 0.55 * 100)
+        if position >= 0.80 and momentum > 0:
+            proximity_strength = _clamp((position - 0.80) / 0.20 * 100)
+            prebreakout_direction = "LONG"
+            prebreakout_score = round(0.55 * compression_strength + 0.45 * proximity_strength, 2)
+        elif position <= 0.20 and momentum < 0:
+            proximity_strength = _clamp((0.20 - position) / 0.20 * 100)
+            prebreakout_direction = "SHORT"
+            prebreakout_score = round(0.55 * compression_strength + 0.45 * proximity_strength, 2)
+
     result.update({
         "status": "CALCULATED", "direction": direction, "score": round(score, 2),
+        "prebreakout_direction": prebreakout_direction,
+        "prebreakout_score": prebreakout_score,
         "regime": regime, "continuation_score": round(_clamp(trend_strength*(1-reversal/150)), 2),
         "reversal_risk": round(reversal, 2),
         "features": {
@@ -88,6 +113,8 @@ def forecast_ensemble(candles):
             "expansion_score": round(expansion, 2),
             "breakout": breakout, "trend_strength": round(trend_strength, 2),
             "last_return_shock": round(shock, 3),
+            "prebreakout_compression_ratio": round(compression_ratio, 4),
+            "prebreakout_range_position": round(position, 4),
         },
     })
     return result
