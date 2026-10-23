@@ -543,3 +543,32 @@ def test_multi_asset_catalyst_alerts_once_per_asset_across_rechecks(tmp_path, mo
     saved = json.loads((tmp_path / "news_state.json").read_text(encoding="utf-8"))
     event = next(row for row in saved["pending"] if row.get("event_id"))
     assert set(event["alerted_assets"]) == {"brent", "wti"}
+
+def test_confirmed_setup_rejects_non_finite_catalyst_baselines():
+    from telegram.news_monitor import _confirmed_setups
+
+    bearish_event = {
+        "title": "Federal Reserve signals hawkish policy and a rate hike",
+        "baseline_prices": {"Oro": float("inf")},
+    }
+    state = SimpleNamespace(
+        commodity="Gold", symbol="XAUUSD", setup_direction="SHORT",
+        final_decision="PAPER_SIGNAL", trigger_confirmed=True, live=True,
+        price=3990.0, entry=3990.0, stop=4010.0, tp1=3950.0,
+        data_source="TEST_FEED",
+    )
+    assert _confirmed_setups(bearish_event, [state]) == []
+
+    bearish_event["baseline_prices"]["Oro"] = float("nan")
+    assert _confirmed_setups(bearish_event, [state]) == []
+
+
+def test_capture_baseline_skips_non_finite_live_prices():
+    from telegram.news_monitor import _capture_baseline
+
+    states = [
+        SimpleNamespace(commodity="Gold", symbol="XAUUSD", live=True, price=float("inf")),
+        SimpleNamespace(commodity="Gold", symbol="XAUUSD", live=True, price=float("nan")),
+    ]
+    assert _capture_baseline({"assets": ["Oro"]}, states) == []
+
