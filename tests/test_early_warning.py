@@ -61,3 +61,10 @@ def test_market_early_warning_rejects_future_latest_timestamp():
     assert result["direction"] == "NONE"
     assert "nel futuro" in result["reasons"][0]
     assert result["execution_authorized"] is False
+
+
+def test_lead_time_backtest_needs_valid_history():
+    from engine.early_warning import backtest_market_early_warning_lead_time
+    result = backtest_market_early_warning_lead_time([])
+    assert result["status"] == "INSUFFICIENT_DATA"
+    assert result["execution_authorized"] is False
