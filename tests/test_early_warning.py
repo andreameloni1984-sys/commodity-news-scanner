@@ -198,7 +198,10 @@ def test_lead_time_backtest_measures_favorable_move_without_authorizing_trade():
     assert 0 <= result["warnings_after_prior_opposite_0_5atr_move"] <= result["sample_count"]
     classes = result["prior_move_timing_class_counts"]
     assert sum(classes.values()) == result["sample_count"]
-    assert sum(result["prior_move_timing_class_pct"].values()) == 100.0
+    for label, count in classes.items():
+        assert result["prior_move_timing_class_pct"][label] == round(
+            100.0 * count / result["sample_count"], 1
+        )
     assert set(classes) == {
         "LOW_PRIOR_MOVE_PROXY", "LATE_CONTINUATION_PROXY",
         "REVERSAL_CONTEXT_PROXY", "INTERMEDIATE_PRIOR_MOVE", "UNCLASSIFIED",
