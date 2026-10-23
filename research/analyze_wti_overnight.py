@@ -14,6 +14,7 @@ import json
 from pathlib import Path
 
 from research.wti_overnight_evaluation import build_wti_research_report
+from research.wti_overnight_validation import chronological_validation_report
 
 
 def main():
@@ -62,6 +63,9 @@ def main():
     report["input_file"] = str(input_path)
     report["source_provider"] = source.get("source") if isinstance(source, dict) else None
     report["cost_assumption_note"] = "Hypothetical scenario only; replace with realistic measured spread/fees/slippage."
+    report["chronological_validation"] = chronological_validation_report(
+        observations, round_trip_cost_bps=args.cost_bps
+    )
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
