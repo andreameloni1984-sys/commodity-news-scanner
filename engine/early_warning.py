@@ -135,7 +135,11 @@ def compute_market_early_warning(
     def base_price(seconds: float) -> float | None:
         target = times[-1] - seconds
         idx = min(range(len(times)), key=lambda i: abs(times[i] - target))
-        if abs(times[idx] - target) > max(2 * step, seconds * 0.25):
+        # A nearby quote is not enough if its actual lookback represents a
+        # materially different horizon (e.g. 3h of data mislabeled as 4h
+        # because the 4h target falls inside a historical gap).
+        actual_lookback = times[-1] - times[idx]
+        if actual_lookback <= 0 or abs(actual_lookback - seconds) > seconds * 0.20:
             return None
         return prices[idx]
 
