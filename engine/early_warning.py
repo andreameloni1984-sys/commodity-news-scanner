@@ -47,9 +47,19 @@ def compute_market_early_warning(
         if p is not None and p > 0 and t is not None and t > 0:
             rows.append((t, p))
     rows.sort(key=lambda x: x[0])
-    # Deduplicate timestamps; keep last quote at each timestamp.
+    # Duplicate timestamps with conflicting prices make the candle order
+    # ambiguous. Reject them instead of letting input order choose the signal.
     dedup = {}
     for t, p in rows:
+        previous = dedup.get(t)
+        if previous is not None and previous != p:
+            return {
+                "stage": "INVALID_DATA",
+                "direction": "NONE",
+                "score": 0,
+                "reasons": ["timestamp duplicati con prezzi discordanti; warning rifiutato"],
+                "execution_authorized": False,
+            }
         dedup[t] = p
     rows = sorted(dedup.items())
     if len(rows) < 12:
