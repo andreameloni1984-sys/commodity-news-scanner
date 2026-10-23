@@ -699,6 +699,8 @@ def backtest_market_early_warning_lead_time(
         "sample_count": len(samples),
         "prior_move_timing_class_counts": prior_move_class_counts,
         "prior_move_timing_class_pct": prior_move_class_pct,
+        "outcomes_by_prior_move_class": outcomes_by_prior_move_class,
+        "outcomes_by_prior_move_class_and_direction": outcomes_by_prior_move_class_and_direction,
         "warnings_after_prior_0_5atr_30m_move": warnings_after_prior_move,
         "warnings_after_prior_0_5atr_30m_move_pct": round(100.0 * warnings_after_prior_move / len(samples), 1),
         "warnings_after_prior_opposite_0_5atr_move": reversal_warnings_after_opposite_move,
