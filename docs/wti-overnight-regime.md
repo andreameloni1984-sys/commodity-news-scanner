@@ -106,3 +106,12 @@ No model fitting, significance testing, stop simulation, or signal promotion is
 performed. The output archive's `chronological_validation` section records
 sample counts, date boundaries, cost-scenario results, and limitations.
 This workflow remains PAPER ONLY and should be manually reviewed before use.
+
+
+## Out-of-sample cost and event diagnostics
+The held-out OOS section now includes a fixed cost-sensitivity grid (0, 3, 5,
+8, 10, and 15 basis points round-trip). This is a scenario comparison, not a
+claim that any cost level matches actual execution. EIA/OPEC splits use only
+explicit `event_flags` supplied on each observation; missing flags are shown
+as unknown rather than assumed to be non-event days. No calendar scraping,
+event inference, or signal promotion is performed.
