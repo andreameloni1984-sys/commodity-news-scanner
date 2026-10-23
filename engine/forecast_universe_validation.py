@@ -44,6 +44,14 @@ def evaluate_universe(history_by_symbol, horizon=4, start=40, min_move_pct=0.05,
         sum(m["mean_net_signed_return_pct"] * m["observations"] for m in valid.values()) / total_obs
         if total_obs else None
     )
+    weighted_long_baseline = (
+        sum(m["baseline_always_long_net_return_pct"] * m["observations"] for m in valid.values()) / total_obs
+        if total_obs else None
+    )
+    weighted_short_baseline = (
+        sum(m["baseline_always_short_net_return_pct"] * m["observations"] for m in valid.values()) / total_obs
+        if total_obs else None
+    )
     return {
         "status": "CALCULATED" if valid else "NO_VALID_INSTRUMENTS",
         "instrument_count": len(instruments),
@@ -55,6 +63,8 @@ def evaluate_universe(history_by_symbol, horizon=4, start=40, min_move_pct=0.05,
         "aggregate_false_signal_rate_pct": round(total_false / total_directional * 100, 2) if total_directional else None,
         "observation_weighted_mean_signed_return_pct": round(weighted_signed, 5) if weighted_signed is not None else None,
         "observation_weighted_mean_net_signed_return_pct": round(weighted_net_signed, 5) if weighted_net_signed is not None else None,
+        "observation_weighted_baseline_always_long_net_return_pct": round(weighted_long_baseline, 5) if weighted_long_baseline is not None else None,
+        "observation_weighted_baseline_always_short_net_return_pct": round(weighted_short_baseline, 5) if weighted_short_baseline is not None else None,
         "round_trip_cost_bps": round_trip_cost_bps,
         "instruments": instruments,
         "caveat": "Per-instrument diagnostics; overlapping horizons and cross-instrument dependence mean aggregates are descriptive, not a portfolio backtest. Gross results exclude costs and do not establish profitability.",
