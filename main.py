@@ -33,6 +33,7 @@ from config import (
 )
 
 from engine.gagarin import analyze_universe
+from engine.prediction_ranker import rank_predictions
 from engine.forex_session import filter_forex_for_session
 
 from paper_trade_journal import (
@@ -196,6 +197,27 @@ def _print_ranking(results):
                 )
             )
 
+    print()
+
+    # Separate PAPER advisory ranking: never changes governor decisions,
+    # journal entries, Telegram output, or execution-layer routing.
+    advisory = rank_predictions(results)
+    print("🧭 RANKING PREDITTIVO PAPER (ADVISORY, NON OPERATIVO)")
+    print("-" * 72)
+    if not advisory:
+        print("Nessuna candidata direzionale con prezzo e ATR validi.")
+    else:
+        for index, row in enumerate(advisory[:5], start=1):
+            early = row.get("early_warning_direction", "NONE")
+            early_score = row.get("early_warning_score", 0.0)
+            print(
+                f"{index:>2}. {row['commodity']:<18} {row['direction']:<5} "
+                f"score={row['score']:>5.1f}/100 "
+                f"early={early:<5}({early_score:>4.1f}) "
+                f"trigger={'SI' if row['trigger_confirmed'] else 'NO'} "
+                f"live={'SI' if row['live'] else 'NO'}"
+            )
+    print("Indice euristico, non probabilità calibrata; non autorizza ingressi.")
     print()
 
 
