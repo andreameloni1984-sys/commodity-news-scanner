@@ -70,6 +70,11 @@ def find_directional_commodity_alerts(states: Iterable[Any]) -> list[dict]:
             "entry": _positive(getattr(state, "entry", None)),
             "stop": _positive(getattr(state, "stop", None)),
             "tp1": _positive(getattr(state, "tp1", None)),
+            "tp2": _positive(getattr(state, "tp2", None)),
+            "tp3": _positive(getattr(state, "tp3", None)),
+            "quote_timestamp": getattr(state, "price_timestamp", None) or getattr(state, "quote_timestamp", None),
+            "trigger_confirmed": bool(getattr(state, "trigger_confirmed", False)),
+            "currency": str(getattr(state, "quote_currency", None) or getattr(state, "currency", None) or "NON VERIFICATA"),
         })
     candidates.sort(key=lambda x: (x["probability"], x["quality"], x["confidence"]), reverse=True)
     return candidates[:3]
@@ -127,16 +132,19 @@ def format_directional_alert(candidates: list[dict]) -> str:
             f"{'📈 POTENZIALE RIALZO' if direction == 'LONG' else '📉 POTENZIALE RIBASSO'}: "
             f"{item['commodity']} — {'potrebbe salire' if direction == 'LONG' else 'potrebbe scendere'}"
         )
-        lines.append(f"Prezzo provider: {item['price']:.6g} USD · età dato {item['age']:.0f}s · {item['provider']}")
+        lines.append(f"Prezzo provider: {item['price']:.6g} · valuta/unità: {item['currency']} · età dato {item['age']:.0f}s · {item['provider']}")
+        timestamp = item.get("quote_timestamp")
+        lines.append(f"Timestamp quotazione: {timestamp}" if timestamp else "Timestamp quotazione: NON VERIFICATO")
         lines.append(
             f"Probabilità: {item['probability']:.0f} | Qualità: {item['quality']:.0f} | "
             f"Affidabilità: {item['confidence']:.0f}"
         )
-        for key, label in (("entry", "Entry indicativo"), ("stop", "Stop teorico"), ("tp1", "TP1 teorico")):
+        for key, label in (("entry", "Ingresso indicativo"), ("stop", "Stop Loss indicativo"), ("tp1", "Take Profit 1"), ("tp2", "Take Profit 2"), ("tp3", "Take Profit 3")):
             value = item.get(key)
-            lines.append(f"{label}: {value:.6g} USD" if value is not None else f"{label}: non disponibile")
+            lines.append(f"{label}: {value:.6g}" if value is not None else f"{label}: da definire")
+        lines.append("Trigger: CONFERMATO" if item.get("trigger_confirmed") else "Trigger: IN ATTESA DI CONFERMA")
         lines.append("")
-    lines.append("Prezzi provider Gagarin, non Trading 212 Bid/Ask. Spread e costi non verificati. Nessun ordine inviato.")
+    lines.append("Prezzi provider Gagarin, non Trading 212 Bid/Ask. Valuta/unità e timestamp vanno verificati se non disponibili. Spread e costi non verificati. PAPER ONLY: nessun ordine inviato.")
     return "\n".join(lines)
 
 
