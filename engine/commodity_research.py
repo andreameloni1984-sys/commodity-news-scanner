@@ -86,6 +86,8 @@ def audit_missed_moves(
         "up_event_windows": 0, "down_event_windows": 0, "ambiguous_windows": 0,
         "anticipated_up_windows": 0, "anticipated_down_windows": 0,
         "missed_up_windows": 0, "missed_down_windows": 0,
+        "missed_up_by_any_signal": 0, "missed_down_by_any_signal": 0,
+        "prebreakout_only_up": 0, "prebreakout_only_down": 0,
         "false_long_windows": 0, "false_short_windows": 0,
         "directional_forecast_windows": 0, "scored_directional_windows": 0,
         "correct_direction_windows": 0, "missed_rate_pct": None,
@@ -113,6 +115,7 @@ def audit_missed_moves(
         if forecast.get("status") != "CALCULATED":
             continue
         direction = forecast.get("direction", "NONE")
+        prebreakout = forecast.get("prebreakout_direction", "NONE")
         regime = str(forecast.get("regime") or "UNKNOWN")
         bucket = report["by_regime"].setdefault(regime, {
             "forecast_windows": 0, "up_events": 0, "down_events": 0,
@@ -130,6 +133,10 @@ def audit_missed_moves(
                 report["anticipated_up_windows"] += 1
             else:
                 report["missed_up_windows"] += 1
+            if direction != "LONG" and prebreakout == "LONG":
+                report["prebreakout_only_up"] += 1
+            if direction != "LONG" and prebreakout != "LONG":
+                report["missed_up_by_any_signal"] += 1
                 bucket["missed_up"] += 1
         if down:
             report["down_event_windows"] += 1
@@ -138,6 +145,10 @@ def audit_missed_moves(
                 report["anticipated_down_windows"] += 1
             else:
                 report["missed_down_windows"] += 1
+            if direction != "SHORT" and prebreakout == "SHORT":
+                report["prebreakout_only_down"] += 1
+            if direction != "SHORT" and prebreakout != "SHORT":
+                report["missed_down_by_any_signal"] += 1
                 bucket["missed_down"] += 1
         if up and down:
             report["ambiguous_windows"] += 1
