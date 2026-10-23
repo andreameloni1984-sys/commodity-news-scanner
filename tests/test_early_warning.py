@@ -767,6 +767,30 @@ def test_temporal_holdout_keeps_future_outcomes_on_their_own_side_of_split(monke
             == summary["sample_count"]
         )
     assert validation["holdout_sample_count_sufficient_for_interpretation"] is False
+
+    # Holdout timing diagnostics must include only the de-overlapped holdout
+    # samples, and LONG/SHORT subgroups must reconcile to that exact count.
+    holdout_rows = [
+        row for row in result["samples"]
+        if row["temporal_validation_partition"] == "HOLDOUT"
+        and row["non_overlapping_outcome_sample"]
+    ]
+    by_class_and_direction = validation["holdout_by_prior_move_class_and_direction"]
+    nested_count = sum(
+        subgroup["sample_count"]
+        for by_direction in by_class_and_direction.values()
+        for subgroup in by_direction.values()
+    )
+    assert nested_count == validation["holdout_non_overlapping_sample_count"]
+    assert nested_count == len(holdout_rows)
+    for label, by_direction in by_class_and_direction.items():
+        for direction, summary in by_direction.items():
+            assert summary["sample_count"] == sum(
+                row["prior_move_timing_class"] == label
+                and row["direction"] == direction
+                for row in holdout_rows
+            )
+
     assert result["execution_authorized"] is False
 
     # A short evaluation span must not manufacture a development/holdout split.
@@ -778,4 +802,9 @@ def test_temporal_holdout_keeps_future_outcomes_on_their_own_side_of_split(monke
     assert short_validation["status"] == "INSUFFICIENT_DATA"
     assert short_validation["unsplit_sample_count"] == short_result["sample_count"]
     assert short_validation["holdout_sample_count_sufficient_for_interpretation"] is False
+    assert sum(
+        subgroup["sample_count"]
+        for by_direction in short_validation["holdout_by_prior_move_class_and_direction"].values()
+        for subgroup in by_direction.values()
+    ) == 0
     assert short_result["execution_authorized"] is False
