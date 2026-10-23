@@ -370,3 +370,29 @@ def test_market_early_warning_rejects_malformed_observations_instead_of_skipping
         assert "warning rifiutato" in result["reasons"][0]
         assert result["execution_authorized"] is False
 
+def test_market_early_warning_rejects_invalid_explicit_time_parameters():
+    now = 1_800_000_000.0
+    timestamps = [now - (19 - i) * 60 for i in range(20)]
+    closes = [100.0 + i * 0.02 for i in range(20)]
+
+    invalid_now_values = (float("nan"), float("inf"), "not-a-timestamp", True)
+    for invalid_now in invalid_now_values:
+        result = compute_market_early_warning(
+            closes, timestamps, atr=0.5, now=invalid_now
+        )
+        assert result["stage"] == "INVALID_PARAMETERS"
+        assert result["direction"] == "NONE"
+        assert result["score"] == 0
+        assert result["execution_authorized"] is False
+
+    invalid_age_limits = (float("nan"), float("inf"), -1, "not-a-number", True)
+    for invalid_age in invalid_age_limits:
+        result = compute_market_early_warning(
+            closes, timestamps, atr=0.5, now=now,
+            max_latest_age_seconds=invalid_age,
+        )
+        assert result["stage"] == "INVALID_PARAMETERS"
+        assert result["direction"] == "NONE"
+        assert result["score"] == 0
+        assert result["execution_authorized"] is False
+
