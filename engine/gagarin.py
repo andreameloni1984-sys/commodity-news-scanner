@@ -26,15 +26,60 @@ def _clamp(value: float, minimum: float = 0.0, maximum: float = 100.0) -> float:
     return max(minimum, min(maximum, float(value)))
 
 
+def _clear_market_move_signal(
+    state: SoyuzState, reason: str = "input prezzo/timestamp non valido"
+) -> SoyuzState:
+    """Clear derived market-move and early-warning fields after invalid input."""
+    state.move_4h_pct = None
+    state.move_24h_pct = None
+    state.move_atr = None
+    state.opportunity_score = 0.0
+    state.opportunity_alert = "NONE"
+    state.opportunity_direction = "NONE"
+    state.expected_move_pct = None
+    state.expected_move_duration_hours = None
+    state.continuation_score = 0.0
+    state.reversal_score = 0.0
+    if isinstance(getattr(state, "metadata", None), dict):
+        state.metadata.update({
+            "market_move_validation": "INVALID_INPUT",
+            "market_move_validation_reason": reason,
+            "market_move_4h_pct": None,
+            "market_move_24h_pct": None,
+            "market_move_atr": None,
+            "opportunity_score": 0.0,
+            "opportunity_alert": "NONE",
+            "opportunity_direction": "NONE",
+            "expected_move_pct": None,
+            "expected_move_duration_hours": None,
+            "continuation_score": 0.0,
+            "reversal_score": 0.0,
+            # A malformed refresh must not leave a previous fresh-looking
+            # warning available to the advisory watchlist.
+            "early_warning": {
+                "stage": "INVALID_DATA",
+                "direction": "NONE",
+                "score": 0,
+                "latest_timestamp_age_seconds": None,
+                "reasons": [reason],
+                "execution_authorized": False,
+            },
+            "early_warning_stage": "INVALID_DATA",
+            "early_warning_direction": "NONE",
+            "early_warning_score": 0.0,
+        })
+    return state
+
+
 def scan_market_opportunity(state: SoyuzState) -> SoyuzState:
-    closes = list(getattr(state, "closes", []) or [])
-    candles = list(getattr(state, "candles", []) or [])
     try:
+        closes = list(getattr(state, "closes", []) or [])
+        candles = list(getattr(state, "candles", []) or [])
         timestamps = [float(x.get("timestamp", 0.0)) for x in candles]
         closes = [float(value) for value in closes]
         atr = float(state.atr or 0.0)
-    except (TypeError, ValueError, OverflowError):
-        return state
+    except (TypeError, ValueError, OverflowError, AttributeError):
+        return _clear_market_move_signal(state, "input prezzo/timestamp non convertibile")
 
     invalid_prices = not all(isfinite(price) and price > 0 for price in closes)
     invalid_atr = not isfinite(atr) or atr < 0
@@ -46,33 +91,7 @@ def scan_market_opportunity(state: SoyuzState) -> SoyuzState:
         or invalid_prices
         or invalid_atr
     ):
-        # Clear derived opportunity fields so a reused state cannot retain a
-        # previous signal after receiving malformed/non-finite market data.
-        state.move_4h_pct = None
-        state.move_24h_pct = None
-        state.move_atr = None
-        state.opportunity_score = 0.0
-        state.opportunity_alert = "NONE"
-        state.opportunity_direction = "NONE"
-        state.expected_move_pct = None
-        state.expected_move_duration_hours = None
-        state.continuation_score = 0.0
-        state.reversal_score = 0.0
-        if isinstance(getattr(state, "metadata", None), dict):
-            state.metadata.update({
-                "market_move_validation": "INVALID_INPUT",
-                "market_move_4h_pct": None,
-                "market_move_24h_pct": None,
-                "market_move_atr": None,
-                "opportunity_score": 0.0,
-                "opportunity_alert": "NONE",
-                "opportunity_direction": "NONE",
-                "expected_move_pct": None,
-                "expected_move_duration_hours": None,
-                "continuation_score": 0.0,
-                "reversal_score": 0.0,
-            })
-        return state
+        return _clear_market_move_signal(state)
 
     if isinstance(getattr(state, "metadata", None), dict):
         state.metadata.pop("market_move_validation", None)
