@@ -346,3 +346,27 @@ def test_market_early_warning_suppresses_volatility_bonus_across_older_gap():
     assert "candela anomala/jump rispetto al baseline" not in result["reasons"]
     assert result["execution_authorized"] is False
 
+def test_market_early_warning_rejects_malformed_observations_instead_of_skipping_them():
+    now = 1_800_000_000.0
+    timestamps = [now - (19 - i) * 60 for i in range(20)]
+    closes = [100.0 + i * 0.02 for i in range(20)]
+
+    malformed_inputs = []
+    bad_close = list(closes)
+    bad_close[8] = float("nan")
+    malformed_inputs.append((bad_close, timestamps))
+    bad_timestamp = list(timestamps)
+    bad_timestamp[8] = float("inf")
+    malformed_inputs.append((closes, bad_timestamp))
+    non_positive_close = list(closes)
+    non_positive_close[8] = 0.0
+    malformed_inputs.append((non_positive_close, timestamps))
+
+    for prices, stamps in malformed_inputs:
+        result = compute_market_early_warning(prices, stamps, atr=0.5, now=now)
+        assert result["stage"] == "INVALID_DATA"
+        assert result["direction"] == "NONE"
+        assert result["score"] == 0
+        assert "warning rifiutato" in result["reasons"][0]
+        assert result["execution_authorized"] is False
+
