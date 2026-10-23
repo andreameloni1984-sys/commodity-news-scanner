@@ -161,3 +161,15 @@ def test_walk_forward_compares_net_returns_with_simple_baselines():
         result["mean_net_signed_return_pct"] - result["baseline_always_short_net_return_pct"], 5
     )
     assert result["net_edge_vs_always_flat_pct"] == result["mean_net_signed_return_pct"]
+
+def test_universe_aggregates_simple_net_return_baselines():
+    from engine.forecast_universe_validation import evaluate_universe
+    history = {
+        "BRENT": make_candles([70 + i * 0.15 for i in range(80)]),
+        "XAUUSD": make_candles([2000 - i * 0.2 for i in range(80)]),
+    }
+    result = evaluate_universe(history, horizon=3, start=40, round_trip_cost_bps=8)
+    assert result["status"] == "CALCULATED"
+    assert result["observation_weighted_baseline_always_long_net_return_pct"] is not None
+    assert result["observation_weighted_baseline_always_short_net_return_pct"] is not None
+    assert result["round_trip_cost_bps"] == 8
