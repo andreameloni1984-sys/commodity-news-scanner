@@ -77,19 +77,35 @@ def compute_market_early_warning(
     times = [x[0] for x in rows]
     prices = [x[1] for x in rows]
     if isinstance(now, datetime):
-        now_ts = (now if now.tzinfo else now.replace(tzinfo=timezone.utc)).timestamp()
-    elif now is not None:
-        now_ts = _finite(now)
+        try:
+            candidate_now = (now if now.tzinfo else now.replace(tzinfo=timezone.utc)).timestamp()
+            now_ts = _finite(candidate_now)
+        except (OverflowError, OSError, ValueError):
+            now_ts = None
+    elif now is None:
+        now_ts = datetime.now(timezone.utc).timestamp()
+    elif isinstance(now, bool):
+        now_ts = None
     else:
-        now_ts = datetime.now(timezone.utc).timestamp()
-    if now_ts is None:
-        now_ts = datetime.now(timezone.utc).timestamp()
+        now_ts = _finite(now)
+    max_age = _finite(max_latest_age_seconds)
+    if (
+        now_ts is None
+        or max_age is None
+        or max_age < 0
+        or isinstance(max_latest_age_seconds, bool)
+    ):
+        return {
+            "stage": "INVALID_PARAMETERS", "direction": "NONE", "score": 0,
+            "reasons": ["now deve essere valido e max_latest_age_seconds finito e >= 0"],
+            "execution_authorized": False,
+        }
     latest_age = now_ts - times[-1]
     if latest_age < -120.0:
         return {"stage": "INSUFFICIENT_DATA", "direction": "NONE", "score": 0,
                 "latest_timestamp_age_seconds": round(latest_age, 1),
                 "reasons": ["timestamp dell'ultimo prezzo nel futuro"], "execution_authorized": False}
-    if latest_age > max(0.0, float(max_latest_age_seconds)):
+    if latest_age > max_age:
         return {"stage": "INSUFFICIENT_DATA", "direction": "NONE", "score": 0,
                 "latest_timestamp_age_seconds": round(latest_age, 1),
                 "reasons": ["ultimo prezzo troppo vecchio per un warning intraday"], "execution_authorized": False}
