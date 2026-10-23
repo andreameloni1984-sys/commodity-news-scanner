@@ -84,13 +84,16 @@ def compute_market_early_warning(
         return {"stage": "INSUFFICIENT_DATA", "direction": "NONE", "score": 0,
                 "reasons": ["cadenza dati troppo lenta per warning intraday"], "execution_authorized": False}
 
-    def ret(seconds: float) -> float | None:
+    def base_price(seconds: float) -> float | None:
         target = times[-1] - seconds
         idx = min(range(len(times)), key=lambda i: abs(times[i] - target))
         if abs(times[idx] - target) > max(2 * step, seconds * 0.25):
             return None
-        base = prices[idx]
-        return (prices[-1] / base - 1.0) * 100.0 if base > 0 else None
+        return prices[idx]
+
+    def ret(seconds: float) -> float | None:
+        base = base_price(seconds)
+        return (prices[-1] / base - 1.0) * 100.0 if base is not None and base > 0 else None
 
     r30, r60, r240 = ret(1800), ret(3600), ret(14400)
     if r30 is None or r60 is None:
@@ -101,12 +104,20 @@ def compute_market_early_warning(
     direction = "LONG" if r30 > 0 else "SHORT" if r30 < 0 else "NONE"
     reasons = []
     score = 0.0
-    # Acceleration: recent 30m leg compared with the preceding 30m leg.
-    preceding30 = r60 - r30
+    # Compare the latest 30m return with the actual preceding 30m leg.
+    # Subtracting cumulative 60m and 30m returns is not mathematically equal
+    # to the preceding leg and can mislabel a direction reversal as acceleration.
+    price_30m_ago = base_price(1800)
+    price_60m_ago = base_price(3600)
+    preceding30 = (
+        (price_30m_ago / price_60m_ago - 1.0) * 100.0
+        if price_30m_ago is not None and price_60m_ago is not None and price_60m_ago > 0
+        else 0.0
+    )
     acceleration = abs(r30) - abs(preceding30)
-    aligned_acceleration = direction != "NONE" and (
-        (direction == "LONG" and r30 > preceding30) or
-        (direction == "SHORT" and r30 < preceding30)
+    aligned_acceleration = (
+        (direction == "LONG" and preceding30 > 0 and r30 > preceding30) or
+        (direction == "SHORT" and preceding30 < 0 and r30 < preceding30)
     )
     if aligned_acceleration:
         score += 20
