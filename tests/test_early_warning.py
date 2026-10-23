@@ -272,6 +272,29 @@ def test_lead_time_backtest_warning_metadata_is_invariant_to_future_price_change
     assert baseline["execution_authorized"] is False
     assert altered["execution_authorized"] is False
 
+def test_lead_time_backtest_rejects_malformed_candle_instead_of_skipping_it():
+    from engine.early_warning import backtest_market_early_warning_lead_time
+
+    start = 1_800_000_000.0 - 39 * 60
+    candles = []
+    for i in range(40):
+        close = 100.0 + i * 0.01
+        candles.append({
+            "timestamp": start + i * 60,
+            "high": close + 0.05,
+            "low": close - 0.05,
+            "close": close,
+        })
+    candles[20] = {**candles[20], "close": float("nan")}
+
+    result = backtest_market_early_warning_lead_time(candles)
+
+    assert result["status"] == "INVALID_DATA"
+    assert result["sample_count"] == 0
+    assert "OHLC o timestamp non valido" in result["reason"]
+    assert result["execution_authorized"] is False
+
+
 def test_market_early_warning_rejects_conflicting_duplicate_timestamps():
     now = 1_800_000_000.0
     timestamps = [now - (19 - i) * 60 for i in range(20)]
