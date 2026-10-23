@@ -76,6 +76,14 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
 
         score = 0.0
         reasons = []
+        early = metadata.get("early_warning", {})
+        if not isinstance(early, dict):
+            early = {}
+        early_direction = _direction(early.get("direction", metadata.get("early_warning_direction", "NONE")))
+        early_score = max(0.0, min(100.0, _num(
+            early.get("score", metadata.get("early_warning_score", 0))
+        )))
+        early_stage = str(early.get("stage", metadata.get("early_warning_stage", "UNKNOWN")) or "UNKNOWN").upper()
         regime = str(getattr(state, "regime", "") or "").upper()
         structure = str(getattr(state, "structure", "") or "").upper()
         if (direction == "LONG" and regime == "TREND_UP") or (direction == "SHORT" and regime == "TREND_DOWN"):
@@ -91,6 +99,14 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
         score += min(15, pre_move * 0.15)
         if pre_move >= 65:
             reasons.append("pre-movimento elevato")
+        # Early-warning is advisory only: it can add a small ranking bonus
+        # only when it agrees with an already-established LONG/SHORT direction.
+        # It cannot create a directional candidate or authorize an entry.
+        if early_stage not in {"", "NONE", "INSUFFICIENT_DATA", "UNKNOWN"} and early_direction == direction:
+            score += min(6.0, early_score * 0.06)
+            reasons.append("early-warning concorde")
+        elif early_direction in {"LONG", "SHORT"} and early_direction != direction:
+            reasons.append("early-warning in conflitto")
         score += min(10, opportunity * 0.10)
         score += min(8, continuation * 0.08)
         score += min(5, quality * 0.05)
@@ -126,6 +142,9 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
             "quality": round(quality, 1),
             "confidence": round(confidence, 1),
             "data_status": str(metadata.get("data_status", "UNKNOWN")),
+            "early_warning_direction": early_direction,
+            "early_warning_score": round(early_score, 1),
+            "early_warning_stage": early_stage,
             "live": live,
             "trigger_confirmed": bool(getattr(state, "trigger_confirmed", False)),
             "final_decision": str(getattr(state, "final_decision", "UNKNOWN")),
