@@ -610,6 +610,90 @@ def backtest_market_early_warning_lead_time(
         label: round(100.0 * count / len(samples), 1)
         for label, count in prior_move_class_counts.items()
     }
+
+    def summarize_outcome_group(group: list[dict[str, Any]]) -> dict[str, Any]:
+        """Summarize future outcomes for a decision-time-defined sample group."""
+        count = len(group)
+        group_favorable_first = sum(
+            1 for row in group
+            if row["lead_seconds"] is not None and (
+                row["first_adverse_seconds"] is None
+                or row["lead_seconds"] < row["first_adverse_seconds"]
+            )
+        )
+        group_adverse_first = sum(
+            1 for row in group
+            if row["first_adverse_seconds"] is not None and (
+                row["lead_seconds"] is None
+                or row["first_adverse_seconds"] < row["lead_seconds"]
+            )
+        )
+        group_same_bar = sum(
+            1 for row in group
+            if row["lead_seconds"] is not None
+            and row["first_adverse_seconds"] is not None
+            and row["lead_seconds"] == row["first_adverse_seconds"]
+        )
+        group_neither = count - group_favorable_first - group_adverse_first - group_same_bar
+        group_resolved = group_favorable_first + group_adverse_first
+        favorable_times = [
+            row["lead_seconds"] for row in group if row["lead_seconds"] is not None
+        ]
+        adverse_times = [
+            row["first_adverse_seconds"] for row in group
+            if row["first_adverse_seconds"] is not None
+        ]
+        median_returns = {}
+        for horizon_key in ("3", "6", "12"):
+            values = [
+                row["returns_pct"][horizon_key]
+                for row in group if horizon_key in row["returns_pct"]
+            ]
+            median_returns[horizon_key] = round(median(values), 5) if values else None
+        return {
+            "sample_count": count,
+            "favorable_first": group_favorable_first,
+            "adverse_first": group_adverse_first,
+            "same_bar_ambiguous": group_same_bar,
+            "neither_reached_0_5atr": group_neither,
+            "favorable_first_pct": round(100.0 * group_favorable_first / count, 1) if count else None,
+            "adverse_first_pct": round(100.0 * group_adverse_first / count, 1) if count else None,
+            "same_bar_ambiguous_pct": round(100.0 * group_same_bar / count, 1) if count else None,
+            "neither_reached_0_5atr_pct": round(100.0 * group_neither / count, 1) if count else None,
+            "resolved_first_count": group_resolved,
+            "favorable_first_pct_resolved": (
+                round(100.0 * group_favorable_first / group_resolved, 1)
+                if group_resolved else None
+            ),
+            "median_warning_to_favorable_0_5atr_seconds": (
+                median(favorable_times) if favorable_times else None
+            ),
+            "median_warning_to_adverse_0_5atr_seconds": (
+                median(adverse_times) if adverse_times else None
+            ),
+            "median_direction_adjusted_return_pct": median_returns,
+        }
+
+    # Group membership is decided exclusively by the 30m move known at the
+    # warning timestamp; future candles contribute only to outcome metrics.
+    timing_labels = tuple(prior_move_class_counts)
+    outcomes_by_prior_move_class = {
+        label: summarize_outcome_group([
+            row for row in samples if row["prior_move_timing_class"] == label
+        ])
+        for label in timing_labels
+    }
+    outcomes_by_prior_move_class_and_direction = {
+        label: {
+            direction: summarize_outcome_group([
+                row for row in samples
+                if row["prior_move_timing_class"] == label
+                and row["direction"] == direction
+            ])
+            for direction in ("LONG", "SHORT")
+        }
+        for label in timing_labels
+    }
     return {
         "status": "OK",
         "sample_count": len(samples),
