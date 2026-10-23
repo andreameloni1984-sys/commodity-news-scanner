@@ -458,6 +458,7 @@ def backtest_market_early_warning_lead_time(
         and row["lead_seconds"] == row["first_adverse_seconds"]
     )
     lead_values = [row["lead_seconds"] for row in samples if row["lead_seconds"] is not None]
+    adverse_values = [row["first_adverse_seconds"] for row in samples if row["first_adverse_seconds"] is not None]
     med_returns = {}
     for horizon_key in ("3", "6", "12"):
         values = [row["returns_pct"][horizon_key] for row in samples if horizon_key in row["returns_pct"]]
@@ -470,7 +471,9 @@ def backtest_market_early_warning_lead_time(
         "same_bar_ambiguous": same_bar,
         "neither_reached_0_5atr": len(samples) - favorable_first - adverse_first - same_bar,
         "favorable_first_pct": round(100.0 * favorable_first / len(samples), 1),
+        "adverse_first_pct": round(100.0 * adverse_first / len(samples), 1),
         "median_seconds_to_favorable_0_5atr": median(lead_values) if lead_values else None,
+        "median_seconds_to_adverse_0_5atr": median(adverse_values) if adverse_values else None,
         "median_direction_adjusted_return_pct": med_returns,
         "samples": samples,
         "execution_authorized": False,
