@@ -36,10 +36,6 @@ class GagarinExpansionTests(unittest.TestCase):
         self.assertTrue(result["paper_only"])
         self.assertEqual(result["status"], "CALCULATED")
 
-
-if __name__ == "__main__":
-    unittest.main()
-
     def test_short_history_does_not_fabricate_four_or_twenty_four_hour_moves(self):
         prices = [100.0, 100.0, 100.0, 102.0]
         timestamps = [0.0, 3600.0, 7200.0, 10800.0]
@@ -81,3 +77,29 @@ if __name__ == "__main__":
         self.assertAlmostEqual(state.move_atr, 2.0, places=4)
         self.assertEqual(state.opportunity_alert, "STRONG_MOVE")
 
+    def test_non_finite_prices_clear_opportunity_signal(self):
+        state = state_for_move(2.0)
+        state.move_4h_pct = 5.0
+        state.move_24h_pct = 10.0
+        state.move_atr = 3.0
+        state.opportunity_score = 99.0
+        state.opportunity_alert = "STRONG_MOVE"
+        state.opportunity_direction = "LONG"
+        state.expected_move_pct = 5.0
+        state.metadata["market_move_24h_pct"] = 10.0
+        state.closes[-1] = float("inf")
+
+        state = scan_market_opportunity(state)
+
+        self.assertIsNone(state.move_4h_pct)
+        self.assertIsNone(state.move_24h_pct)
+        self.assertIsNone(state.move_atr)
+        self.assertEqual(state.opportunity_score, 0.0)
+        self.assertEqual(state.opportunity_alert, "NONE")
+        self.assertEqual(state.opportunity_direction, "NONE")
+        self.assertIsNone(state.expected_move_pct)
+        self.assertEqual(state.metadata["market_move_validation"], "INVALID_INPUT")
+
+
+if __name__ == "__main__":
+    unittest.main()
