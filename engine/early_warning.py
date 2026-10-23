@@ -169,7 +169,10 @@ def compute_market_early_warning(
         if price_30m_ago is not None and price_60m_ago is not None and price_60m_ago > 0
         else 0.0
     )
-    acceleration = abs(r30) - abs(preceding30)
+    # Report the signed change between consecutive 30m returns. The absolute-
+    # magnitude delta can look positive during a reversal (e.g. -1% to +3%),
+    # hiding that momentum changed direction rather than simply accelerated.
+    acceleration = r30 - preceding30
     aligned_acceleration = (
         (direction == "LONG" and preceding30 > 0 and r30 > preceding30) or
         (direction == "SHORT" and preceding30 < 0 and r30 < preceding30)
