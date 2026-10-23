@@ -164,6 +164,35 @@ def test_high_volatility_regime_gets_transparent_ranking_penalty():
     assert volatile_row["direction"] == "LONG"
     assert volatile_row["paper_only"] is True
 
+
+    def test_conflicting_four_and_twenty_four_hour_momentum_is_penalized(self):
+        baseline = state("BASELINE", pre_move_score=0, opportunity_score=0,
+                         continuation_score=0, quality=0, confidence=0)
+        conflict = state("CONFLICTING_MOMENTUM", pre_move_score=0,
+                         opportunity_score=0, continuation_score=0,
+                         quality=0, confidence=0, move_4h_pct=-1.2,
+                         move_24h_pct=2.4)
+
+        baseline_row = rank_predictions([baseline])[0]
+        conflict_row = rank_predictions([conflict])[0]
+
+        self.assertEqual(conflict_row["momentum_alignment"], "CONFLICT")
+        self.assertEqual(conflict_row["move_4h_pct"], -1.2)
+        self.assertEqual(conflict_row["move_24h_pct"], 2.4)
+        self.assertEqual(baseline_row["score"] - conflict_row["score"], 6.0)
+        self.assertIn("momentum 4h/24h in conflitto: possibile ritracciamento o inversione",
+                      conflict_row["reasons"])
+        self.assertTrue(conflict_row["paper_only"])
+
+    def test_missing_four_or_twenty_four_hour_momentum_is_not_called_aligned(self):
+        candidate = state("INCOMPLETE_MOMENTUM", move_4h_pct=-1.0,
+                          move_24h_pct=None)
+        row = rank_predictions([candidate])[0]
+        self.assertEqual(row["momentum_alignment"], "INCOMPLETE")
+        self.assertIsNone(row["move_24h_pct"])
+        self.assertNotIn("momentum 4h/24h in conflitto: possibile ritracciamento o inversione",
+                         row["reasons"])
+
 if __name__ == "__main__":
     unittest.main()
 
