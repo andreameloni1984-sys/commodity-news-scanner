@@ -642,3 +642,44 @@ def test_alert_scorecard_excludes_conflicting_prices_at_same_reaction_timestamp(
         assert report["tp1_observed"] == 0
     assert reports[0] == reports[1]
     assert reports[0]["open_at_last_check"] == 1
+
+def test_alert_scorecard_assigns_reactions_only_to_latest_event_asset_alert():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent_first = datetime(2026, 10, 23, 18, 0, tzinfo=timezone.utc)
+    sent_second = sent_first + timedelta(minutes=30)
+    rows = [
+        {
+            "kind": "NEWS_ALERT_SENT", "event_id": "same-catalyst",
+            "asset": "WTI", "direction": "LONG", "price": 80.0,
+            "stop": 79.0, "tp1": 82.0, "sent_at": sent_first.isoformat(),
+        },
+        {
+            "kind": "NEWS_ALERT_SENT", "event_id": "same-catalyst",
+            "asset": "WTI", "direction": "LONG", "price": 81.0,
+            "stop": 80.0, "tp1": 83.0, "sent_at": sent_second.isoformat(),
+        },
+        {
+            "kind": "NEWS_REACTION", "event_id": "same-catalyst",
+            "asset": "WTI", "current_price": 81.0,
+            "observed_at": (sent_first + timedelta(minutes=20)).isoformat(),
+        },
+        {
+            "kind": "NEWS_REACTION", "event_id": "same-catalyst",
+            "asset": "WTI", "current_price": 83.0,
+            "observed_at": (sent_second + timedelta(minutes=15)).isoformat(),
+        },
+    ]
+
+    report = build_alert_scorecard(rows, now=sent_second + timedelta(minutes=30))
+
+    assert report["alerts"] == 2
+    assert report["scored"] == 2
+    assert report["ambiguous_alert_groups"] == 0
+    first, second = sorted(report["results"], key=lambda row: row["sent_at"])
+    assert first["observed_at"] == (sent_first + timedelta(minutes=20)).isoformat()
+    assert first["outcome"] == "OPEN_AT_LAST_CHECK"
+    assert second["observed_at"] == (sent_second + timedelta(minutes=15)).isoformat()
+    assert second["outcome"] == "TP1_OBSERVED"
+
