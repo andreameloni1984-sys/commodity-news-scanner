@@ -572,3 +572,34 @@ def test_capture_baseline_skips_non_finite_live_prices():
     ]
     assert _capture_baseline({"assets": ["Oro"]}, states) == {}
 
+def test_alert_scorecard_ignores_future_dated_reactions_until_they_are_observable():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 23, 18, 0, tzinfo=timezone.utc)
+    now = sent + timedelta(minutes=30)
+    rows = [
+        {
+            "kind": "NEWS_ALERT_SENT",
+            "event_id": "future-reaction",
+            "asset": "WTI",
+            "direction": "LONG",
+            "price": 80.0,
+            "sent_at": sent.isoformat(),
+        },
+        {
+            "kind": "NEWS_REACTION",
+            "event_id": "future-reaction",
+            "asset": "WTI",
+            "current_price": 84.0,
+            "observed_at": (sent + timedelta(minutes=40)).isoformat(),
+        },
+    ]
+
+    report = build_alert_scorecard(rows, now=now)
+
+    assert report["alerts"] == 1
+    assert report["scored"] == 0
+    assert report["pending"] == 1
+    assert report["unscored_expired"] == 0
+
