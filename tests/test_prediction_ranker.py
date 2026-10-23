@@ -79,3 +79,33 @@ class PredictionRankerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+    def test_early_warning_only_boosts_existing_agreeing_direction(self):
+        base = state("BASE", pre_move_score=0, opportunity_score=0,
+                     continuation_score=0, quality=0, confidence=0)
+        no_warning = rank_predictions([base])[0]
+        agreeing = state("AGREE", pre_move_score=0, opportunity_score=0,
+                         continuation_score=0, quality=0, confidence=0,
+                         metadata={"data_status": "OK", "early_warning": {
+                             "direction": "LONG", "score": 80, "stage": "WATCH"}})
+        agreeing_row = rank_predictions([agreeing])[0]
+        self.assertEqual(agreeing_row["direction"], "LONG")
+        self.assertEqual(agreeing_row["early_warning_direction"], "LONG")
+        self.assertAlmostEqual(agreeing_row["score"] - no_warning["score"], 4.8)
+
+    def test_early_warning_cannot_create_direction_or_boost_conflict(self):
+        neutral = state("NEUTRAL", setup_direction="NONE",
+                        structure_direction="NONE", mtf_direction="NONE",
+                        pre_move_direction="LONG", opportunity_direction="LONG",
+                        metadata={"data_status": "OK", "early_warning": {
+                            "direction": "LONG", "score": 100, "stage": "WATCH"}})
+        self.assertEqual(rank_predictions([neutral]), [])
+        conflict = state("CONFLICT", pre_move_score=0, opportunity_score=0,
+                         continuation_score=0, quality=0, confidence=0,
+                         metadata={"data_status": "OK", "early_warning": {
+                             "direction": "SHORT", "score": 100, "stage": "WATCH"}})
+        row = rank_predictions([conflict])[0]
+        self.assertEqual(row["direction"], "LONG")
+        self.assertEqual(row["early_warning_direction"], "SHORT")
+        self.assertIn("early-warning in conflitto", row["reasons"])
