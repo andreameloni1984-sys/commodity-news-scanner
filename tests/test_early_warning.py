@@ -18,7 +18,7 @@ def test_market_early_warning_detects_directional_acceleration_without_authorizi
             closes.append(100.0 + 0.002 * i)
         else:
             closes.append(100.12 - 0.035 * (i - 60))
-    result = compute_market_early_warning(closes, timestamps, atr=0.5)
+    result = compute_market_early_warning(closes, timestamps, atr=0.5, now=timestamps[-1])
     assert result["direction"] == "SHORT"
     assert result["stage"] in {"EARLY_WARNING", "LATE_MOVE", "WATCH"}
     assert result["execution_authorized"] is False
@@ -38,3 +38,26 @@ def test_catalyst_timing_requires_real_publication_timestamp():
     assert fresh["timing"] == "FRESH_CATALYST"
     assert stale["timing"] == "STALE_CATALYST"
     assert all(x["execution_authorized"] is False for x in (missing, fresh, stale))
+
+
+def test_market_early_warning_rejects_stale_latest_timestamp():
+    now = 1_800_000_000.0
+    timestamps = [now - 3600 + i * 60 for i in range(91)]
+    closes = [100.0 + i * 0.02 for i in range(91)]
+    result = compute_market_early_warning(closes, timestamps, atr=0.5, now=now)
+    assert result["stage"] == "INSUFFICIENT_DATA"
+    assert result["direction"] == "NONE"
+    assert result["latest_timestamp_age_seconds"] == 3600.0
+    assert "troppo vecchio" in result["reasons"][0]
+    assert result["execution_authorized"] is False
+
+
+def test_market_early_warning_rejects_future_latest_timestamp():
+    now = 1_800_000_000.0
+    timestamps = [now + 300 + i * 60 for i in range(91)]
+    closes = [100.0 + i * 0.02 for i in range(91)]
+    result = compute_market_early_warning(closes, timestamps, atr=0.5, now=now)
+    assert result["stage"] == "INSUFFICIENT_DATA"
+    assert result["direction"] == "NONE"
+    assert "nel futuro" in result["reasons"][0]
+    assert result["execution_authorized"] is False
