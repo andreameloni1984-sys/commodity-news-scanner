@@ -13,6 +13,9 @@ from typing import Any
 
 
 def _finite(value: Any) -> float | None:
+    # bool is a subclass of int in Python, but True/False are not valid market data.
+    if isinstance(value, bool):
+        return None
     try:
         result = float(value)
     except (TypeError, ValueError):
