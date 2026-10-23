@@ -31,20 +31,41 @@ def scan_market_opportunity(state: SoyuzState) -> SoyuzState:
     candles = list(getattr(state, "candles", []) or [])
     try:
         timestamps = [float(x.get("timestamp", 0.0)) for x in candles]
+        closes = [float(value) for value in closes]
+        atr = float(state.atr or 0.0)
     except (TypeError, ValueError, OverflowError):
         return state
-    atr = float(state.atr or 0.0)
+
+    invalid_prices = not all(isfinite(price) and price > 0 for price in closes)
+    invalid_atr = not isfinite(atr) or atr < 0
     if (
         len(closes) < 2
         or len(timestamps) != len(closes)
         or not all(isfinite(t) for t in timestamps)
         or any(timestamps[i] <= timestamps[i - 1] for i in range(1, len(timestamps)))
+        or invalid_prices
+        or invalid_atr
     ):
+        # Clear derived opportunity fields so a reused state cannot retain a
+        # previous signal after receiving malformed/non-finite market data.
+        state.move_4h_pct = None
+        state.move_24h_pct = None
+        state.move_atr = None
+        state.opportunity_score = 0.0
+        state.opportunity_alert = "NONE"
+        state.opportunity_direction = "NONE"
+        state.expected_move_pct = None
+        state.expected_move_duration_hours = None
+        state.continuation_score = 0.0
+        state.reversal_score = 0.0
+        if isinstance(getattr(state, "metadata", None), dict):
+            state.metadata["market_move_validation"] = "INVALID_INPUT"
         return state
 
-    latest = float(closes[-1])
-    if latest <= 0:
-        return state
+    if isinstance(getattr(state, "metadata", None), dict):
+        state.metadata.pop("market_move_validation", None)
+
+    latest = closes[-1]
 
     # Use actual time coverage, not merely the nearest available bar. A short
     # history must not be presented as a 4h/24h move, and gaps near the target
