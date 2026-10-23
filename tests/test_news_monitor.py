@@ -75,6 +75,7 @@ def test_alert_requires_existing_live_confirmed_aligned_setup():
     assert "Rapporto R/R su TP1:" in message
     assert "PAPER/DEMO — NESSUN ORDINE" in message
     assert "slippage o gap" in message
+    assert "non è una previsione anticipata" in message
 
 
 def test_telegram_alert_rejects_invalid_stop_or_target_geometry():
@@ -152,9 +153,9 @@ def test_new_news_triggers_immediate_analysis_then_waits_for_price_confirmation(
     assert second["analysis"] == 1
     assert second["alerts"] == 1
     assert len(messages) == 1
-    assert "Reazione dal rilevamento" in messages[0]
+    assert "Variazione dal rilevamento" in messages[0]
     assert "PAPER/DEMO" in messages[0]
-    assert "Timing fonte: FRESH_CATALYST | età: 6.0 min" in messages[0]
+    assert "Timing fonte: FRESH_CATALYST | età alla conferma: 6.0 min" in messages[0]
 
     detected = next(row for row in journal_rows if row.get("kind") == "NEWS_DETECTED")
     sent_row = next(row for row in journal_rows if row.get("kind") == "NEWS_ALERT_SENT")
