@@ -271,3 +271,19 @@ def test_lead_time_backtest_warning_metadata_is_invariant_to_future_price_change
         assert row["atr_at_warning"] == other["atr_at_warning"]
     assert baseline["execution_authorized"] is False
     assert altered["execution_authorized"] is False
+
+def test_market_early_warning_rejects_conflicting_duplicate_timestamps():
+    now = 1_800_000_000.0
+    timestamps = [now - (19 - i) * 60 for i in range(20)]
+    closes = [100.0 + i * 0.02 for i in range(20)]
+    timestamps.append(timestamps[10])
+    closes.append(closes[10] + 0.5)
+
+    result = compute_market_early_warning(closes, timestamps, atr=0.5, now=now)
+
+    assert result["stage"] == "INVALID_DATA"
+    assert result["direction"] == "NONE"
+    assert result["score"] == 0
+    assert "timestamp duplicati" in result["reasons"][0]
+    assert result["execution_authorized"] is False
+
