@@ -483,3 +483,63 @@ def test_title_cluster_uses_normalized_utc_publication_day():
     }
 
     assert _title_cluster(utc_item) == _title_cluster(offset_item)
+
+
+def test_multi_asset_catalyst_alerts_once_per_asset_across_rechecks(tmp_path, monkeypatch):
+    import json
+    from datetime import datetime, timedelta, timezone
+    import telegram.news_monitor as monitor
+
+    monkeypatch.setattr(monitor, "STATE_PATH", tmp_path / "news_state.json")
+    now = datetime(2026, 10, 23, 14, 0, tzinfo=timezone.utc)
+    item = {
+        "source": "Test RSS",
+        "title": "OPEC announces production cut",
+        "url": "https://example.test/opec-cut-multi",
+        "published_at": (now - timedelta(minutes=1)).isoformat(),
+    }
+    wti = SimpleNamespace(
+        commodity="Petrolio WTI", symbol="WTI/USD", setup_direction="LONG",
+        final_decision="PAPER_SIGNAL", trigger_confirmed=True, live=True,
+        price=80.0, entry=80.1, stop=78.5, tp1=83.0, tp2=84.0,
+        data_source="TEST_FEED",
+    )
+    brent = SimpleNamespace(
+        commodity="Petrolio Brent", symbol="BRENT/USD", setup_direction="LONG",
+        final_decision="PAPER_SIGNAL", trigger_confirmed=True, live=True,
+        price=85.0, entry=85.1, stop=83.5, tp1=88.0, tp2=89.0,
+        data_source="TEST_FEED",
+    )
+    states = [wti, brent]
+    messages, journal_rows = [], []
+    monkeypatch.setattr(monitor, "_journal", lambda row: journal_rows.append(dict(row)))
+
+    def analyze():
+        return states
+
+    first = monitor.poll_news_once(
+        lambda message: messages.append(message) or True, analyze,
+        fetcher=lambda: [item], now=now,
+    )
+    assert first["alerts"] == 0  # first pass captures baselines only
+
+    wti.price = 80.2
+    brent.price = 85.2
+    second = monitor.poll_news_once(
+        lambda message: messages.append(message) or True, analyze,
+        fetcher=lambda: [item], now=now + timedelta(minutes=5),
+    )
+    assert second["alerts"] == 2
+    assert len(messages) == 2
+    sent_assets = [row["asset"] for row in journal_rows if row.get("kind") == "NEWS_ALERT_SENT"]
+    assert set(sent_assets) == {"WTI", "Brent"}
+
+    third = monitor.poll_news_once(
+        lambda message: messages.append(message) or True, analyze,
+        fetcher=lambda: [item], now=now + timedelta(minutes=10),
+    )
+    assert third["alerts"] == 0
+    assert len(messages) == 2
+    saved = json.loads((tmp_path / "news_state.json").read_text(encoding="utf-8"))
+    event = next(row for row in saved["pending"] if row.get("event_id"))
+    assert set(event["alerted_assets"]) == {"brent", "wti"}
