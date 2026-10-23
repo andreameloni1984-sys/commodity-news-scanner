@@ -114,7 +114,7 @@ if __name__ == "__main__":
 def test_early_warning_watchlist_can_surface_before_setup_but_never_authorizes():
     from engine.prediction_ranker import rank_early_warnings
     early = state(
-        "EARLY_WTI", setup_direction="NONE", structure_direction="NONE",
+        "EARLY_WTI", data_age_seconds=60, setup_direction="NONE", structure_direction="NONE",
         mtf_direction="NONE", pre_move_direction="NONE", opportunity_direction="NONE",
         metadata={"data_status": "OK", "early_warning": {
             "direction": "LONG", "score": 55, "stage": "EARLY_WARNING",
