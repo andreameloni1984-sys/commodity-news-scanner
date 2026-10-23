@@ -106,3 +106,37 @@ def test_reversal_is_not_mislabeled_as_directional_acceleration():
     assert result["direction"] == "LONG"
     assert "accelerazione recente coerente con la direzione" not in result["reasons"]
     assert result["execution_authorized"] is False
+
+def test_lead_time_backtest_measures_favorable_move_without_authorizing_trade():
+    from engine.early_warning import backtest_market_early_warning_lead_time
+
+    # Quiet drift, then a faster same-direction leg. The controlled OHLC path
+    # should produce early-warning samples and a measurable future excursion.
+    start = 1_800_000_000.0 - 179 * 60
+    candles = []
+    price = 100.0
+    for i in range(180):
+        if i == 0:
+            price = 100.0
+        elif i < 90:
+            price += 0.002
+        elif i < 150:
+            price += 0.02
+        else:
+            price += 0.06
+        candles.append({
+            "timestamp": start + i * 60,
+            "high": price + 0.05,
+            "low": price - 0.05,
+            "close": price,
+        })
+
+    result = backtest_market_early_warning_lead_time(candles, max_bars=96, horizon_bars=12)
+
+    assert result["status"] == "OK"
+    assert result["sample_count"] > 0
+    assert result["favorable_first"] > 0
+    assert result["median_seconds_to_favorable_0_5atr"] is not None
+    assert result["execution_authorized"] is False
+    assert result["method"] == "ROLLING_WALK_FORWARD_NOT_CALIBRATED"
+    assert all(sample["lead_seconds"] is not None for sample in result["samples"])
