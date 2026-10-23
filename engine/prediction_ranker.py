@@ -99,10 +99,14 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
         score += min(15, pre_move * 0.15)
         if pre_move >= 65:
             reasons.append("pre-movimento elevato")
-        # Early-warning is advisory only: it can add a small ranking bonus
-        # only when it agrees with an already-established LONG/SHORT direction.
-        # It cannot create a directional candidate or authorize an entry.
-        if early_stage not in {"", "NONE", "INSUFFICIENT_DATA", "UNKNOWN"} and early_direction == direction:
+        # Early-warning is advisory only. A LATE_MOVE explicitly means the
+        # price is already extended, so it must never add a directional bonus
+        # that could encourage chasing the move.
+        if early_stage == "LATE_MOVE":
+            reasons.append("early-warning: movimento già esteso, bonus disattivato")
+            if early_direction in {"LONG", "SHORT"} and early_direction != direction:
+                reasons.append("early-warning in conflitto")
+        elif early_stage not in {"", "NONE", "INSUFFICIENT_DATA", "UNKNOWN"} and early_direction == direction:
             score += min(6.0, early_score * 0.06)
             reasons.append("early-warning concorde")
         elif early_direction in {"LONG", "SHORT"} and early_direction != direction:
