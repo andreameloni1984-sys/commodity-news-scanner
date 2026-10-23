@@ -25,6 +25,40 @@ def _positive(value: Any) -> float | None:
         return None
 
 
+def _market_structure(high: list[float], low: list[float], closes: list[float], direction: str) -> dict[str, Any]:
+    """Confirm pivots with two closed candles on each side; ignore unfinished swings."""
+    if len(high) != len(low) or len(high) != len(closes) or len(closes) < 7:
+        return {"structure_status": "DATI INSUFFICIENTI", "structure_warning": False,
+                "structure_break": False, "last_swing_high": None, "last_swing_low": None}
+    swing_highs, swing_lows = [], []
+    for i in range(2, len(closes) - 2):
+        if high[i] > max(high[i-2:i]) and high[i] >= max(high[i+1:i+3]):
+            swing_highs.append((i, high[i]))
+        if low[i] < min(low[i-2:i]) and low[i] <= min(low[i+1:i+3]):
+            swing_lows.append((i, low[i]))
+    hh = len(swing_highs) >= 2 and swing_highs[-1][1] > swing_highs[-2][1]
+    lh = len(swing_highs) >= 2 and swing_highs[-1][1] < swing_highs[-2][1]
+    hl = len(swing_lows) >= 2 and swing_lows[-1][1] > swing_lows[-2][1]
+    ll = len(swing_lows) >= 2 and swing_lows[-1][1] < swing_lows[-2][1]
+    last_high = swing_highs[-1][1] if swing_highs else None
+    last_low = swing_lows[-1][1] if swing_lows else None
+    if hh and hl:
+        status = "STRUTTURA RIALZISTA HH/HL"
+    elif lh and ll:
+        status = "STRUTTURA RIBASSISTA LH/LL"
+    else:
+        status = "STRUTTURA MISTA / LATERALE"
+    broken = bool((direction == "LONG" and hl and last_low is not None and closes[-1] < last_low)
+                  or (direction == "SHORT" and lh and last_high is not None and closes[-1] > last_high))
+    warning = bool((direction == "LONG" and lh) or (direction == "SHORT" and hh) or broken)
+    if broken:
+        status = "ROTTURA STRUTTURA — POSSIBILE CAMBIO DI ROTTA"
+    elif warning:
+        status = "ATTENZIONE — STRUTTURA INDEBOLITA"
+    return {"structure_status": status, "structure_warning": warning, "structure_break": broken,
+            "last_swing_high": last_high, "last_swing_low": last_low}
+
+
 def analyze_pattern_and_exit(
     *,
     direction: str,
@@ -96,6 +130,10 @@ def analyze_pattern_and_exit(
         }
 
     current_close = close[-1]
+    structure = _market_structure(high, low, close, direction) if len(high) == len(close) and len(low) == len(close) else {
+        "structure_status": "DATI OHLC INSUFFICIENTI", "structure_warning": False,
+        "structure_break": False, "last_swing_high": None, "last_swing_low": None,
+    }
     momentum = (current_close / close[-4] - 1.0) * 100.0
     prev_momentum = (close[-2] / close[-5] - 1.0) * 100.0
     # Keep candle-pattern recognition based on closed OHLC data. A live quote
@@ -229,6 +267,10 @@ def analyze_pattern_and_exit(
             "Quotazione corrente a TP1 o oltre: valutare presa profitto e protezione "
             "del residuo; il prezzo di esecuzione non è garantito."
         )
+    elif structure.get("structure_break"):
+        action, reason = "EXIT_WARNING", (
+            "Chiusura oltre l'ultimo swing confermato: possibile cambio di rotta; rivalutare subito il setup."
+        )
     elif reversal_score >= 3:
         action, reason = "EXIT_WARNING", (
             "Più segnali contrari concordanti su candele chiuse: possibile inversione, "
@@ -248,6 +290,7 @@ def analyze_pattern_and_exit(
 
     return {
         "pattern": pattern,
+        **structure,
         "candlestick_pattern": candlestick_pattern,
         "bias": bias,
         "momentum_pct": round(momentum, 4),
