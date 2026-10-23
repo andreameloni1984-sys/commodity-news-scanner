@@ -28,12 +28,24 @@ def walk_forward_evaluate(candles, horizon=4, start=40, min_move_pct=0.05, step=
         return {"status": "INVALID_PARAMETERS", "observations": 0,
                 "accuracy_pct": None, "coverage_pct": None,
                 "mean_signed_return_pct": None, "mean_net_signed_return_pct": None,
+                "baseline_always_long_net_return_pct": None,
+                "baseline_always_short_net_return_pct": None,
+                "baseline_always_flat_return_pct": None,
+                "net_edge_vs_always_long_pct": None,
+                "net_edge_vs_always_short_pct": None,
+                "net_edge_vs_always_flat_pct": None,
                 "benchmark_accuracy_pct": None}
     if (not math.isfinite(round_trip_cost_bps) or round_trip_cost_bps < 0
             or not math.isfinite(min_move_pct) or min_move_pct < 0):
         return {"status": "INVALID_PARAMETERS", "observations": 0,
                 "accuracy_pct": None, "coverage_pct": None,
                 "mean_signed_return_pct": None, "mean_net_signed_return_pct": None,
+                "baseline_always_long_net_return_pct": None,
+                "baseline_always_short_net_return_pct": None,
+                "baseline_always_flat_return_pct": None,
+                "net_edge_vs_always_long_pct": None,
+                "net_edge_vs_always_short_pct": None,
+                "net_edge_vs_always_flat_pct": None,
                 "benchmark_accuracy_pct": None}
     rows = list(candles or [])
     horizon = max(1, int(horizon))
@@ -44,6 +56,12 @@ def walk_forward_evaluate(candles, horizon=4, start=40, min_move_pct=0.05, step=
         return {"status": "INSUFFICIENT_DATA", "observations": 0,
                 "accuracy_pct": None, "coverage_pct": None,
                 "mean_signed_return_pct": None, "mean_net_signed_return_pct": None,
+                "baseline_always_long_net_return_pct": None,
+                "baseline_always_short_net_return_pct": None,
+                "baseline_always_flat_return_pct": None,
+                "net_edge_vs_always_long_pct": None,
+                "net_edge_vs_always_short_pct": None,
+                "net_edge_vs_always_flat_pct": None,
                 "round_trip_cost_bps": round_trip_cost_bps, "benchmark_accuracy_pct": None}
     predictions = []
     for origin in range(start, len(rows) - horizon + 1, step):
@@ -81,6 +99,12 @@ def walk_forward_evaluate(candles, horizon=4, start=40, min_move_pct=0.05, step=
         return {"status": "NO_VALID_FORECASTS", "observations": 0,
                 "accuracy_pct": None, "coverage_pct": None,
                 "mean_signed_return_pct": None, "mean_net_signed_return_pct": None,
+                "baseline_always_long_net_return_pct": None,
+                "baseline_always_short_net_return_pct": None,
+                "baseline_always_flat_return_pct": None,
+                "net_edge_vs_always_long_pct": None,
+                "net_edge_vs_always_short_pct": None,
+                "net_edge_vs_always_flat_pct": None,
                 "round_trip_cost_bps": round_trip_cost_bps, "benchmark_accuracy_pct": None}
     directional = [p for p in predictions if p["direction"] in {"LONG", "SHORT"}]
     actual_moves = [p for p in predictions if p["actual"] in {"LONG", "SHORT"}]
