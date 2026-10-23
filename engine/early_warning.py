@@ -229,7 +229,7 @@ def backtest_market_early_warning_lead_time(
         not isinstance(max_bars, bool)
         and raw_max_bars is not None
         and raw_max_bars.is_integer()
-        and raw_max_bars >= 1
+        and raw_max_bars >= 30
     )
     valid_horizon = (
         not isinstance(horizon_bars, bool)
@@ -240,7 +240,7 @@ def backtest_market_early_warning_lead_time(
     if not valid_max or not valid_horizon:
         return {
             "status": "INVALID_PARAMETERS", "sample_count": 0,
-            "reason": "max_bars deve essere un intero positivo e horizon_bars un intero tra 3 e 12",
+            "reason": "max_bars deve essere un intero >= 30 e horizon_bars un intero tra 3 e 12",
             "execution_authorized": False,
             "method": "ROLLING_WALK_FORWARD_NOT_CALIBRATED",
         }
