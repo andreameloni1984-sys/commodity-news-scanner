@@ -200,6 +200,8 @@ def rank_early_warnings(states: Iterable[Any]) -> list[dict]:
             "stage": stage,
             "score": round(score, 1),
             "price": price,
+            "data_age_seconds": round(age_num, 1),
+            "warning_age_seconds": round(warning_age, 1),
             "reasons": list(warning.get("reasons", []) or [])[:4],
             "execution_authorized": False,
             "paper_only": True,
