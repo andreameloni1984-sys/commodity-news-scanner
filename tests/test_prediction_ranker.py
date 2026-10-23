@@ -121,7 +121,7 @@ class PredictionRankerTests(unittest.TestCase):
         self.assertEqual(conflict_row["momentum_alignment"], "CONFLICT")
         self.assertEqual(conflict_row["move_4h_pct"], -1.2)
         self.assertEqual(conflict_row["move_24h_pct"], 2.4)
-        self.assertEqual(baseline_row["score"] - conflict_row["score"], 6.0)
+        self.assertAlmostEqual(baseline_row["score"] - conflict_row["score"], 6.0, places=6)
         self.assertIn("momentum 4h/24h in conflitto: possibile ritracciamento o inversione",
                       conflict_row["reasons"])
         self.assertTrue(conflict_row["paper_only"])
