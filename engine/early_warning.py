@@ -191,7 +191,11 @@ def classify_catalyst_timing(finding: dict[str, Any], now: datetime | None = Non
         return {"timing": "TIME_UNVERIFIED", "age_minutes": None,
                 "reason": "timestamp di pubblicazione assente/non interpretabile",
                 "execution_authorized": False}
-    age = (now.astimezone(timezone.utc) - parsed).total_seconds() / 60.0
+    # A naive caller-supplied datetime has no timezone information. Treat it
+    # as UTC explicitly rather than letting astimezone() silently interpret it
+    # in the host's local timezone (which varies across laptops and CI runners).
+    now_utc = now.replace(tzinfo=timezone.utc) if now.tzinfo is None else now.astimezone(timezone.utc)
+    age = (now_utc - parsed).total_seconds() / 60.0
     if age < -5:
         timing = "FUTURE_TIMESTAMP_INVALID"
     elif age <= 30:
