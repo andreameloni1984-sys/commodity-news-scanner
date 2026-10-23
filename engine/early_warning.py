@@ -463,15 +463,22 @@ def backtest_market_early_warning_lead_time(
     for horizon_key in ("3", "6", "12"):
         values = [row["returns_pct"][horizon_key] for row in samples if horizon_key in row["returns_pct"]]
         med_returns[horizon_key] = round(median(values), 5) if values else None
+    resolved_first = favorable_first + adverse_first
     return {
         "status": "OK",
         "sample_count": len(samples),
         "favorable_first": favorable_first,
         "adverse_first": adverse_first,
+        "resolved_first_count": resolved_first,
         "same_bar_ambiguous": same_bar,
         "neither_reached_0_5atr": len(samples) - favorable_first - adverse_first - same_bar,
+        # Keep the legacy percentages (all samples) for continuity, but also
+        # expose decisive-only percentages so ambiguous/no-hit cases do not
+        # dilute the comparison of which threshold was reached first.
         "favorable_first_pct": round(100.0 * favorable_first / len(samples), 1),
         "adverse_first_pct": round(100.0 * adverse_first / len(samples), 1),
+        "favorable_first_pct_resolved": round(100.0 * favorable_first / resolved_first, 1) if resolved_first else None,
+        "adverse_first_pct_resolved": round(100.0 * adverse_first / resolved_first, 1) if resolved_first else None,
         "median_seconds_to_favorable_0_5atr": median(lead_values) if lead_values else None,
         "median_seconds_to_adverse_0_5atr": median(adverse_values) if adverse_values else None,
         "median_direction_adjusted_return_pct": med_returns,
