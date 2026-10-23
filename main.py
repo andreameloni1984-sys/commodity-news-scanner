@@ -230,7 +230,7 @@ def _print_ranking(results):
         for index, row in enumerate(warnings[:5], start=1):
             why = ", ".join(row["reasons"]) or "condizioni euristiche"
             label = "MOVIMENTO GIÀ ESTESO — NON INSEGUIRE" if row["stage"] == "LATE_MOVE" else "POSSIBILE ANTICIPAZIONE"
-            print(f"{index:>2}. {row['commodity']:<18} {row['direction']:<5} {row['stage']:<13} score={row['score']:>4.1f} | {label}")
+            print(f"{index:>2}. {row['commodity']:<18} {row['direction']:<5} {row['stage']:<13} score={row['score']:>4.1f} | dati={row['data_age_seconds']:.0f}s warning={row['warning_age_seconds']:.0f}s | {label}")
             print(f"    └─ {why}")
     print("Solo monitoraggio PAPER; non crea setup, segnale operativo o ordine.")
     print()
