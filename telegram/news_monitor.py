@@ -24,6 +24,7 @@ from urllib.parse import urlencode
 import requests
 
 from engine.public_event_brain import classify as classify_public_intelligence
+from engine.early_warning import classify_catalyst_timing
 from sputnik_action_reaction import build_action_reaction_record
 from sputnik_catalyst import catalyst_watchlist
 
@@ -658,6 +659,9 @@ def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str
 
 def _format_news_alert(event: dict[str, Any], setup: dict[str, Any]) -> str:
     published = event.get("published_at") or "timestamp non disponibile"
+    timing = str(event.get("catalyst_timing") or "TIME_UNVERIFIED")
+    age = event.get("catalyst_age_minutes")
+    age_label = f"{age:.1f} min" if isinstance(age, (int, float)) else "non verificabile"
     return (
         "🛰 GAGARIN — NEWS → IMPATTO → SETUP → CONFERMA\n"
         "🧪 PAPER/DEMO — NESSUN ORDINE\n\n"
@@ -665,6 +669,7 @@ def _format_news_alert(event: dict[str, Any], setup: dict[str, Any]) -> str:
         f"Fonte: {event.get('source', 'N/D')}\n"
         f"Pubblicazione UTC: {published}\n"
         f"Rilevata UTC: {event.get('first_seen_at', 'N/D')}\n"
+        f"Timing fonte: {timing} | età: {age_label}\n"
         f"Link: {event.get('url', '')}\n\n"
         f"Strumento: {setup['asset']}\n"
         f"Impatto ipotizzato: {setup['impact']}\n"
@@ -728,7 +733,8 @@ def poll_news_once(
     now: datetime | None = None,
 ) -> dict[str, int]:
     """One polling pass; immediate analysis on new news, then 5-minute rechecks."""
-    now = (now or _utc_now()).astimezone(timezone.utc)
+    now = now or _utc_now()
+    now = now.replace(tzinfo=timezone.utc) if now.tzinfo is None else now.astimezone(timezone.utc)
     state = _load_state()
     seen = set(state.get("seen", []))
     clusters = set(state.get("clusters", []))
@@ -764,6 +770,10 @@ def poll_news_once(
         event["assets"] = classified["assets"]
         event["first_seen_at"] = now.isoformat()
         event["expires_at"] = (now + timedelta(seconds=PENDING_TTL_SECONDS)).isoformat()
+        timing = classify_catalyst_timing({"published": event.get("published_at")}, now=now)
+        event["catalyst_timing"] = timing["timing"]
+        event["catalyst_age_minutes"] = timing["age_minutes"]
+        event["catalyst_timing_reason"] = timing["reason"]
         _journal({
             "kind": "NEWS_DETECTED",
             "event_id": fp,
@@ -772,6 +782,9 @@ def poll_news_once(
             "url": event.get("url"),
             "published_at": event.get("published_at"),
             "first_seen_at": event.get("first_seen_at"),
+            "catalyst_timing": event.get("catalyst_timing"),
+            "catalyst_age_minutes": event.get("catalyst_age_minutes"),
+            "catalyst_timing_reason": event.get("catalyst_timing_reason"),
             "assets": event.get("assets"),
             "impact": event.get("impact"),
             "political_intelligence": classified.get("political_intelligence"),
@@ -887,6 +900,9 @@ def poll_news_once(
                             "stop": setup.get("stop"),
                             "tp1": setup.get("tp1"),
                             "sent_at": now.isoformat(),
+                            "published_at": event.get("published_at"),
+                            "catalyst_timing": event.get("catalyst_timing"),
+                            "catalyst_age_minutes": event.get("catalyst_age_minutes"),
                         })
                         break
                 # Keep sent alerts under observation for four hours, without resending them.
