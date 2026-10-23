@@ -59,7 +59,19 @@ def scan_market_opportunity(state: SoyuzState) -> SoyuzState:
         state.continuation_score = 0.0
         state.reversal_score = 0.0
         if isinstance(getattr(state, "metadata", None), dict):
-            state.metadata["market_move_validation"] = "INVALID_INPUT"
+            state.metadata.update({
+                "market_move_validation": "INVALID_INPUT",
+                "market_move_4h_pct": None,
+                "market_move_24h_pct": None,
+                "market_move_atr": None,
+                "opportunity_score": 0.0,
+                "opportunity_alert": "NONE",
+                "opportunity_direction": "NONE",
+                "expected_move_pct": None,
+                "expected_move_duration_hours": None,
+                "continuation_score": 0.0,
+                "reversal_score": 0.0,
+            })
         return state
 
     if isinstance(getattr(state, "metadata", None), dict):
