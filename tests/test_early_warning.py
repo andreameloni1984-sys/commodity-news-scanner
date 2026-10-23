@@ -206,6 +206,50 @@ def test_lead_time_backtest_measures_favorable_move_without_authorizing_trade():
         "LOW_PRIOR_MOVE_PROXY", "LATE_CONTINUATION_PROXY",
         "REVERSAL_CONTEXT_PROXY", "INTERMEDIATE_PRIOR_MOVE", "UNCLASSIFIED",
     }
+
+    # Outcome statistics must partition the exact samples in each decision-time
+    # class and direction; empty groups must remain explicit and safe.
+    outcomes_by_class = result["outcomes_by_prior_move_class"]
+    outcomes_by_class_direction = result["outcomes_by_prior_move_class_and_direction"]
+    assert set(outcomes_by_class) == set(classes)
+    assert set(outcomes_by_class_direction) == set(classes)
+    for label, summary in outcomes_by_class.items():
+        grouped = [
+            row for row in result["samples"]
+            if row["prior_move_timing_class"] == label
+        ]
+        assert summary["sample_count"] == len(grouped) == classes[label]
+        assert (
+            summary["favorable_first"] + summary["adverse_first"]
+            + summary["same_bar_ambiguous"] + summary["neither_reached_0_5atr"]
+            == summary["sample_count"]
+        )
+        assert summary["favorable_first"] == sum(
+            1 for row in grouped if row["lead_seconds"] is not None and (
+                row["first_adverse_seconds"] is None
+                or row["lead_seconds"] < row["first_adverse_seconds"]
+            )
+        )
+        assert set(outcomes_by_class_direction[label]) == {"LONG", "SHORT"}
+        directional_total = 0
+        for direction, direction_summary in outcomes_by_class_direction[label].items():
+            directional_group = [
+                row for row in grouped if row["direction"] == direction
+            ]
+            directional_total += direction_summary["sample_count"]
+            assert direction_summary["sample_count"] == len(directional_group)
+            assert (
+                direction_summary["favorable_first"] + direction_summary["adverse_first"]
+                + direction_summary["same_bar_ambiguous"]
+                + direction_summary["neither_reached_0_5atr"]
+                == direction_summary["sample_count"]
+            )
+            if not directional_group:
+                assert direction_summary["median_warning_to_favorable_0_5atr_seconds"] is None
+                assert direction_summary["median_warning_to_adverse_0_5atr_seconds"] is None
+                assert direction_summary["favorable_first_pct_resolved"] is None
+        assert directional_total == summary["sample_count"]
+
     for sample in result["samples"]:
         prior_return = sample["pre_warning_30m_return_pct"]
         assert prior_return is not None and prior_return > -100.0
