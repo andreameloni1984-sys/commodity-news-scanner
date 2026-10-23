@@ -15,6 +15,8 @@ def test_audit_flags_spike_reversed_before_window_close():
     assert report["status"] == "CALCULATED"
     assert report["up_event_windows"] > 0
     assert report["missed_up_windows"] > 0
+    assert report["missed_up_by_any_signal"] >= 0
+    assert report["prebreakout_only_up"] >= 0
     assert report["paper_only"] is True
     assert report["overlapping_windows"] is True
 
@@ -24,6 +26,7 @@ def test_quiet_series_does_not_invent_events():
     assert report["status"] == "CALCULATED"
     assert report["up_event_windows"] == report["down_event_windows"] == 0
     assert report["missed_rate_pct"] is None
+    assert report["missed_up_by_any_signal"] == report["missed_down_by_any_signal"] == 0
     assert report["by_regime"]
     assert sum(x["forecast_windows"] for x in report["by_regime"].values()) == report["forecasts"]
     assert sum(x["up_events"] for x in report["by_regime"].values()) == report["up_event_windows"]
