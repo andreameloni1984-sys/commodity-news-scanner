@@ -730,6 +730,9 @@ def backtest_market_early_warning_lead_time(
             "median_direction_adjusted_return_pct": median_returns,
         }
 
+    # Keep a stable empty collection for short series, so the downstream
+    # holdout stratification has the same schema whether or not a split exists.
+    holdout_non_overlapping: list[dict[str, Any]] = []
     if split_index is None:
         temporal_validation = {
             "status": "INSUFFICIENT_DATA",
@@ -808,6 +811,25 @@ def backtest_market_early_warning_lead_time(
         }
         for label in timing_labels
     }
+
+    # Holdout-only timing stratification is kept separate from the full-sample
+    # scorecard. It uses only the independently de-overlapped holdout subset,
+    # so development outcomes cannot inflate the holdout group counts.
+    temporal_validation["holdout_by_prior_move_class_and_direction"] = {
+        label: {
+            direction: summarize_outcome_group([
+                row for row in holdout_non_overlapping
+                if row["prior_move_timing_class"] == label
+                and row["direction"] == direction
+            ])
+            for direction in ("LONG", "SHORT")
+        }
+        for label in timing_labels
+    }
+    temporal_validation["holdout_stratification_note"] = (
+        "metriche descrittive sui soli campioni holdout non sovrapposti; "
+        "gruppi piccoli non sono interpretabili come evidenza predittiva"
+    )
     non_overlapping_outcomes = summarize_outcome_group(non_overlapping_samples)
     return {
         "status": "OK",
