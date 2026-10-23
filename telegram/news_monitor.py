@@ -82,9 +82,52 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         direction = str(row.get("direction") or "").upper()
         if sent_at and sent_at >= cutoff and isfinite(price) and price > 0 and direction in {"LONG", "SHORT"}:
             alerts.append((row, sent_at, price, direction))
+    # A reaction belongs to the most recent alert for the same event/asset.
+    # Older journal data can contain repeated sends even though current alert
+    # deduplication should prevent them. Bound each alert's observation window
+    # at the next send so a single price observation is never scored twice.
+    raw_alert_count = len(alerts)
+    grouped_alerts: dict[tuple[Any, ...], list[tuple[dict[str, Any], datetime, float, str]]] = {}
+    for index, candidate in enumerate(alerts):
+        row, sent_at, price, direction = candidate
+        event_id = str(row.get("event_id") or "").strip()
+        asset = str(row.get("asset") or "").strip()
+        key = (event_id, asset, sent_at) if event_id and asset else ("__row__", index)
+        grouped_alerts.setdefault(key, []).append(candidate)
+
+    alerts = []
+    ambiguous_alert_groups = 0
+    for group in grouped_alerts.values():
+        signatures = {
+            (direction, price, str(row.get("stop")), str(row.get("tp1")))
+            for row, _, price, direction in group
+        }
+        if len(signatures) > 1:
+            # With conflicting levels/directions at the same event, asset and
+            # send time, the legacy journal cannot identify which alert owns a
+            # later reaction. Fail closed rather than manufacture a score.
+            ambiguous_alert_groups += 1
+            continue
+        alerts.append(group[0])  # collapse exact duplicate journal records
+
+    sent_times_by_event_asset: dict[tuple[str, str], list[datetime]] = {}
+    for alert, sent_at, _, _ in alerts:
+        event_id = str(alert.get("event_id") or "").strip()
+        asset = str(alert.get("asset") or "").strip()
+        if event_id and asset:
+            sent_times_by_event_asset.setdefault((event_id, asset), []).append(sent_at)
+    next_send_at: dict[tuple[str, str, datetime], datetime] = {}
+    for key, times in sent_times_by_event_asset.items():
+        unique_times = sorted(set(times))
+        for current, following in zip(unique_times, unique_times[1:]):
+            next_send_at[(key[0], key[1], current)] = following
+
     scored, pending, unscored_expired = [], 0, 0
     ambiguous_reaction_groups = 0
     for alert, sent_at, alert_price, direction in alerts:
+        event_id = str(alert.get("event_id") or "").strip()
+        asset = str(alert.get("asset") or "").strip()
+        successor = next_send_at.get((event_id, asset, sent_at)) if event_id and asset else None
         reaction_observations = []
         for row in rows:
             if row.get("kind") != "NEWS_REACTION" or row.get("event_id") != alert.get("event_id") or row.get("asset") != alert.get("asset"):
@@ -93,7 +136,13 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
             # A journal row may carry a malformed/future timestamp. Never
             # score a reaction that had not happened at the scorecard's as-of
             # time; otherwise historical evaluation can leak future prices.
-            if not observed_at or not (sent_at <= observed_at <= min(sent_at + timedelta(hours=4), now)):
+            # The next send is an exclusive boundary for the previous alert.
+            if (
+                not observed_at
+                or observed_at < sent_at
+                or observed_at > min(sent_at + timedelta(hours=4), now)
+                or (successor is not None and observed_at >= successor)
+            ):
                 continue
             try:
                 price = float(row.get("current_price"))
@@ -122,7 +171,11 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         # the first 15m.
         observations = [item for item in reaction_observations if item[0] >= sent_at + timedelta(minutes=15)]
         if not observations:
-            if now <= sent_at + timedelta(hours=4):
+            window_closed = (
+                now > sent_at + timedelta(hours=4)
+                or (successor is not None and now >= successor)
+            )
+            if not window_closed:
                 pending += 1
             else:
                 # Closed evaluation window with missing prices is unscored, not pending or a loss.
@@ -156,8 +209,9 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
     tp1_observed = sum(x["outcome"] == "TP1_OBSERVED" for x in scored)
     sl_observed = sum(x["outcome"] == "SL_OBSERVED" for x in scored)
     open_count = sum(x["outcome"] == "OPEN_AT_LAST_CHECK" for x in scored)
-    return {"window_days": 7, "alerts": len(alerts), "scored": len(scored), "pending": pending,
+    return {"window_days": 7, "alerts": raw_alert_count, "scored": len(scored), "pending": pending,
             "unscored_expired": unscored_expired,
+            "ambiguous_alert_groups": ambiguous_alert_groups,
             "ambiguous_reaction_groups": ambiguous_reaction_groups,
             "coverage_pct": round(len(scored)/len(alerts)*100, 2) if alerts else None,
             "correct": correct, "incorrect": len(scored)-correct,
