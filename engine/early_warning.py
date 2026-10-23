@@ -295,6 +295,26 @@ def classify_catalyst_timing(finding: dict[str, Any], now: datetime | None = Non
 
 
 
+def _select_non_overlapping_outcome_samples(
+    samples: list[dict[str, Any]], horizon_bars: int,
+) -> list[dict[str, Any]]:
+    """Select a chronological subset whose future outcome windows do not overlap.
+
+    A warning at bar i uses outcome bars i+1 through i+horizon_bars. The next
+    selected warning may therefore be at i+horizon_bars, but not earlier.
+    This diagnostic reduces duplicate counting when opposite-direction warnings
+    occur close together; it does not change the primary, full-sample metrics.
+    """
+    selected = []
+    next_allowed_index = -1
+    for sample in sorted(samples, key=lambda row: row["warning_bar_index"]):
+        warning_index = sample["warning_bar_index"]
+        if warning_index >= next_allowed_index:
+            selected.append(sample)
+            next_allowed_index = warning_index + horizon_bars
+    return selected
+
+
 def backtest_market_early_warning_lead_time(
     candles: list[dict[str, Any]],
     max_bars: int = 96,
@@ -516,6 +536,9 @@ def backtest_market_early_warning_lead_time(
         else:
             prior_move_timing_class = "INTERMEDIATE_PRIOR_MOVE"
         samples.append({
+            # Index is relative to the validated, timestamp-sorted candle series.
+            # It supports an auditable subset with non-overlapping future windows.
+            "warning_bar_index": index,
             # Keep the decision-time inputs with each outcome so a reviewer can
             # audit the warning without confusing future outcome data for signal inputs.
             "warning_timestamp": prefix[-1][0],
@@ -547,6 +570,15 @@ def backtest_market_early_warning_lead_time(
             "execution_authorized": False,
             "method": "ROLLING_WALK_FORWARD_NOT_CALIBRATED",
         }
+
+    non_overlapping_samples = _select_non_overlapping_outcome_samples(samples, horizon)
+    selected_warning_indices = {
+        row["warning_bar_index"] for row in non_overlapping_samples
+    }
+    for row in samples:
+        row["non_overlapping_outcome_sample"] = (
+            row["warning_bar_index"] in selected_warning_indices
+        )
 
     favorable_first = sum(
         1 for row in samples
@@ -694,9 +726,13 @@ def backtest_market_early_warning_lead_time(
         }
         for label in timing_labels
     }
+    non_overlapping_outcomes = summarize_outcome_group(non_overlapping_samples)
     return {
         "status": "OK",
         "sample_count": len(samples),
+        "non_overlapping_sample_count": len(non_overlapping_samples),
+        "overlapping_future_window_samples_excluded": len(samples) - len(non_overlapping_samples),
+        "non_overlapping_outcomes": non_overlapping_outcomes,
         "prior_move_timing_class_counts": prior_move_class_counts,
         "prior_move_timing_class_pct": prior_move_class_pct,
         "outcomes_by_prior_move_class": outcomes_by_prior_move_class,
