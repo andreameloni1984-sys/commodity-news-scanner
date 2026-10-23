@@ -310,3 +310,39 @@ def test_market_early_warning_rejects_conflicting_duplicate_timestamps():
     assert "timestamp duplicati" in result["reasons"][0]
     assert result["execution_authorized"] is False
 
+def test_market_early_warning_rejects_recent_timestamp_gap():
+    now = 1_800_000_000.0
+    timestamps = [now - (90 - i) * 60 for i in range(91)]
+    # A ten-minute hole immediately before the latest quote makes the latest
+    # 30m/60m return timing ambiguous, even though the final timestamp is fresh.
+    timestamps = [stamp - 540 if i < 90 else stamp for i, stamp in enumerate(timestamps)]
+    closes = [100.0 + i * 0.001 for i in range(90)] + [101.0]
+
+    result = compute_market_early_warning(closes, timestamps, atr=0.5, now=now)
+
+    assert result["stage"] == "INSUFFICIENT_DATA"
+    assert result["direction"] == "NONE"
+    assert result["score"] == 0
+    assert "gap nei timestamp nell'ultima ora" in result["reasons"][0]
+    assert result["execution_authorized"] is False
+
+
+def test_market_early_warning_suppresses_volatility_bonus_across_older_gap():
+    now = 1_800_000_000.0
+    timestamps = [now - (39 - i) * 900 for i in range(40)]
+    # Insert a one-hour gap ending 75 minutes before the latest candle. It is
+    # outside the momentum freshness guard but inside the volatility sample.
+    timestamps = [stamp - 2700 if i <= 33 else stamp for i, stamp in enumerate(timestamps)]
+    closes = [
+        100.0 + i * 0.01 + (0.6 if i >= 34 else 0.0)
+        for i in range(40)
+    ]
+
+    result = compute_market_early_warning(closes, timestamps, atr=0.5, now=now)
+
+    assert result["direction"] == "LONG"
+    assert "volatilità/jump non valutati: cadenza timestamp irregolare" in result["reasons"]
+    assert "espansione della volatilità intraday" not in result["reasons"]
+    assert "candela anomala/jump rispetto al baseline" not in result["reasons"]
+    assert result["execution_authorized"] is False
+
