@@ -503,6 +503,18 @@ def backtest_market_early_warning_lead_time(
             pre_warning_directional_move_atr is not None
             and pre_warning_directional_move_atr <= -0.5
         )
+        # Classify only the observable 30m move at warning time. This is a
+        # diagnostic proxy, not a claim that the true trend onset is known.
+        if pre_warning_directional_move_atr is None:
+            prior_move_timing_class = "UNCLASSIFIED"
+        elif pre_warning_directional_move_atr >= 0.5:
+            prior_move_timing_class = "LATE_CONTINUATION_PROXY"
+        elif pre_warning_directional_move_atr <= -0.5:
+            prior_move_timing_class = "REVERSAL_CONTEXT_PROXY"
+        elif abs(pre_warning_directional_move_atr) < 0.25:
+            prior_move_timing_class = "LOW_PRIOR_MOVE_PROXY"
+        else:
+            prior_move_timing_class = "INTERMEDIATE_PRIOR_MOVE"
         samples.append({
             # Keep the decision-time inputs with each outcome so a reviewer can
             # audit the warning without confusing future outcome data for signal inputs.
@@ -516,6 +528,7 @@ def backtest_market_early_warning_lead_time(
             "pre_warning_30m_directional_move_atr": round(pre_warning_directional_move_atr, 4) if pre_warning_directional_move_atr is not None else None,
             "move_already_underway": move_already_underway,
             "prior_move_against_warning": prior_move_against_warning,
+            "prior_move_timing_class": prior_move_timing_class,
             "warning_to_favorable_0_25atr_seconds": first_fav_025,
             "warning_to_adverse_0_25atr_seconds": first_adv_025,
             "lead_seconds": first_fav,
@@ -586,9 +599,22 @@ def backtest_market_early_warning_lead_time(
     resolved_first = favorable_first + adverse_first
     warnings_after_prior_move = sum(1 for row in samples if row["move_already_underway"])
     reversal_warnings_after_opposite_move = sum(1 for row in samples if row["prior_move_against_warning"])
+    prior_move_class_counts = {
+        label: sum(1 for row in samples if row["prior_move_timing_class"] == label)
+        for label in (
+            "LOW_PRIOR_MOVE_PROXY", "LATE_CONTINUATION_PROXY",
+            "REVERSAL_CONTEXT_PROXY", "INTERMEDIATE_PRIOR_MOVE", "UNCLASSIFIED",
+        )
+    }
+    prior_move_class_pct = {
+        label: round(100.0 * count / len(samples), 1)
+        for label, count in prior_move_class_counts.items()
+    }
     return {
         "status": "OK",
         "sample_count": len(samples),
+        "prior_move_timing_class_counts": prior_move_class_counts,
+        "prior_move_timing_class_pct": prior_move_class_pct,
         "warnings_after_prior_0_5atr_30m_move": warnings_after_prior_move,
         "warnings_after_prior_0_5atr_30m_move_pct": round(100.0 * warnings_after_prior_move / len(samples), 1),
         "warnings_after_prior_opposite_0_5atr_move": reversal_warnings_after_opposite_move,
