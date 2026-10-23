@@ -43,7 +43,8 @@ def walk_forward_evaluate(candles, horizon=4, start=40, min_move_pct=0.05, step=
     if len(rows) <= start + horizon:
         return {"status": "INSUFFICIENT_DATA", "observations": 0,
                 "accuracy_pct": None, "coverage_pct": None,
-                "mean_signed_return_pct": None, "benchmark_accuracy_pct": None}
+                "mean_signed_return_pct": None, "mean_net_signed_return_pct": None,
+                "round_trip_cost_bps": round_trip_cost_bps, "benchmark_accuracy_pct": None}
     predictions = []
     for origin in range(start, len(rows) - horizon + 1, step):
         past = rows[:origin]
@@ -76,7 +77,8 @@ def walk_forward_evaluate(candles, horizon=4, start=40, min_move_pct=0.05, step=
     if not predictions:
         return {"status": "NO_VALID_FORECASTS", "observations": 0,
                 "accuracy_pct": None, "coverage_pct": None,
-                "mean_signed_return_pct": None, "benchmark_accuracy_pct": None}
+                "mean_signed_return_pct": None, "mean_net_signed_return_pct": None,
+                "round_trip_cost_bps": round_trip_cost_bps, "benchmark_accuracy_pct": None}
     directional = [p for p in predictions if p["direction"] in {"LONG", "SHORT"}]
     actual_moves = [p for p in predictions if p["actual"] in {"LONG", "SHORT"}]
     correct_directional = [p for p in directional if p["direction"] == p["actual"]]
@@ -120,5 +122,5 @@ def walk_forward_evaluate(candles, horizon=4, start=40, min_move_pct=0.05, step=
         "regime_breakdown": regime_stats,
         "horizon_bars": horizon, "step_bars": step, "start_index": start,
         "min_move_pct": float(min_move_pct),
-        "note": "Net metric deducts the configured hypothetical round-trip cost from directional forecasts; cost is not a live estimate and may not capture fees, spread, slippage, financing, gaps or intrabar path. Default step equals horizon to reduce overlapping outcome windows; this is not proof of live profitability.",
+        "note": "Net metric deducts the configured hypothetical round-trip cost from directional forecasts; gross metric excludes fees, spread, slippage, financing, gaps and intrabar path. The configured cost is not a live estimate. Default step equals horizon to reduce overlapping outcome windows; this is not proof of live profitability.",
     }
