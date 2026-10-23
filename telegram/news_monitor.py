@@ -600,7 +600,9 @@ def _capture_baseline(event: dict[str, Any], states: list[Any]) -> dict[str, flo
                 value = float(getattr(state, "price", None))
             except (TypeError, ValueError):
                 continue
-            if value > 0:
+            # A live flag does not make a numeric quote trustworthy: reject
+            # NaN/Infinity before they can become persistent event baselines.
+            if isfinite(value) and value > 0:
                 baseline[asset] = value
                 break
     return baseline
@@ -618,9 +620,11 @@ def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str
             continue
         try:
             baseline = float(baselines.get(asset))
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             continue
-        if baseline <= 0:
+        # Non-finite baselines can manufacture extreme/NaN reactions and must
+        # never confirm a catalyst-driven setup.
+        if not isfinite(baseline) or baseline <= 0:
             continue
         expected_direction = "LONG" if impact == "RIALZISTA" else "SHORT"
         for state in states:
