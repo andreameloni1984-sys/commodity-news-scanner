@@ -13,7 +13,28 @@ def _pct(numerator, denominator):
     return round(numerator / denominator * 100.0, 2) if denominator else None
 
 
-def walk_forward_evaluate(candles, horizon=4, start=40, min_move_pct=0.05, step=None):
+def walk_forward_evaluate(candles, horizon=4, start=40, min_move_pct=0.05, step=None,
+                         round_trip_cost_bps=0.0):
+    """Evaluate causal forecasts with optional hypothetical round-trip costs.
+
+    Costs are a scenario input in basis points, not a live execution estimate.
+    Directional forecasts pay the configured cost once per completed horizon;
+    NONE forecasts are treated as no position and pay no cost.
+    """
+    try:
+        round_trip_cost_bps = float(round_trip_cost_bps)
+        min_move_pct = float(min_move_pct)
+    except (TypeError, ValueError):
+        return {"status": "INVALID_PARAMETERS", "observations": 0,
+                "accuracy_pct": None, "coverage_pct": None,
+                "mean_signed_return_pct": None, "mean_net_signed_return_pct": None,
+                "benchmark_accuracy_pct": None}
+    if (not math.isfinite(round_trip_cost_bps) or round_trip_cost_bps < 0
+            or not math.isfinite(min_move_pct) or min_move_pct < 0):
+        return {"status": "INVALID_PARAMETERS", "observations": 0,
+                "accuracy_pct": None, "coverage_pct": None,
+                "mean_signed_return_pct": None, "mean_net_signed_return_pct": None,
+                "benchmark_accuracy_pct": None}
     rows = list(candles or [])
     horizon = max(1, int(horizon))
     start = max(35, int(start))
@@ -45,9 +66,11 @@ def walk_forward_evaluate(candles, horizon=4, start=40, min_move_pct=0.05, step=
         direction = result.get("direction", "NONE")
         correct = (direction == "NONE") if actual == "FLAT" else (direction == actual)
         signed_return = realized_pct if direction == "LONG" else -realized_pct if direction == "SHORT" else 0.0
+        cost_pct = round_trip_cost_bps / 100.0 if direction in {"LONG", "SHORT"} else 0.0
         predictions.append({
             "direction": direction, "actual": actual, "correct": correct,
-            "signed_return_pct": signed_return, "realized_return_pct": realized_pct,
+            "signed_return_pct": signed_return, "net_signed_return_pct": signed_return - cost_pct,
+            "realized_return_pct": realized_pct,
             "origin_index": origin, "regime": result.get("regime", "UNKNOWN"),
         })
     if not predictions:
@@ -76,6 +99,7 @@ def walk_forward_evaluate(candles, horizon=4, start=40, min_move_pct=0.05, step=
             "missed_move_rate_pct": _pct(sum(p["direction"] == "NONE" for p in regime_moves), len(regime_moves)),
             "false_signal_rate_pct": _pct(sum(p["direction"] != p["actual"] for p in regime_directional), len(regime_directional)),
             "mean_signed_return_pct": round(sum(p["signed_return_pct"] for p in sample) / len(sample), 5),
+            "mean_net_signed_return_pct": round(sum(p["net_signed_return_pct"] for p in sample) / len(sample), 5),
         }
     return {
         "status": "CALCULATED", "observations": len(predictions),
@@ -90,9 +114,11 @@ def walk_forward_evaluate(candles, horizon=4, start=40, min_move_pct=0.05, step=
         "false_signal_count": len(false_signals),
         "false_signal_rate_pct": _pct(len(false_signals), len(directional)),
         "mean_signed_return_pct": round(sum(p["signed_return_pct"] for p in predictions) / len(predictions), 5),
+        "mean_net_signed_return_pct": round(sum(p["net_signed_return_pct"] for p in predictions) / len(predictions), 5),
+        "round_trip_cost_bps": round_trip_cost_bps,
         "benchmark_accuracy_pct": round(baseline, 2),
         "regime_breakdown": regime_stats,
         "horizon_bars": horizon, "step_bars": step, "start_index": start,
         "min_move_pct": float(min_move_pct),
-        "note": "Gross diagnostic only; excludes fees, spread, slippage and intrabar path. Default step equals horizon to reduce overlapping outcome windows; this is not proof of live profitability.",
+        "note": "Net metric deducts the configured hypothetical round-trip cost from directional forecasts; cost is not a live estimate and may not capture fees, spread, slippage, financing, gaps or intrabar path. Default step equals horizon to reduce overlapping outcome windows; this is not proof of live profitability.",
     }
