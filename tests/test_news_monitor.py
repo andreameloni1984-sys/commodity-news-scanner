@@ -57,6 +57,43 @@ def test_alert_requires_existing_live_confirmed_aligned_setup():
     assert matches[0]["asset"] == "WTI"
     assert matches[0]["direction"] == "LONG"
     assert matches[0]["move_pct"] >= 0.05
+    assert matches[0]["rr_tp1"] == (83.0 - 80.1) / (80.1 - 78.5)
+    assert matches[0]["risk_pct"] > 0
+    assert matches[0]["tp1_pct"] > 0
+
+    from telegram.news_monitor import _format_news_alert
+    message = _format_news_alert(
+        {"title": "OPEC announces production cut", "source": "Test RSS",
+         "published_at": "2026-10-18T13:59:00+00:00",
+         "first_seen_at": "2026-10-18T14:00:00+00:00",
+         "catalyst_timing": "FRESH_CATALYST", "catalyst_age_minutes": 6.0,
+         "url": "https://example.test/opec-cut"},
+        matches[0],
+    )
+    assert "Stop Loss: 78.5" in message
+    assert "Take Profit 1: 83" in message
+    assert "Rapporto R/R su TP1:" in message
+    assert "PAPER/DEMO — NESSUN ORDINE" in message
+    assert "slippage o gap" in message
+
+
+def test_telegram_alert_rejects_invalid_stop_or_target_geometry():
+    from telegram.news_monitor import _confirmed_setups
+
+    event = {"title": "OPEC announces production cut", "baseline_prices": {"WTI": 80.0}}
+    base = dict(
+        commodity="Petrolio WTI", symbol="WTI/USD", setup_direction="LONG",
+        final_decision="PAPER_SIGNAL", trigger_confirmed=True, live=True,
+        price=80.1, entry=80.1, stop=81.0, tp1=83.0, data_source="TEST_FEED",
+    )
+    assert _confirmed_setups(event, [SimpleNamespace(**base)]) == []
+
+    base["stop"] = float("nan")
+    assert _confirmed_setups(event, [SimpleNamespace(**base)]) == []
+
+    base["stop"] = 78.5
+    base["tp1"] = 79.0
+    assert _confirmed_setups(event, [SimpleNamespace(**base)]) == []
 
 
 
