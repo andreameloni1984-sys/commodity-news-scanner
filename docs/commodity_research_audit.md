@@ -52,3 +52,12 @@ failure, not a zero move. This utility deliberately does not download data.
 A heuristic direction is not a calibrated probability. Thresholds and horizons
 are research choices. No claim of predictive improvement is made without
 instrument-specific walk-forward and holdout results. PAPER ONLY.
+
+
+## Overlap control
+The audit accepts `step` as the number of bars between forecast origins.
+The default `step=1` preserves dense diagnostics but creates overlapping
+outcome windows when `horizon > 1`. Use `step=horizon` for a second,
+non-overlapping outcome-window view. The latter reduces duplicate counting
+from adjacent windows but also uses fewer observations; compare both views
+and do not treat either as independent evidence of profitability.
