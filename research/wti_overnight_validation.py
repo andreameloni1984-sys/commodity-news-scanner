@@ -96,6 +96,44 @@ def _summarize(rows, cost_bps):
     }
 
 
+def _directional_net_returns(rows, cost_bps):
+    values = []
+    for row in rows:
+        overnight = _valid_number(row.get("overnight_return_pct"))
+        forward = _valid_number(row.get("next_session_return_pct"))
+        if overnight is None or forward is None or overnight == 0:
+            continue
+        gross = forward if overnight > 0 else -forward
+        values.append(gross - cost_bps / 100.0)
+    return values
+
+
+def _event_split_summary(rows, event_key, cost_bps):
+    with_event, without_event, unknown = [], [], []
+    for row in rows:
+        flags = row.get("event_flags")
+        if not isinstance(flags, Mapping) or event_key not in flags:
+            unknown.append(row)
+        elif bool(flags.get(event_key)):
+            with_event.append(row)
+        else:
+            without_event.append(row)
+    def compact(group):
+        returns = _directional_net_returns(group, cost_bps)
+        return {
+            "sessions": len(group),
+            "directional_samples": len(returns),
+            "net_mean_pct": mean(returns) if returns else None,
+            "net_positive_rate_pct": 100 * sum(x > 0 for x in returns) / len(returns) if returns else None,
+        }
+    return {
+        "event_flagged": compact(with_event),
+        "not_event_flagged": compact(without_event),
+        "event_flag_unknown": compact(unknown),
+        "warning": "Only caller-supplied event_flags are used; this code does not infer event dates.",
+    }
+
+
 def chronological_validation_report(observations: Iterable[Mapping], *, round_trip_cost_bps=5.0):
     """Make fixed 60/20/20 chronological slices; no tuning or fitting is performed."""
     cost = _valid_number(round_trip_cost_bps)
@@ -112,6 +150,20 @@ def chronological_validation_report(observations: Iterable[Mapping], *, round_tr
         "held_out_oos_20pct": rows[validation_end:],
     }
     enough_for_three_slices = all(len(part) > 0 for part in slices.values())
+    oos_rows = slices["held_out_oos_20pct"]
+    cost_sensitivity = {}
+    for scenario_bps in (0, 3, 5, 8, 10, 15):
+        returns = _directional_net_returns(oos_rows, scenario_bps)
+        cost_sensitivity[str(scenario_bps)] = {
+            "samples": len(returns),
+            "net_mean_pct": mean(returns) if returns else None,
+            "net_median_pct": median(returns) if returns else None,
+            "net_positive_rate_pct": 100 * sum(x > 0 for x in returns) / len(returns) if returns else None,
+        }
+    event_splits = {
+        "EIA": _event_split_summary(rows, "EIA", cost),
+        "OPEC": _event_split_summary(rows, "OPEC", cost),
+    }
     return {
         "paper_only": True,
         "status": "READY_FOR_MANUAL_REVIEW" if enough_for_three_slices else "INSUFFICIENT_SESSIONS_FOR_ALL_SLICES",
@@ -123,6 +175,8 @@ def chronological_validation_report(observations: Iterable[Mapping], *, round_tr
         "round_trip_cost_bps_scenario": cost,
         "split_method": "chronological 60% development / 20% validation / final 20% held-out OOS; no shuffling",
         "slices": {name: _summarize(part, cost) for name, part in slices.items()},
+        "held_out_oos_cost_sensitivity_bps": cost_sensitivity,
+        "event_day_diagnostics": event_splits,
         "limitations": [
             "No thresholds are fitted and no statistical significance test is performed.",
             "Cost is hypothetical; no spread, fill, stop, sizing, roll, or market-impact simulation.",
