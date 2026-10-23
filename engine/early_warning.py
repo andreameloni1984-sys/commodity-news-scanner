@@ -138,9 +138,15 @@ def compute_market_early_warning(
     def base_price(seconds: float) -> float | None:
         target = times[-1] - seconds
         idx = min(range(len(times)), key=lambda i: abs(times[i] - target))
+        # A historical session/data gap anywhere inside the requested horizon
+        # makes the cumulative return incomparable to a continuous interval.
+        # Do not award 4h context merely because the nearest target quote fits
+        # the tolerance; require uninterrupted timestamp coverage to the latest.
+        for i, interval in enumerate(intervals, start=1):
+            if interval > max_gap_seconds and times[i] > target and times[i - 1] < times[-1]:
+                return None
         # A nearby quote is not enough if its actual lookback represents a
-        # materially different horizon (e.g. 3h of data mislabeled as 4h
-        # because the 4h target falls inside a historical gap).
+        # materially different horizon (e.g. 3h of data mislabeled as 4h).
         actual_lookback = times[-1] - times[idx]
         if actual_lookback <= 0 or abs(actual_lookback - seconds) > seconds * 0.20:
             return None
