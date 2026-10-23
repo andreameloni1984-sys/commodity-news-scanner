@@ -916,8 +916,19 @@ def poll_news_once(
                             "aligned_setup_count": len(matches),
                         })
                         break
-                delivered = bool(event.get("alert_sent"))
-                for setup in ([] if delivered else matches):
+                # Deduplicate delivery per catalyst and asset, not per catalyst
+                # globally: a multi-commodity event may validly confirm WTI and
+                # Brent, while a later recheck must not resend either asset.
+                legacy_event_was_sent = bool(event.get("alert_sent")) and "alerted_assets" not in event
+                alerted_assets = {
+                    _normalise_title(str(asset))
+                    for asset in event.get("alerted_assets", [])
+                    if str(asset).strip()
+                }
+                for setup in matches:
+                    asset_key = _normalise_title(str(setup.get("asset") or ""))
+                    if not asset_key or legacy_event_was_sent or asset_key in alerted_assets:
+                        continue
                     # Refresh catalyst age at delivery time; the detection journal
                     # keeps the original age while the alert shows the current one.
                     timing = classify_catalyst_timing({"published": event.get("published_at")}, now=now)
@@ -927,11 +938,12 @@ def poll_news_once(
                     event["catalyst_timing_reason"] = timing["reason"]
                     if send_telegram(_format_news_alert(event, setup)):
                         sent += 1
-                        delivered = True
+                        alerted_assets.add(asset_key)
+                        event["alerted_assets"] = sorted(alerted_assets)
                         event["alert_sent"] = True
                         event["alert_sent_at"] = now.isoformat()
-                        # Measure the full four-hour reaction window from delivery,
-                        # not from the original headline detection.
+                        # Measure the four-hour reaction window from successful
+                        # delivery; never mark an asset delivered when send fails.
                         event["expires_at"] = (now + timedelta(seconds=PENDING_TTL_SECONDS)).isoformat()
                         _journal({
                             "kind": "NEWS_ALERT_SENT",
@@ -952,9 +964,11 @@ def poll_news_once(
                             "catalyst_age_minutes": event.get("catalyst_age_minutes"),
                             "catalyst_future_skew_minutes": event.get("catalyst_future_skew_minutes"),
                         })
-                        break
-                # Keep sent alerts under observation for four hours, without resending them.
-                if event.get("alert_sent") or not delivered:
+                # Keep every event with at least one delivered asset under
+                # observation; unresolved assets remain eligible on later rechecks.
+                if event.get("alert_sent") or not matches:
+                    still_pending.append(event)
+                elif matches:
                     still_pending.append(event)
             pending = still_pending
         except Exception as exc:
