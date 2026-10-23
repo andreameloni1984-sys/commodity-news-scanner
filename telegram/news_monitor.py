@@ -83,6 +83,7 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         if sent_at and sent_at >= cutoff and isfinite(price) and price > 0 and direction in {"LONG", "SHORT"}:
             alerts.append((row, sent_at, price, direction))
     scored, pending, unscored_expired = [], 0, 0
+    ambiguous_reaction_groups = 0
     for alert, sent_at, alert_price, direction in alerts:
         reaction_observations = []
         for row in rows:
@@ -100,9 +101,25 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
                 continue
             if isfinite(price) and price > 0:
                 reaction_observations.append((observed_at, price))
+        # Multiple journal rows can share a timestamp after retries or
+        # duplicated polling. Identical repeats are harmless; conflicting
+        # prices at the same instant are ambiguous and must not decide TP/SL
+        # or directional outcome based on journal insertion order.
+        by_timestamp: dict[datetime, set[float]] = {}
+        for observed_at, observed_price in reaction_observations:
+            by_timestamp.setdefault(observed_at, set()).add(observed_price)
+        clean_observations = []
+        for observed_at, prices_at_time in by_timestamp.items():
+            if len(prices_at_time) != 1:
+                ambiguous_reaction_groups += 1
+                continue
+            clean_observations.append((observed_at, next(iter(prices_at_time))))
+        reaction_observations = sorted(clean_observations, key=lambda item: item[0])
+
         # Directional accuracy uses a minimum 15-minute horizon to avoid
         # treating immediate noise as a forecast result. TP/SL, however,
-        # must include every post-delivery observation, including the first 15m.
+        # must include every unambiguous post-delivery observation, including
+        # the first 15m.
         observations = [item for item in reaction_observations if item[0] >= sent_at + timedelta(minutes=15)]
         if not observations:
             if now <= sent_at + timedelta(hours=4):
@@ -141,6 +158,7 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
     open_count = sum(x["outcome"] == "OPEN_AT_LAST_CHECK" for x in scored)
     return {"window_days": 7, "alerts": len(alerts), "scored": len(scored), "pending": pending,
             "unscored_expired": unscored_expired,
+            "ambiguous_reaction_groups": ambiguous_reaction_groups,
             "coverage_pct": round(len(scored)/len(alerts)*100, 2) if alerts else None,
             "correct": correct, "incorrect": len(scored)-correct,
             "accuracy_pct": round(correct/len(scored)*100, 2) if scored else None,
@@ -179,6 +197,7 @@ def _maybe_send_daily_scorecard(state: dict[str, Any], send_telegram: Callable[[
     if report["scored"]:
         message = ("📊 GAGARIN — VERIFICA ALERT (ultimi 7 giorni)\n"
                    f"Valutati: {report['scored']}/{report['alerts']} | copertura: {report['coverage_pct']:.1f}% | in attesa: {report['pending']} | senza dati a finestra chiusa: {report['unscored_expired']}\n"
+                   f"Osservazioni ambigue escluse: {report['ambiguous_reaction_groups']}\n"
                    f"Direzione corretta: {report['correct']} | errata: {report['incorrect']}\n"
                    f"Accuratezza direzionale: {report['accuracy_pct']:.1f}%\n"
                    f"Rendimento direzionale medio: {report['mean_directional_return_pct']:+.3f}%\n"
