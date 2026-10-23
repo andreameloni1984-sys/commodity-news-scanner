@@ -42,7 +42,7 @@ def test_catalyst_timing_requires_real_publication_timestamp():
 
 def test_market_early_warning_rejects_stale_latest_timestamp():
     now = 1_800_000_000.0
-    timestamps = [now - 3600 + i * 60 for i in range(91)]
+    timestamps = [now - 9000 + i * 60 for i in range(91)]
     closes = [100.0 + i * 0.02 for i in range(91)]
     result = compute_market_early_warning(closes, timestamps, atr=0.5, now=now)
     assert result["stage"] == "INSUFFICIENT_DATA"
