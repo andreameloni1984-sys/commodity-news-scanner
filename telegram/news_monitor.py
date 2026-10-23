@@ -16,6 +16,7 @@ import threading
 import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
+from math import isfinite
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlencode
@@ -72,10 +73,10 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         sent_at = _parse_datetime(row.get("sent_at") or row.get("recorded_at"))
         try:
             price = float(row.get("price"))
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             continue
         direction = str(row.get("direction") or "").upper()
-        if sent_at and sent_at >= cutoff and price > 0 and direction in {"LONG", "SHORT"}:
+        if sent_at and sent_at >= cutoff and isfinite(price) and price > 0 and direction in {"LONG", "SHORT"}:
             alerts.append((row, sent_at, price, direction))
     scored, pending, unscored_expired = [], 0, 0
     for alert, sent_at, alert_price, direction in alerts:
@@ -88,9 +89,9 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
                 continue
             try:
                 price = float(row.get("current_price"))
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, OverflowError):
                 continue
-            if price > 0:
+            if isfinite(price) and price > 0:
                 reaction_observations.append((observed_at, price))
         # Directional accuracy uses a minimum 15-minute horizon to avoid
         # treating immediate noise as a forecast result. TP/SL, however,
@@ -111,7 +112,9 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         try:
             stop = float(alert.get("stop"))
             tp1 = float(alert.get("tp1"))
-        except (TypeError, ValueError):
+            if not (isfinite(stop) and stop > 0 and isfinite(tp1) and tp1 > 0):
+                stop, tp1 = None, None
+        except (TypeError, ValueError, OverflowError):
             stop, tp1 = None, None
         outcome = "OPEN_AT_LAST_CHECK"
         if stop is not None and tp1 is not None:
