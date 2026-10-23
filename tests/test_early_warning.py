@@ -250,6 +250,31 @@ def test_lead_time_backtest_measures_favorable_move_without_authorizing_trade():
                 assert direction_summary["favorable_first_pct_resolved"] is None
         assert directional_total == summary["sample_count"]
 
+    # Full-sample outcomes may reuse the same future candles when opposite
+    # directions warn close together. The secondary diagnostic must not.
+    non_overlapping = [
+        row for row in result["samples"]
+        if row["non_overlapping_outcome_sample"]
+    ]
+    non_overlapping_indices = [row["warning_bar_index"] for row in non_overlapping]
+    assert result["non_overlapping_sample_count"] == len(non_overlapping)
+    assert result["overlapping_future_window_samples_excluded"] == (
+        result["sample_count"] - len(non_overlapping)
+    )
+    assert all(
+        right - left >= 12
+        for left, right in zip(non_overlapping_indices, non_overlapping_indices[1:])
+    )
+    non_overlapping_summary = result["non_overlapping_outcomes"]
+    assert non_overlapping_summary["sample_count"] == len(non_overlapping)
+    assert (
+        non_overlapping_summary["favorable_first"]
+        + non_overlapping_summary["adverse_first"]
+        + non_overlapping_summary["same_bar_ambiguous"]
+        + non_overlapping_summary["neither_reached_0_5atr"]
+        == len(non_overlapping)
+    )
+
     for sample in result["samples"]:
         prior_return = sample["pre_warning_30m_return_pct"]
         assert prior_return is not None and prior_return > -100.0
@@ -659,3 +684,22 @@ def test_lead_time_backtest_rejects_boolean_ohlc_and_timestamps():
         assert result["sample_count"] == 0
         assert "OHLC o timestamp non valido" in result["reason"]
         assert result["execution_authorized"] is False
+
+
+
+def test_non_overlapping_outcome_selection_excludes_cross_direction_overlap():
+    from engine.early_warning import _select_non_overlapping_outcome_samples
+
+    # The warning at bar 25 has a future window overlapping bar 20's window;
+    # the warning at bar 32 is the first allowed next window, irrespective of
+    # direction, and bar 44 is also non-overlapping with bar 32.
+    samples = [
+        {"warning_bar_index": 20, "direction": "LONG"},
+        {"warning_bar_index": 25, "direction": "SHORT"},
+        {"warning_bar_index": 32, "direction": "SHORT"},
+        {"warning_bar_index": 44, "direction": "LONG"},
+    ]
+
+    selected = _select_non_overlapping_outcome_samples(samples, horizon_bars=12)
+
+    assert [row["warning_bar_index"] for row in selected] == [20, 32, 44]
