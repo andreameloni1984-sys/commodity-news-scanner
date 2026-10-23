@@ -86,6 +86,15 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
         early_stage = str(early.get("stage", metadata.get("early_warning_stage", "UNKNOWN")) or "UNKNOWN").upper()
         regime = str(getattr(state, "regime", "") or "").upper()
         structure = str(getattr(state, "structure", "") or "").upper()
+        # Conflicting 4h and 24h returns often indicate a pullback or a possible
+        # transition. Do not treat the larger 24h move as unqualified agreement:
+        # apply a modest transparent ranking penalty, without forcing a side.
+        move_4h = _num(getattr(state, "move_4h_pct", float("nan")), float("nan"))
+        move_24h = _num(getattr(state, "move_24h_pct", float("nan")), float("nan"))
+        if isfinite(move_4h) and isfinite(move_24h) and move_4h != 0 and move_24h != 0:
+            momentum_alignment = "CONFLICT" if move_4h * move_24h < 0 else "ALIGNED"
+        else:
+            momentum_alignment = "INCOMPLETE"
         if (direction == "LONG" and regime == "TREND_UP") or (direction == "SHORT" and regime == "TREND_DOWN"):
             score += 15; reasons.append("regime coerente")
         if (direction == "LONG" and "BULL" in structure) or (direction == "SHORT" and "BEAR" in structure):
@@ -113,6 +122,9 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
             reasons.append("early-warning in conflitto")
         score += min(10, opportunity * 0.10)
         score += min(8, continuation * 0.08)
+        if momentum_alignment == "CONFLICT":
+            score -= 6.0
+            reasons.append("momentum 4h/24h in conflitto: possibile ritracciamento o inversione")
         score += min(5, quality * 0.05)
         score += min(5, confidence * 0.05)
         # Reward expected range only mildly: volatility is opportunity and risk.
@@ -154,6 +166,9 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
             "early_warning_direction": early_direction,
             "early_warning_score": round(early_score, 1),
             "early_warning_stage": early_stage,
+            "momentum_alignment": momentum_alignment,
+            "move_4h_pct": move_4h if isfinite(move_4h) else None,
+            "move_24h_pct": move_24h if isfinite(move_24h) else None,
             "live": live,
             "trigger_confirmed": bool(getattr(state, "trigger_confirmed", False)),
             "final_decision": str(getattr(state, "final_decision", "UNKNOWN")),
