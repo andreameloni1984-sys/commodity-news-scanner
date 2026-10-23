@@ -89,3 +89,20 @@ def test_market_early_warning_rejects_mismatched_price_timestamp_lengths():
         assert result["score"] == 0
         assert "non coincide" in result["reasons"][0]
         assert result["execution_authorized"] is False
+
+
+def test_reversal_is_not_mislabeled_as_directional_acceleration():
+    now = 1_800_000_000.0
+    timestamps = [now - (90 - i) * 60 for i in range(91)]
+    closes = []
+    for i in range(91):
+        if i <= 30:
+            closes.append(103.0)
+        elif i <= 60:
+            closes.append(103.0 - (3.0 * (i - 30) / 30.0))
+        else:
+            closes.append(100.0 + (1.0 * (i - 60) / 30.0))
+    result = compute_market_early_warning(closes, timestamps, atr=0.5, now=now)
+    assert result["direction"] == "LONG"
+    assert "accelerazione recente coerente con la direzione" not in result["reasons"]
+    assert result["execution_authorized"] is False
