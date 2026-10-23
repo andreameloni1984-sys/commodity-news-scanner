@@ -193,3 +193,22 @@ def test_live_short_stop_is_checked_with_insufficient_candles():
     assert result["stop_invalidated"] is True
     assert result["exit_action"] == "EXIT_WARNING"
     assert result["reference_price"] == 103
+
+
+def test_market_structure_flags_close_below_confirmed_higher_low():
+    from engine.pattern_exit import _market_structure
+
+    highs = [2, 3, 5, 4, 3, 6, 4, 3, 4, 3, 2]
+    lows = [3, 2, 1, 2, 3, 2, 1.5, 2, 3, 2, 1]
+    closes = [2.5, 2.5, 2, 3, 3, 4, 2, 2.5, 3, 2, 1.4]
+    result = _market_structure(highs, lows, closes, "LONG")
+    assert result["structure_break"] is True
+    assert "CAMBIO DI ROTTA" in result["structure_status"]
+
+
+def test_market_structure_needs_confirmed_swings():
+    from engine.pattern_exit import _market_structure
+
+    result = _market_structure([1, 2, 3, 4, 5], [5, 4, 3, 2, 1], [3, 3, 3, 3, 3], "LONG")
+    assert result["structure_status"] == "DATI INSUFFICIENTI"
+    assert result["structure_break"] is False
