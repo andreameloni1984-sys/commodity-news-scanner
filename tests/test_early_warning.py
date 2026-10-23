@@ -163,6 +163,18 @@ def test_lead_time_backtest_measures_favorable_move_without_authorizing_trade():
     assert result["adverse_first_pct"] == round(
         100.0 * result["adverse_first"] / result["sample_count"], 1
     )
+    resolved = result["favorable_first"] + result["adverse_first"]
+    assert result["resolved_first_count"] == resolved
+    assert resolved > 0
+    assert result["favorable_first_pct_resolved"] == round(
+        100.0 * result["favorable_first"] / resolved, 1
+    )
+    assert result["adverse_first_pct_resolved"] == round(
+        100.0 * result["adverse_first"] / resolved, 1
+    )
+    assert round(
+        result["favorable_first_pct_resolved"] + result["adverse_first_pct_resolved"], 1
+    ) == 100.0
     adverse_times = [
         sample["first_adverse_seconds"]
         for sample in result["samples"]
