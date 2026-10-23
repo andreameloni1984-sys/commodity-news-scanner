@@ -371,6 +371,26 @@ def backtest_market_early_warning_lead_time(
         return sum(ranges[-period:]) / period if len(ranges) >= period else None
 
     limit = int(raw_max_bars)
+    # Lead-time metrics are expressed in elapsed seconds but selected by bar
+    # count. Reject large gaps in the evaluated window so "12 future bars"
+    # does not silently mean very different durations across samples.
+    cadence_start = max(0, len(rows) - limit - horizon)
+    cadence_times = [row[0] for row in rows[cadence_start:]]
+    cadence_intervals = [
+        cadence_times[i] - cadence_times[i - 1]
+        for i in range(1, len(cadence_times))
+    ]
+    if cadence_intervals:
+        typical_step = median(cadence_intervals)
+        max_gap_seconds = max(3.0 * typical_step, 300.0)
+        if any(interval > max_gap_seconds for interval in cadence_intervals):
+            return {
+                "status": "INSUFFICIENT_DATA",
+                "sample_count": 0,
+                "reason": "gap temporale nella finestra valutata; anticipo per numero di barre non confrontabile",
+                "execution_authorized": False,
+                "method": "ROLLING_WALK_FORWARD_NOT_CALIBRATED",
+            }
     first = max(15, len(rows) - limit)
     last = len(rows) - horizon
     samples = []
@@ -423,7 +443,9 @@ def backtest_market_early_warning_lead_time(
             "direction": direction,
             "score": _finite(warning.get("score")) or 0.0,
             "lead_seconds": first_fav,
+            "warning_to_favorable_seconds": first_fav,
             "first_adverse_seconds": first_adv,
+            "warning_to_adverse_seconds": first_adv,
             "mfe_atr": mfe / atr_value,
             "mae_atr": mae / atr_value,
             "returns_pct": returns,
@@ -481,6 +503,10 @@ def backtest_market_early_warning_lead_time(
         "adverse_first_pct_resolved": round(100.0 * adverse_first / resolved_first, 1) if resolved_first else None,
         "median_seconds_to_favorable_0_5atr": median(lead_values) if lead_values else None,
         "median_seconds_to_adverse_0_5atr": median(adverse_values) if adverse_values else None,
+        # Explicit aliases make clear these are elapsed times from warning,
+        # not a claim that the warning preceded the start of the price move.
+        "median_warning_to_favorable_seconds": median(lead_values) if lead_values else None,
+        "median_warning_to_adverse_seconds": median(adverse_values) if adverse_values else None,
         "median_direction_adjusted_return_pct": med_returns,
         "samples": samples,
         "execution_authorized": False,
