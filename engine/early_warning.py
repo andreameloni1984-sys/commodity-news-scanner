@@ -441,6 +441,18 @@ def backtest_market_early_warning_lead_time(
                 returns[str(bars)] = round(
                     sign * (future[bars - 1][3] / entry - 1.0) * 100.0, 5
                 )
+        # This is a deliberately conservative proxy for an already-underway
+        # move: how much the price has already travelled over the preceding
+        # 30 minutes at warning time, expressed in ATR. It does not claim to
+        # identify the true start of a move; it helps expose late warnings.
+        prior_30m_return_pct = warning.get("returns_pct", {}).get("30m")
+        pre_warning_move_atr = (
+            abs(entry * prior_30m_return_pct / 100.0) / atr_value
+            if _finite(prior_30m_return_pct) is not None else None
+        )
+        move_already_underway = (
+            pre_warning_move_atr is not None and pre_warning_move_atr >= 0.5
+        )
         samples.append({
             # Keep the decision-time inputs with each outcome so a reviewer can
             # audit the warning without confusing future outcome data for signal inputs.
@@ -449,6 +461,8 @@ def backtest_market_early_warning_lead_time(
             "atr_at_warning": atr_value,
             "direction": direction,
             "score": _finite(warning.get("score")) or 0.0,
+            "pre_warning_30m_move_atr": round(pre_warning_move_atr, 4) if pre_warning_move_atr is not None else None,
+            "move_already_underway": move_already_underway,
             "lead_seconds": first_fav,
             "warning_to_favorable_seconds": first_fav,
             "first_adverse_seconds": first_adv,
@@ -493,9 +507,12 @@ def backtest_market_early_warning_lead_time(
         values = [row["returns_pct"][horizon_key] for row in samples if horizon_key in row["returns_pct"]]
         med_returns[horizon_key] = round(median(values), 5) if values else None
     resolved_first = favorable_first + adverse_first
+    warnings_after_prior_move = sum(1 for row in samples if row["move_already_underway"])
     return {
         "status": "OK",
         "sample_count": len(samples),
+        "warnings_after_prior_0_5atr_30m_move": warnings_after_prior_move,
+        "warnings_after_prior_0_5atr_30m_move_pct": round(100.0 * warnings_after_prior_move / len(samples), 1),
         "favorable_first": favorable_first,
         "adverse_first": adverse_first,
         "resolved_first_count": resolved_first,
