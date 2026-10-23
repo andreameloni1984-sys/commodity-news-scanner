@@ -109,3 +109,33 @@ class PredictionRankerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_early_warning_watchlist_can_surface_before_setup_but_never_authorizes():
+    from engine.prediction_ranker import rank_early_warnings
+    early = state(
+        "EARLY_WTI", setup_direction="NONE", structure_direction="NONE",
+        mtf_direction="NONE", pre_move_direction="NONE", opportunity_direction="NONE",
+        metadata={"data_status": "OK", "early_warning": {
+            "direction": "LONG", "score": 55, "stage": "EARLY_WARNING",
+            "latest_timestamp_age_seconds": 60, "reasons": ["accelerazione"],
+            "execution_authorized": False,
+        }},
+    )
+    ranked = rank_early_warnings([early])
+    assert len(ranked) == 1
+    assert ranked[0]["direction"] == "LONG"
+    assert ranked[0]["execution_authorized"] is False
+    assert ranked[0]["paper_only"] is True
+    assert rank_predictions([early]) == []
+
+
+def test_early_warning_watchlist_rejects_stale_and_non_live_data():
+    from engine.prediction_ranker import rank_early_warnings
+    warning = {"direction": "SHORT", "score": 60, "stage": "EARLY_WARNING",
+               "latest_timestamp_age_seconds": 60, "reasons": []}
+    stale = state("STALE", data_age_seconds=3601,
+                  metadata={"data_status": "OK", "early_warning": warning})
+    non_live = state("NONLIVE", live=False,
+                     metadata={"data_status": "OK", "early_warning": warning})
+    assert rank_early_warnings([stale, non_live]) == []
