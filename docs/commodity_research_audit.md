@@ -19,10 +19,17 @@ Run `load_ohlc_csv(path)`, then `audit_missed_moves(candles, horizon=4,
 threshold_pct=...)`. Thresholds must be calibrated per asset/timeframe using
 training data only. Compare parameters on a later untouched holdout period.
 The audit reports high/low excursions, missed directions, false directional
-signals and directional hit rate. It also groups forecast windows by the
-ensemble's contemporaneous regime (by_regime), including counts of missed
-moves and false signals. This helps identify which contexts deserve later
-holdout analysis; it does not prove that a regime predicts future moves.
+signals and directional hit rate. The ensemble also emits a causal
+pre-breakout watch score based on recent range compression, proximity to prior
+closing-price extremes, and the sign of momentum. It is a heuristic watch
+signal, not a calibrated probability or confirmed breakout.
+
+The audit separately counts important up/down moves missed by both the main
+directional forecast and the pre-breakout watch (missed_up_by_any_signal,
+missed_down_by_any_signal), plus events noticed only by the watch. It also
+groups forecast windows by the ensemble's contemporaneous regime (by_regime).
+These diagnostics help prioritize later holdout analysis; they do not prove
+that a regime or signal predicts future moves.
 Horizons overlap, so windows are not independent observations; raw percentages
 are not confidence estimates.
 
