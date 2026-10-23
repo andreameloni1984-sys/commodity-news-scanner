@@ -257,17 +257,35 @@ def backtest_market_early_warning_lead_time(
     horizon = int(raw_horizon)
     rows = []
     dedup = {}
-    for candle in candles or []:
+    for row_index, candle in enumerate(candles or []):
+        # A lead-time backtest must not silently bridge malformed bars: doing
+        # so changes the meaning of "N future bars" and can bias the measured
+        # outcome. Fail closed and let the caller repair the source dataset.
         if not isinstance(candle, dict):
-            continue
+            return {
+                "status": "INVALID_DATA", "sample_count": 0,
+                "reason": f"candela non valida alla posizione {row_index}: atteso un oggetto OHLC",
+                "execution_authorized": False,
+                "method": "ROLLING_WALK_FORWARD_NOT_CALIBRATED",
+            }
         stamp = _finite(candle.get("timestamp", candle.get("time")))
         high = _finite(candle.get("high", candle.get("h")))
         low = _finite(candle.get("low", candle.get("l")))
         close = _finite(candle.get("close", candle.get("c")))
         if stamp is None or stamp <= 0 or high is None or low is None or close is None:
-            continue
+            return {
+                "status": "INVALID_DATA", "sample_count": 0,
+                "reason": f"OHLC o timestamp non valido alla posizione {row_index}",
+                "execution_authorized": False,
+                "method": "ROLLING_WALK_FORWARD_NOT_CALIBRATED",
+            }
         if low <= 0 or high < low or close <= 0 or high < close or low > close:
-            continue
+            return {
+                "status": "INVALID_DATA", "sample_count": 0,
+                "reason": f"relazione OHLC non valida alla posizione {row_index}",
+                "execution_authorized": False,
+                "method": "ROLLING_WALK_FORWARD_NOT_CALIBRATED",
+            }
         candle_row = (stamp, high, low, close)
         previous = dedup.get(stamp)
         # Conflicting OHLC rows at one timestamp make lead-time/outcome
