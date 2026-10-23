@@ -211,3 +211,63 @@ def test_lead_time_backtest_rejects_invalid_parameters_without_raising():
         assert result["status"] == "INVALID_PARAMETERS"
         assert result["sample_count"] == 0
         assert result["execution_authorized"] is False
+
+def test_lead_time_backtest_warning_metadata_is_invariant_to_future_price_changes():
+    from engine.early_warning import backtest_market_early_warning_lead_time
+
+    start = 1_800_000_000.0 - 179 * 60
+    candles = []
+    price = 100.0
+    for i in range(180):
+        if i == 0:
+            price = 100.0
+        elif i < 90:
+            price += 0.002
+        elif i < 150:
+            price += 0.02
+        else:
+            price += 0.06
+        candles.append({
+            "timestamp": start + i * 60,
+            "high": price + 0.05,
+            "low": price - 0.05,
+            "close": price,
+        })
+
+    cutoff_index = 130
+    cutoff_timestamp = candles[cutoff_index]["timestamp"]
+    changed_future = [dict(candle) for candle in candles]
+    # Change only candles strictly after the cutoff. Warning decisions up to
+    # that time must not depend on these future outcomes.
+    for i in range(cutoff_index + 1, len(changed_future)):
+        for field in ("high", "low", "close"):
+            changed_future[i][field] -= 2.0
+
+    baseline = backtest_market_early_warning_lead_time(
+        candles, max_bars=96, horizon_bars=12
+    )
+    altered = backtest_market_early_warning_lead_time(
+        changed_future, max_bars=96, horizon_bars=12
+    )
+
+    assert baseline["status"] == altered["status"] == "OK"
+    baseline_prefix = {
+        row["warning_timestamp"]: row
+        for row in baseline["samples"]
+        if row["warning_timestamp"] <= cutoff_timestamp
+    }
+    altered_prefix = {
+        row["warning_timestamp"]: row
+        for row in altered["samples"]
+        if row["warning_timestamp"] <= cutoff_timestamp
+    }
+    assert baseline_prefix
+    assert baseline_prefix.keys() == altered_prefix.keys()
+    for timestamp, row in baseline_prefix.items():
+        other = altered_prefix[timestamp]
+        assert row["direction"] == other["direction"]
+        assert row["score"] == other["score"]
+        assert row["entry_price"] == other["entry_price"]
+        assert row["atr_at_warning"] == other["atr_at_warning"]
+    assert baseline["execution_authorized"] is False
+    assert altered["execution_authorized"] is False
