@@ -77,10 +77,6 @@ class PredictionRankerTests(unittest.TestCase):
         self.assertIn("MOVIMENTO ATTESO", message)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
     def test_early_warning_only_boosts_existing_agreeing_direction(self):
         base = state("BASE", pre_move_score=0, opportunity_score=0,
                      continuation_score=0, quality=0, confidence=0)
@@ -109,3 +105,7 @@ if __name__ == "__main__":
         self.assertEqual(row["direction"], "LONG")
         self.assertEqual(row["early_warning_direction"], "SHORT")
         self.assertIn("early-warning in conflitto", row["reasons"])
+
+
+if __name__ == "__main__":
+    unittest.main()
