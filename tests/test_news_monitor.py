@@ -353,3 +353,25 @@ def test_forbidden_news_source_is_cooled_down_for_six_hours(monkeypatch):
     assert delay == 6 * 60 * 60
     assert monitor._SOURCE_RETRY_AT[source] > 0
     assert not monitor._source_allowed(source)
+
+
+
+def test_alert_scorecard_rejects_non_finite_prices_and_levels():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 21, 18, 0, tzinfo=timezone.utc)
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "bad-alert-price", "asset": "WTI",
+         "direction": "LONG", "price": float("inf"), "sent_at": sent.isoformat()},
+        {"kind": "NEWS_ALERT_SENT", "event_id": "bad-reaction", "asset": "Oro",
+         "direction": "LONG", "price": 4000.0, "stop": float("nan"),
+         "tp1": 4100.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "bad-reaction", "asset": "Oro",
+         "current_price": float("inf"),
+         "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+    ]
+    report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
+    assert report["alerts"] == 1
+    assert report["scored"] == 0
+    assert report["pending"] == 1
