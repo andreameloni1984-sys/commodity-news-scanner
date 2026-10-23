@@ -473,3 +473,50 @@ def test_market_early_warning_does_not_treat_three_hours_as_four_hour_context():
     assert "contesto 4h allineato" not in result["reasons"]
     assert result["execution_authorized"] is False
 
+def test_market_early_warning_rejects_boolean_prices_and_timestamps():
+    now = 1_800_000_000.0
+    timestamps = [now - (19 - i) * 60 for i in range(20)]
+    closes = [100.0 + i * 0.02 for i in range(20)]
+
+    bad_prices = list(closes)
+    bad_prices[8] = True
+    bad_timestamps = list(timestamps)
+    bad_timestamps[8] = True
+
+    for prices, stamps in ((bad_prices, timestamps), (closes, bad_timestamps)):
+        result = compute_market_early_warning(prices, stamps, atr=0.5, now=now)
+        assert result["stage"] == "INVALID_DATA"
+        assert result["direction"] == "NONE"
+        assert result["score"] == 0
+        assert "non valido" in result["reasons"][0]
+        assert result["execution_authorized"] is False
+
+
+def test_lead_time_backtest_rejects_boolean_ohlc_and_timestamps():
+    from engine.early_warning import backtest_market_early_warning_lead_time
+
+    start = 1_800_000_000.0 - 39 * 60
+    candles = []
+    for i in range(40):
+        close = 100.0 + i * 0.01
+        candles.append({
+            "timestamp": start + i * 60,
+            "high": close + 0.05,
+            "low": close - 0.05,
+            "close": close,
+        })
+
+    malformed = []
+    bad_high = [dict(row) for row in candles]
+    bad_high[10]["high"] = True
+    malformed.append(bad_high)
+    bad_timestamp = [dict(row) for row in candles]
+    bad_timestamp[10]["timestamp"] = True
+    malformed.append(bad_timestamp)
+
+    for rows in malformed:
+        result = backtest_market_early_warning_lead_time(rows)
+        assert result["status"] == "INVALID_DATA"
+        assert result["sample_count"] == 0
+        assert "OHLC o timestamp non valido" in result["reason"]
+        assert result["execution_authorized"] is False
