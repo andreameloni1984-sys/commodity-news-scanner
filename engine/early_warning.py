@@ -340,6 +340,11 @@ def backtest_market_early_warning_lead_time(
                     sign * (future[bars - 1][3] / entry - 1.0) * 100.0, 5
                 )
         samples.append({
+            # Keep the decision-time inputs with each outcome so a reviewer can
+            # audit the warning without confusing future outcome data for signal inputs.
+            "warning_timestamp": prefix[-1][0],
+            "entry_price": entry,
+            "atr_at_warning": atr_value,
             "direction": direction,
             "score": _finite(warning.get("score")) or 0.0,
             "lead_seconds": first_fav,
