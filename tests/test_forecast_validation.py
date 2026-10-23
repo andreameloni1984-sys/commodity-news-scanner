@@ -123,3 +123,25 @@ def test_walk_forward_rejects_invalid_cost_and_move_threshold():
         result = walk_forward_evaluate(rows, **kwargs)
         assert result["status"] == "INVALID_PARAMETERS"
         assert result["observations"] == 0
+
+
+def test_universe_validation_propagates_cost_scenario():
+    from engine.forecast_universe_validation import evaluate_universe
+
+    history = {
+        "BRENT": make_candles([70 + i * 0.15 for i in range(80)]),
+        "XAUUSD": make_candles([2000 - i * 0.2 for i in range(80)]),
+    }
+    gross = evaluate_universe(history, horizon=3, start=40, round_trip_cost_bps=0)
+    costly = evaluate_universe(history, horizon=3, start=40, round_trip_cost_bps=12)
+    assert costly["round_trip_cost_bps"] == 12
+    assert costly["observation_weighted_mean_net_signed_return_pct"] < (
+        costly["observation_weighted_mean_signed_return_pct"]
+    )
+    assert costly["observation_weighted_mean_net_signed_return_pct"] < (
+        gross["observation_weighted_mean_net_signed_return_pct"]
+    )
+    for metrics in costly["instruments"].values():
+        if metrics["status"] == "CALCULATED":
+            assert metrics["round_trip_cost_bps"] == 12
+            assert "mean_net_signed_return_pct" in metrics
