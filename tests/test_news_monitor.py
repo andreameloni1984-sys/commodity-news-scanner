@@ -387,3 +387,20 @@ def test_alert_scorecard_rejects_non_finite_prices_and_levels():
     assert report["alerts"] == 1
     assert report["scored"] == 0
     assert report["pending"] == 1
+
+
+def test_alert_scorecard_treats_naive_now_as_utc():
+    from datetime import datetime, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 21, 18, 0, tzinfo=timezone.utc)
+    rows = [{
+        "kind": "NEWS_ALERT_SENT", "event_id": "naive-now", "asset": "WTI",
+        "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat(),
+    }]
+    # Naive input is explicitly interpreted as 18:10 UTC, regardless of host TZ.
+    report = build_alert_scorecard(rows, now=datetime(2026, 10, 21, 18, 10))
+    assert report["alerts"] == 1
+    assert report["scored"] == 0
+    assert report["pending"] == 1
+    assert report["unscored_expired"] == 0
