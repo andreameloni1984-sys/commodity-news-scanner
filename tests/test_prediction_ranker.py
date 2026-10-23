@@ -150,5 +150,19 @@ def test_early_warning_watchlist_rejects_missing_timestamp_age():
     assert rank_early_warnings([missing_age]) == []
 
 
+
+
+def test_high_volatility_regime_gets_transparent_ranking_penalty():
+    calm = state("CALM", regime="RANGE", pre_move_score=0,
+                 opportunity_score=0, continuation_score=0, quality=0, confidence=0)
+    volatile = state("VOLATILE", regime="HIGH_VOLATILITY", pre_move_score=0,
+                     opportunity_score=0, continuation_score=0, quality=0, confidence=0)
+    calm_row = rank_predictions([calm])[0]
+    volatile_row = rank_predictions([volatile])[0]
+    assert calm_row["score"] - volatile_row["score"] == 8.0
+    assert "penalità regime alta volatilità" in volatile_row["reasons"]
+    assert volatile_row["direction"] == "LONG"
+    assert volatile_row["paper_only"] is True
+
 if __name__ == "__main__":
     unittest.main()
