@@ -42,6 +42,25 @@ def test_catalyst_timing_requires_real_publication_timestamp():
     assert all(x["execution_authorized"] is False for x in (missing, fresh, stale))
 
 
+def test_catalyst_timing_exposes_future_clock_skew_for_audit():
+    now = datetime(2026, 10, 23, 12, 0, tzinfo=timezone.utc)
+    tolerated = classify_catalyst_timing(
+        {"published": "2026-10-23T12:02:00Z"}, now
+    )
+    invalid = classify_catalyst_timing(
+        {"published": "2026-10-23T12:07:00Z"}, now
+    )
+
+    assert tolerated["timing"] == "FRESH_CATALYST"
+    assert tolerated["age_minutes"] == 0.0
+    assert tolerated["future_skew_minutes"] == 2.0
+    assert "futuro di 2.0 min" in tolerated["reason"]
+    assert invalid["timing"] == "FUTURE_TIMESTAMP_INVALID"
+    assert invalid["future_skew_minutes"] == 7.0
+    assert invalid["execution_authorized"] is False
+    assert tolerated["execution_authorized"] is False
+
+
 def test_catalyst_timing_treats_naive_now_as_utc_not_host_local_timezone():
     previous_tz = os.environ.get("TZ")
     try:
