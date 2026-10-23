@@ -878,6 +878,12 @@ def poll_news_once(
                         break
                 delivered = bool(event.get("alert_sent"))
                 for setup in ([] if delivered else matches):
+                    # Refresh catalyst age at delivery time; the detection journal
+                    # keeps the original age while the alert shows the current one.
+                    timing = classify_catalyst_timing({"published": event.get("published_at")}, now=now)
+                    event["catalyst_timing"] = timing["timing"]
+                    event["catalyst_age_minutes"] = timing["age_minutes"]
+                    event["catalyst_timing_reason"] = timing["reason"]
                     if send_telegram(_format_news_alert(event, setup)):
                         sent += 1
                         delivered = True
