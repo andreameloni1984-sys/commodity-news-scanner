@@ -42,10 +42,19 @@ def compute_market_early_warning(
             "execution_authorized": False,
         }
     rows = []
-    for close, stamp in zip(close_series, timestamp_series):
+    for index, (close, stamp) in enumerate(zip(close_series, timestamp_series)):
         p, t = _finite(close), _finite(stamp)
-        if p is not None and p > 0 and t is not None and t > 0:
-            rows.append((t, p))
+        # Do not silently drop malformed observations: that can make prices on
+        # either side of a missing row look adjacent and distort momentum.
+        if p is None or p <= 0 or t is None or t <= 0:
+            return {
+                "stage": "INVALID_DATA",
+                "direction": "NONE",
+                "score": 0,
+                "reasons": [f"prezzo o timestamp non valido alla riga {index}; warning rifiutato"],
+                "execution_authorized": False,
+            }
+        rows.append((t, p))
     rows.sort(key=lambda x: x[0])
     # Duplicate timestamps with conflicting prices make the candle order
     # ambiguous. Reject them instead of letting input order choose the signal.
