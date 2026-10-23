@@ -262,6 +262,7 @@ def classify_catalyst_timing(finding: dict[str, Any], now: datetime | None = Non
             parsed = None
     if parsed is None:
         return {"timing": "TIME_UNVERIFIED", "age_minutes": None,
+                "future_skew_minutes": None,
                 "reason": "timestamp di pubblicazione assente/non interpretabile",
                 "execution_authorized": False}
     # A naive caller-supplied datetime has no timezone information. Treat it
@@ -269,17 +270,28 @@ def classify_catalyst_timing(finding: dict[str, Any], now: datetime | None = Non
     # in the host's local timezone (which varies across laptops and CI runners).
     now_utc = now.replace(tzinfo=timezone.utc) if now.tzinfo is None else now.astimezone(timezone.utc)
     age = (now_utc - parsed).total_seconds() / 60.0
+    future_skew = round(max(0.0, -age), 1)
     if age < -5:
         timing = "FUTURE_TIMESTAMP_INVALID"
+        reason = "timestamp fonte nel futuro oltre la tolleranza di 5 minuti; verificare orologio/feed"
+    elif age < 0:
+        # Preserve the existing small clock-skew tolerance for classification,
+        # but expose it explicitly so an event published slightly in the future
+        # is not silently audited as if it were published exactly now.
+        timing = "FRESH_CATALYST"
+        reason = f"timestamp fonte nel futuro di {future_skew:.1f} min (entro tolleranza); verificare clock/feed"
     elif age <= 30:
         timing = "FRESH_CATALYST"
+        reason = "timing basato sul timestamp della fonte; impatto da confermare sul prezzo"
     elif age <= 240:
         timing = "RECENT_CATALYST"
+        reason = "timing basato sul timestamp della fonte; impatto da confermare sul prezzo"
     else:
         timing = "STALE_CATALYST"
+        reason = "timing basato sul timestamp della fonte; impatto da confermare sul prezzo"
     return {"timing": timing, "age_minutes": round(max(0.0, age), 1),
-            "reason": "timing basato sul timestamp della fonte; impatto da confermare sul prezzo",
-            "execution_authorized": False}
+            "future_skew_minutes": future_skew,
+            "reason": reason, "execution_authorized": False}
 
 
 
