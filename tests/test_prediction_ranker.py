@@ -124,6 +124,8 @@ def test_early_warning_watchlist_can_surface_before_setup_but_never_authorizes()
     assert ranked[0]["direction"] == "LONG"
     assert ranked[0]["execution_authorized"] is False
     assert ranked[0]["paper_only"] is True
+    assert ranked[0]["data_age_seconds"] == 60.0
+    assert ranked[0]["warning_age_seconds"] == 60.0
     assert rank_predictions([early]) == []
 
 
