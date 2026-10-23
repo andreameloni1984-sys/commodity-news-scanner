@@ -145,3 +145,19 @@ def test_universe_validation_propagates_cost_scenario():
         if metrics["status"] == "CALCULATED":
             assert metrics["round_trip_cost_bps"] == 12
             assert "mean_net_signed_return_pct" in metrics
+
+
+def test_walk_forward_compares_net_returns_with_simple_baselines():
+    rows = make_candles([100 + i * 0.25 for i in range(80)])
+    result = walk_forward_evaluate(rows, horizon=3, start=40, round_trip_cost_bps=8)
+    assert result["status"] == "CALCULATED"
+    assert "baseline_always_long_net_return_pct" in result
+    assert "baseline_always_short_net_return_pct" in result
+    assert result["baseline_always_flat_return_pct"] == 0.0
+    assert result["net_edge_vs_always_long_pct"] == round(
+        result["mean_net_signed_return_pct"] - result["baseline_always_long_net_return_pct"], 5
+    )
+    assert result["net_edge_vs_always_short_pct"] == round(
+        result["mean_net_signed_return_pct"] - result["baseline_always_short_net_return_pct"], 5
+    )
+    assert result["net_edge_vs_always_flat_pct"] == result["mean_net_signed_return_pct"]
