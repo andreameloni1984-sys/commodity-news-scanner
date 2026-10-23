@@ -60,12 +60,12 @@ def test_prebreakout_fields_are_bounded_and_causal():
               95, 99, 96, 98, 95, 99, 96, 98, 95, 99, 96, 98,
               95, 99, 96, 98, 95, 99, 96, 98, 95, 99, 96, 98,
               98.7, 98.9, 99.0, 99.1, 99.2, 99.3, 99.35, 99.4,
-              99.42, 99.44, 99.46, 99.48, 99.50, 99.52]
+              99.42, 99.44, 99.46, 99.48, 99.50, 99.49]
     history = candles(closes)
     result = forecast_ensemble(history)
     assert result["status"] == "CALCULATED"
-    assert result["prebreakout_direction"] in ("LONG", "SHORT", "NONE")
-    assert 0 <= result["prebreakout_score"] <= 100
+    assert result["prebreakout_direction"] == "LONG"
+    assert result["prebreakout_score"] > 0
+    assert result["prebreakout_score"] <= 100
     assert "prebreakout_compression_ratio" in result["features"]
     assert result == forecast_ensemble(history)
-    # Future bars are not part of this forecast input.\n    assert result == forecast_ensemble(history)
