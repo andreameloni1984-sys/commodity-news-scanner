@@ -155,6 +155,55 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
     return ranked
 
 
+def rank_early_warnings(states: Iterable[Any]) -> list[dict]:
+    """Rank watch-only early warnings even before a technical setup exists.
+
+    This separate list is for anticipation/monitoring only: it cannot create a
+    setup, pass the governor, or authorize execution. Stale/future warning data
+    is rejected rather than presented as an actionable early signal.
+    """
+    if isinstance(states, dict):
+        states = states.values()
+    ranked = []
+    for state in states:
+        metadata = getattr(state, "metadata", {}) or {}
+        if not isinstance(metadata, dict):
+            continue
+        warning = metadata.get("early_warning", {})
+        if not isinstance(warning, dict):
+            warning = {}
+        direction = _direction(warning.get("direction", metadata.get("early_warning_direction", "NONE")))
+        stage = str(warning.get("stage", metadata.get("early_warning_stage", "UNKNOWN")) or "UNKNOWN").upper()
+        score = max(0.0, min(100.0, _num(warning.get("score", metadata.get("early_warning_score", 0)))))
+        if direction not in {"LONG", "SHORT"} or stage not in {"EARLY_WARNING", "LATE_MOVE"}:
+            continue
+        price = _num(getattr(state, "price", 0))
+        atr = _num(getattr(state, "atr", 0))
+        if price <= 0 or atr <= 0 or not bool(getattr(state, "live", False)) or not bool(getattr(state, "data_ok", False)):
+            continue
+        age = getattr(state, "data_age_seconds", None)
+        if age is not None:
+            age_num = _num(age, -1.0)
+            if age_num < 0 or age_num > 1800.0:
+                continue
+        warning_age = _num(warning.get("latest_timestamp_age_seconds", 0), -1.0)
+        if warning_age < 0 or warning_age > 1800.0:
+            continue
+        ranked.append({
+            "commodity": str(getattr(state, "commodity", "") or ""),
+            "symbol": str(getattr(state, "symbol", "") or ""),
+            "direction": direction,
+            "stage": stage,
+            "score": round(score, 1),
+            "price": price,
+            "reasons": list(warning.get("reasons", []) or [])[:4],
+            "execution_authorized": False,
+            "paper_only": True,
+        })
+    ranked.sort(key=lambda row: (row["stage"] == "EARLY_WARNING", row["score"]), reverse=True)
+    return ranked
+
+
 def format_best_prediction(states: Iterable[Any], profile: str = "AGGRESSIVE") -> str:
     ranked = rank_predictions(states)
     heading = "🚀 GAGARIN — MIGLIORE PREVISIONE"
