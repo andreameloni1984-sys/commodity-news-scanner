@@ -1,4 +1,6 @@
 from datetime import datetime, timezone
+import os
+import time
 
 from engine.early_warning import compute_market_early_warning, classify_catalyst_timing
 
@@ -38,6 +40,27 @@ def test_catalyst_timing_requires_real_publication_timestamp():
     assert fresh["timing"] == "FRESH_CATALYST"
     assert stale["timing"] == "STALE_CATALYST"
     assert all(x["execution_authorized"] is False for x in (missing, fresh, stale))
+
+
+def test_catalyst_timing_treats_naive_now_as_utc_not_host_local_timezone():
+    previous_tz = os.environ.get("TZ")
+    try:
+        # Simulate a non-UTC host: the naive reference time must still mean UTC.
+        os.environ["TZ"] = "Etc/GMT+8"
+        time.tzset()
+        result = classify_catalyst_timing(
+            {"published": "2026-10-22T11:50:00Z"},
+            datetime(2026, 10, 22, 12, 0),
+        )
+        assert result["timing"] == "FRESH_CATALYST"
+        assert result["age_minutes"] == 10.0
+        assert result["execution_authorized"] is False
+    finally:
+        if previous_tz is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = previous_tz
+        time.tzset()
 
 
 def test_market_early_warning_rejects_stale_latest_timestamp():
