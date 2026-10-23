@@ -52,3 +52,18 @@ def test_failed_telegram_delivery_does_not_consume_alert(monkeypatch, tmp_path):
     assert alert.run_directional_commodity_alert([candidate()]) is False
     monkeypatch.setattr("telegram.bot.send_telegram", lambda message: calls.append(message) or True)
     assert alert.run_directional_commodity_alert([candidate()]) is True
+
+
+def test_alert_shows_full_target_ladder_and_does_not_assume_usd():
+    item = alert.find_directional_commodity_alerts([
+        candidate(tp2=2760, tp3=2790, quote_currency=None, currency=None,
+                  price_timestamp=None, quote_timestamp=None, trigger_confirmed=False)
+    ])
+    message = alert.format_directional_alert(item)
+    assert "Take Profit 1: 2740" in message
+    assert "Take Profit 2: 2760" in message
+    assert "Take Profit 3: 2790" in message
+    assert "valuta/unità: NON VERIFICATA" in message
+    assert "Timestamp quotazione: NON VERIFICATO" in message
+    assert "Trigger: IN ATTESA DI CONFERMA" in message
+    assert "2700 USD" not in message
