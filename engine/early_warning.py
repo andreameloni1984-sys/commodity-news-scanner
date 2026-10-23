@@ -93,6 +93,19 @@ def compute_market_early_warning(
     if step > 1800:
         return {"stage": "INSUFFICIENT_DATA", "direction": "NONE", "score": 0,
                 "reasons": ["cadenza dati troppo lenta per warning intraday"], "execution_authorized": False}
+    max_gap_seconds = max(3.0 * step, 300.0)
+    # A gap in the most recent hour makes 30m/60m momentum ambiguous: the
+    # observed return may have accumulated anywhere inside the missing period.
+    recent_gaps = [
+        interval for end_time, interval in zip(times[1:], intervals)
+        if times[-1] - end_time <= 3600.0 and interval > max_gap_seconds
+    ]
+    if recent_gaps:
+        return {
+            "stage": "INSUFFICIENT_DATA", "direction": "NONE", "score": 0,
+            "reasons": ["gap nei timestamp nell'ultima ora; momentum intraday non valutabile"],
+            "execution_authorized": False,
+        }
 
     def base_price(seconds: float) -> float | None:
         target = times[-1] - seconds
@@ -145,7 +158,6 @@ def compute_market_early_warning(
     # A long gap compresses several minutes of movement into one return and can
     # falsely look like an intraday volatility expansion or anomalous candle.
     cadence_window = intervals[-30:]
-    max_gap_seconds = max(3.0 * step, 300.0)
     cadence_ok = len(cadence_window) >= 8 and all(
         interval <= max_gap_seconds for interval in cadence_window
     )
