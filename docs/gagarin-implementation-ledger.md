@@ -51,3 +51,6 @@ Una lezione è marcata **IMPLEMENTATA** solo se è tradotta in una regola non am
 
 
 | CFG-001 | Gli override delle soglie sono accettati solo entro intervalli validi; valori fuori range ricadono sul profilo attivo | `soyuz_gagarin/config.py` (`_bounded_env_float`) | Range probabilità/qualità/confidenza 0–100; R/R strettamente positivo; stop ATR non inferiore al minimo configurato. Test di regressione da aggiungere e CI da verificare. |
+
+
+| ALERT-004 | Gli alert direzionali Telegram includono TP1/TP2/TP3 quando disponibili, trigger e timestamp della quotazione; non etichettano automaticamente ogni prezzo come USD | `telegram/commodity_direction_alert.py`, `tests/test_directional_commodity_alert.py` | Codice e test aggiunti il 2026-10-23. I test devono essere eseguiti in CI; consegna Telegram reale, unità del provider e dati broker non sono certificati da questo cambiamento. |
