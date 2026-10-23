@@ -68,3 +68,24 @@ def test_lead_time_backtest_needs_valid_history():
     result = backtest_market_early_warning_lead_time([])
     assert result["status"] == "INSUFFICIENT_DATA"
     assert result["execution_authorized"] is False
+
+
+
+def test_market_early_warning_rejects_mismatched_price_timestamp_lengths():
+    now = 1_800_000_000.0
+    timestamps = [now - (90 - i) * 60 for i in range(91)]
+    closes = [100.0 + i * 0.01 for i in range(91)]
+
+    missing_timestamp = compute_market_early_warning(
+        closes, timestamps[:-1], atr=0.5, now=now
+    )
+    missing_price = compute_market_early_warning(
+        closes[:-1], timestamps, atr=0.5, now=now
+    )
+
+    for result in (missing_timestamp, missing_price):
+        assert result["stage"] == "INSUFFICIENT_DATA"
+        assert result["direction"] == "NONE"
+        assert result["score"] == 0
+        assert "non coincide" in result["reasons"][0]
+        assert result["execution_authorized"] is False
