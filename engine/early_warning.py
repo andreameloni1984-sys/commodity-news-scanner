@@ -454,13 +454,34 @@ def backtest_market_early_warning_lead_time(
         # move: how much the price has already travelled over the preceding
         # 30 minutes at warning time, expressed in ATR. It does not claim to
         # identify the true start of a move; it helps expose late warnings.
-        prior_30m_return_pct = warning.get("returns_pct", {}).get("30m")
+        prior_30m_return_pct = _finite(warning.get("returns_pct", {}).get("30m"))
+        # Convert the simple return back to an absolute price change before
+        # normalizing by ATR. entry * return_pct is only an approximation;
+        # the exact prior price is entry / (1 + return_pct / 100).
+        prior_30m_base = (
+            entry / (1.0 + prior_30m_return_pct / 100.0)
+            if prior_30m_return_pct is not None and prior_30m_return_pct > -100.0
+            else None
+        )
+        prior_30m_delta = entry - prior_30m_base if prior_30m_base is not None else None
         pre_warning_move_atr = (
-            abs(entry * prior_30m_return_pct / 100.0) / atr_value
-            if _finite(prior_30m_return_pct) is not None else None
+            abs(prior_30m_delta) / atr_value
+            if prior_30m_delta is not None else None
+        )
+        # A warning is considered potentially late only when the prior move
+        # was already >= 0.5 ATR in the warning's own direction. A strong move
+        # in the opposite direction may instead be a reversal setup.
+        pre_warning_directional_move_atr = (
+            sign * prior_30m_delta / atr_value
+            if prior_30m_delta is not None else None
         )
         move_already_underway = (
-            pre_warning_move_atr is not None and pre_warning_move_atr >= 0.5
+            pre_warning_directional_move_atr is not None
+            and pre_warning_directional_move_atr >= 0.5
+        )
+        prior_move_against_warning = (
+            pre_warning_directional_move_atr is not None
+            and pre_warning_directional_move_atr <= -0.5
         )
         samples.append({
             # Keep the decision-time inputs with each outcome so a reviewer can
@@ -470,8 +491,11 @@ def backtest_market_early_warning_lead_time(
             "atr_at_warning": atr_value,
             "direction": direction,
             "score": _finite(warning.get("score")) or 0.0,
+            "pre_warning_30m_return_pct": prior_30m_return_pct,
             "pre_warning_30m_move_atr": round(pre_warning_move_atr, 4) if pre_warning_move_atr is not None else None,
+            "pre_warning_30m_directional_move_atr": round(pre_warning_directional_move_atr, 4) if pre_warning_directional_move_atr is not None else None,
             "move_already_underway": move_already_underway,
+            "prior_move_against_warning": prior_move_against_warning,
             "lead_seconds": first_fav,
             "warning_to_favorable_seconds": first_fav,
             "first_adverse_seconds": first_adv,
@@ -517,11 +541,13 @@ def backtest_market_early_warning_lead_time(
         med_returns[horizon_key] = round(median(values), 5) if values else None
     resolved_first = favorable_first + adverse_first
     warnings_after_prior_move = sum(1 for row in samples if row["move_already_underway"])
+    reversal_warnings_after_opposite_move = sum(1 for row in samples if row["prior_move_against_warning"])
     return {
         "status": "OK",
         "sample_count": len(samples),
         "warnings_after_prior_0_5atr_30m_move": warnings_after_prior_move,
         "warnings_after_prior_0_5atr_30m_move_pct": round(100.0 * warnings_after_prior_move / len(samples), 1),
+        "warnings_after_prior_opposite_0_5atr_move": reversal_warnings_after_opposite_move,
         "favorable_first": favorable_first,
         "adverse_first": adverse_first,
         "resolved_first_count": resolved_first,
