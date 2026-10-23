@@ -405,6 +405,17 @@ def test_lead_time_backtest_warning_metadata_is_invariant_to_future_price_change
         assert row["score"] == other["score"]
         assert row["entry_price"] == other["entry_price"]
         assert row["atr_at_warning"] == other["atr_at_warning"]
+        # All warning-time diagnostics, including the lateness class, must be
+        # invariant when only candles after the cutoff are changed.
+        for field in (
+            "pre_warning_30m_return_pct",
+            "pre_warning_30m_move_atr",
+            "pre_warning_30m_directional_move_atr",
+            "move_already_underway",
+            "prior_move_against_warning",
+            "prior_move_timing_class",
+        ):
+            assert row[field] == other[field]
     assert baseline["execution_authorized"] is False
     assert altered["execution_authorized"] is False
 
