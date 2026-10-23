@@ -603,3 +603,42 @@ def test_alert_scorecard_ignores_future_dated_reactions_until_they_are_observabl
     assert report["pending"] == 1
     assert report["unscored_expired"] == 0
 
+
+
+def test_alert_scorecard_excludes_conflicting_prices_at_same_reaction_timestamp():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 23, 18, 0, tzinfo=timezone.utc)
+    ambiguous_at = sent + timedelta(minutes=20)
+    clean_at = sent + timedelta(minutes=30)
+    alert = {
+        "kind": "NEWS_ALERT_SENT", "event_id": "duplicate-reaction-time",
+        "asset": "WTI", "direction": "LONG", "price": 80.0,
+        "stop": 79.0, "tp1": 82.0, "sent_at": sent.isoformat(),
+    }
+    conflicting = [
+        {"kind": "NEWS_REACTION", "event_id": "duplicate-reaction-time",
+         "asset": "WTI", "current_price": 78.0, "observed_at": ambiguous_at.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "duplicate-reaction-time",
+         "asset": "WTI", "current_price": 83.0, "observed_at": ambiguous_at.isoformat()},
+    ]
+    later = {
+        "kind": "NEWS_REACTION", "event_id": "duplicate-reaction-time",
+        "asset": "WTI", "current_price": 81.0, "observed_at": clean_at.isoformat(),
+    }
+
+    # Reversing insertion order must not change the outcome. The conflicting
+    # same-time prices could otherwise label either SL or TP1 depending on order.
+    reports = [
+        build_alert_scorecard([alert, *conflicting, later], now=sent + timedelta(hours=1)),
+        build_alert_scorecard([alert, *reversed(conflicting), later], now=sent + timedelta(hours=1)),
+    ]
+    for report in reports:
+        assert report["alerts"] == 1
+        assert report["scored"] == 1
+        assert report["ambiguous_reaction_groups"] == 1
+        assert report["sl_observed"] == 0
+        assert report["tp1_observed"] == 0
+    assert reports[0] == reports[1]
+    assert reports[0]["open_at_last_check"] == 1
