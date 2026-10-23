@@ -188,3 +188,24 @@ def test_lead_time_backtest_rejects_conflicting_duplicate_ohlc_timestamps():
     assert result["sample_count"] == 0
     assert "timestamp duplicati" in result["reason"]
     assert result["execution_authorized"] is False
+
+
+def test_lead_time_backtest_rejects_invalid_parameters_without_raising():
+    from engine.early_warning import backtest_market_early_warning_lead_time
+
+    invalid_options = [
+        {"max_bars": 0},
+        {"max_bars": -1},
+        {"max_bars": "not-a-number"},
+        {"max_bars": float("nan")},
+        {"horizon_bars": 2},
+        {"horizon_bars": 13},
+        {"horizon_bars": "not-a-number"},
+        {"horizon_bars": float("inf")},
+        {"horizon_bars": True},
+    ]
+    for options in invalid_options:
+        result = backtest_market_early_warning_lead_time([], **options)
+        assert result["status"] == "INVALID_PARAMETERS"
+        assert result["sample_count"] == 0
+        assert result["execution_authorized"] is False
