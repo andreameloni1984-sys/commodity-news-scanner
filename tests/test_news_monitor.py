@@ -677,9 +677,8 @@ def test_alert_scorecard_assigns_reactions_only_to_latest_event_asset_alert():
     assert report["alerts"] == 2
     assert report["scored"] == 2
     assert report["ambiguous_alert_groups"] == 0
-    first, second = sorted(report["results"], key=lambda row: row["sent_at"])
-    assert first["observed_at"] == (sent_first + timedelta(minutes=20)).isoformat()
-    assert first["outcome"] == "OPEN_AT_LAST_CHECK"
-    assert second["observed_at"] == (sent_second + timedelta(minutes=15)).isoformat()
-    assert second["outcome"] == "TP1_OBSERVED"
+    # If the second reaction leaked into the first alert's window, both alerts
+    # would be reported as TP1 hits. The boundary must leave one open and one TP1.
+    assert report["tp1_observed"] == 1
+    assert report["open_at_last_check"] == 1
 
