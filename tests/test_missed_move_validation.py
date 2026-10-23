@@ -33,3 +33,19 @@ def test_insufficient_history_is_explicit():
     result = evaluate_missed_moves(flat_candles(40), horizon=4, start=40)
     assert result["status"] == "INSUFFICIENT_DATA"
     assert result["forecasts"] == 0
+
+
+def test_non_finite_future_excursions_are_skipped():
+    rows = flat_candles()
+    rows[50]["high"] = float("nan")
+    result = evaluate_missed_moves(rows, horizon=4, start=40, threshold_pct=0.5)
+    baseline = evaluate_missed_moves(flat_candles(), horizon=4, start=40, threshold_pct=0.5)
+    assert result["status"] == "CALCULATED"
+    assert result["forecasts"] < baseline["forecasts"]
+    assert result["missed_rate_pct"] is None
+
+
+def test_non_finite_threshold_is_rejected():
+    result = evaluate_missed_moves(flat_candles(), threshold_pct=float("inf"))
+    assert result["status"] == "INVALID_PARAMETERS"
+    assert result["forecasts"] == 0
