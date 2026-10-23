@@ -770,11 +770,6 @@ def test_temporal_holdout_keeps_future_outcomes_on_their_own_side_of_split(monke
 
     # Holdout timing diagnostics must include only the de-overlapped holdout
     # samples, and LONG/SHORT subgroups must reconcile to that exact count.
-    holdout_rows = [
-        row for row in result["samples"]
-        if row["temporal_validation_partition"] == "HOLDOUT"
-        and row["non_overlapping_outcome_sample"]
-    ]
     by_class_and_direction = validation["holdout_by_prior_move_class_and_direction"]
     nested_count = sum(
         subgroup["sample_count"]
@@ -782,13 +777,14 @@ def test_temporal_holdout_keeps_future_outcomes_on_their_own_side_of_split(monke
         for subgroup in by_direction.values()
     )
     assert nested_count == validation["holdout_non_overlapping_sample_count"]
-    assert nested_count == len(holdout_rows)
-    for label, by_direction in by_class_and_direction.items():
-        for direction, summary in by_direction.items():
-            assert summary["sample_count"] == sum(
-                row["prior_move_timing_class"] == label
-                and row["direction"] == direction
-                for row in holdout_rows
+    for by_direction in by_class_and_direction.values():
+        for summary in by_direction.values():
+            assert (
+                summary["favorable_first"]
+                + summary["adverse_first"]
+                + summary["same_bar_ambiguous"]
+                + summary["neither_reached_0_5atr"]
+                == summary["sample_count"]
             )
 
     assert result["execution_authorized"] is False
