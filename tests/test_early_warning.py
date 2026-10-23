@@ -160,6 +160,18 @@ def test_lead_time_backtest_measures_favorable_move_without_authorizing_trade():
     assert result["sample_count"] > 0
     assert result["favorable_first"] > 0
     assert result["median_seconds_to_favorable_0_5atr"] is not None
+    assert result["adverse_first_pct"] == round(
+        100.0 * result["adverse_first"] / result["sample_count"], 1
+    )
+    adverse_times = [
+        sample["first_adverse_seconds"]
+        for sample in result["samples"]
+        if sample["first_adverse_seconds"] is not None
+    ]
+    from statistics import median
+    assert result["median_seconds_to_adverse_0_5atr"] == (
+        median(adverse_times) if adverse_times else None
+    )
     assert result["execution_authorized"] is False
     assert result["method"] == "ROLLING_WALK_FORWARD_NOT_CALIBRATED"
     assert all(sample["lead_seconds"] is not None for sample in result["samples"])
