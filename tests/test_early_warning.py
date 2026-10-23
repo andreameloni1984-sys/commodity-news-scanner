@@ -160,6 +160,13 @@ def test_lead_time_backtest_measures_favorable_move_without_authorizing_trade():
     assert result["sample_count"] > 0
     assert result["favorable_first"] > 0
     assert result["median_seconds_to_favorable_0_5atr"] is not None
+    assert result["median_warning_to_favorable_seconds"] == result["median_seconds_to_favorable_0_5atr"]
+    assert result["median_warning_to_adverse_seconds"] == result["median_seconds_to_adverse_0_5atr"]
+    assert all(
+        sample["warning_to_favorable_seconds"] == sample["lead_seconds"]
+        and sample["warning_to_adverse_seconds"] == sample["first_adverse_seconds"]
+        for sample in result["samples"]
+    )
     assert result["adverse_first_pct"] == round(
         100.0 * result["adverse_first"] / result["sample_count"], 1
     )
@@ -420,3 +427,30 @@ def test_market_early_warning_rejects_invalid_explicit_time_parameters():
         assert result["score"] == 0
         assert result["execution_authorized"] is False
 
+
+
+
+def test_lead_time_backtest_rejects_large_time_gaps_in_evaluation_window():
+    from engine.early_warning import backtest_market_early_warning_lead_time
+
+    start = 1_800_000_000.0 - 59 * 60
+    candles = []
+    for i in range(60):
+        close = 100.0 + i * 0.02
+        # Insert a 15-minute hole; bar-count horizons are no longer comparable
+        # to the other one-minute samples, even though all OHLC values are valid.
+        timestamp = start + i * 60 + (900 if i >= 35 else 0)
+        candles.append({
+            "timestamp": timestamp,
+            "high": close + 0.05,
+            "low": close - 0.05,
+            "close": close,
+        })
+
+    result = backtest_market_early_warning_lead_time(candles, max_bars=96, horizon_bars=12)
+
+    assert result["status"] == "INSUFFICIENT_DATA"
+    assert result["sample_count"] == 0
+    assert "gap temporale" in result["reason"]
+    assert result["execution_authorized"] is False
+    assert result["method"] == "ROLLING_WALK_FORWARD_NOT_CALIBRATED"
