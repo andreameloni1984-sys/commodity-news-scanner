@@ -21,7 +21,8 @@ def _finite(value: Any) -> float | None:
 
 
 def compute_market_early_warning(
-    closes: list[Any], timestamps: list[Any], atr: Any = None
+    closes: list[Any], timestamps: list[Any], atr: Any = None,
+    now: float | datetime | None = None, max_latest_age_seconds: float = 1800.0,
 ) -> dict[str, Any]:
     """Estimate directional early-warning conditions from timestamped closes.
 
@@ -46,6 +47,23 @@ def compute_market_early_warning(
                 "reasons": ["servono almeno 12 prezzi con timestamp"], "execution_authorized": False}
     times = [x[0] for x in rows]
     prices = [x[1] for x in rows]
+    if isinstance(now, datetime):
+        now_ts = (now if now.tzinfo else now.replace(tzinfo=timezone.utc)).timestamp()
+    elif now is not None:
+        now_ts = _finite(now)
+    else:
+        now_ts = datetime.now(timezone.utc).timestamp()
+    if now_ts is None:
+        now_ts = datetime.now(timezone.utc).timestamp()
+    latest_age = now_ts - times[-1]
+    if latest_age < -120.0:
+        return {"stage": "INSUFFICIENT_DATA", "direction": "NONE", "score": 0,
+                "latest_timestamp_age_seconds": round(latest_age, 1),
+                "reasons": ["timestamp dell'ultimo prezzo nel futuro"], "execution_authorized": False}
+    if latest_age > max(0.0, float(max_latest_age_seconds)):
+        return {"stage": "INSUFFICIENT_DATA", "direction": "NONE", "score": 0,
+                "latest_timestamp_age_seconds": round(latest_age, 1),
+                "reasons": ["ultimo prezzo troppo vecchio per un warning intraday"], "execution_authorized": False}
     intervals = [times[i] - times[i - 1] for i in range(1, len(times))]
     positive_intervals = [x for x in intervals if x > 0]
     if not positive_intervals:
@@ -121,6 +139,7 @@ def compute_market_early_warning(
         stage = "WATCH"
     return {
         "stage": stage, "direction": direction, "score": round(min(100.0, score), 1),
+        "latest_timestamp_age_seconds": round(max(0.0, latest_age), 1),
         "returns_pct": {"30m": round(r30, 4), "60m": round(r60, 4),
                         "4h": round(r240, 4) if r240 is not None else None},
         "acceleration_pct_points": round(acceleration, 4),
