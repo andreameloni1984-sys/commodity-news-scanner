@@ -39,3 +39,45 @@ class GagarinExpansionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_short_history_does_not_fabricate_four_or_twenty_four_hour_moves(self):
+        prices = [100.0, 100.0, 100.0, 102.0]
+        timestamps = [0.0, 3600.0, 7200.0, 10800.0]
+        candles = [
+            {"timestamp": t, "open": p, "high": p + 0.1, "low": p - 0.1, "close": p}
+            for t, p in zip(timestamps, prices)
+        ]
+        state = SoyuzState(
+            commodity="SHORT_HISTORY", symbol="TEST", closes=prices,
+            candles=candles, timestamps=timestamps, atr=1.0, metadata={},
+        )
+
+        state = scan_market_opportunity(state)
+
+        self.assertIsNone(state.move_4h_pct)
+        self.assertIsNone(state.move_24h_pct)
+        self.assertIsNone(state.move_atr)
+        self.assertEqual(state.opportunity_direction, "NONE")
+        self.assertEqual(state.opportunity_alert, "NONE")
+        self.assertEqual(state.final_decision, "WAIT")
+
+    def test_move_atr_uses_four_hour_window_not_fixed_bar_count(self):
+        prices = [90.0] * 12 + [100.0] * 47 + [102.0]
+        timestamps = [i * 3600.0 for i in range(len(prices))]
+        candles = [
+            {"timestamp": t, "open": p, "high": p + 0.1, "low": p - 0.1, "close": p}
+            for t, p in zip(timestamps, prices)
+        ]
+        state = SoyuzState(
+            commodity="TIMEFRAME_CHECK", symbol="TEST", closes=prices,
+            candles=candles, timestamps=timestamps, atr=1.0, metadata={},
+        )
+
+        state = scan_market_opportunity(state)
+
+        # Four hours ago the price was 100. The older 90 price must not inflate
+        # the ATR-normalized move simply because it is 48 bars back on H1 data.
+        self.assertAlmostEqual(state.move_4h_pct, 2.0, places=4)
+        self.assertAlmostEqual(state.move_atr, 2.0, places=4)
+        self.assertEqual(state.opportunity_alert, "STRONG_MOVE")
+
