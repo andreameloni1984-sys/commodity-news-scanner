@@ -31,8 +31,18 @@ def compute_market_early_warning(
     probability. If timestamps are absent/irregular or data is too short,
     return INSUFFICIENT_DATA rather than infer a signal.
     """
+    close_series = closes or []
+    timestamp_series = timestamps or []
+    if len(close_series) != len(timestamp_series):
+        return {
+            "stage": "INSUFFICIENT_DATA",
+            "direction": "NONE",
+            "score": 0,
+            "reasons": ["numero di prezzi e timestamp non coincide"],
+            "execution_authorized": False,
+        }
     rows = []
-    for close, stamp in zip(closes or [], timestamps or []):
+    for close, stamp in zip(close_series, timestamp_series):
         p, t = _finite(close), _finite(stamp)
         if p is not None and p > 0 and t is not None and t > 0:
             rows.append((t, p))
