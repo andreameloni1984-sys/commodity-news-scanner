@@ -251,7 +251,7 @@ def _maybe_send_daily_scorecard(state: dict[str, Any], send_telegram: Callable[[
     if report["scored"]:
         message = ("📊 GAGARIN — VERIFICA ALERT (ultimi 7 giorni)\n"
                    f"Valutati: {report['scored']}/{report['alerts']} | copertura: {report['coverage_pct']:.1f}% | in attesa: {report['pending']} | senza dati a finestra chiusa: {report['unscored_expired']}\n"
-                   f"Osservazioni ambigue escluse: {report['ambiguous_reaction_groups']}\n"
+                   f"Gruppi alert ambigui esclusi: {report['ambiguous_alert_groups']} | osservazioni ambigue escluse: {report['ambiguous_reaction_groups']}\n"
                    f"Direzione corretta: {report['correct']} | errata: {report['incorrect']}\n"
                    f"Accuratezza direzionale: {report['accuracy_pct']:.1f}%\n"
                    f"Rendimento direzionale medio: {report['mean_directional_return_pct']:+.3f}%\n"
@@ -260,6 +260,7 @@ def _maybe_send_daily_scorecard(state: dict[str, Any], send_telegram: Callable[[
     else:
         message = ("📊 GAGARIN — VERIFICA ALERT (ultimi 7 giorni)\n"
                    f"Alert inviati: {report['alerts']} | in attesa: {report['pending']} | senza dati a finestra chiusa: {report['unscored_expired']}\n"
+                   f"Gruppi alert ambigui esclusi: {report['ambiguous_alert_groups']} | osservazioni ambigue escluse: {report['ambiguous_reaction_groups']}\n"
                    "Campione valutabile insufficiente: servono prezzi osservati almeno 15 minuti dopo l'alert.")
     try:
         sent = bool(send_telegram(message))
