@@ -54,3 +54,6 @@ Una lezione è marcata **IMPLEMENTATA** solo se è tradotta in una regola non am
 
 
 | ALERT-004 | Gli alert direzionali Telegram includono TP1/TP2/TP3 quando disponibili, trigger e timestamp della quotazione; non etichettano automaticamente ogni prezzo come USD | `telegram/commodity_direction_alert.py`, `tests/test_directional_commodity_alert.py` | Codice e test aggiunti il 2026-10-23. I test devono essere eseguiti in CI; consegna Telegram reale, unità del provider e dati broker non sono certificati da questo cambiamento. |
+
+
+| PATTERN-001 | Confermare swing high/low con due candele chiuse per lato; rilevare HH/HL, LH/LL, indebolimento e chiusura oltre l'ultimo swing di supporto/resistenza | `engine/pattern_exit.py`, alert `telegram/aggressive_alert.py` | Implementazione e test aggiunti il 2026-10-23. Test/CI e resa in produzione da verificare. La struttura è un avviso, non una previsione certa; richiede OHLC coerenti sul timeframe analizzato. |
