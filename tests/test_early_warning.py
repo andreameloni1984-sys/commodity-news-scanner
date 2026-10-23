@@ -454,3 +454,22 @@ def test_lead_time_backtest_rejects_large_time_gaps_in_evaluation_window():
     assert "gap temporale" in result["reason"]
     assert result["execution_authorized"] is False
     assert result["method"] == "ROLLING_WALK_FORWARD_NOT_CALIBRATED"
+
+def test_market_early_warning_does_not_treat_three_hours_as_four_hour_context():
+    now = 1_800_000_000.0
+    # The available series is fresh and regular, but starts only three hours
+    # before now. The old 4h lookup tolerance could accept this first quote
+    # (exactly one hour from the target) and mislabel a 3h return as 4h.
+    timestamps = [now - minute * 60 for minute in range(180, -1, -1)]
+    closes = [100.0 + index * 0.01 for index in range(len(timestamps))]
+
+    result = compute_market_early_warning(
+        closes, timestamps, atr=0.5, now=now
+    )
+
+    assert result["returns_pct"]["30m"] is not None
+    assert result["returns_pct"]["60m"] is not None
+    assert result["returns_pct"]["4h"] is None
+    assert "contesto 4h allineato" not in result["reasons"]
+    assert result["execution_authorized"] is False
+
