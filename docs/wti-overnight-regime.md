@@ -95,3 +95,14 @@ The CLI writes `data/wti_overnight_evaluation.json`. Network access is opt-in
 and collection is not scheduled. No tests were run during this change, per the
 manual-verification workflow. Results must be reviewed for incomplete sessions,
 roll effects, event days, and realistic costs before interpretation.
+
+
+## Chronological held-out report
+The CLI also includes `research/wti_overnight_validation.py`, which sorts
+complete sessions by session date, removes duplicate dates, and reports fixed
+60% development / 20% validation / final 20% held-out out-of-sample summaries.
+The held-out segment is descriptive and must not be used to select thresholds.
+No model fitting, significance testing, stop simulation, or signal promotion is
+performed. The output archive's `chronological_validation` section records
+sample counts, date boundaries, cost-scenario results, and limitations.
+This workflow remains PAPER ONLY and should be manually reviewed before use.
