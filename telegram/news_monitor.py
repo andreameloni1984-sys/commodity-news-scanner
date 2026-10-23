@@ -66,6 +66,9 @@ def _journal(record: dict[str, Any]) -> None:
 def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = None) -> dict[str, Any]:
     """Score alert direction using a later live price observation, not a keyword label."""
     now = now or _utc_now()
+    # Keep comparisons deterministic when callers pass a naive datetime.
+    # Treat naive values as UTC explicitly instead of inheriting the host TZ.
+    now = now.replace(tzinfo=timezone.utc) if now.tzinfo is None else now.astimezone(timezone.utc)
     cutoff = now - timedelta(days=7)
     alerts = []
     for row in rows:
