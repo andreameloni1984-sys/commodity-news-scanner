@@ -441,6 +441,17 @@ def backtest_market_early_warning_lead_time(
             }
     first = max(15, len(rows) - limit)
     last = len(rows) - horizon
+    candidate_index_count = max(0, last - first)
+    # Reserve the final quarter of eligible warning indices as a chronological
+    # holdout. Development outcomes must finish strictly before the split, so
+    # no future candle is shared across the two partitions. This is descriptive
+    # validation only: no parameters are fitted or tuned by this function.
+    minimum_split_span = max(2 * horizon + 4, 20)
+    split_index = (
+        first + int(candidate_index_count * 0.75)
+        if candidate_index_count >= minimum_split_span
+        else None
+    )
     samples = []
     last_index_by_direction = {}
     for index in range(first, last):
@@ -535,7 +546,20 @@ def backtest_market_early_warning_lead_time(
             prior_move_timing_class = "LOW_PRIOR_MOVE_PROXY"
         else:
             prior_move_timing_class = "INTERMEDIATE_PRIOR_MOVE"
+        if split_index is None:
+            temporal_partition = "UNSPLIT"
+        elif index >= split_index:
+            temporal_partition = "HOLDOUT"
+        elif index + horizon < split_index:
+            temporal_partition = "DEVELOPMENT"
+        else:
+            # Do not assign an outcome window that straddles the split to
+            # either side; its future bars would contaminate both periods.
+            temporal_partition = "SPLIT_BOUNDARY_EXCLUDED"
         samples.append({
+            # Evaluation partition is for backtest reporting only; it is not a
+            # warning-time feature and never affects the warning direction.
+            "temporal_validation_partition": temporal_partition,
             # Index is relative to the validated, timestamp-sorted candle series.
             # It supports an auditable subset with non-overlapping future windows.
             "warning_bar_index": index,
@@ -706,6 +730,64 @@ def backtest_market_early_warning_lead_time(
             "median_direction_adjusted_return_pct": median_returns,
         }
 
+    if split_index is None:
+        temporal_validation = {
+            "status": "INSUFFICIENT_DATA",
+            "method": "CHRONOLOGICAL_HOLDOUT_NO_MODEL_FIT",
+            "reason": "finestra valutata troppo corta per separare sviluppo e holdout senza sovrapporre gli esiti",
+            "candidate_index_count": candidate_index_count,
+            "minimum_candidate_index_count": minimum_split_span,
+            "unsplit_sample_count": len(samples),
+            "development_sample_count": 0,
+            "holdout_sample_count": 0,
+            "split_boundary_excluded_sample_count": 0,
+            "development_non_overlapping_sample_count": 0,
+            "holdout_non_overlapping_sample_count": 0,
+            "development": summarize_outcome_group([]),
+            "holdout": summarize_outcome_group([]),
+            "holdout_sample_count_sufficient_for_interpretation": False,
+        }
+    else:
+        development_samples = [
+            row for row in samples
+            if row["temporal_validation_partition"] == "DEVELOPMENT"
+        ]
+        holdout_samples = [
+            row for row in samples
+            if row["temporal_validation_partition"] == "HOLDOUT"
+        ]
+        split_boundary_excluded = sum(
+            row["temporal_validation_partition"] == "SPLIT_BOUNDARY_EXCLUDED"
+            for row in samples
+        )
+        # De-overlap each partition independently, so a development warning
+        # cannot suppress a later holdout sample and vice versa.
+        development_non_overlapping = _select_non_overlapping_outcome_samples(
+            development_samples, horizon
+        )
+        holdout_non_overlapping = _select_non_overlapping_outcome_samples(
+            holdout_samples, horizon
+        )
+        temporal_validation = {
+            "status": "OK",
+            "method": "CHRONOLOGICAL_HOLDOUT_NO_MODEL_FIT",
+            "split_start_bar_index": split_index,
+            "candidate_index_count": candidate_index_count,
+            "development_sample_count": len(development_samples),
+            "holdout_sample_count": len(holdout_samples),
+            "split_boundary_excluded_sample_count": split_boundary_excluded,
+            "development_non_overlapping_sample_count": len(development_non_overlapping),
+            "holdout_non_overlapping_sample_count": len(holdout_non_overlapping),
+            "development": summarize_outcome_group(development_non_overlapping),
+            "holdout": summarize_outcome_group(holdout_non_overlapping),
+            "holdout_sample_count_sufficient_for_interpretation": (
+                len(holdout_non_overlapping) >= 20
+            ),
+            "interpretation_note": (
+                "diagnostica cronologica descrittiva; nessun fitting, tuning o prova di edge predittivo"
+            ),
+        }
+
     # Group membership is decided exclusively by the 30m move known at the
     # warning timestamp; future candles contribute only to outcome metrics.
     timing_labels = tuple(prior_move_class_counts)
@@ -733,6 +815,7 @@ def backtest_market_early_warning_lead_time(
         "non_overlapping_sample_count": len(non_overlapping_samples),
         "overlapping_future_window_samples_excluded": len(samples) - len(non_overlapping_samples),
         "non_overlapping_outcomes": non_overlapping_outcomes,
+        "temporal_validation": temporal_validation,
         "prior_move_timing_class_counts": prior_move_class_counts,
         "prior_move_timing_class_pct": prior_move_class_pct,
         "outcomes_by_prior_move_class": outcomes_by_prior_move_class,
