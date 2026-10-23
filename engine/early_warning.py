@@ -221,7 +221,30 @@ def backtest_market_early_warning_lead_time(
     subsequent bars are used only for outcome measurement. This is an in-sample
     diagnostic, not a calibrated probability or a guarantee of future results.
     """
-    horizon = max(3, min(12, int(horizon_bars)))
+    # Invalid configuration must not be silently clamped or leak a ValueError
+    # into the caller. The metrics below support horizons of 3..12 bars.
+    raw_max_bars = _finite(max_bars)
+    raw_horizon = _finite(horizon_bars)
+    valid_max = (
+        not isinstance(max_bars, bool)
+        and raw_max_bars is not None
+        and raw_max_bars.is_integer()
+        and raw_max_bars >= 1
+    )
+    valid_horizon = (
+        not isinstance(horizon_bars, bool)
+        and raw_horizon is not None
+        and raw_horizon.is_integer()
+        and 3 <= raw_horizon <= 12
+    )
+    if not valid_max or not valid_horizon:
+        return {
+            "status": "INVALID_PARAMETERS", "sample_count": 0,
+            "reason": "max_bars deve essere un intero positivo e horizon_bars un intero tra 3 e 12",
+            "execution_authorized": False,
+            "method": "ROLLING_WALK_FORWARD_NOT_CALIBRATED",
+        }
+    horizon = int(raw_horizon)
     rows = []
     dedup = {}
     for candle in candles or []:
@@ -272,7 +295,7 @@ def backtest_market_early_warning_lead_time(
             previous_close = close
         return sum(ranges[-period:]) / period if len(ranges) >= period else None
 
-    limit = max(30, int(max_bars))
+    limit = int(raw_max_bars)
     first = max(15, len(rows) - limit)
     last = len(rows) - horizon
     samples = []
