@@ -444,3 +444,42 @@ def test_alert_scorecard_treats_naive_now_as_utc():
     assert report["scored"] == 0
     assert report["pending"] == 1
     assert report["unscored_expired"] == 0
+
+
+def test_title_cluster_dedupes_syndication_within_utc_day_but_allows_later_recurrence():
+    from telegram.news_monitor import _title_cluster
+
+    first = {
+        "title": "OPEC announces production decision",
+        "url": "https://feed-a.example/story/1",
+        "published_at": "2026-10-22T23:50:00+00:00",
+    }
+    same_day_syndication = {
+        "title": "OPEC announces production decision",
+        "url": "https://feed-b.example/story/2",
+        "published_at": "2026-10-22T23:58:00+00:00",
+    }
+    later_recurrence = {
+        "title": "OPEC announces production decision",
+        "url": "https://feed-c.example/story/3",
+        "published_at": "2026-10-23T09:00:00+00:00",
+    }
+
+    assert _title_cluster(first) == _title_cluster(same_day_syndication)
+    assert _title_cluster(first) != _title_cluster(later_recurrence)
+
+
+def test_title_cluster_uses_normalized_utc_publication_day():
+    from telegram.news_monitor import _title_cluster
+
+    utc_item = {
+        "title": "Fed announces rate decision",
+        "published_at": "2026-10-23T00:30:00+00:00",
+    }
+    offset_item = {
+        "title": "Fed announces rate decision",
+        # Same instant expressed as the previous local calendar date.
+        "published_at": "2026-10-22T20:30:00-04:00",
+    }
+
+    assert _title_cluster(utc_item) == _title_cluster(offset_item)
