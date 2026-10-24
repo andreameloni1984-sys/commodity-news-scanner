@@ -934,9 +934,34 @@ def backtest_market_early_warning_lead_time(
         "gruppi piccoli non sono interpretabili come evidenza predittiva"
     )
     non_overlapping_outcomes = summarize_outcome_group(non_overlapping_samples)
+    paired_025_margins_all = [
+        row["favorable_before_adverse_0_25atr_seconds"]
+        for row in samples
+        if row.get("favorable_before_adverse_0_25atr_seconds") is not None
+    ]
+    paired_05_margins_all = [
+        row["favorable_before_adverse_0_5atr_seconds"]
+        for row in samples
+        if row.get("favorable_before_adverse_0_5atr_seconds") is not None
+    ]
     return {
         "status": "OK",
         "sample_count": len(samples),
+        "minimum_sample_count_for_descriptive_interpretation": minimum_samples_for_interpretation,
+        "median_favorable_before_adverse_0_25atr_seconds": (
+            median(paired_025_margins_all) if paired_025_margins_all else None
+        ),
+        "median_favorable_before_adverse_0_5atr_seconds": (
+            median(paired_05_margins_all) if paired_05_margins_all else None
+        ),
+        "paired_threshold_order_sample_count_0_25atr": len(paired_025_margins_all),
+        "paired_threshold_order_sample_count_0_5atr": len(paired_05_margins_all),
+        "paired_threshold_order_sample_count_0_25atr_sufficient_for_interpretation": (
+            len(paired_025_margins_all) >= minimum_samples_for_interpretation
+        ),
+        "paired_threshold_order_sample_count_0_5atr_sufficient_for_interpretation": (
+            len(paired_05_margins_all) >= minimum_samples_for_interpretation
+        ),
         "non_overlapping_sample_count": len(non_overlapping_samples),
         "overlapping_future_window_samples_excluded": len(samples) - len(non_overlapping_samples),
         "non_overlapping_outcomes": non_overlapping_outcomes,
