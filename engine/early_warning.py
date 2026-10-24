@@ -708,6 +708,8 @@ def backtest_market_early_warning_lead_time(
             median_returns[horizon_key] = round(median(values), 5) if values else None
         return {
             "sample_count": count,
+            "minimum_sample_count_for_descriptive_interpretation": minimum_samples_for_interpretation,
+            "sample_count_sufficient_for_interpretation": count >= minimum_samples_for_interpretation,
             "favorable_first": group_favorable_first,
             "adverse_first": group_adverse_first,
             "same_bar_ambiguous": group_same_bar,
@@ -730,6 +732,14 @@ def backtest_market_early_warning_lead_time(
             "median_direction_adjusted_return_pct": median_returns,
         }
 
+    # A holdout with fewer than 20 non-overlapping windows is flagged as too
+    # small for interpretation. With one selected outcome window per horizon,
+    # a 25% holdout needs at least 80*horizon candidate indices; add one horizon
+    # for the future bars required to score the final candidate. This is a
+    # theoretical data-budget estimate, not a guarantee that warnings will occur.
+    minimum_samples_for_interpretation = 20
+    recommended_max_bars_for_holdout = 81 * horizon
+
     # Keep a stable empty collection for short series, so the downstream
     # holdout stratification has the same schema whether or not a split exists.
     holdout_non_overlapping: list[dict[str, Any]] = []
@@ -741,6 +751,8 @@ def backtest_market_early_warning_lead_time(
             "candidate_index_count": candidate_index_count,
             "minimum_candidate_index_count": minimum_split_span,
             "unsplit_sample_count": len(samples),
+            "minimum_sample_count_for_interpretation": minimum_samples_for_interpretation,
+            "recommended_min_max_bars_for_20_non_overlapping_holdout_samples": recommended_max_bars_for_holdout,
             "development_sample_count": 0,
             "holdout_sample_count": 0,
             "split_boundary_excluded_sample_count": 0,
@@ -776,6 +788,8 @@ def backtest_market_early_warning_lead_time(
             "method": "CHRONOLOGICAL_HOLDOUT_NO_MODEL_FIT",
             "split_start_bar_index": split_index,
             "candidate_index_count": candidate_index_count,
+            "minimum_sample_count_for_interpretation": minimum_samples_for_interpretation,
+            "recommended_min_max_bars_for_20_non_overlapping_holdout_samples": recommended_max_bars_for_holdout,
             "development_sample_count": len(development_samples),
             "holdout_sample_count": len(holdout_samples),
             "split_boundary_excluded_sample_count": split_boundary_excluded,
@@ -784,7 +798,7 @@ def backtest_market_early_warning_lead_time(
             "development": summarize_outcome_group(development_non_overlapping),
             "holdout": summarize_outcome_group(holdout_non_overlapping),
             "holdout_sample_count_sufficient_for_interpretation": (
-                len(holdout_non_overlapping) >= 20
+                len(holdout_non_overlapping) >= minimum_samples_for_interpretation
             ),
             "interpretation_note": (
                 "diagnostica cronologica descrittiva; nessun fitting, tuning o prova di edge predittivo"
