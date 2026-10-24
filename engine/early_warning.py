@@ -57,6 +57,20 @@ def compute_market_early_warning(
                 "reasons": [f"prezzo o timestamp non valido alla riga {index}; warning rifiutato"],
                 "execution_authorized": False,
             }
+        # The warning engine reports age/lookbacks in seconds. Reject likely
+        # Unix-millisecond timestamps explicitly instead of misclassifying
+        # them as far-future observations.
+        if t >= 100_000_000_000:
+            return {
+                "stage": "INVALID_DATA",
+                "direction": "NONE",
+                "score": 0,
+                "reasons": [
+                    f"timestamp alla riga {index} sembra espresso in millisecondi; "
+                    "attesi timestamp Unix in secondi"
+                ],
+                "execution_authorized": False,
+            }
         rows.append((t, p))
     rows.sort(key=lambda x: x[0])
     # Duplicate timestamps with conflicting prices make the candle order
