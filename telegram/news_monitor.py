@@ -122,6 +122,9 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         for current, following in zip(unique_times, unique_times[1:]):
             next_send_at[(key[0], key[1], current)] = following
 
+    # Raw journal rows can include exact duplicates and conflicting groups.
+    # Coverage uses only deduplicated, eligible alerts; "alerts" stays raw.
+    eligible_alert_count = len(alerts)
     scored, pending, unscored_expired = [], 0, 0
     ambiguous_reaction_groups = 0
     invalid_level_alerts = 0
@@ -221,12 +224,12 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
     tp1_observed = sum(x["outcome"] == "TP1_OBSERVED" for x in scored)
     sl_observed = sum(x["outcome"] == "SL_OBSERVED" for x in scored)
     open_count = sum(x["outcome"] == "OPEN_AT_LAST_CHECK" for x in scored)
-    return {"window_days": 7, "alerts": raw_alert_count, "scored": len(scored), "pending": pending,
-            "unscored_expired": unscored_expired,
+    return {"window_days": 7, "alerts": raw_alert_count, "eligible_alerts": eligible_alert_count,
+            "scored": len(scored), "pending": pending, "unscored_expired": unscored_expired,
             "ambiguous_alert_groups": ambiguous_alert_groups,
             "ambiguous_reaction_groups": ambiguous_reaction_groups,
             "invalid_level_alerts": invalid_level_alerts,
-            "coverage_pct": round(len(scored)/len(alerts)*100, 2) if alerts else None,
+            "coverage_pct": round(len(scored)/eligible_alert_count*100, 2) if eligible_alert_count else None,
             "correct": correct, "incorrect": len(scored)-correct,
             "accuracy_pct": round(correct/len(scored)*100, 2) if scored else None,
             "mean_directional_return_pct": round(sum(x["signed_return_pct"] for x in scored)/len(scored), 4) if scored else None,
@@ -263,7 +266,7 @@ def _maybe_send_daily_scorecard(state: dict[str, Any], send_telegram: Callable[[
     report = build_alert_scorecard(rows, now)
     if report["scored"]:
         message = ("📊 GAGARIN — VERIFICA ALERT (ultimi 7 giorni)\n"
-                   f"Valutati: {report['scored']}/{report['alerts']} | copertura: {report['coverage_pct']:.1f}% | in attesa: {report['pending']} | senza dati a finestra chiusa: {report['unscored_expired']}\n"
+                   f"Valutati: {report['scored']}/{report['eligible_alerts']} alert eleggibili (righe grezze: {report['alerts']}) | copertura: {report['coverage_pct']:.1f}% | in attesa: {report['pending']} | senza dati a finestra chiusa: {report['unscored_expired']}\\n"
                    f"Gruppi alert ambigui esclusi: {report['ambiguous_alert_groups']} | osservazioni ambigue escluse: {report['ambiguous_reaction_groups']}\n"
                    f"Direzione corretta: {report['correct']} | errata: {report['incorrect']}\n"
                    f"Accuratezza direzionale: {report['accuracy_pct']:.1f}%\n"
