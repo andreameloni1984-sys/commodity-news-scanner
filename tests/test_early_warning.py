@@ -266,14 +266,6 @@ def test_lead_time_backtest_measures_favorable_move_without_authorizing_trade():
                 f"paired_threshold_order_sample_count_{threshold}_sufficient_for_interpretation"
             ] is (paired_count >= 20)
 
-    # In this longer controlled path, at least one group has enough warnings
-    # overall but too few paired touches to interpret its paired median.
-    assert any(
-        group_summary["sample_count"] >= 20
-        and group_summary["paired_threshold_order_sample_count_0_5atr"] < 20
-        for group_summary in paired_summaries
-    )
-
     # Full-sample outcomes may reuse the same future candles when opposite
     # directions warn close together. The secondary diagnostic must not.
     non_overlapping = [
@@ -938,16 +930,14 @@ def test_temporal_holdout_keeps_future_outcomes_on_their_own_side_of_split(monke
                 f"paired_threshold_order_sample_count_{threshold}_sufficient_for_interpretation"
             ] is (paired_count >= 20)
 
-    # The aggregate warning count can be large while the paired subset remains
-    # too small. Top-level metrics must report that distinction explicitly.
-    assert result["sample_count"] >= 20
+    # Top-level paired-margin fields must follow the same sufficiency rule even
+    # when this short series cannot provide 20 paired observations.
     assert result["minimum_sample_count_for_descriptive_interpretation"] == 20
     for threshold in ("0_25atr", "0_5atr"):
         paired_count = result[f"paired_threshold_order_sample_count_{threshold}"]
-        assert paired_count < 20
         assert result[
             f"paired_threshold_order_sample_count_{threshold}_sufficient_for_interpretation"
-        ] is False
+        ] is (paired_count >= 20)
 
     assert result["execution_authorized"] is False
 
@@ -968,3 +958,53 @@ def test_temporal_holdout_keeps_future_outcomes_on_their_own_side_of_split(monke
         for subgroup in by_direction.values()
     ) == 0
     assert short_result["execution_authorized"] is False
+
+
+
+def test_paired_margin_sufficiency_uses_paired_count_not_total_warning_count(monkeypatch):
+    import engine.early_warning as early_warning
+    from statistics import median
+
+    def always_warn(closes, timestamps, atr=None, now=None, **kwargs):
+        return {
+            "stage": "EARLY_WARNING",
+            "direction": "LONG",
+            "score": 75,
+            "returns_pct": {"30m": 0.1},
+        }
+
+    monkeypatch.setattr(early_warning, "compute_market_early_warning", always_warn)
+    start = 1_800_000_000.0 - 299 * 60
+    candles = []
+    for i in range(300):
+        close = 100.0 + i * 0.02
+        candles.append({
+            "timestamp": start + i * 60,
+            "high": close + 0.02,
+            "low": close - 0.02,
+            "close": close,
+        })
+
+    result = early_warning.backtest_market_early_warning_lead_time(
+        candles, max_bars=180, horizon_bars=12
+    )
+
+    assert result["status"] == "OK"
+    assert result["sample_count"] >= 20
+    assert result["minimum_sample_count_for_descriptive_interpretation"] == 20
+    for threshold in ("0_25atr", "0_5atr"):
+        margin_key = f"favorable_before_adverse_{threshold}_seconds"
+        count_key = f"paired_threshold_order_sample_count_{threshold}"
+        median_key = f"median_favorable_before_adverse_{threshold}_seconds"
+        sufficient_key = f"paired_threshold_order_sample_count_{threshold}_sufficient_for_interpretation"
+        values = [
+            sample[margin_key]
+            for sample in result["samples"]
+            if sample[margin_key] is not None
+        ]
+        assert result[count_key] == len(values)
+        assert result[median_key] == (median(values) if values else None)
+        assert result[count_key] < 20
+        assert result[sufficient_key] is False
+
+    assert result["execution_authorized"] is False
