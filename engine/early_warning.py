@@ -869,12 +869,20 @@ def backtest_market_early_warning_lead_time(
         # dilute the comparison of which threshold was reached first.
         "favorable_first_pct": round(100.0 * favorable_first / len(samples), 1),
         "adverse_first_pct": round(100.0 * adverse_first / len(samples), 1),
+        "same_bar_ambiguous_pct": round(100.0 * same_bar / len(samples), 1),
+        "neither_reached_0_5atr_pct": round(
+            100.0 * (len(samples) - favorable_first - adverse_first - same_bar) / len(samples), 1
+        ),
         "favorable_first_pct_resolved": round(100.0 * favorable_first / resolved_first, 1) if resolved_first else None,
         "adverse_first_pct_resolved": round(100.0 * adverse_first / resolved_first, 1) if resolved_first else None,
         "favorable_0_25atr_first": favorable_025_first,
         "adverse_0_25atr_first": adverse_025_first,
         "same_bar_0_25atr_ambiguous": same_bar_025,
+        "same_bar_0_25atr_ambiguous_pct": round(100.0 * same_bar_025 / len(samples), 1),
         "neither_reached_0_25atr": len(samples) - favorable_025_first - adverse_025_first - same_bar_025,
+        "neither_reached_0_25atr_pct": round(
+            100.0 * (len(samples) - favorable_025_first - adverse_025_first - same_bar_025) / len(samples), 1
+        ),
         "median_warning_to_favorable_0_25atr_seconds": median(lead_025_values) if lead_025_values else None,
         "median_warning_to_adverse_0_25atr_seconds": median(adverse_025_values) if adverse_025_values else None,
         "median_seconds_to_favorable_0_5atr": median(lead_values) if lead_values else None,
