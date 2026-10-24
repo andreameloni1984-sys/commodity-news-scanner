@@ -720,3 +720,33 @@ def test_news_reaction_journal_rejects_non_finite_live_price(tmp_path, monkeypat
     assert reactions == []
     assert second["pending"] == 1
 
+def test_alert_scorecard_does_not_score_tp_sl_with_directionally_invalid_brackets():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 24, 8, 0, tzinfo=timezone.utc)
+    observed = sent + timedelta(minutes=20)
+    rows = [
+        # LONG stop is incorrectly above the reference price.
+        {"kind": "NEWS_ALERT_SENT", "event_id": "bad-long-bracket", "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "stop": 81.0, "tp1": 82.0,
+         "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "bad-long-bracket", "asset": "WTI",
+         "current_price": 81.5, "observed_at": observed.isoformat()},
+        # SHORT stop is incorrectly below the reference price.
+        {"kind": "NEWS_ALERT_SENT", "event_id": "bad-short-bracket", "asset": "Gold",
+         "direction": "SHORT", "price": 4000.0, "stop": 3990.0, "tp1": 3950.0,
+         "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "bad-short-bracket", "asset": "Gold",
+         "current_price": 3995.0, "observed_at": observed.isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
+
+    assert report["alerts"] == 2
+    assert report["scored"] == 2
+    assert report["invalid_level_alerts"] == 2
+    assert report["tp1_observed"] == 0
+    assert report["sl_observed"] == 0
+    assert report["open_at_last_check"] == 2
+
