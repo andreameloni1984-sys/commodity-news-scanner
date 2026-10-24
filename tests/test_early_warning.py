@@ -1042,3 +1042,73 @@ def test_paired_margin_sufficiency_uses_paired_count_not_total_warning_count(mon
         assert result[sufficient_key] is False
 
     assert result["execution_authorized"] is False
+
+
+def test_temporal_holdout_direction_summaries_reconcile_with_deoverlapped_samples(monkeypatch):
+    import engine.early_warning as early_warning
+    from statistics import median
+
+    def alternating_direction_warning(closes, timestamps, atr=None, now=None, **kwargs):
+        return {
+            "stage": "EARLY_WARNING",
+            "direction": "LONG" if len(closes) % 2 else "SHORT",
+            "score": 75,
+            "returns_pct": {"30m": 0.1},
+        }
+
+    monkeypatch.setattr(
+        early_warning, "compute_market_early_warning", alternating_direction_warning
+    )
+    start = 1_800_000_000.0 - 299 * 60
+    candles = []
+    for i in range(300):
+        close = 100.0 + i * 0.02
+        candles.append({
+            "timestamp": start + i * 60,
+            "high": close + 0.05,
+            "low": close - 0.05,
+            "close": close,
+        })
+
+    result = early_warning.backtest_market_early_warning_lead_time(
+        candles, max_bars=300, horizon_bars=12
+    )
+    assert result["status"] == "OK"
+    validation = result["temporal_validation"]
+    assert validation["status"] == "OK"
+
+    holdout_samples = [
+        row for row in result["samples"]
+        if row["temporal_validation_partition"] == "HOLDOUT"
+    ]
+    holdout_non_overlapping = early_warning._select_non_overlapping_outcome_samples(
+        holdout_samples, horizon_bars=12
+    )
+    by_direction = validation["holdout_by_direction"]
+    assert set(by_direction) == {"LONG", "SHORT"}
+    assert sum(summary["sample_count"] for summary in by_direction.values()) == len(
+        holdout_non_overlapping
+    )
+    assert all(by_direction[direction]["sample_count"] > 0 for direction in ("LONG", "SHORT"))
+
+    for direction in ("LONG", "SHORT"):
+        selected = [
+            row for row in holdout_non_overlapping if row["direction"] == direction
+        ]
+        summary = by_direction[direction]
+        assert summary["sample_count"] == len(selected)
+        for threshold in ("0_25atr", "0_5atr"):
+            margin_key = f"favorable_before_adverse_{threshold}_seconds"
+            count_key = f"paired_threshold_order_sample_count_{threshold}"
+            median_key = f"median_favorable_before_adverse_{threshold}_seconds"
+            margins = [
+                row[margin_key] for row in selected if row[margin_key] is not None
+            ]
+            assert summary[count_key] == len(margins)
+            assert summary[median_key] == (median(margins) if margins else None)
+            assert summary[
+                f"{count_key}_sufficient_for_interpretation"
+            ] is (len(margins) >= 20)
+
+    assert result["execution_authorized"] is False
+
