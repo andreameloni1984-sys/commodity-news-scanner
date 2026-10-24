@@ -396,6 +396,19 @@ def backtest_market_early_warning_lead_time(
                 "execution_authorized": False,
                 "method": "ROLLING_WALK_FORWARD_NOT_CALIBRATED",
             }
+        # Outcome lead times are reported in seconds. A contemporary Unix
+        # millisecond timestamp would otherwise pass the relative-cadence
+        # check and inflate every elapsed-time metric by roughly 1000x.
+        if stamp >= 100_000_000_000:
+            return {
+                "status": "INVALID_DATA", "sample_count": 0,
+                "reason": (
+                    f"timestamp alla posizione {row_index} sembra espresso in millisecondi; "
+                    "attesi timestamp Unix in secondi"
+                ),
+                "execution_authorized": False,
+                "method": "ROLLING_WALK_FORWARD_NOT_CALIBRATED",
+            }
         if low <= 0 or high < low or close <= 0 or high < close or low > close:
             return {
                 "status": "INVALID_DATA", "sample_count": 0,
