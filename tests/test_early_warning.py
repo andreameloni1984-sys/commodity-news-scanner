@@ -250,6 +250,30 @@ def test_lead_time_backtest_measures_favorable_move_without_authorizing_trade():
                 assert direction_summary["favorable_first_pct_resolved"] is None
         assert directional_total == summary["sample_count"]
 
+    paired_summaries = [
+        result["non_overlapping_outcomes"],
+        *outcomes_by_class.values(),
+        *(
+            subgroup
+            for by_direction in outcomes_by_class_direction.values()
+            for subgroup in by_direction.values()
+        ),
+    ]
+    for group_summary in paired_summaries:
+        for threshold in ("0_25atr", "0_5atr"):
+            paired_count = group_summary[f"paired_threshold_order_sample_count_{threshold}"]
+            assert group_summary[
+                f"paired_threshold_order_sample_count_{threshold}_sufficient_for_interpretation"
+            ] is (paired_count >= 20)
+
+    # In this longer controlled path, at least one group has enough warnings
+    # overall but too few paired touches to interpret its paired median.
+    assert any(
+        group_summary["sample_count"] >= 20
+        and group_summary["paired_threshold_order_sample_count_0_5atr"] < 20
+        for group_summary in paired_summaries
+    )
+
     # Full-sample outcomes may reuse the same future candles when opposite
     # directions warn close together. The secondary diagnostic must not.
     non_overlapping = [
