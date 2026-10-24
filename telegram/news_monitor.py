@@ -973,8 +973,18 @@ def poll_news_once(
                         try:
                             current_price = float(getattr(observed, "price", None))
                             baseline_price = float(baseline_value)
-                            move_pct = (current_price / baseline_price - 1.0) * 100.0
-                        except (TypeError, ValueError, ZeroDivisionError):
+                        except (TypeError, ValueError, OverflowError):
+                            continue
+                        # Keep malformed live quotes out of the persistent reaction
+                        # journal as well as out of setup confirmation. A live flag
+                        # does not make NaN/Infinity a valid observation.
+                        if (
+                            not isfinite(current_price) or current_price <= 0
+                            or not isfinite(baseline_price) or baseline_price <= 0
+                        ):
+                            continue
+                        move_pct = (current_price / baseline_price - 1.0) * 100.0
+                        if not isfinite(move_pct):
                             continue
                         _journal({
                             "kind": "NEWS_REACTION",
