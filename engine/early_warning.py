@@ -961,6 +961,15 @@ def backtest_market_early_warning_lead_time(
         "metriche descrittive sui soli campioni holdout non sovrapposti; "
         "gruppi piccoli non sono interpretabili come evidenza predittiva"
     )
+    # Provide a direction-only view as well as the class-by-direction matrix.
+    # Both use exactly the same chronological holdout subset de-overlapped above.
+    temporal_validation["holdout_by_direction"] = {
+        direction: summarize_outcome_group([
+            row for row in holdout_non_overlapping
+            if row["direction"] == direction
+        ])
+        for direction in ("LONG", "SHORT")
+    }
     non_overlapping_outcomes = summarize_outcome_group(non_overlapping_samples)
     paired_025_margins_all = [
         row["favorable_before_adverse_0_25atr_seconds"]
