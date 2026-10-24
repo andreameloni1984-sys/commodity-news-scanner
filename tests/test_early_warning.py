@@ -800,6 +800,20 @@ def test_temporal_holdout_keeps_future_outcomes_on_their_own_side_of_split(monke
                 == summary["sample_count"]
             )
 
+    # Top-level outcome percentages must expose ambiguous and no-hit cases,
+    # not only decisive favorable/adverse outcomes.
+    assert result["same_bar_ambiguous_pct"] == round(
+        100.0 * result["same_bar_ambiguous"] / result["sample_count"], 1
+    )
+    assert result["neither_reached_0_5atr_pct"] == round(
+        100.0 * result["neither_reached_0_5atr"] / result["sample_count"], 1
+    )
+    assert result["same_bar_0_25atr_ambiguous_pct"] == round(
+        100.0 * result["same_bar_0_25atr_ambiguous"] / result["sample_count"], 1
+    )
+    assert result["neither_reached_0_25atr_pct"] == round(
+        100.0 * result["neither_reached_0_25atr"] / result["sample_count"], 1
+    )
     assert result["execution_authorized"] is False
 
     # A short evaluation span must not manufacture a development/holdout split.
