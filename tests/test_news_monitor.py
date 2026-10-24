@@ -682,3 +682,41 @@ def test_alert_scorecard_assigns_reactions_only_to_latest_event_asset_alert():
     assert report["tp1_observed"] == 1
     assert report["open_at_last_check"] == 1
 
+def test_news_reaction_journal_rejects_non_finite_live_price(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    import telegram.news_monitor as monitor
+
+    monkeypatch.setattr(monitor, "STATE_PATH", tmp_path / "news_state.json")
+    now = datetime(2026, 10, 23, 14, 0, tzinfo=timezone.utc)
+    item = {
+        "source": "Test RSS",
+        "title": "OPEC announces production cut",
+        "url": "https://example.test/opec-cut-invalid-reaction",
+        "published_at": (now - timedelta(minutes=1)).isoformat(),
+    }
+    wti = SimpleNamespace(
+        commodity="Petrolio WTI", symbol="WTI/USD", setup_direction="LONG",
+        final_decision="PAPER_SIGNAL", trigger_confirmed=True, live=True,
+        price=80.0, entry=80.1, stop=78.5, tp1=83.0, tp2=84.0,
+        data_source="TEST_FEED",
+    )
+    journal_rows = []
+    monkeypatch.setattr(monitor, "_journal", lambda row: journal_rows.append(dict(row)))
+
+    first = monitor.poll_news_once(
+        lambda _message: True, lambda: [wti],
+        fetcher=lambda: [item], now=now,
+    )
+    assert first["alerts"] == 0  # capture a finite baseline only
+
+    wti.price = float("inf")
+    second = monitor.poll_news_once(
+        lambda _message: True, lambda: [wti],
+        fetcher=lambda: [item], now=now + timedelta(minutes=5),
+    )
+
+    reactions = [row for row in journal_rows if row.get("kind") == "NEWS_REACTION"]
+    assert second["alerts"] == 0
+    assert reactions == []
+    assert second["pending"] == 1
+
