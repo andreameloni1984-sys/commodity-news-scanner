@@ -266,7 +266,7 @@ def _maybe_send_daily_scorecard(state: dict[str, Any], send_telegram: Callable[[
     report = build_alert_scorecard(rows, now)
     if report["scored"]:
         message = ("📊 GAGARIN — VERIFICA ALERT (ultimi 7 giorni)\n"
-                   f"Valutati: {report['scored']}/{report['eligible_alerts']} alert eleggibili (righe grezze: {report['alerts']}) | copertura: {report['coverage_pct']:.1f}% | in attesa: {report['pending']} | senza dati a finestra chiusa: {report['unscored_expired']}\\n"
+                   f"Valutati: {report['scored']}/{report['eligible_alerts']} alert eleggibili (righe grezze: {report['alerts']}) | copertura: {report['coverage_pct']:.1f}% | in attesa: {report['pending']} | senza dati a finestra chiusa: {report['unscored_expired']}\n"
                    f"Gruppi alert ambigui esclusi: {report['ambiguous_alert_groups']} | osservazioni ambigue escluse: {report['ambiguous_reaction_groups']}\n"
                    f"Direzione corretta: {report['correct']} | errata: {report['incorrect']}\n"
                    f"Accuratezza direzionale: {report['accuracy_pct']:.1f}%\n"
