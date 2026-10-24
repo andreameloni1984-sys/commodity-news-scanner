@@ -775,6 +775,30 @@ def test_temporal_holdout_keeps_future_outcomes_on_their_own_side_of_split(monke
             + summary["neither_reached_0_5atr"]
             == summary["sample_count"]
         )
+        assert (
+            summary["favorable_0_25atr_first"]
+            + summary["adverse_0_25atr_first"]
+            + summary["same_bar_0_25atr_ambiguous"]
+            + summary["neither_reached_0_25atr"]
+            == summary["sample_count"]
+        )
+        for metric, count_key in (
+            ("favorable_0_25atr_first_pct", "favorable_0_25atr_first"),
+            ("adverse_0_25atr_first_pct", "adverse_0_25atr_first"),
+            ("same_bar_0_25atr_ambiguous_pct", "same_bar_0_25atr_ambiguous"),
+            ("neither_reached_0_25atr_pct", "neither_reached_0_25atr"),
+        ):
+            expected = (
+                round(100.0 * summary[count_key] / summary["sample_count"], 1)
+                if summary["sample_count"] else None
+            )
+            assert summary[metric] == expected
+        assert summary["median_warning_to_favorable_0_25atr_seconds"] is None or (
+            summary["median_warning_to_favorable_0_25atr_seconds"] >= 0
+        )
+        assert summary["median_warning_to_adverse_0_25atr_seconds"] is None or (
+            summary["median_warning_to_adverse_0_25atr_seconds"] >= 0
+        )
     assert validation["holdout_sample_count_sufficient_for_interpretation"] is False
 
     # Holdout timing diagnostics must include only the de-overlapped holdout
@@ -798,6 +822,30 @@ def test_temporal_holdout_keeps_future_outcomes_on_their_own_side_of_split(monke
                 + summary["same_bar_ambiguous"]
                 + summary["neither_reached_0_5atr"]
                 == summary["sample_count"]
+            )
+            assert (
+                summary["favorable_0_25atr_first"]
+                + summary["adverse_0_25atr_first"]
+                + summary["same_bar_0_25atr_ambiguous"]
+                + summary["neither_reached_0_25atr"]
+                == summary["sample_count"]
+            )
+            for metric, count_key in (
+                ("favorable_0_25atr_first_pct", "favorable_0_25atr_first"),
+                ("adverse_0_25atr_first_pct", "adverse_0_25atr_first"),
+                ("same_bar_0_25atr_ambiguous_pct", "same_bar_0_25atr_ambiguous"),
+                ("neither_reached_0_25atr_pct", "neither_reached_0_25atr"),
+            ):
+                expected = (
+                    round(100.0 * summary[count_key] / summary["sample_count"], 1)
+                    if summary["sample_count"] else None
+                )
+                assert summary[metric] == expected
+            assert summary["median_warning_to_favorable_0_25atr_seconds"] is None or (
+                summary["median_warning_to_favorable_0_25atr_seconds"] >= 0
+            )
+            assert summary["median_warning_to_adverse_0_25atr_seconds"] is None or (
+                summary["median_warning_to_adverse_0_25atr_seconds"] >= 0
             )
 
     # Top-level outcome percentages must expose ambiguous and no-hit cases,
