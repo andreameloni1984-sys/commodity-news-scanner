@@ -889,6 +889,42 @@ def test_temporal_holdout_keeps_future_outcomes_on_their_own_side_of_split(monke
         assert summary[count_key] == len(values)
         assert summary[median_key] == (median(values) if values else None)
 
+    # A large outcome group must not make its much smaller paired-margin
+    # subset appear statistically sufficient. Check every public stratification.
+    paired_summaries = [
+        result["non_overlapping_outcomes"],
+        validation["development"],
+        validation["holdout"],
+        *result["outcomes_by_prior_move_class"].values(),
+        *(
+            subgroup
+            for by_direction in result["outcomes_by_prior_move_class_and_direction"].values()
+            for subgroup in by_direction.values()
+        ),
+        *(
+            subgroup
+            for by_direction in validation["holdout_by_prior_move_class_and_direction"].values()
+            for subgroup in by_direction.values()
+        ),
+    ]
+    for group_summary in paired_summaries:
+        for threshold in ("0_25atr", "0_5atr"):
+            paired_count = group_summary[f"paired_threshold_order_sample_count_{threshold}"]
+            assert group_summary[
+                f"paired_threshold_order_sample_count_{threshold}_sufficient_for_interpretation"
+            ] is (paired_count >= 20)
+
+    # This controlled series has many warning samples but few/no paired
+    # threshold touches, proving the paired floor is independent of group size.
+    assert any(
+        group_summary["sample_count"] >= 20
+        and group_summary["paired_threshold_order_sample_count_0_5atr"] < 20
+        and not group_summary[
+            "paired_threshold_order_sample_count_0_5atr_sufficient_for_interpretation"
+        ]
+        for group_summary in paired_summaries
+    )
+
     assert result["execution_authorized"] is False
 
     # A short evaluation span must not manufacture a development/holdout split.
