@@ -938,6 +938,17 @@ def test_temporal_holdout_keeps_future_outcomes_on_their_own_side_of_split(monke
                 f"paired_threshold_order_sample_count_{threshold}_sufficient_for_interpretation"
             ] is (paired_count >= 20)
 
+    # The aggregate warning count can be large while the paired subset remains
+    # too small. Top-level metrics must report that distinction explicitly.
+    assert result["sample_count"] >= 20
+    assert result["minimum_sample_count_for_descriptive_interpretation"] == 20
+    for threshold in ("0_25atr", "0_5atr"):
+        paired_count = result[f"paired_threshold_order_sample_count_{threshold}"]
+        assert paired_count < 20
+        assert result[
+            f"paired_threshold_order_sample_count_{threshold}_sufficient_for_interpretation"
+        ] is False
+
     assert result["execution_authorized"] is False
 
     # A short evaluation span must not manufacture a development/holdout split.
