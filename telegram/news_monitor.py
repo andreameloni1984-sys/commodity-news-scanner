@@ -124,6 +124,7 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
 
     scored, pending, unscored_expired = [], 0, 0
     ambiguous_reaction_groups = 0
+    invalid_level_alerts = 0
     for alert, sent_at, alert_price, direction in alerts:
         event_id = str(alert.get("event_id") or "").strip()
         asset = str(alert.get("asset") or "").strip()
@@ -189,10 +190,21 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         try:
             stop = float(alert.get("stop"))
             tp1 = float(alert.get("tp1"))
-            if not (isfinite(stop) and stop > 0 and isfinite(tp1) and tp1 > 0):
-                stop, tp1 = None, None
+            levels_valid = isfinite(stop) and stop > 0 and isfinite(tp1) and tp1 > 0
         except (TypeError, ValueError, OverflowError):
+            stop, tp1, levels_valid = None, None, False
+        if not levels_valid:
             stop, tp1 = None, None
+        else:
+            # A bracket must be on the correct sides of the alert's reference
+            # price. Otherwise TP/SL outcome labels are structurally ambiguous.
+            bracket_coherent = (
+                (direction == "LONG" and stop < alert_price < tp1)
+                or (direction == "SHORT" and tp1 < alert_price < stop)
+            )
+            if not bracket_coherent:
+                invalid_level_alerts += 1
+                stop, tp1 = None, None
         outcome = "OPEN_AT_LAST_CHECK"
         if stop is not None and tp1 is not None:
             for _, observed_price in reaction_observations:
@@ -213,6 +225,7 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
             "unscored_expired": unscored_expired,
             "ambiguous_alert_groups": ambiguous_alert_groups,
             "ambiguous_reaction_groups": ambiguous_reaction_groups,
+            "invalid_level_alerts": invalid_level_alerts,
             "coverage_pct": round(len(scored)/len(alerts)*100, 2) if alerts else None,
             "correct": correct, "incorrect": len(scored)-correct,
             "accuracy_pct": round(correct/len(scored)*100, 2) if scored else None,
