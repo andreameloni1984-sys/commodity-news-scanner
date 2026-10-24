@@ -18,7 +18,7 @@ def _finite(value: Any) -> float | None:
         return None
     try:
         result = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
     return result if isfinite(result) else None
 
