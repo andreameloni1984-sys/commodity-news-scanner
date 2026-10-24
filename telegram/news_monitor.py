@@ -292,7 +292,8 @@ def _maybe_send_daily_scorecard(state: dict[str, Any], send_telegram: Callable[[
                    f"Direzione corretta: {report['correct']} | errata: {report['incorrect']}\n"
                    f"Accuratezza direzionale: {report['accuracy_pct']:.1f}%\n"
                    f"Rendimento direzionale medio: {report['mean_directional_return_pct']:+.3f}%\n"
-                   f"TP1 osservato: {report['tp1_observed']} | SL osservato: {report['sl_observed']} | ancora aperti: {report['open_at_last_check']} | esiti con gap ambiguo: {report['path_ambiguous_alerts']}\n"
+                   f"TP1 osservato: {report['tp1_observed']} | SL osservato: {report['sl_observed']} | ancora aperti: {report['open_at_last_check']}\n"
+                   f"Percorso TP/SL ambiguo: {report['path_ambiguous_alerts']} (gap osservazioni > {report['observation_gap_limit_minutes']:.0f} min)\n"
                    "TP/SL sono attraversamenti osservati ai controlli periodici, non tick intrabar. Feed Gagarin; esclusi spread/slippage.")
     else:
         message = ("📊 GAGARIN — VERIFICA ALERT (ultimi 7 giorni)\n"
