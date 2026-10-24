@@ -202,10 +202,12 @@ def compute_market_early_warning(
     cadence_ok = len(cadence_window) >= 8 and all(
         interval <= max_gap_seconds for interval in cadence_window
     )
+    volatility_expansion = False
     if len(recent) >= 3 and len(baseline) >= 8 and cadence_ok:
         recent_vol = (sum(x*x for x in recent) / len(recent)) ** 0.5
         baseline_vol = (sum(x*x for x in baseline) / len(baseline)) ** 0.5
         if baseline_vol > 0 and recent_vol >= 1.5 * baseline_vol:
+            volatility_expansion = True
             score += 15
             reasons.append("espansione della volatilità intraday")
         base_median = median(abs(x) for x in baseline)
@@ -237,7 +239,7 @@ def compute_market_early_warning(
         "returns_pct": {"30m": round(r30, 4), "60m": round(r60, 4),
                         "4h": round(r240, 4) if r240 is not None else None},
         "acceleration_pct_points": round(acceleration, 4),
-        "volatility_expansion": any("volatilità" in x for x in reasons),
+        "volatility_expansion": volatility_expansion,
         "late_move": late, "reasons": reasons[:5], "execution_authorized": False,
         "method": "HEURISTIC_NOT_CALIBRATED",
     }
