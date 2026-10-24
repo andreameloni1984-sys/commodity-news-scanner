@@ -862,6 +862,33 @@ def test_temporal_holdout_keeps_future_outcomes_on_their_own_side_of_split(monke
     assert result["neither_reached_0_25atr_pct"] == round(
         100.0 * result["neither_reached_0_25atr"] / result["sample_count"], 1
     )
+    # Paired lead margin is positive when the favorable threshold came first,
+    # negative when adverse came first, and null for same-candle/one-sided cases.
+    for sample in result["samples"]:
+        for margin_key, favorable_key, adverse_key in (
+            ("favorable_before_adverse_0_25atr_seconds",
+             "warning_to_favorable_0_25atr_seconds", "warning_to_adverse_0_25atr_seconds"),
+            ("favorable_before_adverse_0_5atr_seconds", "lead_seconds", "first_adverse_seconds"),
+        ):
+            favorable_time = sample[favorable_key]
+            adverse_time = sample[adverse_key]
+            if favorable_time is None or adverse_time is None or favorable_time == adverse_time:
+                assert sample[margin_key] is None
+            else:
+                assert sample[margin_key] == adverse_time - favorable_time
+
+    from statistics import median
+    non_overlapping = [row for row in result["samples"] if row["non_overlapping_outcome_sample"]]
+    summary = result["non_overlapping_outcomes"]
+    for margin_key, count_key in (
+        ("favorable_before_adverse_0_25atr_seconds", "paired_threshold_order_sample_count_0_25atr"),
+        ("favorable_before_adverse_0_5atr_seconds", "paired_threshold_order_sample_count_0_5atr"),
+    ):
+        values = [row[margin_key] for row in non_overlapping if row[margin_key] is not None]
+        median_key = "median_" + margin_key
+        assert summary[count_key] == len(values)
+        assert summary[median_key] == (median(values) if values else None)
+
     assert result["execution_authorized"] is False
 
     # A short evaluation span must not manufacture a development/holdout split.
