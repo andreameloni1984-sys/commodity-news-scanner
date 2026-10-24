@@ -790,6 +790,15 @@ def backtest_market_early_warning_lead_time(
             ),
             "paired_threshold_order_sample_count_0_25atr": len(paired_025_margins),
             "paired_threshold_order_sample_count_0_5atr": len(paired_05_margins),
+            # The general group size can be much larger than the paired subset:
+            # only samples that touch both thresholds at distinct times contribute
+            # to this margin. Expose a separate floor for each paired metric.
+            "paired_threshold_order_sample_count_0_25atr_sufficient_for_interpretation": (
+                len(paired_025_margins) >= minimum_samples_for_interpretation
+            ),
+            "paired_threshold_order_sample_count_0_5atr_sufficient_for_interpretation": (
+                len(paired_05_margins) >= minimum_samples_for_interpretation
+            ),
             "favorable_0_25atr_first": group_favorable_025,
             "adverse_0_25atr_first": group_adverse_025,
             "same_bar_0_25atr_ambiguous": group_same_bar_025,
