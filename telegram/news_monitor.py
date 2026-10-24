@@ -125,9 +125,14 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
     # Raw journal rows can include exact duplicates and conflicting groups.
     # Coverage uses only deduplicated, eligible alerts; "alerts" stays raw.
     eligible_alert_count = len(alerts)
+    # A gap above three expected recheck intervals can hide an earlier
+    # crossing of the opposite bracket. Keep the observed outcome, but flag
+    # its path as ambiguous rather than implying continuous price knowledge.
+    observation_gap_limit_seconds = max(900, RECHECK_SECONDS * 3)
     scored, pending, unscored_expired = [], 0, 0
     ambiguous_reaction_groups = 0
     invalid_level_alerts = 0
+    path_ambiguous_alerts = 0
     for alert, sent_at, alert_price, direction in alerts:
         event_id = str(alert.get("event_id") or "").strip()
         asset = str(alert.get("asset") or "").strip()
@@ -209,17 +214,31 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
                 invalid_level_alerts += 1
                 stop, tp1 = None, None
         outcome = "OPEN_AT_LAST_CHECK"
+        path_ambiguous = False
         if stop is not None and tp1 is not None:
-            for _, observed_price in reaction_observations:
+            previous_observed_at = None
+            for reaction_at, observed_price in reaction_observations:
+                if (
+                    previous_observed_at is not None
+                    and (reaction_at - previous_observed_at).total_seconds() > observation_gap_limit_seconds
+                ):
+                    path_ambiguous = True
+                previous_observed_at = reaction_at
                 if (direction == "LONG" and observed_price <= stop) or (direction == "SHORT" and observed_price >= stop):
                     outcome = "SL_OBSERVED"
                     break
                 if (direction == "LONG" and observed_price >= tp1) or (direction == "SHORT" and observed_price <= tp1):
                     outcome = "TP1_OBSERVED"
                     break
+            if outcome == "OPEN_AT_LAST_CHECK":
+                # A gap only matters to TP/SL path interpretation if a level
+                # was eventually observed; an open outcome is not a hit.
+                path_ambiguous = False
+            elif path_ambiguous:
+                path_ambiguous_alerts += 1
         scored.append({"asset": alert.get("asset"), "direction": direction, "sent_at": sent_at.isoformat(),
                        "observed_at": observed_at.isoformat(), "signed_return_pct": round(signed_pct, 6),
-                       "correct": signed_pct > 0, "outcome": outcome})
+                       "correct": signed_pct > 0, "outcome": outcome, "path_ambiguous": path_ambiguous})
     correct = sum(x["correct"] for x in scored)
     tp1_observed = sum(x["outcome"] == "TP1_OBSERVED" for x in scored)
     sl_observed = sum(x["outcome"] == "SL_OBSERVED" for x in scored)
@@ -229,6 +248,8 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
             "ambiguous_alert_groups": ambiguous_alert_groups,
             "ambiguous_reaction_groups": ambiguous_reaction_groups,
             "invalid_level_alerts": invalid_level_alerts,
+            "path_ambiguous_alerts": path_ambiguous_alerts,
+            "observation_gap_limit_minutes": round(observation_gap_limit_seconds / 60, 2),
             "coverage_pct": round(len(scored)/eligible_alert_count*100, 2) if eligible_alert_count else None,
             "correct": correct, "incorrect": len(scored)-correct,
             "accuracy_pct": round(correct/len(scored)*100, 2) if scored else None,
