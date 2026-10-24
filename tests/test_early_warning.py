@@ -922,6 +922,7 @@ def test_temporal_holdout_keeps_future_outcomes_on_their_own_side_of_split(monke
             for by_direction in validation["holdout_by_prior_move_class_and_direction"].values()
             for subgroup in by_direction.values()
         ),
+        *validation["holdout_by_direction"].values(),
     ]
     for group_summary in paired_summaries:
         for threshold in ("0_25atr", "0_5atr"):
