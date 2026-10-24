@@ -1207,3 +1207,20 @@ def test_backtest_rejects_millisecond_timestamps_instead_of_inflating_lead_times
     assert "timestamp" in result["reason"]
     assert "millisecondi" in result["reason"]
     assert result["execution_authorized"] is False
+
+
+def test_market_early_warning_rejects_millisecond_timestamps_explicitly():
+    now_seconds = 1_800_000_000
+    timestamps_ms = [(now_seconds - (19 - i) * 60) * 1000 for i in range(20)]
+    closes = [100.0 + i * 0.02 for i in range(20)]
+
+    result = compute_market_early_warning(
+        closes, timestamps_ms, atr=0.5, now=now_seconds
+    )
+
+    assert result["stage"] == "INVALID_DATA"
+    assert result["direction"] == "NONE"
+    assert result["score"] == 0
+    assert "millisecondi" in result["reasons"][0]
+    assert result["execution_authorized"] is False
+
