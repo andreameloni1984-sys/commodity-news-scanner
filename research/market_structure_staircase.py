@@ -116,6 +116,19 @@ def detect_staircase(bars: Iterable[Mapping], *, left=2, right=2, min_swing_pct=
     else:
         structure = "MIXED_OR_TRANSITIONAL"
 
+    # Recent state uses only the latest comparison of each swing type.
+    # This prevents a long-ago trend from dominating the current diagnosis.
+    latest_high_state = high_comparisons[-1]["structure"] if high_comparisons else None
+    latest_low_state = low_comparisons[-1]["structure"] if low_comparisons else None
+    if latest_high_state == "HIGHER_HIGH" and latest_low_state == "HIGHER_LOW":
+        recent_structure = "RECENT_BULLISH_STAIRCASE"
+    elif latest_high_state == "LOWER_HIGH" and latest_low_state == "LOWER_LOW":
+        recent_structure = "RECENT_BEARISH_STAIRCASE"
+    elif latest_high_state and latest_low_state:
+        recent_structure = "RECENT_MIXED_OR_TRANSITIONAL"
+    else:
+        recent_structure = "INSUFFICIENT_RECENT_SWING_COMPARISONS"
+
     last_close = _num(raw[-1].get("close")) if isinstance(raw[-1], Mapping) else None
     latest_low = swings["low"][-1] if swings["low"] else None
     latest_high = swings["high"][-1] if swings["high"] else None
@@ -131,6 +144,9 @@ def detect_staircase(bars: Iterable[Mapping], *, left=2, right=2, min_swing_pct=
         "bars": len(raw),
         "pivot_parameters": {"left_bars": left, "right_bars": right, "min_swing_pct": min_swing_pct},
         "structure": structure,
+        "recent_structure": recent_structure,
+        "latest_high_comparison": high_comparisons[-1] if high_comparisons else None,
+        "latest_low_comparison": low_comparisons[-1] if low_comparisons else None,
         "counts": {"higher_high": hh, "higher_low": hl, "lower_high": lh, "lower_low": ll},
         "high_comparisons": high_comparisons,
         "low_comparisons": low_comparisons,
