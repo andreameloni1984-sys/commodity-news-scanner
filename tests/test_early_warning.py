@@ -1127,3 +1127,30 @@ def test_temporal_holdout_direction_summaries_reconcile_with_deoverlapped_sample
 
     assert result["execution_authorized"] is False
 
+
+
+
+def test_irregular_baseline_cadence_does_not_claim_volatility_expansion():
+    # A gap older than the latest hour does not invalidate the 30m/60m
+    # returns, but it does make the wider volatility baseline incomparable.
+    # The diagnostic must say "not evaluated" and keep the boolean false.
+    now = 1_800_000_000.0
+    timestamps = []
+    for i in range(91):
+        stamp = now - (90 - i) * 300
+        if i >= 61:
+            stamp += 1500
+        timestamps.append(stamp)
+    closes = [100.0 + i * 0.03 for i in range(91)]
+
+    result = compute_market_early_warning(
+        closes, timestamps, atr=1.0, now=timestamps[-1]
+    )
+
+    assert result["stage"] in {"WATCH", "EARLY_WARNING", "LATE_MOVE"}
+    assert any(
+        "volatilità/jump non valutati: cadenza timestamp irregolare" in reason
+        for reason in result["reasons"]
+    )
+    assert result["volatility_expansion"] is False
+    assert result["execution_authorized"] is False
