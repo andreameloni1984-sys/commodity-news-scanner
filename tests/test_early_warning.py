@@ -183,6 +183,13 @@ def test_lead_time_backtest_measures_favorable_move_without_authorizing_trade():
 
     assert result["status"] == "OK"
     assert result["sample_count"] > 0
+    cadence = result["cadence_diagnostics"]
+    assert cadence["evaluated_bar_count"] == 108
+    assert cadence["evaluated_interval_count"] == 107
+    assert cadence["typical_interval_seconds"] == 60.0
+    assert cadence["max_observed_interval_seconds"] == 60.0
+    assert cadence["max_allowed_interval_seconds"] == 300.0
+    assert cadence["gap_count"] == 0
     assert result["favorable_first"] > 0
     assert result["favorable_0_25atr_first"] + result["adverse_0_25atr_first"] + result["same_bar_0_25atr_ambiguous"] + result["neither_reached_0_25atr"] == result["sample_count"]
     assert result["median_warning_to_favorable_0_25atr_seconds"] is not None
@@ -609,6 +616,13 @@ def test_lead_time_backtest_rejects_large_time_gaps_in_evaluation_window():
     assert result["status"] == "INSUFFICIENT_DATA"
     assert result["sample_count"] == 0
     assert "gap temporale" in result["reason"]
+    cadence = result["cadence_diagnostics"]
+    assert cadence["evaluated_bar_count"] == 60
+    assert cadence["evaluated_interval_count"] == 59
+    assert cadence["typical_interval_seconds"] == 60.0
+    assert cadence["max_observed_interval_seconds"] == 960.0
+    assert cadence["max_allowed_interval_seconds"] == 300.0
+    assert cadence["gap_count"] == 1
     assert result["execution_authorized"] is False
     assert result["method"] == "ROLLING_WALK_FORWARD_NOT_CALIBRATED"
 
