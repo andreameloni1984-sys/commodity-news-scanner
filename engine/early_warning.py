@@ -692,12 +692,42 @@ def backtest_market_early_warning_lead_time(
         )
         group_neither = count - group_favorable_first - group_adverse_first - group_same_bar
         group_resolved = group_favorable_first + group_adverse_first
+        group_favorable_025 = sum(
+            1 for row in group
+            if row["warning_to_favorable_0_25atr_seconds"] is not None and (
+                row["warning_to_adverse_0_25atr_seconds"] is None
+                or row["warning_to_favorable_0_25atr_seconds"] < row["warning_to_adverse_0_25atr_seconds"]
+            )
+        )
+        group_adverse_025 = sum(
+            1 for row in group
+            if row["warning_to_adverse_0_25atr_seconds"] is not None and (
+                row["warning_to_favorable_0_25atr_seconds"] is None
+                or row["warning_to_adverse_0_25atr_seconds"] < row["warning_to_favorable_0_25atr_seconds"]
+            )
+        )
+        group_same_bar_025 = sum(
+            1 for row in group
+            if row["warning_to_favorable_0_25atr_seconds"] is not None
+            and row["warning_to_adverse_0_25atr_seconds"] is not None
+            and row["warning_to_favorable_0_25atr_seconds"] == row["warning_to_adverse_0_25atr_seconds"]
+        )
+        group_neither_025 = count - group_favorable_025 - group_adverse_025 - group_same_bar_025
+        group_resolved_025 = group_favorable_025 + group_adverse_025
         favorable_times = [
             row["lead_seconds"] for row in group if row["lead_seconds"] is not None
         ]
         adverse_times = [
             row["first_adverse_seconds"] for row in group
             if row["first_adverse_seconds"] is not None
+        ]
+        favorable_times_025 = [
+            row["warning_to_favorable_0_25atr_seconds"] for row in group
+            if row["warning_to_favorable_0_25atr_seconds"] is not None
+        ]
+        adverse_times_025 = [
+            row["warning_to_adverse_0_25atr_seconds"] for row in group
+            if row["warning_to_adverse_0_25atr_seconds"] is not None
         ]
         median_returns = {}
         for horizon_key in ("3", "6", "12"):
@@ -728,6 +758,25 @@ def backtest_market_early_warning_lead_time(
             ),
             "median_warning_to_adverse_0_5atr_seconds": (
                 median(adverse_times) if adverse_times else None
+            ),
+            "favorable_0_25atr_first": group_favorable_025,
+            "adverse_0_25atr_first": group_adverse_025,
+            "same_bar_0_25atr_ambiguous": group_same_bar_025,
+            "neither_reached_0_25atr": group_neither_025,
+            "favorable_0_25atr_first_pct": round(100.0 * group_favorable_025 / count, 1) if count else None,
+            "adverse_0_25atr_first_pct": round(100.0 * group_adverse_025 / count, 1) if count else None,
+            "same_bar_0_25atr_ambiguous_pct": round(100.0 * group_same_bar_025 / count, 1) if count else None,
+            "neither_reached_0_25atr_pct": round(100.0 * group_neither_025 / count, 1) if count else None,
+            "resolved_0_25atr_first_count": group_resolved_025,
+            "favorable_0_25atr_first_pct_resolved": (
+                round(100.0 * group_favorable_025 / group_resolved_025, 1)
+                if group_resolved_025 else None
+            ),
+            "median_warning_to_favorable_0_25atr_seconds": (
+                median(favorable_times_025) if favorable_times_025 else None
+            ),
+            "median_warning_to_adverse_0_25atr_seconds": (
+                median(adverse_times_025) if adverse_times_025 else None
             ),
             "median_direction_adjusted_return_pct": median_returns,
         }
