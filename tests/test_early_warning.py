@@ -1182,3 +1182,28 @@ def test_extremely_large_integer_market_data_fails_closed_without_overflow():
     assert backtest["status"] == "INVALID_DATA"
     assert backtest["sample_count"] == 0
     assert backtest["execution_authorized"] is False
+
+
+def test_backtest_rejects_millisecond_timestamps_instead_of_inflating_lead_times():
+    start_seconds = 1_800_000_000
+    candles = []
+    for i in range(40):
+        close = 100.0 + i * 0.01
+        candles.append({
+            "timestamp": (start_seconds + i * 60) * 1000,
+            "high": close + 0.05,
+            "low": close - 0.05,
+            "close": close,
+        })
+
+    from engine.early_warning import backtest_market_early_warning_lead_time
+
+    result = backtest_market_early_warning_lead_time(
+        candles, max_bars=30, horizon_bars=3
+    )
+
+    assert result["status"] == "INVALID_DATA"
+    assert result["sample_count"] == 0
+    assert "timestamp" in result["reason"]
+    assert "millisecondi" in result["reason"]
+    assert result["execution_authorized"] is False
