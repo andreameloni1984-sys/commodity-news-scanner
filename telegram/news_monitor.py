@@ -16,6 +16,7 @@ import threading
 import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
+from math import isfinite
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlencode
@@ -23,6 +24,7 @@ from urllib.parse import urlencode
 import requests
 
 from engine.public_event_brain import classify as classify_public_intelligence
+from engine.early_warning import classify_catalyst_timing
 from sputnik_action_reaction import build_action_reaction_record
 from sputnik_catalyst import catalyst_watchlist
 
@@ -64,6 +66,9 @@ def _journal(record: dict[str, Any]) -> None:
 def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = None) -> dict[str, Any]:
     """Score alert direction using a later live price observation, not a keyword label."""
     now = now or _utc_now()
+    # Keep comparisons deterministic when callers pass a naive datetime.
+    # Treat naive values as UTC explicitly instead of inheriting the host TZ.
+    now = now.replace(tzinfo=timezone.utc) if now.tzinfo is None else now.astimezone(timezone.utc)
     cutoff = now - timedelta(days=7)
     alerts = []
     for row in rows:
@@ -72,32 +77,114 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         sent_at = _parse_datetime(row.get("sent_at") or row.get("recorded_at"))
         try:
             price = float(row.get("price"))
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             continue
         direction = str(row.get("direction") or "").upper()
-        if sent_at and sent_at >= cutoff and price > 0 and direction in {"LONG", "SHORT"}:
+        if sent_at and sent_at >= cutoff and isfinite(price) and price > 0 and direction in {"LONG", "SHORT"}:
             alerts.append((row, sent_at, price, direction))
+    # A reaction belongs to the most recent alert for the same event/asset.
+    # Older journal data can contain repeated sends even though current alert
+    # deduplication should prevent them. Bound each alert's observation window
+    # at the next send so a single price observation is never scored twice.
+    raw_alert_count = len(alerts)
+    grouped_alerts: dict[tuple[Any, ...], list[tuple[dict[str, Any], datetime, float, str]]] = {}
+    for index, candidate in enumerate(alerts):
+        row, sent_at, price, direction = candidate
+        event_id = str(row.get("event_id") or "").strip()
+        asset = str(row.get("asset") or "").strip()
+        key = (event_id, asset, sent_at) if event_id and asset else ("__row__", index)
+        grouped_alerts.setdefault(key, []).append(candidate)
+
+    alerts = []
+    ambiguous_alert_groups = 0
+    for group in grouped_alerts.values():
+        signatures = {
+            (direction, price, str(row.get("stop")), str(row.get("tp1")))
+            for row, _, price, direction in group
+        }
+        if len(signatures) > 1:
+            # With conflicting levels/directions at the same event, asset and
+            # send time, the legacy journal cannot identify which alert owns a
+            # later reaction. Fail closed rather than manufacture a score.
+            ambiguous_alert_groups += 1
+            continue
+        alerts.append(group[0])  # collapse exact duplicate journal records
+
+    sent_times_by_event_asset: dict[tuple[str, str], list[datetime]] = {}
+    for alert, sent_at, _, _ in alerts:
+        event_id = str(alert.get("event_id") or "").strip()
+        asset = str(alert.get("asset") or "").strip()
+        if event_id and asset:
+            sent_times_by_event_asset.setdefault((event_id, asset), []).append(sent_at)
+    next_send_at: dict[tuple[str, str, datetime], datetime] = {}
+    for key, times in sent_times_by_event_asset.items():
+        unique_times = sorted(set(times))
+        for current, following in zip(unique_times, unique_times[1:]):
+            next_send_at[(key[0], key[1], current)] = following
+
+    # Raw journal rows can include exact duplicates and conflicting groups.
+    # Coverage uses only deduplicated, eligible alerts; "alerts" stays raw.
+    eligible_alert_count = len(alerts)
+    # A gap above three expected recheck intervals can hide an earlier
+    # crossing of the opposite bracket. Keep the observed outcome, but flag
+    # its path as ambiguous rather than implying continuous price knowledge.
+    observation_gap_limit_seconds = max(900, RECHECK_SECONDS * 3)
     scored, pending, unscored_expired = [], 0, 0
+    ambiguous_reaction_groups = 0
+    invalid_level_alerts = 0
+    path_ambiguous_alerts = 0
     for alert, sent_at, alert_price, direction in alerts:
+        event_id = str(alert.get("event_id") or "").strip()
+        asset = str(alert.get("asset") or "").strip()
+        successor = next_send_at.get((event_id, asset, sent_at)) if event_id and asset else None
         reaction_observations = []
         for row in rows:
             if row.get("kind") != "NEWS_REACTION" or row.get("event_id") != alert.get("event_id") or row.get("asset") != alert.get("asset"):
                 continue
             observed_at = _parse_datetime(row.get("observed_at") or row.get("recorded_at"))
-            if not observed_at or not (sent_at <= observed_at <= sent_at + timedelta(hours=4)):
+            # A journal row may carry a malformed/future timestamp. Never
+            # score a reaction that had not happened at the scorecard's as-of
+            # time; otherwise historical evaluation can leak future prices.
+            # The next send is an exclusive boundary for the previous alert.
+            if (
+                not observed_at
+                or observed_at < sent_at
+                or observed_at > min(sent_at + timedelta(hours=4), now)
+                or (successor is not None and observed_at >= successor)
+            ):
                 continue
             try:
                 price = float(row.get("current_price"))
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, OverflowError):
                 continue
-            if price > 0:
+            if isfinite(price) and price > 0:
                 reaction_observations.append((observed_at, price))
+        # Multiple journal rows can share a timestamp after retries or
+        # duplicated polling. Identical repeats are harmless; conflicting
+        # prices at the same instant are ambiguous and must not decide TP/SL
+        # or directional outcome based on journal insertion order.
+        by_timestamp: dict[datetime, set[float]] = {}
+        for observed_at, observed_price in reaction_observations:
+            by_timestamp.setdefault(observed_at, set()).add(observed_price)
+        clean_observations = []
+        for observed_at, prices_at_time in by_timestamp.items():
+            if len(prices_at_time) != 1:
+                ambiguous_reaction_groups += 1
+                continue
+            clean_observations.append((observed_at, next(iter(prices_at_time))))
+        reaction_observations = sorted(clean_observations, key=lambda item: item[0])
+
         # Directional accuracy uses a minimum 15-minute horizon to avoid
         # treating immediate noise as a forecast result. TP/SL, however,
-        # must include every post-delivery observation, including the first 15m.
+        # must include every unambiguous post-delivery observation, including
+        # the first 15m.
         observations = [item for item in reaction_observations if item[0] >= sent_at + timedelta(minutes=15)]
         if not observations:
-            if now <= sent_at + timedelta(hours=4):
+            window_closed = (
+                now > sent_at + timedelta(hours=4)
+                or (successor is not None and now >= successor)
+            )
+            if not window_closed:
                 pending += 1
             else:
                 # Closed evaluation window with missing prices is unscored, not pending or a loss.
@@ -111,27 +198,59 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         try:
             stop = float(alert.get("stop"))
             tp1 = float(alert.get("tp1"))
-        except (TypeError, ValueError):
+            levels_valid = isfinite(stop) and stop > 0 and isfinite(tp1) and tp1 > 0
+        except (TypeError, ValueError, OverflowError):
+            stop, tp1, levels_valid = None, None, False
+        if not levels_valid:
             stop, tp1 = None, None
+        else:
+            # A bracket must be on the correct sides of the alert's reference
+            # price. Otherwise TP/SL outcome labels are structurally ambiguous.
+            bracket_coherent = (
+                (direction == "LONG" and stop < alert_price < tp1)
+                or (direction == "SHORT" and tp1 < alert_price < stop)
+            )
+            if not bracket_coherent:
+                invalid_level_alerts += 1
+                stop, tp1 = None, None
         outcome = "OPEN_AT_LAST_CHECK"
+        path_ambiguous = False
         if stop is not None and tp1 is not None:
-            for _, observed_price in reaction_observations:
+            previous_observed_at = None
+            for reaction_at, observed_price in reaction_observations:
+                if (
+                    previous_observed_at is not None
+                    and (reaction_at - previous_observed_at).total_seconds() > observation_gap_limit_seconds
+                ):
+                    path_ambiguous = True
+                previous_observed_at = reaction_at
                 if (direction == "LONG" and observed_price <= stop) or (direction == "SHORT" and observed_price >= stop):
                     outcome = "SL_OBSERVED"
                     break
                 if (direction == "LONG" and observed_price >= tp1) or (direction == "SHORT" and observed_price <= tp1):
                     outcome = "TP1_OBSERVED"
                     break
+            if outcome == "OPEN_AT_LAST_CHECK":
+                # A gap only matters to TP/SL path interpretation if a level
+                # was eventually observed; an open outcome is not a hit.
+                path_ambiguous = False
+            elif path_ambiguous:
+                path_ambiguous_alerts += 1
         scored.append({"asset": alert.get("asset"), "direction": direction, "sent_at": sent_at.isoformat(),
                        "observed_at": observed_at.isoformat(), "signed_return_pct": round(signed_pct, 6),
-                       "correct": signed_pct > 0, "outcome": outcome})
+                       "correct": signed_pct > 0, "outcome": outcome, "path_ambiguous": path_ambiguous})
     correct = sum(x["correct"] for x in scored)
     tp1_observed = sum(x["outcome"] == "TP1_OBSERVED" for x in scored)
     sl_observed = sum(x["outcome"] == "SL_OBSERVED" for x in scored)
     open_count = sum(x["outcome"] == "OPEN_AT_LAST_CHECK" for x in scored)
-    return {"window_days": 7, "alerts": len(alerts), "scored": len(scored), "pending": pending,
-            "unscored_expired": unscored_expired,
-            "coverage_pct": round(len(scored)/len(alerts)*100, 2) if alerts else None,
+    return {"window_days": 7, "alerts": raw_alert_count, "eligible_alerts": eligible_alert_count,
+            "scored": len(scored), "pending": pending, "unscored_expired": unscored_expired,
+            "ambiguous_alert_groups": ambiguous_alert_groups,
+            "ambiguous_reaction_groups": ambiguous_reaction_groups,
+            "invalid_level_alerts": invalid_level_alerts,
+            "path_ambiguous_alerts": path_ambiguous_alerts,
+            "observation_gap_limit_minutes": round(observation_gap_limit_seconds / 60, 2),
+            "coverage_pct": round(len(scored)/eligible_alert_count*100, 2) if eligible_alert_count else None,
             "correct": correct, "incorrect": len(scored)-correct,
             "accuracy_pct": round(correct/len(scored)*100, 2) if scored else None,
             "mean_directional_return_pct": round(sum(x["signed_return_pct"] for x in scored)/len(scored), 4) if scored else None,
@@ -168,15 +287,18 @@ def _maybe_send_daily_scorecard(state: dict[str, Any], send_telegram: Callable[[
     report = build_alert_scorecard(rows, now)
     if report["scored"]:
         message = ("📊 GAGARIN — VERIFICA ALERT (ultimi 7 giorni)\n"
-                   f"Valutati: {report['scored']}/{report['alerts']} | copertura: {report['coverage_pct']:.1f}% | in attesa: {report['pending']} | senza dati a finestra chiusa: {report['unscored_expired']}\n"
+                   f"Valutati: {report['scored']}/{report['eligible_alerts']} alert eleggibili (righe grezze: {report['alerts']}) | copertura: {report['coverage_pct']:.1f}% | in attesa: {report['pending']} | senza dati a finestra chiusa: {report['unscored_expired']}\n"
+                   f"Gruppi alert ambigui esclusi: {report['ambiguous_alert_groups']} | osservazioni ambigue escluse: {report['ambiguous_reaction_groups']}\n"
                    f"Direzione corretta: {report['correct']} | errata: {report['incorrect']}\n"
                    f"Accuratezza direzionale: {report['accuracy_pct']:.1f}%\n"
                    f"Rendimento direzionale medio: {report['mean_directional_return_pct']:+.3f}%\n"
                    f"TP1 osservato: {report['tp1_observed']} | SL osservato: {report['sl_observed']} | ancora aperti: {report['open_at_last_check']}\n"
+                   f"Percorso TP/SL ambiguo: {report['path_ambiguous_alerts']} (gap osservazioni > {report['observation_gap_limit_minutes']:.0f} min)\n"
                    "TP/SL sono attraversamenti osservati ai controlli periodici, non tick intrabar. Feed Gagarin; esclusi spread/slippage.")
     else:
         message = ("📊 GAGARIN — VERIFICA ALERT (ultimi 7 giorni)\n"
                    f"Alert inviati: {report['alerts']} | in attesa: {report['pending']} | senza dati a finestra chiusa: {report['unscored_expired']}\n"
+                   f"Gruppi alert ambigui esclusi: {report['ambiguous_alert_groups']} | osservazioni ambigue escluse: {report['ambiguous_reaction_groups']}\n"
                    "Campione valutabile insufficiente: servono prezzi osservati almeno 15 minuti dopo l'alert.")
     try:
         sent = bool(send_telegram(message))
@@ -315,8 +437,18 @@ def _fingerprint(item: dict[str, Any]) -> str:
 
 
 def _title_cluster(item: dict[str, Any]) -> str:
+    """Deduplicate syndicated titles within a UTC publication day, not forever.
+
+    Title-only hashes suppressed genuinely new recurrences of the same headline
+    for as long as the bounded state retained that hash. A UTC date bucket keeps
+    same-day syndication deduplication while allowing a later-day event with the
+    same normalized title to be considered independently.
+    """
     title = _normalise_title(str(item.get("title") or ""))
-    return hashlib.sha256(title.encode("utf-8")).hexdigest()[:20]
+    published = _parse_datetime(item.get("published_at"))
+    publication_day = published.date().isoformat() if published else "unknown-date"
+    key = f"{publication_day}|{title}"
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:20]
 
 
 def _source_allowed(source: str, min_interval: int = 0) -> bool:
@@ -583,7 +715,9 @@ def _capture_baseline(event: dict[str, Any], states: list[Any]) -> dict[str, flo
                 value = float(getattr(state, "price", None))
             except (TypeError, ValueError):
                 continue
-            if value > 0:
+            # A live flag does not make a numeric quote trustworthy: reject
+            # NaN/Infinity before they can become persistent event baselines.
+            if isfinite(value) and value > 0:
                 baseline[asset] = value
                 break
     return baseline
@@ -601,9 +735,11 @@ def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str
             continue
         try:
             baseline = float(baselines.get(asset))
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             continue
-        if baseline <= 0:
+        # Non-finite baselines can manufacture extreme/NaN reactions and must
+        # never confirm a catalyst-driven setup.
+        if not isfinite(baseline) or baseline <= 0:
             continue
         expected_direction = "LONG" if impact == "RIALZISTA" else "SHORT"
         for state in states:
@@ -629,8 +765,22 @@ def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str
             if any(v is None for v in (price, entry, stop, tp1)):
                 continue
             try:
-                price_value = float(price)
-            except (TypeError, ValueError):
+                price_value, entry_value, stop_value, tp1_value = (
+                    float(price), float(entry), float(stop), float(tp1)
+                )
+                tp2_raw = getattr(state, "tp2", None)
+                tp2_value = float(tp2_raw) if tp2_raw is not None else None
+            except (TypeError, ValueError, OverflowError):
+                continue
+            numeric_levels = [price_value, entry_value, stop_value, tp1_value]
+            if tp2_value is not None:
+                numeric_levels.append(tp2_value)
+            if not all(isfinite(value) and value > 0 for value in numeric_levels):
+                continue
+            # Never send a Telegram trade plan with impossible risk geometry.
+            risk_distance = entry_value - stop_value if direction == "LONG" else stop_value - entry_value
+            reward_distance = tp1_value - entry_value if direction == "LONG" else entry_value - tp1_value
+            if risk_distance <= 0 or reward_distance <= 0:
                 continue
             move_pct = (price_value / baseline - 1.0) * 100.0
             if impact == "RIALZISTA" and move_pct < min_reaction_pct:
@@ -642,40 +792,55 @@ def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str
                 "impact": impact,
                 "state": state,
                 "direction": direction,
-                "price": price,
-                "entry": entry,
-                "stop": stop,
-                "tp1": tp1,
-                "tp2": getattr(state, "tp2", None),
+                "price": price_value,
+                "entry": entry_value,
+                "stop": stop_value,
+                "tp1": tp1_value,
+                "tp2": tp2_value,
                 "price_source": price_source,
                 "move_pct": move_pct,
+                "risk_pct": risk_distance / entry_value * 100.0,
+                "tp1_pct": reward_distance / entry_value * 100.0,
+                "rr_tp1": reward_distance / risk_distance,
             })
     return setups
 
 
 def _format_news_alert(event: dict[str, Any], setup: dict[str, Any]) -> str:
     published = event.get("published_at") or "timestamp non disponibile"
+    timing = str(event.get("catalyst_timing") or "TIME_UNVERIFIED")
+    age = event.get("catalyst_age_minutes")
+    age_label = f"{age:.1f} min" if isinstance(age, (int, float)) and isfinite(age) else "non verificabile"
+    rr = setup.get("rr_tp1")
+    rr_label = f"{float(rr):.2f}R" if isinstance(rr, (int, float)) and isfinite(rr) and rr > 0 else "N/D"
+    risk_pct = setup.get("risk_pct")
+    reward_pct = setup.get("tp1_pct")
+    risk_label = f"{float(risk_pct):.2f}%" if isinstance(risk_pct, (int, float)) and isfinite(risk_pct) else "N/D"
+    reward_label = f"{float(reward_pct):.2f}%" if isinstance(reward_pct, (int, float)) and isfinite(reward_pct) else "N/D"
     return (
-        "🛰 GAGARIN — NEWS → IMPATTO → SETUP → CONFERMA\n"
+        "🛰 GAGARIN — CATALIZZATORE → PREZZO → SETUP CONFERMATO\n"
         "🧪 PAPER/DEMO — NESSUN ORDINE\n\n"
         f"NEWS: {event.get('title', '')}\n"
         f"Fonte: {event.get('source', 'N/D')}\n"
         f"Pubblicazione UTC: {published}\n"
         f"Rilevata UTC: {event.get('first_seen_at', 'N/D')}\n"
+        f"Timing fonte: {timing} | età alla conferma: {age_label}\n"
         f"Link: {event.get('url', '')}\n\n"
-        f"Strumento: {setup['asset']}\n"
-        f"Impatto ipotizzato: {setup['impact']}\n"
-        f"Reazione dal rilevamento: {float(setup.get('move_pct', 0.0)):+.3f}%\n"
-        f"Setup Gagarin: {setup['direction']} — TRIGGER CONFERMATO\n"
-        f"Feed prezzo Gagarin: {setup.get('price_source', 'N/D')}\n"
-        f"Prezzo: {float(setup['price']):.6g}\n"
+        f"🔎 STRUMENTO: {setup['asset']} | {setup['direction']}\n"
+        f"Impatto news (euristico): {setup['impact']}\n"
+        f"Variazione dal rilevamento: {float(setup.get('move_pct', 0.0)):+.3f}%\n"
+        "⚠️ Conferma dopo un movimento già osservato: non è una previsione anticipata del prezzo.\n"
+        f"Trigger Gagarin: CONFERMATO | feed: {setup.get('price_source', 'N/D')}\n\n"
+        f"Prezzo attuale: {float(setup['price']):.6g}\n"
         f"Entry indicativa: {float(setup['entry']):.6g}\n"
-        f"SL: {float(setup['stop']):.6g}\n"
-        f"TP1: {float(setup['tp1']):.6g}"
-        + (f" | TP2: {float(setup['tp2']):.6g}" if setup.get("tp2") is not None else "")
-        + "\n\nImpatto e direzione sono ipotesi. I livelli usano il feed Gagarin, non quotazioni CFD Trading 212; l'alert non invia ordini."
+        f"Stop Loss: {float(setup['stop']):.6g} (rischio teorico {risk_label})\n"
+        f"Take Profit 1: {float(setup['tp1']):.6g} (obiettivo teorico {reward_label})\n"
+        + (f"Take Profit 2: {float(setup['tp2']):.6g}\n" if setup.get("tp2") is not None else "")
+        + f"Rapporto R/R su TP1: {rr_label}\n\n"
+        "⚠️ Il catalizzatore e la direzione sono euristici, non probabilità calibrate. "
+        "Il rapporto R/R non include spread, slippage o gap. Prezzi dal feed Gagarin, "
+        "non necessariamente quotazioni CFD Trading 212. Nessun ordine viene inviato."
     )
-
 
 def _load_state() -> dict[str, Any]:
     try:
@@ -725,7 +890,8 @@ def poll_news_once(
     now: datetime | None = None,
 ) -> dict[str, int]:
     """One polling pass; immediate analysis on new news, then 5-minute rechecks."""
-    now = (now or _utc_now()).astimezone(timezone.utc)
+    now = now or _utc_now()
+    now = now.replace(tzinfo=timezone.utc) if now.tzinfo is None else now.astimezone(timezone.utc)
     state = _load_state()
     seen = set(state.get("seen", []))
     clusters = set(state.get("clusters", []))
@@ -761,6 +927,11 @@ def poll_news_once(
         event["assets"] = classified["assets"]
         event["first_seen_at"] = now.isoformat()
         event["expires_at"] = (now + timedelta(seconds=PENDING_TTL_SECONDS)).isoformat()
+        timing = classify_catalyst_timing({"published": event.get("published_at")}, now=now)
+        event["catalyst_timing"] = timing["timing"]
+        event["catalyst_age_minutes"] = timing["age_minutes"]
+        event["catalyst_future_skew_minutes"] = timing.get("future_skew_minutes")
+        event["catalyst_timing_reason"] = timing["reason"]
         _journal({
             "kind": "NEWS_DETECTED",
             "event_id": fp,
@@ -769,6 +940,10 @@ def poll_news_once(
             "url": event.get("url"),
             "published_at": event.get("published_at"),
             "first_seen_at": event.get("first_seen_at"),
+            "catalyst_timing": event.get("catalyst_timing"),
+            "catalyst_age_minutes": event.get("catalyst_age_minutes"),
+            "catalyst_future_skew_minutes": event.get("catalyst_future_skew_minutes"),
+            "catalyst_timing_reason": event.get("catalyst_timing_reason"),
             "assets": event.get("assets"),
             "impact": event.get("impact"),
             "political_intelligence": classified.get("political_intelligence"),
@@ -836,8 +1011,18 @@ def poll_news_once(
                         try:
                             current_price = float(getattr(observed, "price", None))
                             baseline_price = float(baseline_value)
-                            move_pct = (current_price / baseline_price - 1.0) * 100.0
-                        except (TypeError, ValueError, ZeroDivisionError):
+                        except (TypeError, ValueError, OverflowError):
+                            continue
+                        # Keep malformed live quotes out of the persistent reaction
+                        # journal as well as out of setup confirmation. A live flag
+                        # does not make NaN/Infinity a valid observation.
+                        if (
+                            not isfinite(current_price) or current_price <= 0
+                            or not isfinite(baseline_price) or baseline_price <= 0
+                        ):
+                            continue
+                        move_pct = (current_price / baseline_price - 1.0) * 100.0
+                        if not isfinite(move_pct):
                             continue
                         _journal({
                             "kind": "NEWS_REACTION",
@@ -860,15 +1045,34 @@ def poll_news_once(
                             "aligned_setup_count": len(matches),
                         })
                         break
-                delivered = bool(event.get("alert_sent"))
-                for setup in ([] if delivered else matches):
+                # Deduplicate delivery per catalyst and asset, not per catalyst
+                # globally: a multi-commodity event may validly confirm WTI and
+                # Brent, while a later recheck must not resend either asset.
+                legacy_event_was_sent = bool(event.get("alert_sent")) and "alerted_assets" not in event
+                alerted_assets = {
+                    _normalise_title(str(asset))
+                    for asset in event.get("alerted_assets", [])
+                    if str(asset).strip()
+                }
+                for setup in matches:
+                    asset_key = _normalise_title(str(setup.get("asset") or ""))
+                    if not asset_key or legacy_event_was_sent or asset_key in alerted_assets:
+                        continue
+                    # Refresh catalyst age at delivery time; the detection journal
+                    # keeps the original age while the alert shows the current one.
+                    timing = classify_catalyst_timing({"published": event.get("published_at")}, now=now)
+                    event["catalyst_timing"] = timing["timing"]
+                    event["catalyst_age_minutes"] = timing["age_minutes"]
+                    event["catalyst_future_skew_minutes"] = timing.get("future_skew_minutes")
+                    event["catalyst_timing_reason"] = timing["reason"]
                     if send_telegram(_format_news_alert(event, setup)):
                         sent += 1
-                        delivered = True
+                        alerted_assets.add(asset_key)
+                        event["alerted_assets"] = sorted(alerted_assets)
                         event["alert_sent"] = True
                         event["alert_sent_at"] = now.isoformat()
-                        # Measure the full four-hour reaction window from delivery,
-                        # not from the original headline detection.
+                        # Measure the four-hour reaction window from successful
+                        # delivery; never mark an asset delivered when send fails.
                         event["expires_at"] = (now + timedelta(seconds=PENDING_TTL_SECONDS)).isoformat()
                         _journal({
                             "kind": "NEWS_ALERT_SENT",
@@ -884,10 +1088,16 @@ def poll_news_once(
                             "stop": setup.get("stop"),
                             "tp1": setup.get("tp1"),
                             "sent_at": now.isoformat(),
+                            "published_at": event.get("published_at"),
+                            "catalyst_timing": event.get("catalyst_timing"),
+                            "catalyst_age_minutes": event.get("catalyst_age_minutes"),
+                            "catalyst_future_skew_minutes": event.get("catalyst_future_skew_minutes"),
                         })
-                        break
-                # Keep sent alerts under observation for four hours, without resending them.
-                if event.get("alert_sent") or not delivered:
+                # Keep every event with at least one delivered asset under
+                # observation; unresolved assets remain eligible on later rechecks.
+                if event.get("alert_sent") or not matches:
+                    still_pending.append(event)
+                elif matches:
                     still_pending.append(event)
             pending = still_pending
         except Exception as exc:

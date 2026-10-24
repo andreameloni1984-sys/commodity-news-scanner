@@ -22,6 +22,7 @@ I punteggi sono SCORE DI SELEZIONE, non probabilità statistiche.
 from __future__ import annotations
 
 import json
+from math import isfinite
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -36,7 +37,8 @@ WEATHER_MAX_AGE_DAYS = 45.0
 
 def _float(value: Any, default: float = 0.0) -> float:
     try:
-        return float(value)
+        number = float(value)
+        return number if isfinite(number) else default
     except (TypeError, ValueError):
         return default
 
@@ -139,7 +141,10 @@ def _direction(state: Any, forecast: dict | None) -> str:
         confidence = _float(item.get("confidence"))
         if direction in votes:
             votes[direction] += max(1.0, confidence)
-    return "LONG" if votes["LONG"] >= votes["SHORT"] else "SHORT"
+    # No evidence or a tied forecast is not a directional forecast.
+    if votes["LONG"] == votes["SHORT"]:
+        return "NONE"
+    return "LONG" if votes["LONG"] > votes["SHORT"] else "SHORT"
 
 
 def _technical_component(state: Any, direction: str) -> tuple[float, list[str]]:
@@ -196,7 +201,9 @@ def _history_component(state: Any, direction: str) -> tuple[float, list[str]]:
     closes = []
     for value in getattr(state, "closes", []) or []:
         try:
-            closes.append(float(value))
+            number = float(value)
+            if isfinite(number):
+                closes.append(number)
         except (TypeError, ValueError):
             pass
 
@@ -354,6 +361,10 @@ def select_anticipation(states: Iterable[Any]) -> list[dict[str, Any]]:
         weather = weather_data.get(name)
 
         direction = _direction(state, forecast)
+        # Do not manufacture an early LONG/SHORT when technical and forecast
+        # evidence are absent or contradictory.
+        if direction not in {"LONG", "SHORT"}:
+            continue
         technical, technical_reasons = _technical_component(state, direction)
         history, history_reasons = _history_component(state, direction)
         long_term, forecast_reasons = _forecast_component(forecast, direction)
@@ -365,9 +376,36 @@ def select_anticipation(states: Iterable[Any]) -> list[dict[str, Any]]:
 
         trigger_confirmed = bool(getattr(state, "trigger_confirmed", False))
         final_decision = _norm(getattr(state, "final_decision", "WAIT"))
-        stage = "ENTRY" if final_decision == "ENTRY" and trigger_confirmed else "EARLY WATCH"
+        metadata = getattr(state, "metadata", {}) or {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+
+        # Do not call a move "early" if a provider-supplied recent return says
+        # the move is already extended. Threshold is configurable per instrument;
+        # if absent, use a conservative default and label it as a heuristic.
+        recent_move = _float(
+            getattr(state, "move_4h_pct", metadata.get("move_4h_pct", 0.0)),
+            0.0,
+        )
+        late_threshold = abs(_float(metadata.get("late_move_threshold_pct", 2.5), 2.5))
+        move_is_extended = late_threshold > 0 and (
+            (direction == "SHORT" and recent_move <= -late_threshold)
+            or (direction == "LONG" and recent_move >= late_threshold)
+        )
+        if final_decision == "ENTRY" and trigger_confirmed:
+            stage = "ENTRY"
+        elif move_is_extended:
+            stage = "LATE SHORT" if direction == "SHORT" else "LATE LONG"
+        else:
+            stage = "EARLY WARNING"
+        if move_is_extended:
+            technical_reasons.append(
+                f"movimento 4h già esteso ({recent_move:.2f}%; soglia euristica {late_threshold:.2f}%)"
+            )
 
         blockers = list(getattr(state, "blockers", []) or [])
+        if move_is_extended:
+            blockers.append("possibile ingresso tardivo: non inseguire il movimento")
         if not trigger_confirmed:
             blockers.append("trigger non confermato")
         if not getattr(state, "live", False):

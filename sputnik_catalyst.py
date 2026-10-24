@@ -6,6 +6,7 @@ volume, technical setup and Gagarin's existing risk/safety gates.
 """
 from __future__ import annotations
 from typing import Any
+from engine.early_warning import classify_catalyst_timing
 
 DOMAIN_INSTRUMENTS = {
     "ENERGY": [
@@ -75,6 +76,7 @@ def catalyst_watchlist(findings: list[dict[str, Any]], limit: int = 10) -> list[
         domains = finding.get("domains") or []
         event_id = str(finding.get("event_id") or "")
         evidence = str(finding.get("evidence") or "")
+        timing = classify_catalyst_timing(finding)
         for domain in domains:
             domain = str(domain).upper()
             for instrument, description in DOMAIN_INSTRUMENTS.get(domain, []):
@@ -87,6 +89,8 @@ def catalyst_watchlist(findings: list[dict[str, Any]], limit: int = 10) -> list[
                     "domains": set(),
                     "primary_source": False,
                     "evidence": [],
+                    "timings": [],
+                    "published": [],
                 })
                 row["sources"].add(source)
                 if event_id:
@@ -94,12 +98,23 @@ def catalyst_watchlist(findings: list[dict[str, Any]], limit: int = 10) -> list[
                 row["domains"].add(domain)
                 row["primary_source"] |= source in PRIMARY_SOURCES
                 row["evidence"].append(evidence or "PUBLIC_SOURCE_TEXT")
+                row["timings"].append(timing)
+                if finding.get("published"):
+                    row["published"].append(str(finding.get("published")))
 
     result = []
     for row in merged.values():
         source_count = len(row["sources"])
         event_count = len(row["events"])
         score = min(100, 40 + (20 if row["primary_source"] else 0) + min(20, source_count * 10) + min(20, event_count * 5))
+        timing_rows = row["timings"]
+        timing_priority = {"FRESH_CATALYST": 4, "RECENT_CATALYST": 3,
+                           "TIME_UNVERIFIED": 2, "STALE_CATALYST": 1,
+                           "FUTURE_TIMESTAMP_INVALID": 0}
+        best_timing = max(timing_rows, key=lambda x: timing_priority.get(x.get("timing"), 0)) if timing_rows else {
+            "timing": "TIME_UNVERIFIED", "age_minutes": None,
+            "reason": "timestamp non disponibile", "execution_authorized": False,
+        }
         result.append({
             "instrument": row["instrument"],
             "description": row["description"],
@@ -110,7 +125,11 @@ def catalyst_watchlist(findings: list[dict[str, Any]], limit: int = 10) -> list[
             "domains": sorted(row["domains"]),
             "primary_source": row["primary_source"],
             "evidence": sorted(set(row["evidence"])),
-            "reason": "Catalizzatore pubblico da verificare; nessuna direzione BUY/SELL inferita.",
+            "catalyst_timing": best_timing["timing"],
+            "catalyst_age_minutes": best_timing.get("age_minutes"),
+            "published_timestamps": sorted(set(row["published"])),
+            "early_warning_stage": "CATALYST_WATCH" if best_timing["timing"] in {"FRESH_CATALYST", "RECENT_CATALYST"} else "TIMING_UNVERIFIED",
+            "reason": "Catalizzatore pubblico da verificare; timing non equivale a previsione di prezzo; nessuna direzione BUY/SELL inferita.",
             "execution_authorized": False,
         })
     result.sort(key=lambda x: (-x["score"], x["instrument"]))

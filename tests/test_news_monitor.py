@@ -57,6 +57,44 @@ def test_alert_requires_existing_live_confirmed_aligned_setup():
     assert matches[0]["asset"] == "WTI"
     assert matches[0]["direction"] == "LONG"
     assert matches[0]["move_pct"] >= 0.05
+    assert matches[0]["rr_tp1"] == (83.0 - 80.1) / (80.1 - 78.5)
+    assert matches[0]["risk_pct"] > 0
+    assert matches[0]["tp1_pct"] > 0
+
+    from telegram.news_monitor import _format_news_alert
+    message = _format_news_alert(
+        {"title": "OPEC announces production cut", "source": "Test RSS",
+         "published_at": "2026-10-18T13:59:00+00:00",
+         "first_seen_at": "2026-10-18T14:00:00+00:00",
+         "catalyst_timing": "FRESH_CATALYST", "catalyst_age_minutes": 6.0,
+         "url": "https://example.test/opec-cut"},
+        matches[0],
+    )
+    assert "Stop Loss: 78.5" in message
+    assert "Take Profit 1: 83" in message
+    assert "Rapporto R/R su TP1:" in message
+    assert "PAPER/DEMO — NESSUN ORDINE" in message
+    assert "slippage o gap" in message
+    assert "non è una previsione anticipata" in message
+
+
+def test_telegram_alert_rejects_invalid_stop_or_target_geometry():
+    from telegram.news_monitor import _confirmed_setups
+
+    event = {"title": "OPEC announces production cut", "baseline_prices": {"WTI": 80.0}}
+    base = dict(
+        commodity="Petrolio WTI", symbol="WTI/USD", setup_direction="LONG",
+        final_decision="PAPER_SIGNAL", trigger_confirmed=True, live=True,
+        price=80.1, entry=80.1, stop=81.0, tp1=83.0, data_source="TEST_FEED",
+    )
+    assert _confirmed_setups(event, [SimpleNamespace(**base)]) == []
+
+    base["stop"] = float("nan")
+    assert _confirmed_setups(event, [SimpleNamespace(**base)]) == []
+
+    base["stop"] = 78.5
+    base["tp1"] = 79.0
+    assert _confirmed_setups(event, [SimpleNamespace(**base)]) == []
 
 
 
@@ -88,6 +126,8 @@ def test_new_news_triggers_immediate_analysis_then_waits_for_price_confirmation(
     )
     analysis_calls = []
     messages = []
+    journal_rows = []
+    monkeypatch.setattr(monitor, "_journal", lambda row: journal_rows.append(dict(row)))
 
     def analyze():
         analysis_calls.append(1)
@@ -113,8 +153,18 @@ def test_new_news_triggers_immediate_analysis_then_waits_for_price_confirmation(
     assert second["analysis"] == 1
     assert second["alerts"] == 1
     assert len(messages) == 1
-    assert "Reazione dal rilevamento" in messages[0]
+    assert "Variazione dal rilevamento" in messages[0]
     assert "PAPER/DEMO" in messages[0]
+    assert "Timing fonte: FRESH_CATALYST | età alla conferma: 6.0 min" in messages[0]
+
+    detected = next(row for row in journal_rows if row.get("kind") == "NEWS_DETECTED")
+    sent_row = next(row for row in journal_rows if row.get("kind") == "NEWS_ALERT_SENT")
+    assert detected["catalyst_timing"] == "FRESH_CATALYST"
+    assert detected["catalyst_age_minutes"] == 1.0
+    assert detected["catalyst_future_skew_minutes"] == 0.0
+    assert sent_row["catalyst_timing"] == "FRESH_CATALYST"
+    assert sent_row["catalyst_age_minutes"] == 6.0
+    assert sent_row["catalyst_future_skew_minutes"] == 0.0
 
     # The observation window starts when Telegram delivery succeeds.
     import json
@@ -122,6 +172,8 @@ def test_new_news_triggers_immediate_analysis_then_waits_for_price_confirmation(
     sent_event = next(event for event in saved["pending"] if event.get("alert_sent"))
     assert sent_event["alert_sent_at"] == (now + timedelta(minutes=5)).isoformat()
     assert sent_event["expires_at"] == (now + timedelta(minutes=5, hours=4)).isoformat()
+    assert sent_event["catalyst_timing"] == "FRESH_CATALYST"
+    assert sent_event["catalyst_age_minutes"] == 6.0
 
 
 
@@ -353,3 +405,397 @@ def test_forbidden_news_source_is_cooled_down_for_six_hours(monkeypatch):
     assert delay == 6 * 60 * 60
     assert monitor._SOURCE_RETRY_AT[source] > 0
     assert not monitor._source_allowed(source)
+
+
+
+def test_alert_scorecard_rejects_non_finite_prices_and_levels():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 21, 18, 0, tzinfo=timezone.utc)
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "bad-alert-price", "asset": "WTI",
+         "direction": "LONG", "price": float("inf"), "sent_at": sent.isoformat()},
+        {"kind": "NEWS_ALERT_SENT", "event_id": "bad-reaction", "asset": "Oro",
+         "direction": "LONG", "price": 4000.0, "stop": float("nan"),
+         "tp1": 4100.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "bad-reaction", "asset": "Oro",
+         "current_price": float("inf"),
+         "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+    ]
+    report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
+    assert report["alerts"] == 1
+    assert report["scored"] == 0
+    assert report["pending"] == 1
+
+
+def test_alert_scorecard_treats_naive_now_as_utc():
+    from datetime import datetime, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 21, 18, 0, tzinfo=timezone.utc)
+    rows = [{
+        "kind": "NEWS_ALERT_SENT", "event_id": "naive-now", "asset": "WTI",
+        "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat(),
+    }]
+    # Naive input is explicitly interpreted as 18:10 UTC, regardless of host TZ.
+    report = build_alert_scorecard(rows, now=datetime(2026, 10, 21, 18, 10))
+    assert report["alerts"] == 1
+    assert report["scored"] == 0
+    assert report["pending"] == 1
+    assert report["unscored_expired"] == 0
+
+
+def test_title_cluster_dedupes_syndication_within_utc_day_but_allows_later_recurrence():
+    from telegram.news_monitor import _title_cluster
+
+    first = {
+        "title": "OPEC announces production decision",
+        "url": "https://feed-a.example/story/1",
+        "published_at": "2026-10-22T23:50:00+00:00",
+    }
+    same_day_syndication = {
+        "title": "OPEC announces production decision",
+        "url": "https://feed-b.example/story/2",
+        "published_at": "2026-10-22T23:58:00+00:00",
+    }
+    later_recurrence = {
+        "title": "OPEC announces production decision",
+        "url": "https://feed-c.example/story/3",
+        "published_at": "2026-10-23T09:00:00+00:00",
+    }
+
+    assert _title_cluster(first) == _title_cluster(same_day_syndication)
+    assert _title_cluster(first) != _title_cluster(later_recurrence)
+
+
+def test_title_cluster_uses_normalized_utc_publication_day():
+    from telegram.news_monitor import _title_cluster
+
+    utc_item = {
+        "title": "Fed announces rate decision",
+        "published_at": "2026-10-23T00:30:00+00:00",
+    }
+    offset_item = {
+        "title": "Fed announces rate decision",
+        # Same instant expressed as the previous local calendar date.
+        "published_at": "2026-10-22T20:30:00-04:00",
+    }
+
+    assert _title_cluster(utc_item) == _title_cluster(offset_item)
+
+
+def test_multi_asset_catalyst_alerts_once_per_asset_across_rechecks(tmp_path, monkeypatch):
+    import json
+    from datetime import datetime, timedelta, timezone
+    import telegram.news_monitor as monitor
+
+    monkeypatch.setattr(monitor, "STATE_PATH", tmp_path / "news_state.json")
+    now = datetime(2026, 10, 23, 14, 0, tzinfo=timezone.utc)
+    item = {
+        "source": "Test RSS",
+        "title": "OPEC announces production cut",
+        "url": "https://example.test/opec-cut-multi",
+        "published_at": (now - timedelta(minutes=1)).isoformat(),
+    }
+    wti = SimpleNamespace(
+        commodity="Petrolio WTI", symbol="WTI/USD", setup_direction="LONG",
+        final_decision="PAPER_SIGNAL", trigger_confirmed=True, live=True,
+        price=80.0, entry=80.1, stop=78.5, tp1=83.0, tp2=84.0,
+        data_source="TEST_FEED",
+    )
+    brent = SimpleNamespace(
+        commodity="Petrolio Brent", symbol="BRENT/USD", setup_direction="LONG",
+        final_decision="PAPER_SIGNAL", trigger_confirmed=True, live=True,
+        price=85.0, entry=85.1, stop=83.5, tp1=88.0, tp2=89.0,
+        data_source="TEST_FEED",
+    )
+    states = [wti, brent]
+    messages, journal_rows = [], []
+    monkeypatch.setattr(monitor, "_journal", lambda row: journal_rows.append(dict(row)))
+
+    def analyze():
+        return states
+
+    first = monitor.poll_news_once(
+        lambda message: messages.append(message) or True, analyze,
+        fetcher=lambda: [item], now=now,
+    )
+    assert first["alerts"] == 0  # first pass captures baselines only
+
+    wti.price = 80.2
+    brent.price = 85.2
+    second = monitor.poll_news_once(
+        lambda message: messages.append(message) or True, analyze,
+        fetcher=lambda: [item], now=now + timedelta(minutes=5),
+    )
+    assert second["alerts"] == 2
+    assert len(messages) == 2
+    sent_assets = [row["asset"] for row in journal_rows if row.get("kind") == "NEWS_ALERT_SENT"]
+    assert set(sent_assets) == {"WTI", "Brent"}
+
+    third = monitor.poll_news_once(
+        lambda message: messages.append(message) or True, analyze,
+        fetcher=lambda: [item], now=now + timedelta(minutes=10),
+    )
+    assert third["alerts"] == 0
+    assert len(messages) == 2
+    saved = json.loads((tmp_path / "news_state.json").read_text(encoding="utf-8"))
+    event = next(row for row in saved["pending"] if row.get("event_id"))
+    assert set(event["alerted_assets"]) == {"brent", "wti"}
+
+def test_confirmed_setup_rejects_non_finite_catalyst_baselines():
+    from telegram.news_monitor import _confirmed_setups
+
+    bearish_event = {
+        "title": "Federal Reserve signals hawkish policy and a rate hike",
+        "baseline_prices": {"Oro": float("inf")},
+    }
+    state = SimpleNamespace(
+        commodity="Gold", symbol="XAUUSD", setup_direction="SHORT",
+        final_decision="PAPER_SIGNAL", trigger_confirmed=True, live=True,
+        price=3990.0, entry=3990.0, stop=4010.0, tp1=3950.0,
+        data_source="TEST_FEED",
+    )
+    assert _confirmed_setups(bearish_event, [state]) == []
+
+    bearish_event["baseline_prices"]["Oro"] = float("nan")
+    assert _confirmed_setups(bearish_event, [state]) == []
+
+
+def test_capture_baseline_skips_non_finite_live_prices():
+    from telegram.news_monitor import _capture_baseline
+
+    states = [
+        SimpleNamespace(commodity="Gold", symbol="XAUUSD", live=True, price=float("inf")),
+        SimpleNamespace(commodity="Gold", symbol="XAUUSD", live=True, price=float("nan")),
+    ]
+    assert _capture_baseline({"assets": ["Oro"]}, states) == {}
+
+def test_alert_scorecard_ignores_future_dated_reactions_until_they_are_observable():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 23, 18, 0, tzinfo=timezone.utc)
+    now = sent + timedelta(minutes=30)
+    rows = [
+        {
+            "kind": "NEWS_ALERT_SENT",
+            "event_id": "future-reaction",
+            "asset": "WTI",
+            "direction": "LONG",
+            "price": 80.0,
+            "sent_at": sent.isoformat(),
+        },
+        {
+            "kind": "NEWS_REACTION",
+            "event_id": "future-reaction",
+            "asset": "WTI",
+            "current_price": 84.0,
+            "observed_at": (sent + timedelta(minutes=40)).isoformat(),
+        },
+    ]
+
+    report = build_alert_scorecard(rows, now=now)
+
+    assert report["alerts"] == 1
+    assert report["scored"] == 0
+    assert report["pending"] == 1
+    assert report["unscored_expired"] == 0
+
+
+
+def test_alert_scorecard_excludes_conflicting_prices_at_same_reaction_timestamp():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 23, 18, 0, tzinfo=timezone.utc)
+    ambiguous_at = sent + timedelta(minutes=20)
+    clean_at = sent + timedelta(minutes=30)
+    alert = {
+        "kind": "NEWS_ALERT_SENT", "event_id": "duplicate-reaction-time",
+        "asset": "WTI", "direction": "LONG", "price": 80.0,
+        "stop": 79.0, "tp1": 82.0, "sent_at": sent.isoformat(),
+    }
+    conflicting = [
+        {"kind": "NEWS_REACTION", "event_id": "duplicate-reaction-time",
+         "asset": "WTI", "current_price": 78.0, "observed_at": ambiguous_at.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "duplicate-reaction-time",
+         "asset": "WTI", "current_price": 83.0, "observed_at": ambiguous_at.isoformat()},
+    ]
+    later = {
+        "kind": "NEWS_REACTION", "event_id": "duplicate-reaction-time",
+        "asset": "WTI", "current_price": 81.0, "observed_at": clean_at.isoformat(),
+    }
+
+    # Reversing insertion order must not change the outcome. The conflicting
+    # same-time prices could otherwise label either SL or TP1 depending on order.
+    reports = [
+        build_alert_scorecard([alert, *conflicting, later], now=sent + timedelta(hours=1)),
+        build_alert_scorecard([alert, *reversed(conflicting), later], now=sent + timedelta(hours=1)),
+    ]
+    for report in reports:
+        assert report["alerts"] == 1
+        assert report["scored"] == 1
+        assert report["ambiguous_reaction_groups"] == 1
+        assert report["sl_observed"] == 0
+        assert report["tp1_observed"] == 0
+    assert reports[0] == reports[1]
+    assert reports[0]["open_at_last_check"] == 1
+
+def test_alert_scorecard_assigns_reactions_only_to_latest_event_asset_alert():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent_first = datetime(2026, 10, 23, 18, 0, tzinfo=timezone.utc)
+    sent_second = sent_first + timedelta(minutes=30)
+    rows = [
+        {
+            "kind": "NEWS_ALERT_SENT", "event_id": "same-catalyst",
+            "asset": "WTI", "direction": "LONG", "price": 80.0,
+            "stop": 79.0, "tp1": 82.0, "sent_at": sent_first.isoformat(),
+        },
+        {
+            "kind": "NEWS_ALERT_SENT", "event_id": "same-catalyst",
+            "asset": "WTI", "direction": "LONG", "price": 81.0,
+            "stop": 80.0, "tp1": 83.0, "sent_at": sent_second.isoformat(),
+        },
+        {
+            "kind": "NEWS_REACTION", "event_id": "same-catalyst",
+            "asset": "WTI", "current_price": 81.0,
+            "observed_at": (sent_first + timedelta(minutes=20)).isoformat(),
+        },
+        {
+            "kind": "NEWS_REACTION", "event_id": "same-catalyst",
+            "asset": "WTI", "current_price": 83.0,
+            "observed_at": (sent_second + timedelta(minutes=15)).isoformat(),
+        },
+    ]
+
+    report = build_alert_scorecard(rows, now=sent_second + timedelta(minutes=30))
+
+    assert report["alerts"] == 2
+    assert report["scored"] == 2
+    assert report["ambiguous_alert_groups"] == 0
+    # If the second reaction leaked into the first alert's window, both alerts
+    # would be reported as TP1 hits. The boundary must leave one open and one TP1.
+    assert report["tp1_observed"] == 1
+    assert report["open_at_last_check"] == 1
+
+def test_news_reaction_journal_rejects_non_finite_live_price(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    import telegram.news_monitor as monitor
+
+    monkeypatch.setattr(monitor, "STATE_PATH", tmp_path / "news_state.json")
+    now = datetime(2026, 10, 23, 14, 0, tzinfo=timezone.utc)
+    item = {
+        "source": "Test RSS",
+        "title": "OPEC announces production cut",
+        "url": "https://example.test/opec-cut-invalid-reaction",
+        "published_at": (now - timedelta(minutes=1)).isoformat(),
+    }
+    wti = SimpleNamespace(
+        commodity="Petrolio WTI", symbol="WTI/USD", setup_direction="LONG",
+        final_decision="PAPER_SIGNAL", trigger_confirmed=True, live=True,
+        price=80.0, entry=80.1, stop=78.5, tp1=83.0, tp2=84.0,
+        data_source="TEST_FEED",
+    )
+    journal_rows = []
+    monkeypatch.setattr(monitor, "_journal", lambda row: journal_rows.append(dict(row)))
+
+    first = monitor.poll_news_once(
+        lambda _message: True, lambda: [wti],
+        fetcher=lambda: [item], now=now,
+    )
+    assert first["alerts"] == 0  # capture a finite baseline only
+
+    wti.price = float("inf")
+    second = monitor.poll_news_once(
+        lambda _message: True, lambda: [wti],
+        fetcher=lambda: [item], now=now + timedelta(minutes=5),
+    )
+
+    reactions = [row for row in journal_rows if row.get("kind") == "NEWS_REACTION"]
+    assert second["alerts"] == 0
+    assert reactions == []
+    assert second["pending"] == 1
+
+def test_alert_scorecard_does_not_score_tp_sl_with_directionally_invalid_brackets():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 24, 8, 0, tzinfo=timezone.utc)
+    observed = sent + timedelta(minutes=20)
+    rows = [
+        # LONG stop is incorrectly above the reference price.
+        {"kind": "NEWS_ALERT_SENT", "event_id": "bad-long-bracket", "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "stop": 81.0, "tp1": 82.0,
+         "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "bad-long-bracket", "asset": "WTI",
+         "current_price": 81.5, "observed_at": observed.isoformat()},
+        # SHORT stop is incorrectly below the reference price.
+        {"kind": "NEWS_ALERT_SENT", "event_id": "bad-short-bracket", "asset": "Gold",
+         "direction": "SHORT", "price": 4000.0, "stop": 3990.0, "tp1": 3950.0,
+         "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "bad-short-bracket", "asset": "Gold",
+         "current_price": 3995.0, "observed_at": observed.isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
+
+    assert report["alerts"] == 2
+    assert report["scored"] == 2
+    assert report["invalid_level_alerts"] == 2
+    assert report["tp1_observed"] == 0
+    assert report["sl_observed"] == 0
+    assert report["open_at_last_check"] == 2
+
+def test_alert_scorecard_coverage_uses_eligible_alerts_not_raw_journal_rows():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 21, 18, 0, tzinfo=timezone.utc)
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "ambiguous", "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "stop": 79.0, "tp1": 81.0,
+         "sent_at": sent.isoformat()},
+        {"kind": "NEWS_ALERT_SENT", "event_id": "ambiguous", "asset": "WTI",
+         "direction": "SHORT", "price": 80.0, "stop": 81.0, "tp1": 79.0,
+         "sent_at": sent.isoformat()},
+        {"kind": "NEWS_ALERT_SENT", "event_id": "valid", "asset": "Brent",
+         "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "valid", "asset": "Brent",
+         "current_price": 80.2, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
+
+    assert report["alerts"] == 3
+    assert report["eligible_alerts"] == 1
+    assert report["scored"] == 1
+    assert report["ambiguous_alert_groups"] == 1
+    assert report["coverage_pct"] == 100.0
+
+def test_alert_scorecard_flags_tp_sl_path_ambiguous_after_long_observation_gap():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 24, 8, 0, tzinfo=timezone.utc)
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "gap-tp", "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "stop": 79.0, "tp1": 81.0,
+         "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "gap-tp", "asset": "WTI",
+         "current_price": 80.2, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+        # The 30-minute gap is greater than the scorecard's 15-minute floor.
+        {"kind": "NEWS_REACTION", "event_id": "gap-tp", "asset": "WTI",
+         "current_price": 81.1, "observed_at": (sent + timedelta(minutes=50)).isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
+
+    assert report["scored"] == 1
+    assert report["tp1_observed"] == 1
+    assert report["sl_observed"] == 0
+    assert report["path_ambiguous_alerts"] == 1
+    assert report["observation_gap_limit_minutes"] == 15.0
