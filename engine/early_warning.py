@@ -448,17 +448,32 @@ def backtest_market_early_warning_lead_time(
         cadence_times[i] - cadence_times[i - 1]
         for i in range(1, len(cadence_times))
     ]
-    if cadence_intervals:
-        typical_step = median(cadence_intervals)
-        max_gap_seconds = max(3.0 * typical_step, 300.0)
-        if any(interval > max_gap_seconds for interval in cadence_intervals):
-            return {
-                "status": "INSUFFICIENT_DATA",
-                "sample_count": 0,
-                "reason": "gap temporale nella finestra valutata; anticipo per numero di barre non confrontabile",
-                "execution_authorized": False,
-                "method": "ROLLING_WALK_FORWARD_NOT_CALIBRATED",
-            }
+    typical_step = median(cadence_intervals) if cadence_intervals else None
+    max_gap_seconds = max(3.0 * typical_step, 300.0) if typical_step is not None else None
+    observed_max_interval = max(cadence_intervals) if cadence_intervals else None
+    gap_count = (
+        sum(1 for interval in cadence_intervals if interval > max_gap_seconds)
+        if max_gap_seconds is not None else 0
+    )
+    # Expose the exact cadence evidence behind the fail-closed decision so a
+    # rejected backtest can be diagnosed without guessing at the gap threshold.
+    cadence_diagnostics = {
+        "evaluated_bar_count": len(cadence_times),
+        "evaluated_interval_count": len(cadence_intervals),
+        "typical_interval_seconds": round(typical_step, 3) if typical_step is not None else None,
+        "max_observed_interval_seconds": round(observed_max_interval, 3) if observed_max_interval is not None else None,
+        "max_allowed_interval_seconds": round(max_gap_seconds, 3) if max_gap_seconds is not None else None,
+        "gap_count": gap_count,
+    }
+    if gap_count:
+        return {
+            "status": "INSUFFICIENT_DATA",
+            "sample_count": 0,
+            "reason": "gap temporale nella finestra valutata; anticipo per numero di barre non confrontabile",
+            "cadence_diagnostics": cadence_diagnostics,
+            "execution_authorized": False,
+            "method": "ROLLING_WALK_FORWARD_NOT_CALIBRATED",
+        }
     first = max(15, len(rows) - limit)
     last = len(rows) - horizon
     candidate_index_count = max(0, last - first)
@@ -624,6 +639,7 @@ def backtest_market_early_warning_lead_time(
         return {
             "status": "NO_EARLY_WARNING_SAMPLES", "sample_count": 0,
             "reason": "nessun early warning storico con finestra futura completa",
+            "cadence_diagnostics": cadence_diagnostics,
             "execution_authorized": False,
             "method": "ROLLING_WALK_FORWARD_NOT_CALIBRATED",
         }
@@ -1011,6 +1027,7 @@ def backtest_market_early_warning_lead_time(
         "overlapping_future_window_samples_excluded": len(samples) - len(non_overlapping_samples),
         "non_overlapping_outcomes": non_overlapping_outcomes,
         "temporal_validation": temporal_validation,
+        "cadence_diagnostics": cadence_diagnostics,
         "prior_move_timing_class_counts": prior_move_class_counts,
         "prior_move_timing_class_pct": prior_move_class_pct,
         "outcomes_by_prior_move_class": outcomes_by_prior_move_class,
