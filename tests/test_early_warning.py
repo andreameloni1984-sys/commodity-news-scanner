@@ -974,9 +974,9 @@ def test_paired_margin_sufficiency_uses_paired_count_not_total_warning_count(mon
         }
 
     monkeypatch.setattr(early_warning, "compute_market_early_warning", always_warn)
-    start = 1_800_000_000.0 - 299 * 60
+    start = 1_800_000_000.0 - 499 * 60
     candles = []
-    for i in range(300):
+    for i in range(500):
         close = 100.0 + i * 0.02
         candles.append({
             "timestamp": start + i * 60,
@@ -986,7 +986,7 @@ def test_paired_margin_sufficiency_uses_paired_count_not_total_warning_count(mon
         })
 
     result = early_warning.backtest_market_early_warning_lead_time(
-        candles, max_bars=180, horizon_bars=12
+        candles, max_bars=300, horizon_bars=12
     )
 
     assert result["status"] == "OK"
