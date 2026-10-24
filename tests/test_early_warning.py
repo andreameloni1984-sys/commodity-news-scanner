@@ -1154,3 +1154,31 @@ def test_irregular_baseline_cadence_does_not_claim_volatility_expansion():
     )
     assert result["volatility_expansion"] is False
     assert result["execution_authorized"] is False
+
+
+def test_extremely_large_integer_market_data_fails_closed_without_overflow():
+    # float(very_large_int) raises OverflowError; public APIs must classify the
+    # input as invalid data rather than crashing the warning/backtest pipeline.
+    huge = 10 ** 10000
+    warning = compute_market_early_warning(
+        [huge], [1_800_000_000.0], now=1_800_000_000.0
+    )
+    assert warning["stage"] == "INVALID_DATA"
+    assert warning["direction"] == "NONE"
+    assert warning["execution_authorized"] is False
+
+    from engine.early_warning import backtest_market_early_warning_lead_time
+
+    backtest = backtest_market_early_warning_lead_time(
+        [{
+            "timestamp": 1_800_000_000.0,
+            "high": huge,
+            "low": 100.0,
+            "close": 100.0,
+        }],
+        max_bars=30,
+        horizon_bars=3,
+    )
+    assert backtest["status"] == "INVALID_DATA"
+    assert backtest["sample_count"] == 0
+    assert backtest["execution_authorized"] is False
