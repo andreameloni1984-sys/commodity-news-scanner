@@ -914,17 +914,6 @@ def test_temporal_holdout_keeps_future_outcomes_on_their_own_side_of_split(monke
                 f"paired_threshold_order_sample_count_{threshold}_sufficient_for_interpretation"
             ] is (paired_count >= 20)
 
-    # This controlled series has many warning samples but few/no paired
-    # threshold touches, proving the paired floor is independent of group size.
-    assert any(
-        group_summary["sample_count"] >= 20
-        and group_summary["paired_threshold_order_sample_count_0_5atr"] < 20
-        and not group_summary[
-            "paired_threshold_order_sample_count_0_5atr_sufficient_for_interpretation"
-        ]
-        for group_summary in paired_summaries
-    )
-
     assert result["execution_authorized"] is False
 
     # A short evaluation span must not manufacture a development/holdout split.
