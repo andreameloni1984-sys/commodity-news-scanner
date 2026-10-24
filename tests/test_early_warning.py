@@ -735,6 +735,11 @@ def test_temporal_holdout_keeps_future_outcomes_on_their_own_side_of_split(monke
     assert result["status"] == "OK"
     validation = result["temporal_validation"]
     assert validation["status"] == "OK"
+    assert validation["minimum_sample_count_for_interpretation"] == 20
+    assert validation["recommended_min_max_bars_for_20_non_overlapping_holdout_samples"] == 81 * 12
+    assert validation["holdout_sample_count_sufficient_for_interpretation"] == (
+        validation["holdout_non_overlapping_sample_count"] >= 20
+    )
     split_index = validation["split_start_bar_index"]
     assert split_index is not None
     assert (
@@ -759,6 +764,10 @@ def test_temporal_holdout_keeps_future_outcomes_on_their_own_side_of_split(monke
 
     for key in ("development", "holdout"):
         summary = validation[key]
+        assert summary["minimum_sample_count_for_descriptive_interpretation"] == 20
+        assert summary["sample_count_sufficient_for_interpretation"] == (
+            summary["sample_count"] >= 20
+        )
         assert (
             summary["favorable_first"]
             + summary["adverse_first"]
@@ -779,6 +788,10 @@ def test_temporal_holdout_keeps_future_outcomes_on_their_own_side_of_split(monke
     assert nested_count == validation["holdout_non_overlapping_sample_count"]
     for by_direction in by_class_and_direction.values():
         for summary in by_direction.values():
+            assert summary["minimum_sample_count_for_descriptive_interpretation"] == 20
+            assert summary["sample_count_sufficient_for_interpretation"] == (
+                summary["sample_count"] >= 20
+            )
             assert (
                 summary["favorable_first"]
                 + summary["adverse_first"]
@@ -796,6 +809,8 @@ def test_temporal_holdout_keeps_future_outcomes_on_their_own_side_of_split(monke
     assert short_result["status"] == "OK"
     short_validation = short_result["temporal_validation"]
     assert short_validation["status"] == "INSUFFICIENT_DATA"
+    assert short_validation["minimum_sample_count_for_interpretation"] == 20
+    assert short_validation["recommended_min_max_bars_for_20_non_overlapping_holdout_samples"] == 81 * 12
     assert short_validation["unsplit_sample_count"] == short_result["sample_count"]
     assert short_validation["holdout_sample_count_sufficient_for_interpretation"] is False
     assert sum(
