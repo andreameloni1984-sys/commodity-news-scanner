@@ -578,10 +578,23 @@ def backtest_market_early_warning_lead_time(
             "prior_move_timing_class": prior_move_timing_class,
             "warning_to_favorable_0_25atr_seconds": first_fav_025,
             "warning_to_adverse_0_25atr_seconds": first_adv_025,
+            # Positive means favorable threshold was reached earlier; negative
+            # means adverse threshold was reached earlier. Same-candle and
+            # one-sided outcomes remain undefined rather than being imputed.
+            "favorable_before_adverse_0_25atr_seconds": (
+                first_adv_025 - first_fav_025
+                if first_fav_025 is not None and first_adv_025 is not None
+                and first_fav_025 != first_adv_025 else None
+            ),
             "lead_seconds": first_fav,
             "warning_to_favorable_seconds": first_fav,
             "first_adverse_seconds": first_adv,
             "warning_to_adverse_seconds": first_adv,
+            "favorable_before_adverse_0_5atr_seconds": (
+                first_adv - first_fav
+                if first_fav is not None and first_adv is not None
+                and first_fav != first_adv else None
+            ),
             "mfe_atr": mfe / atr_value,
             "mae_atr": mae / atr_value,
             "returns_pct": returns,
@@ -729,6 +742,16 @@ def backtest_market_early_warning_lead_time(
             row["warning_to_adverse_0_25atr_seconds"] for row in group
             if row["warning_to_adverse_0_25atr_seconds"] is not None
         ]
+        paired_025_margins = [
+            row["favorable_before_adverse_0_25atr_seconds"]
+            for row in group
+            if row.get("favorable_before_adverse_0_25atr_seconds") is not None
+        ]
+        paired_05_margins = [
+            row["favorable_before_adverse_0_5atr_seconds"]
+            for row in group
+            if row.get("favorable_before_adverse_0_5atr_seconds") is not None
+        ]
         median_returns = {}
         for horizon_key in ("3", "6", "12"):
             values = [
@@ -759,6 +782,14 @@ def backtest_market_early_warning_lead_time(
             "median_warning_to_adverse_0_5atr_seconds": (
                 median(adverse_times) if adverse_times else None
             ),
+            "median_favorable_before_adverse_0_25atr_seconds": (
+                median(paired_025_margins) if paired_025_margins else None
+            ),
+            "median_favorable_before_adverse_0_5atr_seconds": (
+                median(paired_05_margins) if paired_05_margins else None
+            ),
+            "paired_threshold_order_sample_count_0_25atr": len(paired_025_margins),
+            "paired_threshold_order_sample_count_0_5atr": len(paired_05_margins),
             "favorable_0_25atr_first": group_favorable_025,
             "adverse_0_25atr_first": group_adverse_025,
             "same_bar_0_25atr_ambiguous": group_same_bar_025,
