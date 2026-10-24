@@ -929,6 +929,13 @@ def test_temporal_holdout_keeps_future_outcomes_on_their_own_side_of_split(monke
             assert group_summary[
                 f"paired_threshold_order_sample_count_{threshold}_sufficient_for_interpretation"
             ] is (paired_count >= 20)
+            favorable_count = group_summary[f"paired_favorable_first_count_{threshold}"]
+            adverse_count = group_summary[f"paired_adverse_first_count_{threshold}"]
+            assert favorable_count + adverse_count == paired_count
+            expected_favorable_pct = (
+                round(100.0 * favorable_count / paired_count, 1) if paired_count else None
+            )
+            assert group_summary[f"paired_favorable_first_pct_{threshold}"] == expected_favorable_pct
 
     # Top-level paired-margin fields must follow the same sufficiency rule even
     # when this short series cannot provide 20 paired observations.
@@ -938,6 +945,13 @@ def test_temporal_holdout_keeps_future_outcomes_on_their_own_side_of_split(monke
         assert result[
             f"paired_threshold_order_sample_count_{threshold}_sufficient_for_interpretation"
         ] is (paired_count >= 20)
+        favorable_count = result[f"paired_favorable_first_count_{threshold}"]
+        adverse_count = result[f"paired_adverse_first_count_{threshold}"]
+        assert favorable_count + adverse_count == paired_count
+        expected_favorable_pct = (
+            round(100.0 * favorable_count / paired_count, 1) if paired_count else None
+        )
+        assert result[f"paired_favorable_first_pct_{threshold}"] == expected_favorable_pct
 
     assert result["execution_authorized"] is False
 
@@ -959,6 +973,26 @@ def test_temporal_holdout_keeps_future_outcomes_on_their_own_side_of_split(monke
     ) == 0
     assert short_result["execution_authorized"] is False
 
+
+
+def test_paired_margin_order_metrics_report_share_with_favorable_threshold_first():
+    from engine.early_warning import _paired_margin_order_metrics
+
+    assert _paired_margin_order_metrics([60, -120, 30, -30]) == {
+        "favorable_first_count": 2,
+        "adverse_first_count": 2,
+        "favorable_first_pct": 50.0,
+    }
+    assert _paired_margin_order_metrics([-60, -120]) == {
+        "favorable_first_count": 0,
+        "adverse_first_count": 2,
+        "favorable_first_pct": 0.0,
+    }
+    assert _paired_margin_order_metrics([]) == {
+        "favorable_first_count": 0,
+        "adverse_first_count": 0,
+        "favorable_first_pct": None,
+    }
 
 
 def test_paired_margin_sufficiency_uses_paired_count_not_total_warning_count(monkeypatch):
