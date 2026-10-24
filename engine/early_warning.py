@@ -315,6 +315,26 @@ def _select_non_overlapping_outcome_samples(
     return selected
 
 
+def _paired_margin_order_metrics(margins: list[float]) -> dict[str, Any]:
+    """Summarize signed paired margins; positive means favorable threshold first.
+
+    Same-candle and one-sided outcomes are excluded before this helper is called.
+    Keep the denominator limited to samples where both thresholds were reached
+    at distinct timestamps, rather than mixing them with one-sided outcomes.
+    """
+    favorable_first_count = sum(1 for value in margins if value > 0)
+    adverse_first_count = sum(1 for value in margins if value < 0)
+    paired_count = favorable_first_count + adverse_first_count
+    return {
+        "favorable_first_count": favorable_first_count,
+        "adverse_first_count": adverse_first_count,
+        "favorable_first_pct": (
+            round(100.0 * favorable_first_count / paired_count, 1)
+            if paired_count else None
+        ),
+    }
+
+
 def backtest_market_early_warning_lead_time(
     candles: list[dict[str, Any]],
     max_bars: int = 96,
@@ -752,6 +772,8 @@ def backtest_market_early_warning_lead_time(
             for row in group
             if row.get("favorable_before_adverse_0_5atr_seconds") is not None
         ]
+        paired_order_025 = _paired_margin_order_metrics(paired_025_margins)
+        paired_order_05 = _paired_margin_order_metrics(paired_05_margins)
         median_returns = {}
         for horizon_key in ("3", "6", "12"):
             values = [
@@ -790,6 +812,12 @@ def backtest_market_early_warning_lead_time(
             ),
             "paired_threshold_order_sample_count_0_25atr": len(paired_025_margins),
             "paired_threshold_order_sample_count_0_5atr": len(paired_05_margins),
+            "paired_favorable_first_count_0_25atr": paired_order_025["favorable_first_count"],
+            "paired_adverse_first_count_0_25atr": paired_order_025["adverse_first_count"],
+            "paired_favorable_first_pct_0_25atr": paired_order_025["favorable_first_pct"],
+            "paired_favorable_first_count_0_5atr": paired_order_05["favorable_first_count"],
+            "paired_adverse_first_count_0_5atr": paired_order_05["adverse_first_count"],
+            "paired_favorable_first_pct_0_5atr": paired_order_05["favorable_first_pct"],
             # The general group size can be much larger than the paired subset:
             # only samples that touch both thresholds at distinct times contribute
             # to this margin. Expose a separate floor for each paired metric.
@@ -944,6 +972,8 @@ def backtest_market_early_warning_lead_time(
         for row in samples
         if row.get("favorable_before_adverse_0_5atr_seconds") is not None
     ]
+    paired_order_025_all = _paired_margin_order_metrics(paired_025_margins_all)
+    paired_order_05_all = _paired_margin_order_metrics(paired_05_margins_all)
     return {
         "status": "OK",
         "sample_count": len(samples),
@@ -956,6 +986,12 @@ def backtest_market_early_warning_lead_time(
         ),
         "paired_threshold_order_sample_count_0_25atr": len(paired_025_margins_all),
         "paired_threshold_order_sample_count_0_5atr": len(paired_05_margins_all),
+        "paired_favorable_first_count_0_25atr": paired_order_025_all["favorable_first_count"],
+        "paired_adverse_first_count_0_25atr": paired_order_025_all["adverse_first_count"],
+        "paired_favorable_first_pct_0_25atr": paired_order_025_all["favorable_first_pct"],
+        "paired_favorable_first_count_0_5atr": paired_order_05_all["favorable_first_count"],
+        "paired_adverse_first_count_0_5atr": paired_order_05_all["adverse_first_count"],
+        "paired_favorable_first_pct_0_5atr": paired_order_05_all["favorable_first_pct"],
         "paired_threshold_order_sample_count_0_25atr_sufficient_for_interpretation": (
             len(paired_025_margins_all) >= minimum_samples_for_interpretation
         ),
