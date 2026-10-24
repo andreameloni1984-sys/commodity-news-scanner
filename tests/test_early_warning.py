@@ -1051,7 +1051,7 @@ def test_temporal_holdout_direction_summaries_reconcile_with_deoverlapped_sample
     def alternating_direction_warning(closes, timestamps, atr=None, now=None, **kwargs):
         return {
             "stage": "EARLY_WARNING",
-            "direction": "LONG" if len(closes) % 2 else "SHORT",
+            "direction": "LONG" if (len(closes) // 12) % 2 else "SHORT",
             "score": 75,
             "returns_pct": {"30m": 0.1},
         }
