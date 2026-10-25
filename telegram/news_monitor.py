@@ -195,6 +195,15 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         observed_at, current_price = observations[-1]
         raw_pct = (current_price / alert_price - 1) * 100
         signed_pct = raw_pct if direction == "LONG" else -raw_pct
+        # Track the worst and best direction-adjusted excursions over the same
+        # >=15m observations used for directional accuracy. These are observed
+        # extrema, not continuous-path drawdown or execution P&L.
+        directional_returns = [
+            ((price / alert_price - 1) * 100) * (1 if direction == "LONG" else -1)
+            for _, price in observations
+        ]
+        max_adverse_excursion_pct = min(directional_returns)
+        max_favorable_excursion_pct = max(directional_returns)
         try:
             stop = float(alert.get("stop"))
             tp1 = float(alert.get("tp1"))
@@ -238,6 +247,8 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
                 path_ambiguous_alerts += 1
         scored.append({"asset": alert.get("asset"), "direction": direction, "sent_at": sent_at.isoformat(),
                        "observed_at": observed_at.isoformat(), "signed_return_pct": round(signed_pct, 6),
+                       "max_adverse_excursion_pct": round(max_adverse_excursion_pct, 6),
+                       "max_favorable_excursion_pct": round(max_favorable_excursion_pct, 6),
                        "correct": signed_pct > 0, "outcome": outcome, "path_ambiguous": path_ambiguous})
     correct = sum(x["correct"] for x in scored)
     tp1_observed = sum(x["outcome"] == "TP1_OBSERVED" for x in scored)
@@ -254,6 +265,8 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
             "correct": correct, "incorrect": len(scored)-correct,
             "accuracy_pct": round(correct/len(scored)*100, 2) if scored else None,
             "mean_directional_return_pct": round(sum(x["signed_return_pct"] for x in scored)/len(scored), 4) if scored else None,
+            "mean_max_adverse_excursion_pct": round(sum(x["max_adverse_excursion_pct"] for x in scored)/len(scored), 4) if scored else None,
+            "mean_max_favorable_excursion_pct": round(sum(x["max_favorable_excursion_pct"] for x in scored)/len(scored), 4) if scored else None,
             "tp1_observed": tp1_observed, "sl_observed": sl_observed, "open_at_last_check": open_count}
 
 
@@ -292,6 +305,7 @@ def _maybe_send_daily_scorecard(state: dict[str, Any], send_telegram: Callable[[
                    f"Direzione corretta: {report['correct']} | errata: {report['incorrect']}\n"
                    f"Accuratezza direzionale: {report['accuracy_pct']:.1f}%\n"
                    f"Rendimento direzionale medio: {report['mean_directional_return_pct']:+.3f}%\n"
+                   f"Escursione avversa/favorevole media: {report['mean_max_adverse_excursion_pct']:+.3f}% / {report['mean_max_favorable_excursion_pct']:+.3f}% (osservata, da +15 min)\n"
                    f"TP1 osservato: {report['tp1_observed']} | SL osservato: {report['sl_observed']} | ancora aperti: {report['open_at_last_check']}\n"
                    f"Percorso TP/SL ambiguo: {report['path_ambiguous_alerts']} (gap osservazioni > {report['observation_gap_limit_minutes']:.0f} min)\n"
                    "TP/SL sono attraversamenti osservati ai controlli periodici, non tick intrabar. Feed Gagarin; esclusi spread/slippage.")
