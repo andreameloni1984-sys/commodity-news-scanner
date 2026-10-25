@@ -155,6 +155,27 @@ def test_reversal_is_not_mislabeled_as_directional_acceleration():
     assert result["acceleration_pct_points"] > 0
     assert result["execution_authorized"] is False
 
+
+def test_market_early_warning_marks_large_recent_atr_move_as_late():
+    now = 1_800_000_000.0
+    timestamps = [now - (90 - i) * 60 for i in range(91)]
+    closes = [
+        100.0 if i <= 60 else 100.0 + 0.05 * (i - 60)
+        for i in range(91)
+    ]
+
+    result = compute_market_early_warning(
+        closes, timestamps, atr=0.5, now=now
+    )
+
+    assert result["direction"] == "LONG"
+    assert result["pre_warning_30m_move_atr"] == 3.0
+    assert result["late_move"] is True
+    assert result["stage"] == "LATE_MOVE"
+    assert any("ultimi 30m già esteso" in reason for reason in result["reasons"])
+    assert result["execution_authorized"] is False
+
+
 def test_lead_time_backtest_measures_favorable_move_without_authorizing_trade():
     from engine.early_warning import backtest_market_early_warning_lead_time
 
