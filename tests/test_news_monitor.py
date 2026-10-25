@@ -303,6 +303,8 @@ def test_alert_scorecard_reports_adverse_and_favorable_excursions_not_only_final
     assert report["mean_directional_return_pct"] == 1.0
     assert report["mean_max_adverse_excursion_pct"] == -2.0
     assert report["mean_max_favorable_excursion_pct"] == 3.0
+    assert report["recovered_after_adverse_count"] == 1
+    assert report["recovered_after_adverse_pct"] == 100.0
 
 
 def test_alert_scorecard_marks_alert_pending_without_later_observation():
