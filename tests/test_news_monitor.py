@@ -279,6 +279,32 @@ def test_alert_scorecard_scores_only_prices_observed_after_alert():
     assert report["pending"] == 0
 
 
+def test_alert_scorecard_reports_adverse_and_favorable_excursions_not_only_final_return():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 21, 18, 0, tzinfo=timezone.utc)
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "evt-excursion", "asset": "WTI",
+         "direction": "LONG", "price": 100.0, "stop": 95.0, "tp1": 105.0,
+         "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "evt-excursion", "asset": "WTI",
+         "current_price": 98.0, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "evt-excursion", "asset": "WTI",
+         "current_price": 103.0, "observed_at": (sent + timedelta(minutes=30)).isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "evt-excursion", "asset": "WTI",
+         "current_price": 101.0, "observed_at": (sent + timedelta(minutes=40)).isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
+
+    assert report["scored"] == 1
+    assert report["correct"] == 1  # final observation is positive
+    assert report["mean_directional_return_pct"] == 1.25 if False else report["mean_directional_return_pct"] == 1.0
+    assert report["mean_max_adverse_excursion_pct"] == -2.0
+    assert report["mean_max_favorable_excursion_pct"] == 3.0
+
+
 def test_alert_scorecard_marks_alert_pending_without_later_observation():
     from datetime import datetime, timezone
     from telegram.news_monitor import build_alert_scorecard
