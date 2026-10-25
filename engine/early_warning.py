@@ -244,10 +244,32 @@ def compute_market_early_warning(
     atr_value = _finite(atr)
     extension = abs(r240) if r240 is not None else abs(r60)
     atr_pct = atr_value / prices[-1] * 100 if atr_value and atr_value > 0 else None
-    late = bool(atr_pct and atr_pct > 0 and extension >= max(2.5, 2.0 * atr_pct))
+    price_30m_ago = base_price(1800)
+    pre_warning_30m_move_atr = (
+        abs(prices[-1] - price_30m_ago) / atr_value
+        if price_30m_ago is not None and atr_value is not None and atr_value > 0
+        else None
+    )
+    # A large move over the most recent 30m can already be extended even
+    # when its percentage return is below the older fixed 2.5% threshold.
+    # Use ATR-normalized displacement as an additional, transparent late-entry
+    # guard; this only changes the warning stage/ranking, never execution.
+    late_by_recent_move = (
+        pre_warning_30m_move_atr is not None
+        and pre_warning_30m_move_atr >= 1.5
+    )
+    late_by_longer_extension = bool(
+        atr_pct and atr_pct > 0 and extension >= max(2.5, 2.0 * atr_pct)
+    )
+    late = late_by_recent_move or late_by_longer_extension
     if late:
         score = max(0.0, score - 20.0)
-        reasons.append("movimento già esteso: rischio di inseguimento")
+        if late_by_recent_move:
+            reasons.append(
+                "movimento degli ultimi 30m già esteso (>=1.5 ATR): rischio di inseguimento"
+            )
+        else:
+            reasons.append("movimento già esteso: rischio di inseguimento")
     if not reasons:
         reasons.append("nessuna combinazione anticipatoria sufficientemente forte")
 
