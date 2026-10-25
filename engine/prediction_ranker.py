@@ -115,11 +115,13 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
             reasons.append("early-warning: movimento già esteso, bonus disattivato")
             if early_direction in {"LONG", "SHORT"} and early_direction != direction:
                 reasons.append("early-warning in conflitto")
-        elif early_stage not in {"", "NONE", "INSUFFICIENT_DATA", "UNKNOWN"} and early_direction == direction:
+        elif early_stage in {"EARLY_WARNING", "WATCH"} and early_direction == direction:
             score += min(6.0, early_score * 0.06)
             reasons.append("early-warning concorde")
         elif early_direction in {"LONG", "SHORT"} and early_direction != direction:
             reasons.append("early-warning in conflitto")
+        elif early_stage not in {"EARLY_WARNING", "WATCH", "LATE_MOVE", "", "NONE", "UNKNOWN"}:
+            reasons.append("early-warning non valido/non utilizzabile: bonus disattivato")
         score += min(10, opportunity * 0.10)
         score += min(8, continuation * 0.08)
         if momentum_alignment == "CONFLICT":
