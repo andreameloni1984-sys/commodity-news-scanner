@@ -300,7 +300,7 @@ def test_alert_scorecard_reports_adverse_and_favorable_excursions_not_only_final
 
     assert report["scored"] == 1
     assert report["correct"] == 1  # final observation is positive
-    assert report["mean_directional_return_pct"] == 1.25 if False else report["mean_directional_return_pct"] == 1.0
+    assert report["mean_directional_return_pct"] == 1.0
     assert report["mean_max_adverse_excursion_pct"] == -2.0
     assert report["mean_max_favorable_excursion_pct"] == 3.0
 
