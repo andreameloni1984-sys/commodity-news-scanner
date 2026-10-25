@@ -285,6 +285,10 @@ def compute_market_early_warning(
         "returns_pct": {"30m": round(r30, 4), "60m": round(r60, 4),
                         "4h": round(r240, 4) if r240 is not None else None},
         "acceleration_pct_points": round(acceleration, 4),
+        "pre_warning_30m_move_atr": (
+            round(pre_warning_30m_move_atr, 4)
+            if pre_warning_30m_move_atr is not None else None
+        ),
         "volatility_expansion": volatility_expansion,
         "late_move": late, "reasons": reasons[:5], "execution_authorized": False,
         "method": "HEURISTIC_NOT_CALIBRATED",
