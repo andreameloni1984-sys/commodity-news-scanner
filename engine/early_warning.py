@@ -117,6 +117,16 @@ def compute_market_early_warning(
             "reasons": ["now deve essere valido e max_latest_age_seconds finito e >= 0"],
             "execution_authorized": False,
         }
+    # The reference clock must use the same Unix-seconds unit as market
+    # timestamps; otherwise every quote can appear impossibly far in the past.
+    if now_ts >= 100_000_000_000:
+        return {
+            "stage": "INVALID_PARAMETERS",
+            "direction": "NONE",
+            "score": 0,
+            "reasons": ["now sembra espresso in millisecondi; attesi timestamp Unix in secondi"],
+            "execution_authorized": False,
+        }
     latest_age = now_ts - times[-1]
     if latest_age < -120.0:
         return {"stage": "INSUFFICIENT_DATA", "direction": "NONE", "score": 0,
