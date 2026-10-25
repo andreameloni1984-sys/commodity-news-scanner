@@ -254,6 +254,12 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
     tp1_observed = sum(x["outcome"] == "TP1_OBSERVED" for x in scored)
     sl_observed = sum(x["outcome"] == "SL_OBSERVED" for x in scored)
     open_count = sum(x["outcome"] == "OPEN_AT_LAST_CHECK" for x in scored)
+    # Surface signals that ended directionally positive despite at least one
+    # observed adverse excursion; final accuracy alone can hide this path risk.
+    recovered_after_adverse_count = sum(
+        x["signed_return_pct"] > 0 and x["max_adverse_excursion_pct"] < 0
+        for x in scored
+    )
     return {"window_days": 7, "alerts": raw_alert_count, "eligible_alerts": eligible_alert_count,
             "scored": len(scored), "pending": pending, "unscored_expired": unscored_expired,
             "ambiguous_alert_groups": ambiguous_alert_groups,
@@ -267,6 +273,8 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
             "mean_directional_return_pct": round(sum(x["signed_return_pct"] for x in scored)/len(scored), 4) if scored else None,
             "mean_max_adverse_excursion_pct": round(sum(x["max_adverse_excursion_pct"] for x in scored)/len(scored), 4) if scored else None,
             "mean_max_favorable_excursion_pct": round(sum(x["max_favorable_excursion_pct"] for x in scored)/len(scored), 4) if scored else None,
+            "recovered_after_adverse_count": recovered_after_adverse_count,
+            "recovered_after_adverse_pct": round(recovered_after_adverse_count / len(scored) * 100, 2) if scored else None,
             "tp1_observed": tp1_observed, "sl_observed": sl_observed, "open_at_last_check": open_count}
 
 
@@ -306,6 +314,7 @@ def _maybe_send_daily_scorecard(state: dict[str, Any], send_telegram: Callable[[
                    f"Accuratezza direzionale: {report['accuracy_pct']:.1f}%\n"
                    f"Rendimento direzionale medio: {report['mean_directional_return_pct']:+.3f}%\n"
                    f"Escursione avversa/favorevole media: {report['mean_max_adverse_excursion_pct']:+.3f}% / {report['mean_max_favorable_excursion_pct']:+.3f}% (osservata, da +15 min)\n"
+                   f"Segnali finiti positivi dopo escursione avversa: {report['recovered_after_adverse_count']} ({report['recovered_after_adverse_pct']:.1f}%)\n"
                    f"TP1 osservato: {report['tp1_observed']} | SL osservato: {report['sl_observed']} | ancora aperti: {report['open_at_last_check']}\n"
                    f"Percorso TP/SL ambiguo: {report['path_ambiguous_alerts']} (gap osservazioni > {report['observation_gap_limit_minutes']:.0f} min)\n"
                    "TP/SL sono attraversamenti osservati ai controlli periodici, non tick intrabar. Feed Gagarin; esclusi spread/slippage.")
