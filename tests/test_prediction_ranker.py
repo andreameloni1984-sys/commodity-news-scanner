@@ -90,6 +90,29 @@ class PredictionRankerTests(unittest.TestCase):
         self.assertEqual(agreeing_row["early_warning_direction"], "LONG")
         self.assertAlmostEqual(agreeing_row["score"] - no_warning["score"], 4.8)
 
+
+    def test_invalid_early_warning_stage_cannot_boost_directional_rank(self):
+        base = state("BASE", pre_move_score=0, opportunity_score=0,
+                     continuation_score=0, quality=0, confidence=0)
+        baseline = rank_predictions([base])[0]
+        invalid = state(
+            "INVALID_WARNING", pre_move_score=0, opportunity_score=0,
+            continuation_score=0, quality=0, confidence=0,
+            metadata={"data_status": "OK", "early_warning": {
+                "direction": "LONG", "score": 100, "stage": "INVALID_DATA",
+            }},
+        )
+
+        row = rank_predictions([invalid])[0]
+
+        self.assertEqual(row["score"], baseline["score"])
+        self.assertIn(
+            "early-warning non valido/non utilizzabile: bonus disattivato",
+            row["reasons"],
+        )
+        self.assertFalse(row.get("execution_authorized", False))
+
+
     def test_early_warning_cannot_create_direction_or_boost_conflict(self):
         neutral = state("NEUTRAL", setup_direction="NONE",
                         structure_direction="NONE", mtf_direction="NONE",
