@@ -25,3 +25,12 @@
 - **Implemented:** the reader now prefers explicit alternate links, accepts RSS/default links, and ignores self/enclosure links. Entries with no usable article link are dropped instead of being emitted with a non-article endpoint.
 - **Regression tests:** alternate-after-self ordering and self-only Atom entries.
 - **Limits:** offline parser tests do not prove current feed availability or live Telegram delivery. Render build-pipeline minutes remain exhausted; no deployment, Telegram test message, or trade order was triggered.
+
+
+## 2026-10-26 — Preserve valid GDELT articles when a response contains malformed rows
+
+- **Finding:** the GDELT parser called `.get()` on every row without checking its type. One null/string row could raise and discard all valid articles in the same response, then trigger source backoff.
+- **Implemented:** validate the response envelope and articles list; skip non-object rows while retaining valid rows. An invalid envelope raises a clear ValueError, so the existing source failure/backoff path handles it without aborting the wider poll.
+- **Regression tests:** mixed valid/malformed rows retain the valid article; a non-list articles field is rejected explicitly.
+- **Limits:** this improves parser resilience but does not fix upstream GDELT timeouts or guarantee source availability. Render deployment remains blocked by exhausted build minutes; no Telegram test message was sent.
+- **Safety:** PAPER/DEMO only; no orders or broker operations.
