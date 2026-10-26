@@ -837,6 +837,7 @@ def _load_state() -> dict[str, Any]:
             payload.setdefault("pending", [])
             payload.setdefault("last_analysis_at", 0)
             payload.setdefault("initialized", False)
+            _restore_source_backoff(payload)
             return payload
     except Exception as exc:
         print(f"NEWS state database read failed | {type(exc).__name__}: {exc}", flush=True)
@@ -848,13 +849,19 @@ def _load_state() -> dict[str, Any]:
             payload.setdefault("pending", [])
             payload.setdefault("last_analysis_at", 0)
             payload.setdefault("initialized", False)
+            _restore_source_backoff(payload)
             return payload
     except (OSError, json.JSONDecodeError):
         pass
-    return {"seen": [], "clusters": [], "pending": [], "last_analysis_at": 0, "initialized": False}
+    payload = {"seen": [], "clusters": [], "pending": [], "last_analysis_at": 0, "initialized": False}
+    _restore_source_backoff(payload)
+    return payload
 
 
 def _save_state(state: dict[str, Any]) -> None:
+    # The in-memory retry deadlines use monotonic time; serialize UTC deadlines
+    # before writing to either PostgreSQL or the local fallback file.
+    _snapshot_source_backoff(state)
     try:
         from state_store import save_state
         save_state("gagarin_news_monitor", state)
