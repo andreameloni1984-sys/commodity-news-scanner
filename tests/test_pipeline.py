@@ -26,7 +26,7 @@
 
 from engine.state import SoyuzState
 from engine.regime import apply_regime, _safe_float, _rsi_wilder, _volatility_diagnostics
-from engine.structure import apply_structure
+from engine.structure import apply_structure, _find_swing_highs, _find_swing_lows
 from engine.setup import apply_setup
 from engine.trigger import apply_trigger
 from engine.risk import apply_risk
@@ -526,6 +526,56 @@ def _prepare_retest_state(direction="LONG", close=100.04):
     return state
 
 
+def test_structure_retest_does_not_reuse_a_pre_breakout_touch():
+    from engine.structure import _detect_retest
+
+    candles = [
+        {"open": 100.00, "high": 100.10, "low": 99.90, "close": 100.02},  # touch before breakout
+        {"open": 100.16, "high": 100.20, "low": 100.15, "close": 100.15},  # prior breakout confirmed
+        {"open": 100.32, "high": 100.40, "low": 100.30, "close": 100.35},  # current bar does not retest
+    ]
+    assert _detect_retest(candles, True, "LONG", 100.0, 1.0) == (False, "NONE", None)
+
+
+def test_structure_retest_requires_prior_breakout_and_current_touch_for_both_sides():
+    from engine.structure import _detect_retest
+
+    long_candles = [
+        {"open": 100.15, "high": 100.20, "low": 100.12, "close": 100.15},
+        {"open": 100.05, "high": 100.20, "low": 99.95, "close": 100.15},
+    ]
+    short_candles = [
+        {"open": 99.90, "high": 99.95, "low": 99.80, "close": 99.85},
+        {"open": 99.95, "high": 100.05, "low": 99.80, "close": 99.85},
+    ]
+    assert _detect_retest(long_candles, True, "LONG", 100.0, 1.0) == (True, "LONG", 100.0)
+    assert _detect_retest(short_candles, True, "SHORT", 100.0, 1.0) == (True, "SHORT", 100.0)
+
+
+def test_structure_retest_fails_closed_on_non_finite_prices():
+    from engine.structure import _detect_retest
+
+    candles = [
+        {"open": 100.15, "high": 100.20, "low": 100.12, "close": float("nan")},
+        {"open": 100.05, "high": 100.20, "low": 99.95, "close": 100.15},
+    ]
+    assert _detect_retest(candles, True, "LONG", 100.0, 1.0) == (False, "NONE", None)
+
+
+def test_structure_retest_rejects_inconsistent_or_incomplete_ohlc():
+    from engine.structure import _detect_retest
+
+    valid_previous = {"open": 100.15, "high": 100.20, "low": 100.12, "close": 100.15}
+    malformed_bars = [
+        {"open": 100.30, "high": 100.10, "low": 99.95, "close": 100.15},
+        {"high": 100.20, "low": 99.95, "close": 100.15},
+    ]
+    for bar in malformed_bars:
+        assert _detect_retest(
+            [valid_previous, bar], True, "LONG", 100.0, 1.0
+        ) == (False, "NONE", None)
+
+
 def test_retest_trigger_requires_current_level_interaction():
     state = _prepare_retest_state("LONG", close=101.0)
     state.mtf_alignment = 50.0
@@ -871,3 +921,43 @@ def test_safety_recomputes_rr_from_actual_bracket_prices():
     assert state.safety == "BLOCKED"
     assert "RR_GEOMETRY_MISMATCH" in state.blockers
     assert "RR_FAIL" in state.blockers
+
+
+def test_swing_pivots_are_timestamped_when_right_side_confirmation_arrives():
+    candles = [
+        {"high": 2, "low": 8, "timestamp": "2026-01-01T00:00:00Z"},
+        {"high": 3, "low": 7, "timestamp": "2026-01-01T00:05:00Z"},
+        {"high": 10, "low": 1, "timestamp": "2026-01-01T00:10:00Z"},
+        {"high": 4, "low": 6, "timestamp": "2026-01-01T00:15:00Z"},
+        {"high": 3, "low": 7, "timestamp": "2026-01-01T00:20:00Z"},
+    ]
+
+    # With only one right-side candle, the pivot is not yet knowable.
+    assert _find_swing_highs(candles[:4]) == []
+    assert _find_swing_lows(candles[:4]) == []
+
+    high = _find_swing_highs(candles)[0]
+    low = _find_swing_lows(candles)[0]
+    for pivot in (high, low):
+        assert pivot["event_time"] == "2026-01-01T00:10:00+00:00"
+        assert pivot["available_at"] == "2026-01-01T00:20:00+00:00"
+        assert pivot["confirmation_index"] == 4
+    assert high["price"] == 10
+    assert low["price"] == 1
+
+
+def test_swing_pivot_availability_fails_closed_for_naive_or_malformed_times():
+    candles = [
+        {"high": 2, "low": 8, "timestamp": "2026-01-01T00:00:00"},
+        {"high": 3, "low": 7, "timestamp": "2026-01-01T00:05:00"},
+        {"high": 10, "low": 1, "timestamp": "2026-01-01T00:10:00"},
+        {"high": 4, "low": 6, "timestamp": "not-a-time"},
+        {"high": 3, "low": 7, "timestamp": "2026-01-01T00:20:00"},
+    ]
+    high = _find_swing_highs(candles)[0]
+    low = _find_swing_lows(candles)[0]
+    for pivot in (high, low):
+        assert pivot["event_time"] is None
+        assert pivot["available_at"] is None
+        assert pivot["confirmation_index"] == 4
+

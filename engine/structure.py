@@ -1,3 +1,7 @@
+from datetime import datetime, timezone
+
+import math
+
 from engine.state import SoyuzState
 
 
@@ -38,6 +42,33 @@ MIN_MTF_BARS = 5
 
 MIN_MTF_ALIGNMENT = 50.0
 STRONG_MTF_ALIGNMENT = 75.0
+
+
+def _utc_candle_timestamp(candle):
+    """Return a timezone-aware candle timestamp normalized to UTC, or None."""
+    value = candle.get("datetime") or candle.get("timestamp") or candle.get("time")
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except (TypeError, ValueError, OverflowError):
+            return None
+    else:
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None
+    return parsed.astimezone(timezone.utc).isoformat()
+
+
+def _pivot_timing(candles, index):
+    """Keep pivot event time separate from the bar that confirms availability."""
+    event_time = _utc_candle_timestamp(candles[index])
+    confirmation_index = index + SWING_RIGHT
+    available_at = _utc_candle_timestamp(candles[confirmation_index])
+    if event_time is None or available_at is None or available_at <= event_time:
+        available_at = None
+    return event_time, available_at, confirmation_index
 
 
 # ============================================================
@@ -94,13 +125,15 @@ def _find_swing_highs(candles) -> list:
 
         if valid:
 
+            event_time, available_at, confirmation_index = _pivot_timing(candles, index)
             swings.append(
                 {
                     "index": index,
                     "price": current,
-                    "datetime": candles[
-                        index
-                    ].get("datetime"),
+                    "datetime": candles[index].get("datetime") or candles[index].get("timestamp") or candles[index].get("time"),
+                    "event_time": event_time,
+                    "available_at": available_at,
+                    "confirmation_index": confirmation_index,
                 }
             )
 
@@ -156,13 +189,15 @@ def _find_swing_lows(candles) -> list:
 
         if valid:
 
+            event_time, available_at, confirmation_index = _pivot_timing(candles, index)
             swings.append(
                 {
                     "index": index,
                     "price": current,
-                    "datetime": candles[
-                        index
-                    ].get("datetime"),
+                    "datetime": candles[index].get("datetime") or candles[index].get("timestamp") or candles[index].get("time"),
+                    "event_time": event_time,
+                    "available_at": available_at,
+                    "confirmation_index": confirmation_index,
                 }
             )
 
@@ -275,6 +310,23 @@ def _detect_breakout(
 # ============================================================
 
 
+def _validated_ohlc_bar(candle):
+    """Return finite, internally consistent OHLC values or fail closed."""
+    try:
+        open_price = float(candle["open"])
+        high = float(candle["high"])
+        low = float(candle["low"])
+        close = float(candle["close"])
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return None
+
+    if not all(math.isfinite(value) for value in (open_price, high, low, close)):
+        return None
+    if high < low or high < max(open_price, close) or low > min(open_price, close):
+        return None
+    return open_price, high, low, close
+
+
 def _detect_retest(
     candles,
     breakout,
@@ -282,62 +334,46 @@ def _detect_retest(
     breakout_level,
     atr,
 ):
+    """Confirm a retest only on the current bar after a prior confirmed breakout.
 
-    if not breakout:
+    Older candles in a lookback window must not be relabelled as retests:
+    they may have touched the level before the breakout was knowable.
+    """
+    if not breakout or breakout_level is None or atr is None or len(candles) < 2:
         return False, "NONE", None
 
-    if breakout_level is None:
+    try:
+        level = float(breakout_level)
+        atr_value = float(atr)
+    except (TypeError, ValueError, OverflowError):
         return False, "NONE", None
 
-    if atr is None or atr <= 0:
+    previous = _validated_ohlc_bar(candles[-2])
+    current = _validated_ohlc_bar(candles[-1])
+    if previous is None or current is None or not math.isfinite(level) or not math.isfinite(atr_value) or atr_value <= 0:
         return False, "NONE", None
 
-    if len(candles) < 2:
-        return False, "NONE", None
+    previous_close = previous[3]
+    _, high, low, close = current
 
-    tolerance = atr * RETEST_ATR_TOLERANCE
+    tolerance = atr_value * RETEST_ATR_TOLERANCE
+    breakout_buffer = atr_value * BREAKOUT_ATR_BUFFER
 
-    recent = candles[-3:]
+    if breakout_direction == "LONG":
+        # A previous candle must already have closed beyond the breakout
+        # buffer; the current candle alone cannot be both breakout and retest.
+        previous_breakout_confirmed = previous_close > level + breakout_buffer
+        touched = low <= level + tolerance and high >= level - tolerance
+        held = close > level
+        if previous_breakout_confirmed and touched and held:
+            return True, "LONG", level
 
-    for candle in recent:
-
-        close = candle["close"]
-        high = candle["high"]
-        low = candle["low"]
-
-        if breakout_direction == "LONG":
-
-            touched = (
-                low <= breakout_level + tolerance
-                and high >= breakout_level - tolerance
-            )
-
-            held = close > breakout_level
-
-            if touched and held:
-
-                return (
-                    True,
-                    "LONG",
-                    breakout_level,
-                )
-
-        elif breakout_direction == "SHORT":
-
-            touched = (
-                high >= breakout_level - tolerance
-                and low <= breakout_level + tolerance
-            )
-
-            held = close < breakout_level
-
-            if touched and held:
-
-                return (
-                    True,
-                    "SHORT",
-                    breakout_level,
-                )
+    elif breakout_direction == "SHORT":
+        previous_breakout_confirmed = previous_close < level - breakout_buffer
+        touched = high >= level - tolerance and low <= level + tolerance
+        held = close < level
+        if previous_breakout_confirmed and touched and held:
+            return True, "SHORT", level
 
     return False, "NONE", None
 
