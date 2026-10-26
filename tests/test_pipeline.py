@@ -530,9 +530,9 @@ def test_structure_retest_does_not_reuse_a_pre_breakout_touch():
     from engine.structure import _detect_retest
 
     candles = [
-        {"high": 100.10, "low": 99.90, "close": 100.02},  # touch before breakout
-        {"high": 100.20, "low": 100.15, "close": 100.15},  # prior breakout confirmed
-        {"high": 100.40, "low": 100.30, "close": 100.35},  # current bar does not retest
+        {"open": 100.00, "high": 100.10, "low": 99.90, "close": 100.02},  # touch before breakout
+        {"open": 100.16, "high": 100.20, "low": 100.15, "close": 100.15},  # prior breakout confirmed
+        {"open": 100.32, "high": 100.40, "low": 100.30, "close": 100.35},  # current bar does not retest
     ]
     assert _detect_retest(candles, True, "LONG", 100.0, 1.0) == (False, "NONE", None)
 
@@ -541,12 +541,12 @@ def test_structure_retest_requires_prior_breakout_and_current_touch_for_both_sid
     from engine.structure import _detect_retest
 
     long_candles = [
-        {"high": 100.20, "low": 100.12, "close": 100.15},
-        {"high": 100.20, "low": 99.95, "close": 100.15},
+        {"open": 100.15, "high": 100.20, "low": 100.12, "close": 100.15},
+        {"open": 100.05, "high": 100.20, "low": 99.95, "close": 100.15},
     ]
     short_candles = [
-        {"high": 99.88, "low": 99.80, "close": 99.85},
-        {"high": 100.05, "low": 99.80, "close": 99.85},
+        {"open": 99.90, "high": 99.95, "low": 99.80, "close": 99.85},
+        {"open": 99.95, "high": 100.05, "low": 99.80, "close": 99.85},
     ]
     assert _detect_retest(long_candles, True, "LONG", 100.0, 1.0) == (True, "LONG", 100.0)
     assert _detect_retest(short_candles, True, "SHORT", 100.0, 1.0) == (True, "SHORT", 100.0)
@@ -556,10 +556,24 @@ def test_structure_retest_fails_closed_on_non_finite_prices():
     from engine.structure import _detect_retest
 
     candles = [
-        {"high": 100.20, "low": 100.12, "close": float("nan")},
-        {"high": 100.20, "low": 99.95, "close": 100.15},
+        {"open": 100.15, "high": 100.20, "low": 100.12, "close": float("nan")},
+        {"open": 100.05, "high": 100.20, "low": 99.95, "close": 100.15},
     ]
     assert _detect_retest(candles, True, "LONG", 100.0, 1.0) == (False, "NONE", None)
+
+
+def test_structure_retest_rejects_inconsistent_or_incomplete_ohlc():
+    from engine.structure import _detect_retest
+
+    valid_previous = {"open": 100.15, "high": 100.20, "low": 100.12, "close": 100.15}
+    malformed_bars = [
+        {"open": 100.30, "high": 100.10, "low": 99.95, "close": 100.15},
+        {"high": 100.20, "low": 99.95, "close": 100.15},
+    ]
+    for bar in malformed_bars:
+        assert _detect_retest(
+            [valid_previous, bar], True, "LONG", 100.0, 1.0
+        ) == (False, "NONE", None)
 
 
 def test_retest_trigger_requires_current_level_interaction():
