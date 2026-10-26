@@ -446,3 +446,36 @@ def test_stale_pending_catalyst_is_suppressed_before_telegram(tmp_path, monkeypa
     assert suppressed[0]["catalyst_timing"] == "STALE_CATALYST"
     saved = json.loads(state_path.read_text(encoding="utf-8"))
     assert saved["pending"] == []
+
+
+def test_retry_after_header_rejects_nonfinite_and_negative_values(monkeypatch):
+    from types import SimpleNamespace
+    import telegram.news_monitor as monitor
+
+    for header in ("NaN", "Infinity", "-Infinity", "-10", "not-a-number"):
+        source = "TEST_RETRY_AFTER_INVALID"
+        monkeypatch.setitem(monitor._SOURCE_FAILURES, source, 0)
+        monkeypatch.setitem(monitor._SOURCE_RETRY_AT, source, 0.0)
+        error = RuntimeError("upstream unavailable")
+        error.response = SimpleNamespace(status_code=503, headers={"Retry-After": header})
+
+        delay = monitor._source_failed(source, error)
+
+        assert delay == 120
+        assert not monitor._source_allowed(source)
+
+
+def test_retry_after_header_is_capped_to_maximum_backoff(monkeypatch):
+    from types import SimpleNamespace
+    import telegram.news_monitor as monitor
+
+    source = "TEST_RETRY_AFTER_LARGE"
+    monkeypatch.setitem(monitor._SOURCE_FAILURES, source, 0)
+    monkeypatch.setitem(monitor._SOURCE_RETRY_AT, source, 0.0)
+    error = RuntimeError("upstream busy")
+    error.response = SimpleNamespace(status_code=503, headers={"Retry-After": "999999"})
+
+    delay = monitor._source_failed(source, error)
+
+    assert delay == monitor.SOURCE_BACKOFF_MAX_SECONDS
+    assert not monitor._source_allowed(source)
