@@ -48,3 +48,47 @@ def test_atom_self_only_link_is_not_emitted_as_article(monkeypatch):
     monkeypatch.setattr(monitor.requests, "get", lambda *args, **kwargs: response)
 
     assert monitor._get_rss_items("Test Atom", "https://news.example/feed") == []
+
+
+
+def test_gdelt_skips_malformed_rows_without_losing_valid_articles(monkeypatch):
+    import telegram.news_monitor as monitor
+
+    payload = {
+        "articles": [
+            {
+                "title": "OPEC announces crude supply cut",
+                "url": "https://news.example/opec-cut",
+                "seendate": "2026-10-26T10:15:00Z",
+                "domain": "news.example",
+            },
+            None,
+            "not-an-article-object",
+            {"title": "Missing URL", "seendate": "2026-10-26T10:16:00Z"},
+        ]
+    }
+    response = type("Response", (), {
+        "headers": {"Content-Type": "application/json"},
+        "json": lambda self: payload,
+        "raise_for_status": lambda self: None,
+    })()
+    monkeypatch.setattr(monitor.requests, "get", lambda *args, **kwargs: response)
+
+    rows = monitor._get_gdelt_items()
+    assert len(rows) == 1
+    assert rows[0]["url"] == "https://news.example/opec-cut"
+
+
+def test_gdelt_rejects_invalid_articles_envelope(monkeypatch):
+    import pytest
+    import telegram.news_monitor as monitor
+
+    response = type("Response", (), {
+        "headers": {"Content-Type": "application/json"},
+        "json": lambda self: {"articles": "unexpected-string"},
+        "raise_for_status": lambda self: None,
+    })()
+    monkeypatch.setattr(monitor.requests, "get", lambda *args, **kwargs: response)
+
+    with pytest.raises(ValueError, match="articles field is not a list"):
+        monitor._get_gdelt_items()
