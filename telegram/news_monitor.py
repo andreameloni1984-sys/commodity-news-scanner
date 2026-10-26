@@ -10,6 +10,7 @@ from __future__ import annotations
 import email.utils
 import hashlib
 import json
+import math
 import os
 import re
 import threading
@@ -614,6 +615,44 @@ def _capture_baseline(event: dict[str, Any], states: list[Any]) -> dict[str, flo
     return baseline
 
 
+def _finite_positive(value: Any) -> float | None:
+    """Return a finite positive price/level, rejecting NaN, infinity and non-numbers."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return number if math.isfinite(number) and number > 0 else None
+
+
+def _valid_signal_levels(
+    direction: str, price: Any, entry: Any, stop: Any, tp1: Any, tp2: Any = None
+) -> bool:
+    """Validate finite positive prices and directionally ordered PAPER risk levels."""
+    current, entry_v, stop_v, tp1_v = (
+        _finite_positive(value) for value in (price, entry, stop, tp1)
+    )
+    if any(value is None for value in (current, entry_v, stop_v, tp1_v)):
+        return False
+    direction = str(direction or "").upper()
+    if direction == "LONG":
+        if not (stop_v < entry_v < tp1_v):
+            return False
+    elif direction == "SHORT":
+        if not (tp1_v < entry_v < stop_v):
+            return False
+    else:
+        return False
+    if tp2 is not None:
+        tp2_v = _finite_positive(tp2)
+        if tp2_v is None:
+            return False
+        if direction == "LONG" and tp2_v <= tp1_v:
+            return False
+        if direction == "SHORT" and tp2_v >= tp1_v:
+            return False
+    return True
+
+
 def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str, Any]]:
     """Require a live Gagarin trigger and measurable price movement after news detection."""
     classified = classify_event(event.get("title", ""))
@@ -651,12 +690,11 @@ def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str
             price_source = str(getattr(state, "data_source", "") or getattr(state, "provider", "")).strip()
             if not price_source or price_source.upper() in {"UNKNOWN", "N/A", "NONE"}:
                 continue
-            if any(v is None for v in (price, entry, stop, tp1)):
+            if not _valid_signal_levels(
+                direction, price, entry, stop, tp1, getattr(state, "tp2", None)
+            ):
                 continue
-            try:
-                price_value = float(price)
-            except (TypeError, ValueError):
-                continue
+            price_value = float(price)
             move_pct = (price_value / baseline - 1.0) * 100.0
             if impact == "RIALZISTA" and move_pct < min_reaction_pct:
                 continue
