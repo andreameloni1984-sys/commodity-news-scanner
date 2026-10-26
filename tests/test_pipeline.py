@@ -871,3 +871,18 @@ def test_safety_recomputes_rr_from_actual_bracket_prices():
     assert state.safety == "BLOCKED"
     assert "RR_GEOMETRY_MISMATCH" in state.blockers
     assert "RR_FAIL" in state.blockers
+
+
+
+def test_rsi_wilder_matches_reference_values_after_recursive_smoothing():
+    # Deterministic reference fixture: the first 14 changes seed Wilder's
+    # average gains/losses (RSI=65); the 15th change must use Wilder's RMA
+    # recurrence, not a fresh simple average over the latest window.
+    closes = [100.0]
+    for change in (1, -1, 2, -1, 2, -1, 2, -1, 2, -1, 2, -1, 2, -1, 2):
+        closes.append(closes[-1] + change)
+
+    assert abs(_rsi_wilder(closes[:15], 14) - 65.0) < 1e-12
+    assert abs(_rsi_wilder(closes, 14) - 68.40277777777777) < 1e-10
+    assert _rsi_wilder(closes, 0) is None
+    assert _rsi_wilder(closes, "invalid-period") is None
