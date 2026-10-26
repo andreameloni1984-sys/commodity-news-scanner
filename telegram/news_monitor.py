@@ -249,6 +249,8 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
                        "observed_at": observed_at.isoformat(), "signed_return_pct": round(signed_pct, 6),
                        "max_adverse_excursion_pct": round(max_adverse_excursion_pct, 6),
                        "max_favorable_excursion_pct": round(max_favorable_excursion_pct, 6),
+                       "late_move": alert.get("late_move") if isinstance(alert.get("late_move"), bool) else None,
+                       "early_warning_stage": alert.get("early_warning_stage"),
                        "correct": signed_pct > 0, "outcome": outcome, "path_ambiguous": path_ambiguous})
     correct = sum(x["correct"] for x in scored)
     tp1_observed = sum(x["outcome"] == "TP1_OBSERVED" for x in scored)
@@ -260,6 +262,19 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         x["signed_return_pct"] > 0 and x["max_adverse_excursion_pct"] < 0
         for x in scored
     )
+    def _late_move_group(late_flag: bool) -> dict[str, Any]:
+        group = [x for x in scored if x.get("late_move") is late_flag]
+        return {
+            "count": len(group),
+            "accuracy_pct": round(sum(x["correct"] for x in group) / len(group) * 100, 2) if group else None,
+            "mean_directional_return_pct": round(sum(x["signed_return_pct"] for x in group) / len(group), 4) if group else None,
+            "mean_max_adverse_excursion_pct": round(sum(x["max_adverse_excursion_pct"] for x in group) / len(group), 4) if group else None,
+        }
+    late_move_comparison = {
+        "late": _late_move_group(True),
+        "not_late": _late_move_group(False),
+        "unknown_count": sum(x.get("late_move") is None for x in scored),
+    }
     return {"window_days": 7, "alerts": raw_alert_count, "eligible_alerts": eligible_alert_count,
             "scored": len(scored), "pending": pending, "unscored_expired": unscored_expired,
             "ambiguous_alert_groups": ambiguous_alert_groups,
@@ -275,6 +290,7 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
             "mean_max_favorable_excursion_pct": round(sum(x["max_favorable_excursion_pct"] for x in scored)/len(scored), 4) if scored else None,
             "recovered_after_adverse_count": recovered_after_adverse_count,
             "recovered_after_adverse_pct": round(recovered_after_adverse_count / len(scored) * 100, 2) if scored else None,
+            "late_move_comparison": late_move_comparison,
             "tp1_observed": tp1_observed, "sl_observed": sl_observed, "open_at_last_check": open_count}
 
 
@@ -306,6 +322,16 @@ def _maybe_send_daily_scorecard(state: dict[str, Any], send_telegram: Callable[[
         except OSError:
             pass
     report = build_alert_scorecard(rows, now)
+    late_group = report["late_move_comparison"]["late"]
+    non_late_group = report["late_move_comparison"]["not_late"]
+    late_adverse = (
+        f"{late_group['mean_max_adverse_excursion_pct']:+.3f}%"
+        if late_group["mean_max_adverse_excursion_pct"] is not None else "N/D"
+    )
+    non_late_adverse = (
+        f"{non_late_group['mean_max_adverse_excursion_pct']:+.3f}%"
+        if non_late_group["mean_max_adverse_excursion_pct"] is not None else "N/D"
+    )
     if report["scored"]:
         message = ("📊 GAGARIN — VERIFICA ALERT (ultimi 7 giorni)\n"
                    f"Valutati: {report['scored']}/{report['eligible_alerts']} alert eleggibili (righe grezze: {report['alerts']}) | copertura: {report['coverage_pct']:.1f}% | in attesa: {report['pending']} | senza dati a finestra chiusa: {report['unscored_expired']}\n"
@@ -315,6 +341,7 @@ def _maybe_send_daily_scorecard(state: dict[str, Any], send_telegram: Callable[[
                    f"Rendimento direzionale medio: {report['mean_directional_return_pct']:+.3f}%\n"
                    f"Escursione avversa/favorevole media: {report['mean_max_adverse_excursion_pct']:+.3f}% / {report['mean_max_favorable_excursion_pct']:+.3f}% (osservata, da +15 min)\n"
                    f"Segnali finiti positivi dopo escursione avversa: {report['recovered_after_adverse_count']} ({report['recovered_after_adverse_pct']:.1f}%)\n"
+                   f"Confronto LATE_MOVE: tardivi n={late_group['count']} MAE media={late_adverse}; non tardivi n={non_late_group['count']} MAE media={non_late_adverse}; classe assente={report['late_move_comparison']['unknown_count']}\n"
                    f"TP1 osservato: {report['tp1_observed']} | SL osservato: {report['sl_observed']} | ancora aperti: {report['open_at_last_check']}\n"
                    f"Percorso TP/SL ambiguo: {report['path_ambiguous_alerts']} (gap osservazioni > {report['observation_gap_limit_minutes']:.0f} min)\n"
                    "TP/SL sono attraversamenti osservati ai controlli periodici, non tick intrabar. Feed Gagarin; esclusi spread/slippage.")
