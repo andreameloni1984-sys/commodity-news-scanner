@@ -45,6 +45,66 @@ STATE_PATH = Path(os.getenv("GAGARIN_NEWS_STATE_PATH", "data/news_monitor_state.
 JOURNAL_PATH = Path(os.getenv("GAGARIN_NEWS_JOURNAL_PATH", "data/news_event_journal.jsonl"))
 
 
+def _restore_source_backoff(state: dict[str, Any], now: datetime | None = None) -> None:
+    """Restore source cooldowns from wall-clock timestamps after a process restart."""
+    saved = state.get("source_backoff")
+    if not isinstance(saved, dict):
+        return
+    now_utc = now or _utc_now()
+    now_utc = now_utc.replace(tzinfo=timezone.utc) if now_utc.tzinfo is None else now_utc.astimezone(timezone.utc)
+    monotonic_now = time.monotonic()
+    failures: dict[str, int] = {}
+    retry_at: dict[str, float] = {}
+    last_success: dict[str, float] = {}
+    for raw_source, record in saved.items():
+        if not isinstance(record, dict):
+            continue
+        source = str(raw_source)
+        try:
+            count = max(0, int(record.get("failures", 0)))
+        except (TypeError, ValueError, OverflowError):
+            count = 0
+        if count:
+            failures[source] = count
+        retry_dt = _parse_datetime(record.get("retry_at_utc"))
+        if retry_dt is not None:
+            remaining = (retry_dt - now_utc).total_seconds()
+            if remaining > 0:
+                retry_at[source] = monotonic_now + remaining
+        success_dt = _parse_datetime(record.get("last_success_at_utc"))
+        if success_dt is not None:
+            age = max(0.0, (now_utc - success_dt).total_seconds())
+            last_success[source] = monotonic_now - age
+    with _SOURCE_LOCK:
+        _SOURCE_FAILURES.clear()
+        _SOURCE_FAILURES.update(failures)
+        _SOURCE_RETRY_AT.clear()
+        _SOURCE_RETRY_AT.update(retry_at)
+        _SOURCE_LAST_SUCCESS.clear()
+        _SOURCE_LAST_SUCCESS.update(last_success)
+
+
+def _snapshot_source_backoff(state: dict[str, Any], now: datetime | None = None) -> None:
+    """Serialize source health as UTC timestamps; monotonic clocks cannot survive restarts."""
+    now_utc = now or _utc_now()
+    now_utc = now_utc.replace(tzinfo=timezone.utc) if now_utc.tzinfo is None else now_utc.astimezone(timezone.utc)
+    monotonic_now = time.monotonic()
+    snapshot: dict[str, dict[str, Any]] = {}
+    with _SOURCE_LOCK:
+        sources = set(_SOURCE_FAILURES) | set(_SOURCE_RETRY_AT) | set(_SOURCE_LAST_SUCCESS)
+        for source in sources:
+            record: dict[str, Any] = {"failures": max(0, int(_SOURCE_FAILURES.get(source, 0)))}
+            retry = _SOURCE_RETRY_AT.get(source, 0.0)
+            if retry > monotonic_now:
+                record["retry_at_utc"] = (now_utc + timedelta(seconds=retry - monotonic_now)).isoformat()
+            last_success = _SOURCE_LAST_SUCCESS.get(source, 0.0)
+            if last_success > 0.0:
+                age = max(0.0, monotonic_now - last_success)
+                record["last_success_at_utc"] = (now_utc - timedelta(seconds=age)).isoformat()
+            snapshot[source] = record
+    state["source_backoff"] = snapshot
+
+
 def _journal(record: dict[str, Any]) -> None:
     """Append an audit record to PostgreSQL when configured, with file fallback."""
     row = dict(record)
