@@ -933,6 +933,25 @@ def _save_state(state: dict[str, Any]) -> None:
     except OSError as exc:
         print(f"NEWS state save failed | {type(exc).__name__}: {exc}", flush=True)
 
+def _early_warning_late_flag(early_warning: dict[str, Any], stage: Any = None) -> bool | None:
+    """Return a cohort label only when the warning stage is explicitly understood.
+
+    A missing/invalid stage is unknown, not evidence that the alert was early.
+    An explicit boolean captured with the alert takes precedence for old journals.
+    """
+    if not isinstance(early_warning, dict):
+        early_warning = {}
+    explicit = early_warning.get("late_move")
+    if isinstance(explicit, bool):
+        return explicit
+    normalized_stage = str(
+        stage if stage is not None else early_warning.get("stage", "UNKNOWN")
+    ).strip().upper()
+    if normalized_stage in {"LATE_MOVE", "EARLY_WARNING", "WATCH"}:
+        return normalized_stage == "LATE_MOVE"
+    return None
+
+
 def poll_news_once(
     send_telegram: Callable[[str], bool],
     run_analysis: Callable[[], Any],
@@ -1136,14 +1155,11 @@ def poll_news_once(
                             or setup_metadata.get("early_warning_stage")
                             or "UNKNOWN"
                         )
-                        if isinstance(early_warning.get("late_move"), bool):
-                            early_warning_late = early_warning.get("late_move")
-                        elif early_warning_stage in {"LATE_MOVE", "EARLY_WARNING", "WATCH"}:
-                            early_warning_late = early_warning_stage == "LATE_MOVE"
-                        else:
-                            # INVALID_DATA / INSUFFICIENT_DATA must remain
-                            # unknown, not be counted as a successful non-late warning.
-                            early_warning_late = None
+                        # Invalid/insufficient stages must not be counted as
+                        # a successful non-late warning in the outcome cohort.
+                        early_warning_late = _early_warning_late_flag(
+                            early_warning, early_warning_stage
+                        )
                         pre_warning_move_atr = early_warning.get("pre_warning_30m_move_atr")
                         try:
                             pre_warning_move_atr = float(pre_warning_move_atr)
