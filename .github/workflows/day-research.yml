@@ -27,14 +27,30 @@ jobs:
       - name: Run day research
         run: python engine/day_research.py
 
-      - name: Commit if changed
+      - name: Persist research snapshot off main
+        shell: bash
         run: |
+          set -euo pipefail
+          output="$(mktemp)"
+          cp data/day_research.json "$output"
+          branch="research/day-research-notes"
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/day_research.json
-          if git diff --staged --quiet; then
-            echo "No changes to day_research.json"
+          git fetch origin "refs/heads/$branch:refs/remotes/origin/$branch" || true
+          if git show-ref --verify --quiet "refs/remotes/origin/$branch"; then
+            git checkout -B "$branch" "origin/$branch"
           else
-            git commit -m "chore: update day research notes $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            git push
+            git checkout --orphan "$branch"
+            git rm -rf . >/dev/null 2>&1 || true
+          fi
+
+          mkdir -p data
+          cp "$output" data/day_research.json
+          git add data/day_research.json
+          if git diff --cached --quiet; then
+            echo "No changes to research snapshot"
+          else
+            git commit -m "research: update day notes $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            git push origin "HEAD:$branch"
           fi
