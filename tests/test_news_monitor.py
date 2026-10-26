@@ -505,3 +505,43 @@ def test_alert_scorecard_rejects_non_finite_prices_and_invalid_levels():
     assert report["tp1_observed"] == 0
     assert report["sl_observed"] == 0
     assert report["open_at_last_check"] == 1
+
+
+def test_retry_after_http_date_is_honoured_and_capped(monkeypatch):
+    from datetime import datetime, timezone
+    import telegram.news_monitor as monitor
+
+    now = datetime(2026, 10, 26, 12, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(monitor, "_utc_now", lambda: now)
+    assert monitor._parse_retry_after_seconds(
+        "Mon, 26 Oct 2026 12:20:00 GMT"
+    ) == 20 * 60
+    assert monitor._parse_retry_after_seconds(
+        "Mon, 26 Oct 2026 14:00:00 GMT"
+    ) == monitor.SOURCE_BACKOFF_MAX_SECONDS
+    assert monitor._parse_retry_after_seconds(
+        "Mon, 26 Oct 2026 11:00:00 GMT"
+    ) == 0
+    assert monitor._parse_retry_after_seconds("not-a-date") is None
+
+
+def test_source_failed_honours_retry_after_http_date(monkeypatch):
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+    import telegram.news_monitor as monitor
+
+    source = "TEST_RETRY_AFTER_DATE"
+    monkeypatch.setattr(monitor, "_utc_now", lambda: datetime(2026, 10, 26, 12, 0, tzinfo=timezone.utc))
+    monkeypatch.setitem(monitor._SOURCE_FAILURES, source, 0)
+    monkeypatch.setitem(monitor._SOURCE_RETRY_AT, source, 0.0)
+    error = RuntimeError("upstream unavailable")
+    error.response = SimpleNamespace(
+        status_code=503,
+        headers={"Retry-After": "Mon, 26 Oct 2026 12:20:00 GMT"},
+    )
+    monkeypatch.setattr(monitor.time, "monotonic", lambda: 100.0)
+
+    delay = monitor._source_failed(source, error)
+
+    assert delay == 20 * 60
+    assert monitor._SOURCE_RETRY_AT[source] == 100.0 + 20 * 60
