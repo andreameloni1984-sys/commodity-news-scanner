@@ -17,3 +17,11 @@
 - Regression tests: NaN, positive/negative infinity, negative and non-numeric values; oversized finite values are capped.
 - Verification: changes committed to the feature branch. CI must run on the PR before this is considered verified. No production deploy or Telegram test message was sent. Render build quota remains a separate deployment blocker.
 - Next: inspect the new CI results and merge only after all relevant checks pass.
+
+
+## 2026-10-26 — Select Atom article permalinks before source deduplication
+
+- **Finding:** the RSS/Atom reader overwrote its link field in document order. An Atom entry with `rel="alternate"` followed by `rel="self"` could end up with the API endpoint as its source URL, impairing deduplication and making Telegram citations less useful.
+- **Implemented:** the reader now prefers explicit alternate links, accepts RSS/default links, and ignores self/enclosure links. Entries with no usable article link are dropped instead of being emitted with a non-article endpoint.
+- **Regression tests:** alternate-after-self ordering and self-only Atom entries.
+- **Limits:** offline parser tests do not prove current feed availability or live Telegram delivery. Render build-pipeline minutes remain exhausted; no deployment, Telegram test message, or trade order was triggered.
