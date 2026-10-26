@@ -614,3 +614,26 @@ def test_save_state_persists_current_source_backoff(monkeypatch, tmp_path):
     assert saved["source_backoff"]["GDELT"]["failures"] == 1
     assert monitor._parse_datetime(saved["source_backoff"]["GDELT"]["retry_at_utc"]) > now
 
+def test_restore_source_backoff_caps_corrupt_far_future_deadline(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    import time
+    import telegram.news_monitor as monitor
+
+    now = datetime(2026, 10, 26, 15, 0, tzinfo=timezone.utc)
+    for mapping in (monitor._SOURCE_FAILURES, monitor._SOURCE_RETRY_AT, monitor._SOURCE_LAST_SUCCESS):
+        mapping.clear()
+
+    monitor._restore_source_backoff(
+        {
+            "source_backoff": {
+                "GDELT": {
+                    "failures": 1,
+                    "retry_at_utc": (now + timedelta(days=7)).isoformat(),
+                }
+            }
+        },
+        now=now,
+    )
+
+    remaining = monitor._SOURCE_RETRY_AT["GDELT"] - time.monotonic()
+    assert 0 < remaining <= monitor.PERMANENT_HTTP_BACKOFF_SECONDS
