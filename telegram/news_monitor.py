@@ -372,20 +372,37 @@ def _source_succeeded(source: str) -> None:
         print(f"NEWS source recovered | source={source}", flush=True)
 
 
+def _parse_retry_after_seconds(value: Any, now: datetime | None = None) -> int | None:
+    """Parse Retry-After seconds or HTTP-date, capped to the source backoff maximum."""
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        seconds = float(raw)
+        if math.isfinite(seconds) and seconds >= 0:
+            return min(int(seconds), SOURCE_BACKOFF_MAX_SECONDS)
+    except (TypeError, ValueError, OverflowError):
+        pass
+    try:
+        retry_at = email.utils.parsedate_to_datetime(raw)
+        if retry_at.tzinfo is None:
+            retry_at = retry_at.replace(tzinfo=timezone.utc)
+        current = now or _utc_now()
+        if current.tzinfo is None:
+            current = current.replace(tzinfo=timezone.utc)
+        seconds = int((retry_at - current.astimezone(timezone.utc)).total_seconds())
+        return min(max(0, seconds), SOURCE_BACKOFF_MAX_SECONDS)
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
 def _source_failed(source: str, exc: Exception) -> int:
     """Apply exponential cooldown; honour Retry-After when the server supplies it."""
     response = getattr(exc, "response", None)
     status = getattr(response, "status_code", None)
-    retry_after = None
-    try:
-        raw_retry_after = (getattr(response, "headers", {}) or {}).get("Retry-After", "")
-        candidate_retry_after = float(raw_retry_after)
-        # Treat server-provided headers as untrusted input. NaN/Infinity can
-        # otherwise raise during int() below and abort the whole poll cycle.
-        if math.isfinite(candidate_retry_after) and candidate_retry_after >= 0:
-            retry_after = int(min(candidate_retry_after, SOURCE_BACKOFF_MAX_SECONDS))
-    except (TypeError, ValueError, OverflowError):
-        retry_after = None
+    retry_after = _parse_retry_after_seconds(
+        (getattr(response, "headers", {}) or {}).get("Retry-After", "")
+    )
 
     with _SOURCE_LOCK:
         failures = _SOURCE_FAILURES.get(source, 0) + 1
