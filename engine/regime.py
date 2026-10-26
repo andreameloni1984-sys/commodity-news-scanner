@@ -180,11 +180,18 @@ RSI_WILDER_PERIOD = 14
 
 
 def _rsi_wilder(closes, period=RSI_WILDER_PERIOD):
-    """Return Wilder RSI from closes; None if there are too few valid values."""
-    try:
-        period = int(period)
-    except (TypeError, ValueError):
+    """Return Wilder RSI from closes; None if inputs or history are invalid."""
+    # Do not silently truncate a fractional period or let int(inf) raise.
+    # A configured indicator period must be a finite positive integer.
+    if isinstance(period, bool):
         return None
+    try:
+        period_value = float(period)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not math.isfinite(period_value) or not period_value.is_integer():
+        return None
+    period = int(period_value)
     if period < 1:
         return None
     values = []
