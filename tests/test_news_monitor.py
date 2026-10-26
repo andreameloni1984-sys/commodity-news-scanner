@@ -518,6 +518,10 @@ def test_valid_signal_levels_enforces_minimum_rr_and_blocks_late_prices():
     assert not _valid_signal_levels("LONG", 80.0, 80.0, 79.0, 81.5, 81.99, 82.5)
     assert not _valid_signal_levels("LONG", 80.0, 80.0, 79.0, 81.5, 82.0, 82.49)
 
+    # A quote can still be inside the bracket yet have too little reward left.
+    assert not _valid_signal_levels("LONG", 80.5, 80.0, 79.0, 81.5, 82.0, 82.5)
+    assert not _valid_signal_levels("SHORT", 79.5, 80.0, 81.0, 78.5, 78.0, 77.5)
+
     # A quote that has already reached/passed TP1 is a late entry, not a valid alert.
     assert not _valid_signal_levels("LONG", 81.6, 80.0, 79.0, 81.5, 82.0, 82.5)
     assert not _valid_signal_levels("SHORT", 78.4, 80.0, 81.0, 78.5, 78.0, 77.5)
