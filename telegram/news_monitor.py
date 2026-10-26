@@ -1136,11 +1136,14 @@ def poll_news_once(
                             or setup_metadata.get("early_warning_stage")
                             or "UNKNOWN"
                         )
-                        early_warning_late = (
-                            early_warning.get("late_move")
-                            if isinstance(early_warning.get("late_move"), bool)
-                            else (early_warning_stage == "LATE_MOVE" if early_warning_stage != "UNKNOWN" else None)
-                        )
+                        if isinstance(early_warning.get("late_move"), bool):
+                            early_warning_late = early_warning.get("late_move")
+                        elif early_warning_stage in {"LATE_MOVE", "EARLY_WARNING", "WATCH"}:
+                            early_warning_late = early_warning_stage == "LATE_MOVE"
+                        else:
+                            # INVALID_DATA / INSUFFICIENT_DATA must remain
+                            # unknown, not be counted as a successful non-late warning.
+                            early_warning_late = None
                         pre_warning_move_atr = early_warning.get("pre_warning_30m_move_atr")
                         try:
                             pre_warning_move_atr = float(pre_warning_move_atr)
