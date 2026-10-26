@@ -1114,6 +1114,36 @@ def poll_news_once(
                             "aligned_setup_count": len(matches),
                         })
                         break
+                # Recheck source age at delivery time, not only at initial ingestion.
+                # A pending catalyst may outlive the four-hour freshness window while
+                # waiting for price confirmation; do not send a stale late alert.
+                timing = classify_catalyst_timing({"published": event.get("published_at")}, now=now)
+                event["catalyst_timing"] = timing["timing"]
+                event["catalyst_age_minutes"] = timing["age_minutes"]
+                event["catalyst_future_skew_minutes"] = timing.get("future_skew_minutes")
+                event["catalyst_timing_reason"] = timing["reason"]
+                suppress_new_alerts = timing["timing"] in {
+                    "STALE_CATALYST", "FUTURE_TIMESTAMP_INVALID", "TIME_UNVERIFIED"
+                }
+                if suppress_new_alerts and not event.get("alert_suppressed_reason"):
+                    event["alert_suppressed_reason"] = timing["timing"]
+                    _journal({
+                        "kind": "NEWS_ALERT_SUPPRESSED",
+                        "event_id": event.get("event_id"),
+                        "title": event.get("title"),
+                        "source": event.get("source"),
+                        "url": event.get("url"),
+                        "published_at": event.get("published_at"),
+                        "catalyst_timing": timing["timing"],
+                        "catalyst_age_minutes": timing.get("age_minutes"),
+                        "reason": timing["reason"],
+                    })
+                # If this catalyst has never produced an alert, remove it from
+                # pending after suppression. If it was already delivered, keep it
+                # only for its post-alert outcome observations.
+                if suppress_new_alerts and not event.get("alert_sent"):
+                    continue
+
                 # Deduplicate delivery per catalyst and asset, not per catalyst
                 # globally: a multi-commodity event may validly confirm WTI and
                 # Brent, while a later recheck must not resend either asset.
@@ -1127,13 +1157,10 @@ def poll_news_once(
                     asset_key = _normalise_title(str(setup.get("asset") or ""))
                     if not asset_key or legacy_event_was_sent or asset_key in alerted_assets:
                         continue
-                    # Refresh catalyst age at delivery time; the detection journal
-                    # keeps the original age while the alert shows the current one.
-                    timing = classify_catalyst_timing({"published": event.get("published_at")}, now=now)
-                    event["catalyst_timing"] = timing["timing"]
-                    event["catalyst_age_minutes"] = timing["age_minutes"]
-                    event["catalyst_future_skew_minutes"] = timing.get("future_skew_minutes")
-                    event["catalyst_timing_reason"] = timing["reason"]
+                    if suppress_new_alerts:
+                        # An earlier alert may still be under outcome observation,
+                        # but a stale catalyst must not create a new asset alert.
+                        continue
                     if send_telegram(_format_news_alert(event, setup)):
                         sent += 1
                         alerted_assets.add(asset_key)
