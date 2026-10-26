@@ -122,6 +122,9 @@ def test_new_news_triggers_immediate_analysis_then_waits_for_price_confirmation(
     sent_event = next(event for event in saved["pending"] if event.get("alert_sent"))
     assert sent_event["alert_sent_at"] == (now + timedelta(minutes=5)).isoformat()
     assert sent_event["expires_at"] == (now + timedelta(minutes=5, hours=4)).isoformat()
+    assert sent_event["event_time"] == (now - timedelta(minutes=1)).isoformat()
+    assert sent_event["available_at"] == now.isoformat()
+    assert sent_event["decision_time"] == (now + timedelta(minutes=5)).isoformat()
 
 
 
@@ -364,14 +367,22 @@ def test_baseline_point_in_time_gate_rejects_missing_reversed_and_future_timesta
     now = datetime(2026, 10, 26, 10, 10, tzinfo=timezone.utc)
     first_seen = now - timedelta(minutes=5)
     valid = {
+        "event_time": (now - timedelta(minutes=6)).isoformat(),
+        "available_at": first_seen.isoformat(),
+        "decision_time": now.isoformat(),
         "first_seen_at": first_seen.isoformat(),
         "baseline_at": (now - timedelta(minutes=4)).isoformat(),
         "baseline_prices": {"WTI": 80.0},
     }
     assert _baseline_point_in_time_valid(valid, now) == (True, "BASELINE_POINT_IN_TIME_VALID")
     assert _baseline_point_in_time_valid({**valid, "baseline_at": None}, now)[0] is False
+    assert _baseline_point_in_time_valid({**valid, "first_seen_at": None, "available_at": None}, now)[0] is False
+    assert _baseline_point_in_time_valid({**valid, "event_time": None}, now)[0] is False
+    assert _baseline_point_in_time_valid({**valid, "decision_time": None}, now)[0] is False
+    assert _baseline_point_in_time_valid({**valid, "available_at": (now + timedelta(seconds=1)).isoformat()}, now) == (False, "AVAILABILITY_AFTER_DECISION")
+    assert _baseline_point_in_time_valid({**valid, "event_time": (now - timedelta(minutes=2)).isoformat()}, now) == (False, "EVENT_AFTER_AVAILABILITY")
     assert _baseline_point_in_time_valid({**valid, "baseline_at": (first_seen - timedelta(seconds=1)).isoformat()}, now) == (False, "BASELINE_PRECEDES_DETECTION")
-    assert _baseline_point_in_time_valid({**valid, "baseline_at": (now + timedelta(seconds=1)).isoformat()}, now) == (False, "BASELINE_FROM_FUTURE")
+    assert _baseline_point_in_time_valid({**valid, "baseline_at": (now + timedelta(seconds=1)).isoformat()}, now) == (False, "BASELINE_AFTER_DECISION")
     assert _baseline_point_in_time_valid({**valid, "baseline_prices": {"WTI": float("nan")}}, now) == (False, "BASELINE_PRICE_INVALID")
 
 
