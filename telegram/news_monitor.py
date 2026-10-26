@@ -651,6 +651,25 @@ def _finite_positive(value: Any) -> float | None:
     return number if math.isfinite(number) and number > 0 else None
 
 
+def _baseline_point_in_time_valid(event: dict[str, Any], now: datetime) -> tuple[bool, str]:
+    """Require the price baseline to exist after detection and before decision time."""
+    first_seen = _parse_datetime(event.get("first_seen_at"))
+    baseline_at = _parse_datetime(event.get("baseline_at"))
+    if first_seen is None or baseline_at is None:
+        return False, "BASELINE_TIMESTAMP_MISSING_OR_INVALID"
+    now_utc = now.replace(tzinfo=timezone.utc) if now.tzinfo is None else now.astimezone(timezone.utc)
+    if baseline_at < first_seen:
+        return False, "BASELINE_PRECEDES_DETECTION"
+    if baseline_at > now_utc:
+        return False, "BASELINE_FROM_FUTURE"
+    prices = event.get("baseline_prices")
+    if not isinstance(prices, dict) or not prices:
+        return False, "BASELINE_PRICE_MISSING"
+    if any(_finite_positive(value) is None for value in prices.values()):
+        return False, "BASELINE_PRICE_INVALID"
+    return True, "BASELINE_POINT_IN_TIME_VALID"
+
+
 def _valid_signal_levels(
     direction: str, price: Any, entry: Any, stop: Any, tp1: Any, tp2: Any = None
 ) -> bool:
@@ -916,6 +935,19 @@ def poll_news_once(
                         })
                     still_pending.append(event)
                     continue
+                if not event.get("alert_sent"):
+                    baseline_ok, baseline_reason = _baseline_point_in_time_valid(event, now)
+                    if not baseline_ok:
+                        _journal({
+                            "kind": "NEWS_ALERT_SUPPRESSED",
+                            "event_id": event.get("event_id"),
+                            "title": event.get("title"),
+                            "source": event.get("source"),
+                            "url": event.get("url"),
+                            "published_at": event.get("published_at"),
+                            "reason": baseline_reason,
+                        })
+                        continue
                 matches = _confirmed_setups(event, states)
                 classified = classify_event(event.get("title", ""))
                 for asset in classified.get("assets", []):
