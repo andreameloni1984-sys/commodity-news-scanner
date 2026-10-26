@@ -505,3 +505,45 @@ def test_alert_scorecard_rejects_non_finite_prices_and_invalid_levels():
     assert report["tp1_observed"] == 0
     assert report["sl_observed"] == 0
     assert report["open_at_last_check"] == 1
+
+
+
+def test_capture_baseline_rejects_non_finite_prices():
+    from telegram.news_monitor import _capture_baseline
+
+    for invalid_price in (float("nan"), float("inf"), float("-inf")):
+        state = SimpleNamespace(
+            commodity="Petrolio WTI",
+            symbol="WTI/USD",
+            live=True,
+            price=invalid_price,
+        )
+        assert _capture_baseline(
+            {"title": "OPEC announces production cut", "assets": ["WTI"]},
+            [state],
+        ) == {}
+
+
+def test_confirmed_setups_reject_non_finite_baselines():
+    from telegram.news_monitor import _confirmed_setups
+
+    state = SimpleNamespace(
+        commodity="Oro",
+        symbol="XAU/USD",
+        setup_direction="SHORT",
+        final_decision="PAPER_SIGNAL",
+        trigger_confirmed=True,
+        live=True,
+        price=3990.0,
+        entry=3990.0,
+        stop=4050.0,
+        tp1=3900.0,
+        tp2=3850.0,
+        data_source="TEST_FEED",
+    )
+    for invalid_baseline in (float("nan"), float("inf"), float("-inf")):
+        event = {
+            "title": "Federal Reserve signals hawkish policy and a rate hike",
+            "baseline_prices": {"Oro": invalid_baseline, "Argento": invalid_baseline},
+        }
+        assert _confirmed_setups(event, [state]) == []
