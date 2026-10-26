@@ -2,6 +2,7 @@
 
 Ranks the strongest current directional forecast across the scanned universe.
 Scores are transparent heuristic selection scores, NOT calibrated probabilities.
+Commodity price levels are displayed explicitly in USD, their quote currency.
 """
 from __future__ import annotations
 
@@ -40,14 +41,10 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
             _direction(getattr(state, "mtf_direction", "NONE")),
             _direction(getattr(state, "opportunity_direction", "NONE")),
         ]
-        # The most recent confirmed setup takes priority; otherwise use the
-        # pre-move model and then structural/MTF context.
         direction = next((d for d in directions[1:2] if d != "NONE"), "NONE")
         if direction == "NONE":
             direction = next((d for d in (directions[0], directions[2], directions[3], directions[4]) if d != "NONE"), "NONE")
         if direction == "NONE":
-            # Always produce a directional candidate when the current market
-            # series supplies momentum; this is a lower-evidence fallback.
             move24 = _num(getattr(state, "move_24h_pct", 0))
             move4 = _num(getattr(state, "move_4h_pct", 0))
             if move24 != 0:
@@ -107,7 +104,6 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
         score += min(8, continuation * 0.08)
         score += min(5, quality * 0.05)
         score += min(5, confidence * 0.05)
-        # Reward expected range only mildly: volatility is opportunity and risk.
         score += min(5, expected_move * 0.8)
         if live and data_ok:
             score += 10; reasons.append("dati live validi")
@@ -115,7 +111,6 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
             score -= 15; reasons.append("dati non validati")
         if not live:
             score -= 8; reasons.append("prezzi non live")
-        # Penalise disagreement between independent directional inputs.
         active = [d for d in directions if d != "NONE"]
         conflicts = sum(1 for d in active if d != direction)
         score -= conflicts * 5
@@ -160,16 +155,17 @@ def format_best_prediction(states: Iterable[Any], profile: str = "AGGRESSIVE") -
     best = ranked[0]
     lines = [
         heading, "━━━━━━━━━━━━━━━━━━━━", "🧪 PAPER ONLY",
+        "Prezzi delle materie prime espressi in USD.",
         f"PROFILO: {profile}",
         f"SCELTA #1: {best['commodity']} ({best['symbol']}) — {best['direction']}",
         f"SCORE PREVISIONE: {best['score']:.1f}/100 (indice comparativo, NON probabilità)",
         f"MOVIMENTO ATTESO DAL MODELLO: circa {best['expected_move_pct']:.2f}%",
-        f"PREZZO: {best['price']:.6g}",
-        f"ENTRY: {best['entry']:.6g}" if best['entry'] is not None else "ENTRY: non disponibile",
-        f"STOP LOSS: {best['stop']:.6g}" if best['stop'] is not None else "STOP LOSS: non disponibile",
-        f"TAKE PROFIT 1: {best['tp1']:.6g}" if best['tp1'] is not None else "TAKE PROFIT 1: non disponibile",
-        f"TAKE PROFIT 2: {best['tp2']:.6g}" if best['tp2'] is not None else "TAKE PROFIT 2: non disponibile",
-        f"TAKE PROFIT 3: {best['tp3']:.6g}" if best['tp3'] is not None else "TAKE PROFIT 3: non disponibile",
+        f"PREZZO (USD): ${best['price']:.6g}",
+        f"ENTRY (USD): ${best['entry']:.6g}" if best['entry'] is not None else "ENTRY (USD): non disponibile",
+        f"STOP LOSS (USD): ${best['stop']:.6g}" if best['stop'] is not None else "STOP LOSS (USD): non disponibile",
+        f"TAKE PROFIT 1 (USD): ${best['tp1']:.6g}" if best['tp1'] is not None else "TAKE PROFIT 1 (USD): non disponibile",
+        f"TAKE PROFIT 2 (USD): ${best['tp2']:.6g}" if best['tp2'] is not None else "TAKE PROFIT 2 (USD): non disponibile",
+        f"TAKE PROFIT 3 (USD): ${best['tp3']:.6g}" if best['tp3'] is not None else "TAKE PROFIT 3 (USD): non disponibile",
         f"QUALITÀ {best['quality']:.0f} | CONFIDENCE {best['confidence']:.0f} | TRIGGER {'SÌ' if best['trigger_confirmed'] else 'NO'}",
         f"DATI: {best['data_status']} | {'LIVE' if best['live'] else 'NON LIVE'}",
         "PERCHÉ: " + (", ".join(best["reasons"]) if best["reasons"] else "segnali deboli"),
