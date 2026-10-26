@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 
+import math
+
 from engine.state import SoyuzState
 
 
@@ -315,62 +317,48 @@ def _detect_retest(
     breakout_level,
     atr,
 ):
+    """Confirm a retest only on the current bar after a prior confirmed breakout.
 
-    if not breakout:
+    Older candles in a lookback window must not be relabelled as retests:
+    they may have touched the level before the breakout was knowable.
+    """
+    if not breakout or breakout_level is None or atr is None or len(candles) < 2:
         return False, "NONE", None
 
-    if breakout_level is None:
+    try:
+        level = float(breakout_level)
+        atr_value = float(atr)
+        previous_close = float(candles[-2]["close"])
+        current = candles[-1]
+        close = float(current["close"])
+        high = float(current["high"])
+        low = float(current["low"])
+    except (KeyError, TypeError, ValueError, OverflowError):
         return False, "NONE", None
 
-    if atr is None or atr <= 0:
+    if not all(math.isfinite(value) for value in (
+        level, atr_value, previous_close, close, high, low
+    )) or atr_value <= 0:
         return False, "NONE", None
 
-    if len(candles) < 2:
-        return False, "NONE", None
+    tolerance = atr_value * RETEST_ATR_TOLERANCE
+    breakout_buffer = atr_value * BREAKOUT_ATR_BUFFER
 
-    tolerance = atr * RETEST_ATR_TOLERANCE
+    if breakout_direction == "LONG":
+        # A previous candle must already have closed beyond the breakout
+        # buffer; the current candle alone cannot be both breakout and retest.
+        previous_breakout_confirmed = previous_close > level + breakout_buffer
+        touched = low <= level + tolerance and high >= level - tolerance
+        held = close > level
+        if previous_breakout_confirmed and touched and held:
+            return True, "LONG", level
 
-    recent = candles[-3:]
-
-    for candle in recent:
-
-        close = candle["close"]
-        high = candle["high"]
-        low = candle["low"]
-
-        if breakout_direction == "LONG":
-
-            touched = (
-                low <= breakout_level + tolerance
-                and high >= breakout_level - tolerance
-            )
-
-            held = close > breakout_level
-
-            if touched and held:
-
-                return (
-                    True,
-                    "LONG",
-                    breakout_level,
-                )
-
-        elif breakout_direction == "SHORT":
-
-            touched = (
-                high >= breakout_level - tolerance
-                and low <= breakout_level + tolerance
-            )
-
-            held = close < breakout_level
-
-            if touched and held:
-
-                return (
-                    True,
-                    "SHORT",
-                    breakout_level,
-                )
+    elif breakout_direction == "SHORT":
+        previous_breakout_confirmed = previous_close < level - breakout_buffer
+        touched = high >= level - tolerance and low <= level + tolerance
+        held = close < level
+        if previous_breakout_confirmed and touched and held:
+            return True, "SHORT", level
 
     return False, "NONE", None
 
