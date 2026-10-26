@@ -505,3 +505,59 @@ def test_alert_scorecard_rejects_non_finite_prices_and_invalid_levels():
     assert report["tp1_observed"] == 0
     assert report["sl_observed"] == 0
     assert report["open_at_last_check"] == 1
+
+
+
+def test_gdelt_failure_backoff_survives_process_restart(tmp_path, monkeypatch):
+    import json
+    import time
+    import state_store
+    import telegram.news_monitor as monitor
+
+    state_path = tmp_path / "gdelt_backoff.json"
+    monkeypatch.setattr(monitor, "GDELT_STATE_PATH", state_path)
+    monkeypatch.setattr(monitor, "_SOURCE_FAILURES", {})
+    monkeypatch.setattr(monitor, "_SOURCE_RETRY_AT", {})
+    monkeypatch.setattr(monitor, "_SOURCE_LAST_SUCCESS", {})
+    monkeypatch.setattr(monitor, "_GDELT_STATE_LOADED", False)
+    monkeypatch.setattr(state_store, "load_state", lambda key: None)
+    monkeypatch.setattr(state_store, "save_state", lambda key, value: False)
+
+    delay = monitor._source_failed("GDELT", RuntimeError("simulated timeout"))
+    assert delay == 5 * 60
+    saved = json.loads(state_path.read_text(encoding="utf-8"))
+    assert saved["failures"] == 1
+    assert saved["retry_at_utc"]
+
+    # Simulate a fresh process: monotonic deadlines are lost, UTC state is not.
+    monkeypatch.setattr(monitor, "_SOURCE_FAILURES", {})
+    monkeypatch.setattr(monitor, "_SOURCE_RETRY_AT", {})
+    monkeypatch.setattr(monitor, "_SOURCE_LAST_SUCCESS", {})
+    monkeypatch.setattr(monitor, "_GDELT_STATE_LOADED", False)
+    assert monitor._source_allowed("GDELT", min_interval=monitor.GDELT_MIN_INTERVAL_SECONDS) is False
+    assert monitor._SOURCE_RETRY_AT["GDELT"] > time.monotonic()
+
+
+def test_gdelt_minimum_poll_interval_survives_process_restart(tmp_path, monkeypatch):
+    import json
+    import state_store
+    import telegram.news_monitor as monitor
+
+    state_path = tmp_path / "gdelt_backoff.json"
+    monkeypatch.setattr(monitor, "GDELT_STATE_PATH", state_path)
+    monkeypatch.setattr(monitor, "_SOURCE_FAILURES", {})
+    monkeypatch.setattr(monitor, "_SOURCE_RETRY_AT", {})
+    monkeypatch.setattr(monitor, "_SOURCE_LAST_SUCCESS", {})
+    monkeypatch.setattr(monitor, "_GDELT_STATE_LOADED", False)
+    monkeypatch.setattr(state_store, "load_state", lambda key: None)
+    monkeypatch.setattr(state_store, "save_state", lambda key, value: False)
+
+    monitor._source_succeeded("GDELT")
+    saved = json.loads(state_path.read_text(encoding="utf-8"))
+    assert saved["last_success_at_utc"]
+
+    monkeypatch.setattr(monitor, "_SOURCE_FAILURES", {})
+    monkeypatch.setattr(monitor, "_SOURCE_RETRY_AT", {})
+    monkeypatch.setattr(monitor, "_SOURCE_LAST_SUCCESS", {})
+    monkeypatch.setattr(monitor, "_GDELT_STATE_LOADED", False)
+    assert monitor._source_allowed("GDELT", min_interval=monitor.GDELT_MIN_INTERVAL_SECONDS) is False
