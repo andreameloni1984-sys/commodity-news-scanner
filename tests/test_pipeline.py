@@ -26,7 +26,7 @@
 
 from engine.state import SoyuzState
 from engine.regime import apply_regime, _safe_float, _rsi_wilder, _volatility_diagnostics
-from engine.structure import apply_structure
+from engine.structure import apply_structure, _find_swing_highs, _find_swing_lows
 from engine.setup import apply_setup
 from engine.trigger import apply_trigger
 from engine.risk import apply_risk
@@ -871,3 +871,43 @@ def test_safety_recomputes_rr_from_actual_bracket_prices():
     assert state.safety == "BLOCKED"
     assert "RR_GEOMETRY_MISMATCH" in state.blockers
     assert "RR_FAIL" in state.blockers
+
+
+def test_swing_pivots_are_timestamped_when_right_side_confirmation_arrives():
+    candles = [
+        {"high": 2, "low": 8, "timestamp": "2026-01-01T00:00:00Z"},
+        {"high": 3, "low": 7, "timestamp": "2026-01-01T00:05:00Z"},
+        {"high": 10, "low": 1, "timestamp": "2026-01-01T00:10:00Z"},
+        {"high": 4, "low": 6, "timestamp": "2026-01-01T00:15:00Z"},
+        {"high": 3, "low": 7, "timestamp": "2026-01-01T00:20:00Z"},
+    ]
+
+    # With only one right-side candle, the pivot is not yet knowable.
+    assert _find_swing_highs(candles[:4]) == []
+    assert _find_swing_lows(candles[:4]) == []
+
+    high = _find_swing_highs(candles)[0]
+    low = _find_swing_lows(candles)[0]
+    for pivot in (high, low):
+        assert pivot["event_time"] == "2026-01-01T00:10:00+00:00"
+        assert pivot["available_at"] == "2026-01-01T00:20:00+00:00"
+        assert pivot["confirmation_index"] == 4
+    assert high["price"] == 10
+    assert low["price"] == 1
+
+
+def test_swing_pivot_availability_fails_closed_for_naive_or_malformed_times():
+    candles = [
+        {"high": 2, "low": 8, "timestamp": "2026-01-01T00:00:00"},
+        {"high": 3, "low": 7, "timestamp": "2026-01-01T00:05:00"},
+        {"high": 10, "low": 1, "timestamp": "2026-01-01T00:10:00"},
+        {"high": 4, "low": 6, "timestamp": "not-a-time"},
+        {"high": 3, "low": 7, "timestamp": "2026-01-01T00:20:00"},
+    ]
+    high = _find_swing_highs(candles)[0]
+    low = _find_swing_lows(candles)[0]
+    for pivot in (high, low):
+        assert pivot["event_time"] is None
+        assert pivot["available_at"] is None
+        assert pivot["confirmation_index"] == 4
+
