@@ -353,3 +353,61 @@ def test_forbidden_news_source_is_cooled_down_for_six_hours(monkeypatch):
     assert delay == 6 * 60 * 60
     assert monitor._SOURCE_RETRY_AT[source] > 0
     assert not monitor._source_allowed(source)
+
+
+
+def test_stale_pending_catalyst_is_suppressed_before_telegram(tmp_path, monkeypatch):
+    import json
+    from datetime import datetime, timedelta, timezone
+    import telegram.news_monitor as monitor
+
+    now = datetime(2026, 10, 26, 10, 0, tzinfo=timezone.utc)
+    state_path = tmp_path / "news_state.json"
+    monkeypatch.setattr(monitor, "STATE_PATH", state_path)
+    monkeypatch.setattr(monitor, "_maybe_send_daily_scorecard", lambda *args, **kwargs: None)
+
+    event = {
+        "event_id": "stale-opec-event",
+        "source": "Test RSS",
+        "title": "OPEC announces production cut",
+        "url": "https://example.test/opec-cut",
+        "published_at": (now - timedelta(hours=5)).isoformat(),
+        "first_seen_at": (now - timedelta(minutes=10)).isoformat(),
+        "baseline_at": (now - timedelta(minutes=5)).isoformat(),
+        "baseline_prices": {"WTI": 80.0},
+        "expires_at": (now + timedelta(minutes=10)).isoformat(),
+    }
+    state_path.write_text(json.dumps({
+        "seen": [],
+        "clusters": [],
+        "pending": [event],
+        "last_analysis_at": now.timestamp() - monitor.RECHECK_SECONDS - 1,
+        "initialized": True,
+    }), encoding="utf-8")
+
+    wti = SimpleNamespace(
+        commodity="Petrolio WTI", symbol="WTI/USD", setup_direction="LONG",
+        final_decision="PAPER_SIGNAL", trigger_confirmed=True, live=True,
+        price=80.1, entry=80.1, stop=78.5, tp1=83.0, tp2=84.0,
+        data_source="TEST_FEED", metadata={},
+    )
+    messages = []
+    journal_rows = []
+    monkeypatch.setattr(monitor, "_journal", lambda row: journal_rows.append(dict(row)))
+
+    result = monitor.poll_news_once(
+        lambda message: messages.append(message) or True,
+        lambda: [wti],
+        fetcher=lambda: [],
+        now=now,
+    )
+
+    assert result["analysis"] == 1
+    assert result["alerts"] == 0
+    assert messages == []
+    suppressed = [row for row in journal_rows if row.get("kind") == "NEWS_ALERT_SUPPRESSED"]
+    assert len(suppressed) == 1
+    assert suppressed[0]["event_id"] == "stale-opec-event"
+    assert suppressed[0]["catalyst_timing"] == "STALE_CATALYST"
+    saved = json.loads(state_path.read_text(encoding="utf-8"))
+    assert saved["pending"] == []
