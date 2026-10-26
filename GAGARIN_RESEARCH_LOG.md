@@ -45,3 +45,12 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+
+## 2026-10-26 — Add a numeric reference regression for RSI Wilder
+
+- **Finding:** `engine/regime.py::_rsi_wilder` already uses the Wilder recursive average, but existing tests covered only monotonic rise/fall, flat data, insufficient history and invalid values. Those cases would not reliably detect accidental replacement of the smoothing recurrence with a simple moving average.
+- **Implemented:** added a deterministic mixed-gain/loss fixture with independently calculated expected values: RSI 65.0 after the 14-change seed and approximately 68.4027777778 after one additional +2 change. Also verifies invalid periods fail closed.
+- **Files:** `tests/test_pipeline.py`; implementation under test remains `engine/regime.py::_rsi_wilder`.
+- **Validation status:** GitHub CI on the new PR must pass before this regression is considered verified. No market data or trading outcome is inferred from the synthetic fixture.
+- **Scope:** test coverage only; no RSI threshold, regime, entry, risk or execution behavior changed. PAPER/DEMO only.
