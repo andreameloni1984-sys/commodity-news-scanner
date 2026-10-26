@@ -1,6 +1,17 @@
 from types import SimpleNamespace
 
-from telegram.news_monitor import classify_event, _confirmed_setups  # selected commodity universe is authoritative
+from telegram.news_monitor import classify_event, _confirmed_setups, _early_warning_late_flag  # selected commodity universe is authoritative
+
+
+def test_early_warning_cohort_keeps_invalid_stages_unknown():
+    assert _early_warning_late_flag({}, "LATE_MOVE") is True
+    assert _early_warning_late_flag({}, " early_warning ") is False
+    assert _early_warning_late_flag({}, "WATCH") is False
+    assert _early_warning_late_flag({}, "INVALID_DATA") is None
+    assert _early_warning_late_flag({}, "INSUFFICIENT_DATA") is None
+    assert _early_warning_late_flag({}, None) is None
+    # An explicit captured label is authoritative for legacy journal records.
+    assert _early_warning_late_flag({"late_move": True}, "EARLY_WARNING") is True
 
 
 def test_oil_inventory_draw_is_provisional_bullish_for_crude():
