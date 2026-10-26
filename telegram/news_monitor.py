@@ -43,6 +43,11 @@ _SOURCE_LAST_SUCCESS: dict[str, float] = {}
 _SOURCE_LOCK = threading.Lock()
 STATE_PATH = Path(os.getenv("GAGARIN_NEWS_STATE_PATH", "data/news_monitor_state.json"))
 JOURNAL_PATH = Path(os.getenv("GAGARIN_NEWS_JOURNAL_PATH", "data/news_event_journal.jsonl"))
+# Persist GDELT cooldowns as UTC wall-clock timestamps; monotonic deadlines do not
+# survive a process restart. PostgreSQL is preferred when DATABASE_URL is set.
+GDELT_STATE_PATH = Path(os.getenv("GAGARIN_GDELT_STATE_PATH", "data/gdelt_backoff_state.json"))
+_GDELT_STATE_LOADED = False
+_GDELT_STATE_LOAD_LOCK = threading.Lock()
 
 
 def _journal(record: dict[str, Any]) -> None:
@@ -352,8 +357,79 @@ def _title_cluster(item: dict[str, Any]) -> str:
     return hashlib.sha256(title.encode("utf-8")).hexdigest()[:20]
 
 
+def _restore_gdelt_state() -> None:
+    """Restore GDELT cooldown/last-success timestamps after a process restart."""
+    global _GDELT_STATE_LOADED
+    with _GDELT_STATE_LOAD_LOCK:
+        if _GDELT_STATE_LOADED:
+            return
+        payload = None
+        try:
+            from state_store import load_state
+            payload = load_state("gagarin_news_gdelt_backoff")
+        except Exception as exc:
+            print(f"NEWS GDELT state database read failed | {type(exc).__name__}: {exc}", flush=True)
+        if not isinstance(payload, dict) or not payload:
+            try:
+                candidate = json.loads(GDELT_STATE_PATH.read_text(encoding="utf-8"))
+                payload = candidate if isinstance(candidate, dict) else {}
+            except (OSError, json.JSONDecodeError):
+                payload = {}
+
+        now_utc = _utc_now()
+        now_mono = time.monotonic()
+        retry_at = _parse_datetime(payload.get("retry_at_utc"))
+        last_success_at = _parse_datetime(payload.get("last_success_at_utc"))
+        try:
+            failures = max(0, min(100, int(payload.get("failures", 0))))
+        except (TypeError, ValueError, OverflowError):
+            failures = 0
+        with _SOURCE_LOCK:
+            if failures:
+                _SOURCE_FAILURES["GDELT"] = failures
+            if retry_at is not None:
+                remaining = (retry_at - now_utc).total_seconds()
+                if remaining > 0:
+                    _SOURCE_RETRY_AT["GDELT"] = now_mono + min(remaining, PERMANENT_HTTP_BACKOFF_SECONDS)
+            if last_success_at is not None and last_success_at <= now_utc:
+                elapsed = min((now_utc - last_success_at).total_seconds(), 7 * 24 * 60 * 60)
+                _SOURCE_LAST_SUCCESS["GDELT"] = now_mono - max(0.0, elapsed)
+        _GDELT_STATE_LOADED = True
+
+
+def _persist_gdelt_state() -> None:
+    """Best-effort persistence; local-file fallback is not guaranteed durable on Render."""
+    now_utc = _utc_now()
+    now_mono = time.monotonic()
+    with _SOURCE_LOCK:
+        retry_mono = _SOURCE_RETRY_AT.get("GDELT")
+        success_mono = _SOURCE_LAST_SUCCESS.get("GDELT")
+        failures = _SOURCE_FAILURES.get("GDELT", 0)
+    retry_at = (now_utc + timedelta(seconds=max(0.0, retry_mono - now_mono))) if retry_mono is not None and retry_mono > now_mono else None
+    last_success_at = (now_utc - timedelta(seconds=max(0.0, now_mono - success_mono))) if success_mono is not None else None
+    payload = {
+        "failures": int(failures),
+        "retry_at_utc": retry_at.isoformat() if retry_at is not None else None,
+        "last_success_at_utc": last_success_at.isoformat() if last_success_at is not None else None,
+    }
+    try:
+        from state_store import save_state
+        save_state("gagarin_news_gdelt_backoff", payload)
+    except Exception as exc:
+        print(f"NEWS GDELT state database save failed | {type(exc).__name__}: {exc}", flush=True)
+    try:
+        GDELT_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = GDELT_STATE_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload, ensure_ascii=False, allow_nan=False), encoding="utf-8")
+        tmp.replace(GDELT_STATE_PATH)
+    except OSError as exc:
+        print(f"NEWS GDELT state local fallback save failed | {type(exc).__name__}: {exc}", flush=True)
+
+
 def _source_allowed(source: str, min_interval: int = 0) -> bool:
     """Return false while a source is in backoff or within its minimum poll interval."""
+    if source == "GDELT":
+        _restore_gdelt_state()
     now = time.monotonic()
     with _SOURCE_LOCK:
         retry_at = _SOURCE_RETRY_AT.get(source, 0.0)
@@ -364,16 +440,22 @@ def _source_allowed(source: str, min_interval: int = 0) -> bool:
 
 
 def _source_succeeded(source: str) -> None:
+    if source == "GDELT":
+        _restore_gdelt_state()
     with _SOURCE_LOCK:
         recovered = _SOURCE_FAILURES.pop(source, 0) > 0
         _SOURCE_RETRY_AT.pop(source, None)
         _SOURCE_LAST_SUCCESS[source] = time.monotonic()
+    if source == "GDELT":
+        _persist_gdelt_state()
     if recovered:
         print(f"NEWS source recovered | source={source}", flush=True)
 
 
 def _source_failed(source: str, exc: Exception) -> int:
     """Apply exponential cooldown; honour Retry-After when the server supplies it."""
+    if source == "GDELT":
+        _restore_gdelt_state()
     response = getattr(exc, "response", None)
     status = getattr(response, "status_code", None)
     retry_after = None
@@ -407,6 +489,8 @@ def _source_failed(source: str, exc: Exception) -> int:
             delay = PERMANENT_HTTP_BACKOFF_SECONDS
         _SOURCE_RETRY_AT[source] = time.monotonic() + delay
 
+    if source == "GDELT":
+        _persist_gdelt_state()
     status_text = f" HTTP={status}" if status is not None else ""
     print(
         f"NEWS source failure | source={source} | error={type(exc).__name__}"
