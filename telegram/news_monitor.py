@@ -76,7 +76,7 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         except (TypeError, ValueError):
             continue
         direction = str(row.get("direction") or "").upper()
-        if sent_at and sent_at >= cutoff and price > 0 and direction in {"LONG", "SHORT"}:
+        if sent_at and sent_at >= cutoff and math.isfinite(price) and price > 0 and direction in {"LONG", "SHORT"}:
             alerts.append((row, sent_at, price, direction))
     scored, pending, unscored_expired = [], 0, 0
     for alert, sent_at, alert_price, direction in alerts:
@@ -91,7 +91,7 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
                 price = float(row.get("current_price"))
             except (TypeError, ValueError):
                 continue
-            if price > 0:
+            if math.isfinite(price) and price > 0:
                 reaction_observations.append((observed_at, price))
         # Directional accuracy uses a minimum 15-minute horizon to avoid
         # treating immediate noise as a forecast result. TP/SL, however,
@@ -115,7 +115,14 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         except (TypeError, ValueError):
             stop, tp1 = None, None
         outcome = "OPEN_AT_LAST_CHECK"
-        if stop is not None and tp1 is not None:
+        levels_valid = (
+            stop is not None and tp1 is not None
+            and math.isfinite(stop) and math.isfinite(tp1)
+            and stop > 0 and tp1 > 0
+            and ((direction == "LONG" and stop < alert_price < tp1)
+                 or (direction == "SHORT" and tp1 < alert_price < stop))
+        )
+        if levels_valid:
             for _, observed_price in reaction_observations:
                 if (direction == "LONG" and observed_price <= stop) or (direction == "SHORT" and observed_price >= stop):
                     outcome = "SL_OBSERVED"
