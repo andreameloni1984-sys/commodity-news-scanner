@@ -45,3 +45,12 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+## 2026-10-26 — Preserve swing-pivot point-in-time availability
+
+- **Finding:** the structure engine confirmed pivots only after the configured right-side candles, but each pivot record exposed only the pivot candle's time. A historical evaluator could mistakenly treat that earlier event time as the time the pivot became knowable.
+- **Implemented:** `engine/structure.py` now records `event_time`, UTC-normalized `available_at` from the confirmation candle, and `confirmation_index` for both swing highs and lows. The legacy `datetime` field is preserved with timestamp-key fallback. Missing, malformed, naive, or non-monotonic timestamps produce no usable `available_at`; the index still identifies when the confirmation bar arrives.
+- **Regression tests:** `tests/test_pipeline.py` checks that a pivot is absent before right-side confirmation, becomes available only at the confirmation bar, and fails closed on invalid timestamps.
+- **Validation status:** CI runs on this PR branch; no local test run is claimed. This makes the point-in-time information explicit but is not a live-market or profitability validation. Any offline evaluator must use `available_at`/ `confirmation_index`, not `event_time`, when deciding whether a pivot was knowable.
+- **Deployment/safety:** no Render deployment, Telegram test message, broker, or order was triggered. PAPER/DEMO ONLY.
+
