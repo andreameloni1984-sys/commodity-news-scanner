@@ -637,3 +637,56 @@ def test_restore_source_backoff_caps_corrupt_far_future_deadline(monkeypatch):
 
     remaining = monitor._SOURCE_RETRY_AT["GDELT"] - time.monotonic()
     assert 0 < remaining <= monitor.PERMANENT_HTTP_BACKOFF_SECONDS
+
+
+def test_fetcher_failure_does_not_abort_pending_price_recheck(tmp_path, monkeypatch):
+    import json
+    import telegram.news_monitor as monitor
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime(2026, 10, 26, 14, 0, tzinfo=timezone.utc)
+    event = {
+        "event_id": "pending-event",
+        "title": "OPEC announces production cut",
+        "source": "Test RSS",
+        "url": "https://example.test/opec-cut",
+        "published_at": (now - timedelta(minutes=1)).isoformat(),
+        "first_seen_at": (now - timedelta(minutes=5)).isoformat(),
+        "expires_at": (now + timedelta(hours=1)).isoformat(),
+        "assets": ["WTI", "Brent"],
+        "impact": {"WTI": "RIALZISTA", "Brent": "RIALZISTA"},
+        "baseline_prices": {"WTI": 80.0, "Brent": 85.0},
+        "baseline_at": (now - timedelta(minutes=4)).isoformat(),
+    }
+    seeded_state = {
+        "seen": ["already-seen"],
+        "clusters": ["already-clustered"],
+        "pending": [event],
+        "last_analysis_at": 0,
+        "initialized": True,
+    }
+    monkeypatch.setattr(monitor, "STATE_PATH", tmp_path / "news_state.json")
+    monkeypatch.setattr(monitor, "_load_state", lambda: dict(seeded_state))
+    monkeypatch.setattr(monitor, "_maybe_send_daily_scorecard", lambda *args: False)
+
+    analysis_calls = []
+
+    def fail_fetch():
+        raise RuntimeError("simulated aggregate fetch failure")
+
+    def analyze():
+        analysis_calls.append(True)
+        return []
+
+    result = monitor.poll_news_once(
+        lambda message: False,
+        analyze,
+        fetcher=fail_fetch,
+        now=now,
+    )
+
+    assert result == {"fetched": 0, "new_relevant": 0, "pending": 1, "alerts": 0, "analysis": 1}
+    assert analysis_calls == [True]
+    saved = json.loads((tmp_path / "news_state.json").read_text(encoding="utf-8"))
+    assert saved["pending"][0]["event_id"] == "pending-event"
+
