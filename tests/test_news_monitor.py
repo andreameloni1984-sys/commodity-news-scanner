@@ -505,3 +505,37 @@ def test_alert_scorecard_rejects_non_finite_prices_and_invalid_levels():
     assert report["tp1_observed"] == 0
     assert report["sl_observed"] == 0
     assert report["open_at_last_check"] == 1
+
+def test_valid_signal_levels_enforces_minimum_rr_and_blocks_late_prices():
+    from telegram.news_monitor import _valid_signal_levels
+
+    # At entry, the complete LONG and SHORT brackets meet the 1.5R / 2R / 2.5R minima.
+    assert _valid_signal_levels("LONG", 80.0, 80.0, 79.0, 81.5, 82.0, 82.5)
+    assert _valid_signal_levels("SHORT", 80.0, 80.0, 81.0, 78.5, 78.0, 77.5)
+
+    # Reject TP1 below 1.5R, TP2 below 2R, and TP3 below 2.5R.
+    assert not _valid_signal_levels("LONG", 80.0, 80.0, 79.0, 81.49, 82.0, 82.5)
+    assert not _valid_signal_levels("LONG", 80.0, 80.0, 79.0, 81.5, 81.99, 82.5)
+    assert not _valid_signal_levels("LONG", 80.0, 80.0, 79.0, 81.5, 82.0, 82.49)
+
+    # A quote that has already reached/passed TP1 is a late entry, not a valid alert.
+    assert not _valid_signal_levels("LONG", 81.6, 80.0, 79.0, 81.5, 82.0, 82.5)
+    assert not _valid_signal_levels("SHORT", 78.4, 80.0, 81.0, 78.5, 78.0, 77.5)
+
+    # TP3 without TP2 cannot establish ordered target geometry.
+    assert not _valid_signal_levels("LONG", 80.0, 80.0, 79.0, 81.5, None, 82.5)
+
+
+def test_confirmed_setups_rejects_levels_below_minimum_rr():
+    from types import SimpleNamespace
+    from telegram.news_monitor import _confirmed_setups
+
+    event = {"title": "OPEC announces production cut", "baseline_prices": {"WTI": 80.0}}
+    state = SimpleNamespace(
+        commodity="Petrolio WTI", symbol="WTI/USD", setup_direction="LONG",
+        final_decision="PAPER_SIGNAL", trigger_confirmed=True, live=True,
+        price=80.0, entry=80.0, stop=79.0, tp1=81.4, tp2=82.0, tp3=82.5,
+        data_source="TEST_FEED",
+    )
+    assert _confirmed_setups(event, [state]) == []
+
