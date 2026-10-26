@@ -1,6 +1,6 @@
 # Gagarin — registro delle regole implementate e verificate
 
-Aggiornato: 2026-10-21. Questo registro distingue ciò che è nel codice e ha test automatici da ciò che è ancora da verificare. Non certifica che tutte le oltre 100 nozioni studiate in precedenza siano state trascritte: per farlo serve un inventario puntuale delle singole fonti/lezioni.
+Aggiornato: 2026-10-26. Questo registro distingue ciò che è nel codice e ha test automatici da ciò che è ancora da verificare. Non certifica che tutte le oltre 100 nozioni studiate in precedenza siano state trascritte: per farlo serve un inventario puntuale delle singole fonti/lezioni.
 
 ## Catalogo dei 100 punti
 
@@ -57,3 +57,11 @@ Una lezione è marcata **IMPLEMENTATA** solo se è tradotta in una regola non am
 
 
 | PATTERN-001 | Confermare swing high/low con due candele chiuse per lato; rilevare HH/HL, LH/LL, indebolimento e chiusura oltre l'ultimo swing di supporto/resistenza | `engine/pattern_exit.py`, alert `telegram/aggressive_alert.py` | Implementazione e test aggiunti il 2026-10-23. Test/CI e resa in produzione da verificare. La struttura è un avviso, non una previsione certa; richiede OHLC coerenti sul timeframe analizzato. |
+
+
+## 2026-10-26 — Freshness recheck on the active Telegram news path
+
+- **Problema:** la pipeline principale rifiutava notizie vecchie al primo ingresso, ma un evento poteva restare in coda mentre aspettava la conferma del prezzo e arrivare all'invio Telegram dopo la finestra temporale utile.
+- **Implementazione:** telegram/news_monitor.py rivaluta il timestamp prima dell'invio. Fonti non databili, timestamp futuri oltre cinque minuti ed eventi più vecchi di quattro ore generano NEWS_ALERT_SUPPRESSED e non producono un nuovo messaggio. Gli eventi già notificati restano disponibili per completare l'osservazione post-alert.
+- **Test:** aggiunta regressione end-to-end del monitor con un evento OPEC di cinque ore e un setup WTI PAPER altrimenti valido; deve risultare zero alert e una registrazione di soppressione.
+- **Stato:** branch fix/gagarin-stale-catalyst-alert-gate-20261026; test/CI da verificare prima di integrazione. Nessun ordine e nessun messaggio di prova Telegram.
