@@ -123,6 +123,10 @@ def test_new_news_triggers_immediate_analysis_then_waits_for_price_confirmation(
         tp1=83.0,
         tp2=84.0,
         data_source="TEST_FEED",
+        metadata={"early_warning": {
+            "stage": "LATE_MOVE", "direction": "LONG", "score": 48.0,
+            "pre_warning_30m_move_atr": 1.7, "late_move": True,
+        }},
     )
     analysis_calls = []
     messages = []
@@ -165,6 +169,11 @@ def test_new_news_triggers_immediate_analysis_then_waits_for_price_confirmation(
     assert sent_row["catalyst_timing"] == "FRESH_CATALYST"
     assert sent_row["catalyst_age_minutes"] == 6.0
     assert sent_row["catalyst_future_skew_minutes"] == 0.0
+    assert sent_row["early_warning_stage"] == "LATE_MOVE"
+    assert sent_row["early_warning_direction"] == "LONG"
+    assert sent_row["early_warning_score"] == 48.0
+    assert sent_row["pre_warning_30m_move_atr"] == 1.7
+    assert sent_row["late_move"] is True
 
     # The observation window starts when Telegram delivery succeeds.
     import json
@@ -305,6 +314,43 @@ def test_alert_scorecard_reports_adverse_and_favorable_excursions_not_only_final
     assert report["mean_max_favorable_excursion_pct"] == 3.0
     assert report["recovered_after_adverse_count"] == 1
     assert report["recovered_after_adverse_pct"] == 100.0
+
+
+def test_alert_scorecard_compares_outcomes_by_captured_late_move_class():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 21, 18, 0, tzinfo=timezone.utc)
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "late", "asset": "WTI",
+         "direction": "LONG", "price": 100.0, "late_move": True,
+         "early_warning_stage": "LATE_MOVE", "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "late", "asset": "WTI",
+         "current_price": 98.0, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "late", "asset": "WTI",
+         "current_price": 102.0, "observed_at": (sent + timedelta(minutes=30)).isoformat()},
+        {"kind": "NEWS_ALERT_SENT", "event_id": "not-late", "asset": "Brent",
+         "direction": "LONG", "price": 100.0, "late_move": False,
+         "early_warning_stage": "EARLY_WARNING", "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "not-late", "asset": "Brent",
+         "current_price": 99.5, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "not-late", "asset": "Brent",
+         "current_price": 101.0, "observed_at": (sent + timedelta(minutes=30)).isoformat()},
+        {"kind": "NEWS_ALERT_SENT", "event_id": "legacy", "asset": "Gold",
+         "direction": "LONG", "price": 100.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "legacy", "asset": "Gold",
+         "current_price": 101.0, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
+    comparison = report["late_move_comparison"]
+
+    assert report["scored"] == 3
+    assert comparison["late"]["count"] == 1
+    assert comparison["late"]["mean_max_adverse_excursion_pct"] == -2.0
+    assert comparison["not_late"]["count"] == 1
+    assert comparison["not_late"]["mean_max_adverse_excursion_pct"] == -0.5
+    assert comparison["unknown_count"] == 1
 
 
 def test_alert_scorecard_marks_alert_pending_without_later_observation():
