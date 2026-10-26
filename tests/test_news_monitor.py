@@ -479,3 +479,29 @@ def test_retry_after_header_is_capped_to_maximum_backoff(monkeypatch):
 
     assert delay == monitor.SOURCE_BACKOFF_MAX_SECONDS
     assert not monitor._source_allowed(source)
+
+
+def test_alert_scorecard_rejects_non_finite_prices_and_invalid_levels():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 21, 18, 0, tzinfo=timezone.utc)
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "bad-nan", "asset": "WTI", "direction": "LONG",
+         "price": float("nan"), "sent_at": sent.isoformat()},
+        {"kind": "NEWS_ALERT_SENT", "event_id": "bad-inf", "asset": "WTI", "direction": "LONG",
+         "price": float("inf"), "sent_at": sent.isoformat()},
+        {"kind": "NEWS_ALERT_SENT", "event_id": "bad-levels", "asset": "WTI", "direction": "LONG",
+         "price": 80.0, "stop": float("nan"), "tp1": 82.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "bad-levels", "asset": "WTI",
+         "current_price": float("inf"), "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "bad-levels", "asset": "WTI",
+         "current_price": 80.2, "observed_at": (sent + timedelta(minutes=25)).isoformat()},
+    ]
+    report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
+    assert report["alerts"] == 1
+    assert report["scored"] == 1
+    assert report["correct"] == 1
+    assert report["tp1_observed"] == 0
+    assert report["sl_observed"] == 0
+    assert report["open_at_last_check"] == 1
