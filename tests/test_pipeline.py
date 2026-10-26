@@ -886,3 +886,10 @@ def test_rsi_wilder_matches_reference_values_after_recursive_smoothing():
     assert abs(_rsi_wilder(closes, 14) - 68.40277777777777) < 1e-10
     assert _rsi_wilder(closes, 0) is None
     assert _rsi_wilder(closes, "invalid-period") is None
+
+
+
+def test_rsi_wilder_rejects_fractional_boolean_and_non_finite_periods():
+    closes = [float(i) for i in range(20)]
+    for period in (0, -1, 14.5, True, float("nan"), float("inf"), float("-inf"), "invalid-period"):
+        assert _rsi_wilder(closes, period) is None
