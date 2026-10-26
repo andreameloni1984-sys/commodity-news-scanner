@@ -98,7 +98,7 @@ def _snapshot_source_backoff(state: dict[str, Any], now: datetime | None = None)
             if retry > monotonic_now:
                 record["retry_at_utc"] = (now_utc + timedelta(seconds=retry - monotonic_now)).isoformat()
             last_success = _SOURCE_LAST_SUCCESS.get(source, 0.0)
-            if last_success > 0.0:
+            if source in _SOURCE_LAST_SUCCESS:
                 age = max(0.0, monotonic_now - last_success)
                 record["last_success_at_utc"] = (now_utc - timedelta(seconds=age)).isoformat()
             snapshot[source] = record
