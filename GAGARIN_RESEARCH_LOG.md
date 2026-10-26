@@ -45,3 +45,14 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+
+## 2026-10-26 — Persist GDELT backoff across process restarts
+
+- **Finding:** GDELT cooldowns and the 15-minute minimum poll interval used monotonic timestamps held only in process memory. A service restart discarded both, allowing an immediate retry after a timeout/429 and potentially increasing upstream pressure.
+- **Implemented on branch** `fix/gagarin-persist-gdelt-backoff-20261026`: persist GDELT failure count, retry deadline, and last-success time as UTC in the PostgreSQL state store when configured, with an atomic local-file fallback. On restart, UTC deadlines are translated back into monotonic deadlines; expired/invalid timestamps do not create a cooldown.
+- **Files:** `telegram/news_monitor.py`, `tests/test_news_monitor.py`.
+- **Regression tests:** timeout cooldown survives simulated restart; the minimum GDELT poll interval also survives restart. Tests use a temporary file and mock the database as unavailable.
+- **Validation status:** CI must complete on the new PR before this change is considered verified. No live feed was polled by these tests; no Telegram message, order, merge, or deployment was triggered.
+- **Persistence limit:** PostgreSQL-backed persistence depends on `DATABASE_URL` being configured and working. Without it, the local file is best-effort and may be ephemeral on Render; no durable-journal claim is made.
+- **Safety:** PAPER/DEMO only.
