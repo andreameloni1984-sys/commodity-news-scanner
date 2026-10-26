@@ -34,3 +34,14 @@
 - **Regression tests:** mixed valid/malformed rows retain the valid article; a non-list articles field is rejected explicitly.
 - **Limits:** this improves parser resilience but does not fix upstream GDELT timeouts or guarantee source availability. Render deployment remains blocked by exhausted build minutes; no Telegram test message was sent.
 - **Safety:** PAPER/DEMO only; no orders or broker operations.
+
+
+## 2026-10-26 — Reject non-finite values in the post-alert scorecard
+
+- **Finding:** Python accepts `NaN` and `Infinity` as floats. Without finite-value checks, a corrupted alert or reaction price could contaminate directional accuracy; invalid SL/TP geometry could be counted as an outcome.
+- **Implemented in PR #67:** filter non-finite/non-positive alert and reaction prices; count TP1/SL only when finite positive levels are ordered correctly around the alert price for LONG/SHORT.
+- **Files:** `telegram/news_monitor.py`, `tests/test_news_monitor.py`.
+- **Code commit:** `fc5b67c77bb6a9076e2d7be15bf57d5cec40db8b`; regression-test commit `16aa670f4e8571b57995c41f45c8af543f7b4386`.
+- **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
+- **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
+- **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
