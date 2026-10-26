@@ -356,6 +356,25 @@ def test_forbidden_news_source_is_cooled_down_for_six_hours(monkeypatch):
 
 
 
+
+def test_baseline_point_in_time_gate_rejects_missing_reversed_and_future_timestamps():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import _baseline_point_in_time_valid
+
+    now = datetime(2026, 10, 26, 10, 10, tzinfo=timezone.utc)
+    first_seen = now - timedelta(minutes=5)
+    valid = {
+        "first_seen_at": first_seen.isoformat(),
+        "baseline_at": (now - timedelta(minutes=4)).isoformat(),
+        "baseline_prices": {"WTI": 80.0},
+    }
+    assert _baseline_point_in_time_valid(valid, now) == (True, "BASELINE_POINT_IN_TIME_VALID")
+    assert _baseline_point_in_time_valid({**valid, "baseline_at": None}, now)[0] is False
+    assert _baseline_point_in_time_valid({**valid, "baseline_at": (first_seen - timedelta(seconds=1)).isoformat()}, now) == (False, "BASELINE_PRECEDES_DETECTION")
+    assert _baseline_point_in_time_valid({**valid, "baseline_at": (now + timedelta(seconds=1)).isoformat()}, now) == (False, "BASELINE_FROM_FUTURE")
+    assert _baseline_point_in_time_valid({**valid, "baseline_prices": {"WTI": float("nan")}}, now) == (False, "BASELINE_PRICE_INVALID")
+
+
 def test_valid_signal_levels_enforces_directional_order_and_finite_values():
     from telegram.news_monitor import _valid_signal_levels
 
