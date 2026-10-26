@@ -1,6 +1,6 @@
 # Gagarin — registro delle regole implementate e verificate
 
-Aggiornato: 2026-10-21. Questo registro distingue ciò che è nel codice e ha test automatici da ciò che è ancora da verificare. Non certifica che tutte le oltre 100 nozioni studiate in precedenza siano state trascritte: per farlo serve un inventario puntuale delle singole fonti/lezioni.
+Aggiornato: 2026-10-26. Questo registro distingue ciò che è nel codice e ha test automatici da ciò che è ancora da verificare. Non certifica che tutte le oltre 100 nozioni studiate in precedenza siano state trascritte: per farlo serve un inventario puntuale delle singole fonti/lezioni.
 
 ## Catalogo dei 100 punti
 
@@ -51,3 +51,12 @@ Una lezione è marcata **IMPLEMENTATA** solo se è tradotta in una regola non am
 
 
 | CFG-001 | Gli override delle soglie sono accettati solo entro intervalli validi; valori fuori range ricadono sul profilo attivo | `soyuz_gagarin/config.py` (`_bounded_env_float`) | Range probabilità/qualità/confidenza 0–100; R/R strettamente positivo; stop ATR non inferiore al minimo configurato. Test di regressione da aggiungere e CI da verificare. |
+
+
+## 2026-10-26 — Freshness gate at Telegram delivery
+
+- **Problema osservato:** un evento RSS poteva essere acquisito quando recente e restare in coda fino a quattro ore in attesa della conferma del prezzo. Il controllo iniziale di freschezza non veniva ripetuto come requisito di invio: un evento poteva quindi generare un alert Telegram quando la fonte era già classificata STALE_CATALYST.
+- **Implementazione sul branch di sviluppo:** prima di inviare un nuovo alert, il monitor ricalcola il timing della pubblicazione. Gli eventi STALE_CATALYST, FUTURE_TIMESTAMP_INVALID o TIME_UNVERIFIED vengono registrati come NEWS_ALERT_SUPPRESSED e non generano nuovi messaggi. Gli eventi già notificati restano in osservazione per non interrompere lo scorecard post-alert.
+- **Test di regressione:** un evento OPEC vecchio di cinque ore, pur avendo un setup WTI simulato altrimenti valido, non deve inviare Telegram e deve essere rimosso dalla coda non notificata.
+- **Stato:** modifica e test aggiunti al branch PR #60; esito CI da verificare sul nuovo head. Non è stato eseguito merge o deploy, quindi non è ancora confermato che il servizio Telegram di produzione esegua questo codice.
+- **Limite:** il gate usa le soglie temporali esplicite di classify_catalyst_timing; non dimostra capacità predittiva né sostituisce la conferma di prezzo/volume. PAPER/DEMO, nessun ordine.
