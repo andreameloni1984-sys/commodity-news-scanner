@@ -891,7 +891,19 @@ def poll_news_once(
     seen = set(state.get("seen", []))
     clusters = set(state.get("clusters", []))
     pending = list(state.get("pending", []))
-    fetched = fetcher()
+    try:
+        raw_fetched = fetcher()
+        if not isinstance(raw_fetched, list):
+            raise TypeError("news fetcher did not return a list")
+        invalid_rows = sum(not isinstance(item, dict) for item in raw_fetched)
+        if invalid_rows:
+            print(f"NEWS fetch cycle skipped malformed rows | count={invalid_rows}", flush=True)
+        fetched = [item for item in raw_fetched if isinstance(item, dict)]
+    except Exception as exc:
+        # A transient aggregator failure must not prevent already-pending events
+        # from being rechecked against the current live price/setup.
+        print(f"NEWS fetch cycle failed | error={type(exc).__name__}", flush=True)
+        fetched = []
     new_relevant: list[dict[str, Any]] = []
     fresh_cutoff = now - timedelta(minutes=60)
     initialized = bool(state.get("initialized", False))
