@@ -310,6 +310,23 @@ def _detect_breakout(
 # ============================================================
 
 
+def _validated_ohlc_bar(candle):
+    """Return finite, internally consistent OHLC values or fail closed."""
+    try:
+        open_price = float(candle["open"])
+        high = float(candle["high"])
+        low = float(candle["low"])
+        close = float(candle["close"])
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return None
+
+    if not all(math.isfinite(value) for value in (open_price, high, low, close)):
+        return None
+    if high < low or high < max(open_price, close) or low > min(open_price, close):
+        return None
+    return open_price, high, low, close
+
+
 def _detect_retest(
     candles,
     breakout,
@@ -328,18 +345,16 @@ def _detect_retest(
     try:
         level = float(breakout_level)
         atr_value = float(atr)
-        previous_close = float(candles[-2]["close"])
-        current = candles[-1]
-        close = float(current["close"])
-        high = float(current["high"])
-        low = float(current["low"])
-    except (KeyError, TypeError, ValueError, OverflowError):
+    except (TypeError, ValueError, OverflowError):
         return False, "NONE", None
 
-    if not all(math.isfinite(value) for value in (
-        level, atr_value, previous_close, close, high, low
-    )) or atr_value <= 0:
+    previous = _validated_ohlc_bar(candles[-2])
+    current = _validated_ohlc_bar(candles[-1])
+    if previous is None or current is None or not math.isfinite(level) or not math.isfinite(atr_value) or atr_value <= 0:
         return False, "NONE", None
+
+    previous_close = previous[3]
+    _, high, low, close = current
 
     tolerance = atr_value * RETEST_ATR_TOLERANCE
     breakout_buffer = atr_value * BREAKOUT_ATR_BUFFER
