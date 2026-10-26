@@ -554,3 +554,63 @@ def test_source_backoff_restore_ignores_expired_and_malformed_timestamps():
     assert monitor._SOURCE_FAILURES.get("BAD", 0) == 0
     assert "BAD" not in monitor._SOURCE_RETRY_AT
 
+def test_load_state_restores_persisted_source_backoff_before_polling(monkeypatch, tmp_path):
+    from datetime import datetime, timedelta, timezone
+    import json
+    import time
+    import telegram.news_monitor as monitor
+
+    now = datetime(2026, 10, 26, 13, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(monitor, "STATE_PATH", tmp_path / "news_state.json")
+    monkeypatch.setattr(monitor, "_utc_now", lambda: now)
+    for mapping in (monitor._SOURCE_FAILURES, monitor._SOURCE_RETRY_AT, monitor._SOURCE_LAST_SUCCESS):
+        mapping.clear()
+    state = {
+        "seen": [],
+        "clusters": [],
+        "pending": [],
+        "last_analysis_at": 0,
+        "initialized": True,
+        "source_backoff": {
+            "GDELT": {
+                "failures": 2,
+                "retry_at_utc": (now + timedelta(minutes=20)).isoformat(),
+            }
+        },
+    }
+    (tmp_path / "news_state.json").write_text(json.dumps(state), encoding="utf-8")
+
+    loaded = monitor._load_state()
+
+    assert loaded["source_backoff"]["GDELT"]["failures"] == 2
+    assert monitor._SOURCE_FAILURES["GDELT"] == 2
+    assert not monitor._source_allowed("GDELT")
+    assert monitor._SOURCE_RETRY_AT["GDELT"] > time.monotonic()
+
+
+def test_save_state_persists_current_source_backoff(monkeypatch, tmp_path):
+    from datetime import datetime, timezone
+    import json
+    import time
+    import telegram.news_monitor as monitor
+
+    now = datetime(2026, 10, 26, 13, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(monitor, "STATE_PATH", tmp_path / "news_state.json")
+    monkeypatch.setattr(monitor, "_utc_now", lambda: now)
+    for mapping in (monitor._SOURCE_FAILURES, monitor._SOURCE_RETRY_AT, monitor._SOURCE_LAST_SUCCESS):
+        mapping.clear()
+    monitor._SOURCE_FAILURES["GDELT"] = 1
+    monitor._SOURCE_RETRY_AT["GDELT"] = time.monotonic() + 600
+
+    monitor._save_state({
+        "seen": [],
+        "clusters": [],
+        "pending": [],
+        "last_analysis_at": 0,
+        "initialized": True,
+    })
+
+    saved = json.loads((tmp_path / "news_state.json").read_text(encoding="utf-8"))
+    assert saved["source_backoff"]["GDELT"]["failures"] == 1
+    assert monitor._parse_datetime(saved["source_backoff"]["GDELT"]["retry_at_utc"]) > now
+
