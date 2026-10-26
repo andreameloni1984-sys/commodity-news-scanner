@@ -54,3 +54,13 @@
 - **Files:** `tests/test_pipeline.py`; implementation under test remains `engine/regime.py::_rsi_wilder`.
 - **Validation status:** GitHub CI on the new PR must pass before this regression is considered verified. No market data or trading outcome is inferred from the synthetic fixture.
 - **Scope:** test coverage only; no RSI threshold, regime, entry, risk or execution behavior changed. PAPER/DEMO only.
+
+
+## 2026-10-26 — Fail closed on malformed RSI periods
+
+- **Finding:** `_rsi_wilder` converted `period` directly with `int()`. Fractional values were silently truncated, and `NaN`/infinity could raise or be mishandled instead of returning an invalid/insufficient result.
+- **Implemented:** require a finite, positive integer period; reject booleans, fractional values, non-finite numbers and malformed strings without changing the default period or Wilder smoothing recurrence.
+- **Files:** `engine/regime.py::_rsi_wilder`, `tests/test_pipeline.py`.
+- **Regression tests:** exact mixed-gain/loss Wilder reference values plus invalid period cases (zero, negative, fractional, boolean, NaN, infinities and text).
+- **Validation status:** CI on PR #73 must pass before this fix is considered verified. Synthetic reference data validates arithmetic only, not profitability.
+- **Safety:** PAPER/DEMO only; no entry thresholds or order paths changed.
