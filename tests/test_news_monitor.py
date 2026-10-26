@@ -356,6 +356,41 @@ def test_forbidden_news_source_is_cooled_down_for_six_hours(monkeypatch):
 
 
 
+def test_valid_signal_levels_enforces_directional_order_and_finite_values():
+    from telegram.news_monitor import _valid_signal_levels
+
+    assert _valid_signal_levels("LONG", 80.1, 80.1, 78.5, 83.0, 84.0)
+    assert _valid_signal_levels("SHORT", 79.9, 80.0, 81.0, 78.0, 77.0)
+    assert not _valid_signal_levels("LONG", float("nan"), 80.1, 78.5, 83.0, 84.0)
+    assert not _valid_signal_levels("LONG", 80.1, float("inf"), 78.5, 83.0, 84.0)
+    assert not _valid_signal_levels("LONG", 80.1, 80.1, 80.2, 83.0, 84.0)
+    assert not _valid_signal_levels("LONG", 80.1, 80.1, 78.5, 80.0, 84.0)
+    assert not _valid_signal_levels("LONG", 80.1, 80.1, 78.5, 83.0, 82.0)
+    assert not _valid_signal_levels("SHORT", 79.9, 80.0, 81.0, 82.0, 77.0)
+
+
+def test_confirmed_setups_rejects_nonfinite_and_inverted_levels():
+    from telegram.news_monitor import _confirmed_setups
+
+    event = {"title": "OPEC announces production cut", "baseline_prices": {"WTI": 80.0}}
+    base = dict(
+        commodity="Petrolio WTI", symbol="WTI/USD", setup_direction="LONG",
+        final_decision="PAPER_SIGNAL", trigger_confirmed=True, live=True,
+        price=80.1, entry=80.1, stop=78.5, tp1=83.0, tp2=84.0,
+        data_source="TEST_FEED",
+    )
+    invalid_variants = [
+        {"price": float("nan")},
+        {"entry": float("inf")},
+        {"stop": 80.2},
+        {"tp1": 80.0},
+        {"tp2": 82.0},
+    ]
+    for override in invalid_variants:
+        state_data = {**base, **override}
+        assert _confirmed_setups(event, [SimpleNamespace(**state_data)]) == []
+
+
 def test_stale_pending_catalyst_is_suppressed_before_telegram(tmp_path, monkeypatch):
     import json
     from datetime import datetime, timedelta, timezone
