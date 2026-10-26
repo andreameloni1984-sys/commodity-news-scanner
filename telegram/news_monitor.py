@@ -464,8 +464,16 @@ def _get_gdelt_items() -> list[dict[str, Any]]:
     )
     response.raise_for_status()
     payload = response.json()
+    if not isinstance(payload, dict):
+        raise ValueError("GDELT response payload is not an object")
+    rows = payload.get("articles", [])
+    if not isinstance(rows, list):
+        raise ValueError("GDELT articles field is not a list")
     items: list[dict[str, Any]] = []
-    for row in payload.get("articles", []):
+    for row in rows:
+        # A malformed row must not discard valid articles from the same response.
+        if not isinstance(row, dict):
+            continue
         title = str(row.get("title") or "").strip()
         url = str(row.get("url") or "").strip()
         published = _parse_datetime(row.get("seendate") or row.get("datetime"))
