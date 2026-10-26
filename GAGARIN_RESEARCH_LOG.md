@@ -64,3 +64,13 @@
 - **Regression tests:** a historical touch before breakout no longer counts; valid post-breakout retests are checked for both directions; non-finite prices are rejected.
 - **CI on code/test commit `adc7eb82a2decd49fb273490dab5feecc12e986d`:** all five workflows passed — [SOYUZ GAGARIN Tests](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40404825468), [PAPER](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40404825654), [NEWS alert](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40404825404), [Public Event Brain](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40404825326), and [Execution Layer](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40404825395).
 - **Validation limits:** deterministic synthetic regression only; no live-market or out-of-sample profitability claim. This change intentionally favors false negatives over retests that cannot be shown to occur after a breakout. No Render deploy or Telegram test message was triggered. PAPER/DEMO ONLY.
+
+
+## 2026-10-26 — Retest OHLC integrity gate (run follow-up)
+
+- **Finding:** `_detect_retest()` checked finiteness of high/low/close, but it did not require an open price or validate that each candle's OHLC range contained its open and close. A malformed provider bar could therefore be interpreted as a valid breakout retest.
+- **Implemented:** `engine/structure.py` adds `_validated_ohlc_bar()`. Both the previous breakout-confirmation bar and current retest bar must have finite open/high/low/close and internally consistent geometry (`high >= low`, `high >= max(open, close)`, `low <= min(open, close)`). Missing or inconsistent OHLC fails closed; no directional decision is created from the malformed bar.
+- **Regression tests:** `tests/test_pipeline.py` now supplies full OHLC for LONG/SHORT valid retests and tests missing-open/inconsistent-range rejection plus the existing non-finite-price rejection.
+- **Code/test commit:** `b9faf45074a970c500110771ea9c9f32c0b13145`.
+- **CI:** all five PR workflows passed on that commit: SOYUZ GAGARIN Tests (run 40411139215), PAPER (40411139173), NEWS alert (40411139393), Public Event Brain (40411139212), Execution Layer (40411139264).
+- **Validation limit:** deterministic regression tests only; no replay against live provider bars, no out-of-sample P&L result, and no profitability claim. A stricter gate may reject provider data that omits open; this is intentional fail-closed behavior pending data-quality validation. No Render deployment, Telegram test message, broker or order. PAPER/DEMO ONLY.
