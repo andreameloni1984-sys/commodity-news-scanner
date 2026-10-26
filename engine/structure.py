@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from engine.state import SoyuzState
 
 
@@ -38,6 +40,33 @@ MIN_MTF_BARS = 5
 
 MIN_MTF_ALIGNMENT = 50.0
 STRONG_MTF_ALIGNMENT = 75.0
+
+
+def _utc_candle_timestamp(candle):
+    """Return a timezone-aware candle timestamp normalized to UTC, or None."""
+    value = candle.get("datetime") or candle.get("timestamp") or candle.get("time")
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except (TypeError, ValueError, OverflowError):
+            return None
+    else:
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None
+    return parsed.astimezone(timezone.utc).isoformat()
+
+
+def _pivot_timing(candles, index):
+    """Keep pivot event time separate from the bar that confirms availability."""
+    event_time = _utc_candle_timestamp(candles[index])
+    confirmation_index = index + SWING_RIGHT
+    available_at = _utc_candle_timestamp(candles[confirmation_index])
+    if event_time is None or available_at is None or available_at <= event_time:
+        available_at = None
+    return event_time, available_at, confirmation_index
 
 
 # ============================================================
@@ -94,13 +123,15 @@ def _find_swing_highs(candles) -> list:
 
         if valid:
 
+            event_time, available_at, confirmation_index = _pivot_timing(candles, index)
             swings.append(
                 {
                     "index": index,
                     "price": current,
-                    "datetime": candles[
-                        index
-                    ].get("datetime"),
+                    "datetime": candles[index].get("datetime") or candles[index].get("timestamp") or candles[index].get("time"),
+                    "event_time": event_time,
+                    "available_at": available_at,
+                    "confirmation_index": confirmation_index,
                 }
             )
 
@@ -156,13 +187,15 @@ def _find_swing_lows(candles) -> list:
 
         if valid:
 
+            event_time, available_at, confirmation_index = _pivot_timing(candles, index)
             swings.append(
                 {
                     "index": index,
                     "price": current,
-                    "datetime": candles[
-                        index
-                    ].get("datetime"),
+                    "datetime": candles[index].get("datetime") or candles[index].get("timestamp") or candles[index].get("time"),
+                    "event_time": event_time,
+                    "available_at": available_at,
+                    "confirmation_index": confirmation_index,
                 }
             )
 
