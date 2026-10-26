@@ -70,6 +70,10 @@ def _restore_source_backoff(state: dict[str, Any], now: datetime | None = None) 
         if retry_dt is not None:
             remaining = (retry_dt - now_utc).total_seconds()
             if remaining > 0:
+                # A corrupt or clock-skewed state file must not silence a source
+                # for days. Legitimate transient cooldowns are <= 1h and the
+                # longest intentional permanent-status cooldown is 6h.
+                remaining = min(remaining, float(PERMANENT_HTTP_BACKOFF_SECONDS))
                 retry_at[source] = monotonic_now + remaining
         success_dt = _parse_datetime(record.get("last_success_at_utc"))
         if success_dt is not None:
