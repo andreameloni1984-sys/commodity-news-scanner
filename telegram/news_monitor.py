@@ -1124,6 +1124,37 @@ def poll_news_once(
                         # Measure the four-hour reaction window from successful
                         # delivery; never mark an asset delivered when send fails.
                         event["expires_at"] = (now + timedelta(seconds=PENDING_TTL_SECONDS)).isoformat()
+                        setup_state = setup.get("state")
+                        setup_metadata = getattr(setup_state, "metadata", {})
+                        if not isinstance(setup_metadata, dict):
+                            setup_metadata = {}
+                        early_warning = setup_metadata.get("early_warning", {})
+                        if not isinstance(early_warning, dict):
+                            early_warning = {}
+                        early_warning_stage = str(
+                            early_warning.get("stage")
+                            or setup_metadata.get("early_warning_stage")
+                            or "UNKNOWN"
+                        )
+                        early_warning_late = (
+                            early_warning.get("late_move")
+                            if isinstance(early_warning.get("late_move"), bool)
+                            else (early_warning_stage == "LATE_MOVE" if early_warning_stage != "UNKNOWN" else None)
+                        )
+                        pre_warning_move_atr = early_warning.get("pre_warning_30m_move_atr")
+                        try:
+                            pre_warning_move_atr = float(pre_warning_move_atr)
+                            if not isfinite(pre_warning_move_atr):
+                                pre_warning_move_atr = None
+                        except (TypeError, ValueError, OverflowError):
+                            pre_warning_move_atr = None
+                        warning_score = early_warning.get("score", setup_metadata.get("early_warning_score"))
+                        try:
+                            warning_score = float(warning_score)
+                            if not isfinite(warning_score):
+                                warning_score = None
+                        except (TypeError, ValueError, OverflowError):
+                            warning_score = None
                         _journal({
                             "kind": "NEWS_ALERT_SENT",
                             "event_id": event.get("event_id"),
@@ -1142,6 +1173,14 @@ def poll_news_once(
                             "catalyst_timing": event.get("catalyst_timing"),
                             "catalyst_age_minutes": event.get("catalyst_age_minutes"),
                             "catalyst_future_skew_minutes": event.get("catalyst_future_skew_minutes"),
+                            # Snapshot decision-time warning metadata so later
+                            # scorecards can compare late vs non-late alerts without
+                            # inferring the warning stage from future prices.
+                            "early_warning_stage": early_warning_stage,
+                            "early_warning_direction": early_warning.get("direction") or setup_metadata.get("early_warning_direction"),
+                            "early_warning_score": warning_score,
+                            "pre_warning_30m_move_atr": pre_warning_move_atr,
+                            "late_move": early_warning_late,
                         })
                 # Keep every event with at least one delivered asset under
                 # observation; unresolved assets remain eligible on later rechecks.
