@@ -371,8 +371,13 @@ def _source_failed(source: str, exc: Exception) -> int:
     status = getattr(response, "status_code", None)
     retry_after = None
     try:
-        retry_after = float((getattr(response, "headers", {}) or {}).get("Retry-After", ""))
-    except (TypeError, ValueError):
+        raw_retry_after = (getattr(response, "headers", {}) or {}).get("Retry-After", "")
+        candidate_retry_after = float(raw_retry_after)
+        # Treat server-provided headers as untrusted input. NaN/Infinity can
+        # otherwise raise during int() below and abort the whole poll cycle.
+        if math.isfinite(candidate_retry_after) and candidate_retry_after >= 0:
+            retry_after = int(min(candidate_retry_after, SOURCE_BACKOFF_MAX_SECONDS))
+    except (TypeError, ValueError, OverflowError):
         retry_after = None
 
     with _SOURCE_LOCK:
