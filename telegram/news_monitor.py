@@ -423,14 +423,21 @@ def _get_rss_items(source: str, url: str) -> list[dict[str, Any]]:
         if tag != "item" and tag != "entry":
             continue
         fields: dict[str, str] = {}
+        link_candidates: list[tuple[int, str]] = []
         for child in list(node):
             name = child.tag.rsplit("}", 1)[-1].lower()
             if name == "link":
-                value = child.attrib.get("href") or (child.text or "")
-            else:
-                value = child.text or ""
+                rel = str(child.attrib.get("rel") or "").strip().lower()
+                value = str(child.attrib.get("href") or (child.text or "")).strip()
+                if value and rel in {"", "alternate"}:
+                    # Prefer an explicit article permalink; ignore self/enclosure links.
+                    link_candidates.append((0 if rel == "alternate" else 1, value))
+                continue
+            value = child.text or ""
             if value:
                 fields[name] = value.strip()
+        if link_candidates:
+            fields["link"] = min(link_candidates, key=lambda row: row[0])[1]
         title = fields.get("title", "")
         link = fields.get("link", "")
         published = fields.get("pubdate") or fields.get("published") or fields.get("updated") or fields.get("date")
