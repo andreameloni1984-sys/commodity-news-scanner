@@ -1,4 +1,6 @@
 from datetime import datetime, timezone
+from math import isfinite
+from statistics import median
 
 from commodities.universe import Commodity
 from engine.state import SoyuzState
@@ -14,6 +16,7 @@ from engine.forecast_ensemble import forecast_ensemble
 from engine.research_validation import annotate
 from engine.energy_confluence import stamp_energy
 from engine.energy_chain import stamp_paper
+from engine.early_warning import compute_market_early_warning
 
 STRONG_MOVE_ATR = 1.5
 OPPORTUNITY_MOVE_PCT_24H = 1.0
@@ -24,28 +27,106 @@ def _clamp(value: float, minimum: float = 0.0, maximum: float = 100.0) -> float:
     return max(minimum, min(maximum, float(value)))
 
 
-def scan_market_opportunity(state: SoyuzState) -> SoyuzState:
-    closes = list(getattr(state, "closes", []) or [])
-    candles = list(getattr(state, "candles", []) or [])
-    timestamps = [float(x.get("timestamp", 0.0)) for x in candles]
-    atr = float(state.atr or 0.0)
-    if len(closes) < 2 or len(timestamps) != len(closes):
-        return state
+def _clear_market_move_signal(
+    state: SoyuzState, reason: str = "input prezzo/timestamp non valido"
+) -> SoyuzState:
+    """Clear derived market-move and early-warning fields after invalid input."""
+    state.move_4h_pct = None
+    state.move_24h_pct = None
+    state.move_atr = None
+    state.opportunity_score = 0.0
+    state.opportunity_alert = "NONE"
+    state.opportunity_direction = "NONE"
+    state.expected_move_pct = None
+    state.expected_move_duration_hours = None
+    state.continuation_score = 0.0
+    state.reversal_score = 0.0
+    if isinstance(getattr(state, "metadata", None), dict):
+        state.metadata.update({
+            "market_move_validation": "INVALID_INPUT",
+            "market_move_validation_reason": reason,
+            "market_move_4h_pct": None,
+            "market_move_24h_pct": None,
+            "market_move_atr": None,
+            "opportunity_score": 0.0,
+            "opportunity_alert": "NONE",
+            "opportunity_direction": "NONE",
+            "expected_move_pct": None,
+            "expected_move_duration_hours": None,
+            "continuation_score": 0.0,
+            "reversal_score": 0.0,
+            # A malformed refresh must not leave a previous fresh-looking
+            # warning available to the advisory watchlist.
+            "early_warning": {
+                "stage": "INVALID_DATA",
+                "direction": "NONE",
+                "score": 0,
+                "latest_timestamp_age_seconds": None,
+                "reasons": [reason],
+                "execution_authorized": False,
+            },
+            "early_warning_stage": "INVALID_DATA",
+            "early_warning_direction": "NONE",
+            "early_warning_score": 0.0,
+        })
+    return state
 
-    latest = float(closes[-1])
-    if latest <= 0:
-        return state
+
+def scan_market_opportunity(state: SoyuzState) -> SoyuzState:
+    try:
+        closes = list(getattr(state, "closes", []) or [])
+        candles = list(getattr(state, "candles", []) or [])
+        timestamps = [float(x.get("timestamp", 0.0)) for x in candles]
+        closes = [float(value) for value in closes]
+        atr = float(state.atr or 0.0)
+    except (TypeError, ValueError, OverflowError, AttributeError):
+        return _clear_market_move_signal(state, "input prezzo/timestamp non convertibile")
+
+    invalid_prices = not all(isfinite(price) and price > 0 for price in closes)
+    invalid_atr = not isfinite(atr) or atr < 0
+    if (
+        len(closes) < 2
+        or len(timestamps) != len(closes)
+        or not all(isfinite(t) for t in timestamps)
+        or any(timestamps[i] <= timestamps[i - 1] for i in range(1, len(timestamps)))
+        or invalid_prices
+        or invalid_atr
+    ):
+        return _clear_market_move_signal(state)
+
+    if isinstance(getattr(state, "metadata", None), dict):
+        state.metadata.pop("market_move_validation", None)
+
+    latest = closes[-1]
+
+    # Use actual time coverage, not merely the nearest available bar. A short
+    # history must not be presented as a 4h/24h move, and gaps near the target
+    # must not silently substitute a materially different observation.
+    typical_step = median(
+        timestamps[i] - timestamps[i - 1] for i in range(1, len(timestamps))
+    )
+
+    def price_from_hours(hours: float):
+        target = timestamps[-1] - hours * 3600.0
+        if target < timestamps[0]:
+            return None
+        idx = min(range(len(timestamps)), key=lambda i: abs(timestamps[i] - target))
+        tolerance = max(60.0, typical_step * 0.75)
+        if abs(timestamps[idx] - target) > tolerance:
+            return None
+        base = float(closes[idx])
+        return base if base > 0 else None
 
     def pct_from_hours(hours: float):
-        target = timestamps[-1] - hours * 3600.0
-        idx = min(range(len(timestamps)), key=lambda i: abs(timestamps[i] - target))
-        base = float(closes[idx])
-        return ((latest / base) - 1.0) * 100.0 if base > 0 else None
+        base = price_from_hours(hours)
+        return ((latest / base) - 1.0) * 100.0 if base is not None else None
 
     move_4h = pct_from_hours(4.0)
     move_24h = pct_from_hours(24.0)
-    lookback_index = max(0, len(closes) - 49)
-    move_atr = abs(latest - float(closes[lookback_index])) / atr if atr > 0 else None
+    # Normalize the current move against the actual 4h reference price.
+    # A fixed 48-bar lookback spans very different durations across timeframes.
+    base_4h = price_from_hours(4.0)
+    move_atr = abs(latest - base_4h) / atr if atr > 0 and base_4h is not None else None
 
     direction_value = float(move_24h if move_24h is not None else move_4h or 0.0)
     direction = "LONG" if direction_value > 0 else "SHORT" if direction_value < 0 else "NONE"
@@ -94,6 +175,14 @@ def scan_market_opportunity(state: SoyuzState) -> SoyuzState:
     state.metadata["expected_move_duration_hours"] = state.expected_move_duration_hours
     state.metadata["continuation_score"] = state.continuation_score
     state.metadata["reversal_score"] = state.reversal_score
+
+    # Research-inspired early warning: timestamped intraday data only.
+    # This is an advisory ranking index, not a calibrated probability or entry.
+    early_warning = compute_market_early_warning(closes, timestamps, atr)
+    state.metadata["early_warning"] = early_warning
+    state.metadata["early_warning_stage"] = early_warning.get("stage", "INSUFFICIENT_DATA")
+    state.metadata["early_warning_direction"] = early_warning.get("direction", "NONE")
+    state.metadata["early_warning_score"] = early_warning.get("score", 0.0)
     return state
 
 

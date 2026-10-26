@@ -5,13 +5,14 @@ Scores are transparent heuristic selection scores, NOT calibrated probabilities.
 """
 from __future__ import annotations
 
+from math import isfinite
 from typing import Any, Iterable
 
 
 def _num(value: Any, default: float = 0.0) -> float:
     try:
         number = float(value)
-        return number if number == number else default
+        return number if isfinite(number) else default
     except (TypeError, ValueError):
         return default
 
@@ -40,27 +41,14 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
             _direction(getattr(state, "mtf_direction", "NONE")),
             _direction(getattr(state, "opportunity_direction", "NONE")),
         ]
-        # The most recent confirmed setup takes priority; otherwise use the
-        # pre-move model and then structural/MTF context.
-        direction = next((d for d in directions[1:2] if d != "NONE"), "NONE")
-        if direction == "NONE":
-            direction = next((d for d in (directions[0], directions[2], directions[3], directions[4]) if d != "NONE"), "NONE")
-        if direction == "NONE":
-            # Always produce a directional candidate when the current market
-            # series supplies momentum; this is a lower-evidence fallback.
-            move24 = _num(getattr(state, "move_24h_pct", 0))
-            move4 = _num(getattr(state, "move_4h_pct", 0))
-            if move24 != 0:
-                direction = "LONG" if move24 > 0 else "SHORT"
-            elif move4 != 0:
-                direction = "LONG" if move4 > 0 else "SHORT"
-            else:
-                closes = getattr(state, "closes", []) or []
-                try:
-                    if len(closes) >= 2 and float(closes[-1]) != float(closes[0]):
-                        direction = "LONG" if float(closes[-1]) > float(closes[0]) else "SHORT"
-                except (TypeError, ValueError):
-                    pass
+        # Direction requires explicit directional evidence. Prefer a validated
+        # setup, then market structure, multi-timeframe alignment, and finally
+        # an independently generated opportunity direction. Pre-move/momentum
+        # alone is not sufficient to manufacture a LONG/SHORT candidate.
+        direction = next(
+            (d for d in (directions[1], directions[2], directions[3]) if d != "NONE"),
+            "NONE",
+        )
         if direction == "NONE":
             continue
 
@@ -88,8 +76,25 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
 
         score = 0.0
         reasons = []
+        early = metadata.get("early_warning", {})
+        if not isinstance(early, dict):
+            early = {}
+        early_direction = _direction(early.get("direction", metadata.get("early_warning_direction", "NONE")))
+        early_score = max(0.0, min(100.0, _num(
+            early.get("score", metadata.get("early_warning_score", 0))
+        )))
+        early_stage = str(early.get("stage", metadata.get("early_warning_stage", "UNKNOWN")) or "UNKNOWN").upper()
         regime = str(getattr(state, "regime", "") or "").upper()
         structure = str(getattr(state, "structure", "") or "").upper()
+        # Conflicting 4h and 24h returns often indicate a pullback or a possible
+        # transition. Do not treat the larger 24h move as unqualified agreement:
+        # apply a modest transparent ranking penalty, without forcing a side.
+        move_4h = _num(getattr(state, "move_4h_pct", float("nan")), float("nan"))
+        move_24h = _num(getattr(state, "move_24h_pct", float("nan")), float("nan"))
+        if isfinite(move_4h) and isfinite(move_24h) and move_4h != 0 and move_24h != 0:
+            momentum_alignment = "CONFLICT" if move_4h * move_24h < 0 else "ALIGNED"
+        else:
+            momentum_alignment = "INCOMPLETE"
         if (direction == "LONG" and regime == "TREND_UP") or (direction == "SHORT" and regime == "TREND_DOWN"):
             score += 15; reasons.append("regime coerente")
         if (direction == "LONG" and "BULL" in structure) or (direction == "SHORT" and "BEAR" in structure):
@@ -103,8 +108,25 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
         score += min(15, pre_move * 0.15)
         if pre_move >= 65:
             reasons.append("pre-movimento elevato")
+        # Early-warning is advisory only. A LATE_MOVE explicitly means the
+        # price is already extended, so it must never add a directional bonus
+        # that could encourage chasing the move.
+        if early_stage == "LATE_MOVE":
+            reasons.append("early-warning: movimento già esteso, bonus disattivato")
+            if early_direction in {"LONG", "SHORT"} and early_direction != direction:
+                reasons.append("early-warning in conflitto")
+        elif early_stage in {"EARLY_WARNING", "WATCH"} and early_direction == direction:
+            score += min(6.0, early_score * 0.06)
+            reasons.append("early-warning concorde")
+        elif early_direction in {"LONG", "SHORT"} and early_direction != direction:
+            reasons.append("early-warning in conflitto")
+        elif early_stage not in {"EARLY_WARNING", "WATCH", "LATE_MOVE", "", "NONE", "UNKNOWN"}:
+            reasons.append("early-warning non valido/non utilizzabile: bonus disattivato")
         score += min(10, opportunity * 0.10)
         score += min(8, continuation * 0.08)
+        if momentum_alignment == "CONFLICT":
+            score -= 6.0
+            reasons.append("momentum 4h/24h in conflitto: possibile ritracciamento o inversione")
         score += min(5, quality * 0.05)
         score += min(5, confidence * 0.05)
         # Reward expected range only mildly: volatility is opportunity and risk.
@@ -115,6 +137,11 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
             score -= 15; reasons.append("dati non validati")
         if not live:
             score -= 8; reasons.append("prezzi non live")
+        # High-volatility regimes increase stop-out/slippage risk. Keep the
+        # penalty explicit and modest; this is ranking only, not an entry gate.
+        if regime == "HIGH_VOLATILITY":
+            score -= 8.0
+            reasons.append("penalità regime alta volatilità")
         # Penalise disagreement between independent directional inputs.
         active = [d for d in directions if d != "NONE"]
         conflicts = sum(1 for d in active if d != direction)
@@ -138,6 +165,12 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
             "quality": round(quality, 1),
             "confidence": round(confidence, 1),
             "data_status": str(metadata.get("data_status", "UNKNOWN")),
+            "early_warning_direction": early_direction,
+            "early_warning_score": round(early_score, 1),
+            "early_warning_stage": early_stage,
+            "momentum_alignment": momentum_alignment,
+            "move_4h_pct": move_4h if isfinite(move_4h) else None,
+            "move_24h_pct": move_24h if isfinite(move_24h) else None,
             "live": live,
             "trigger_confirmed": bool(getattr(state, "trigger_confirmed", False)),
             "final_decision": str(getattr(state, "final_decision", "UNKNOWN")),
@@ -145,6 +178,61 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
             "paper_only": True,
         })
     ranked.sort(key=lambda row: (row["score"], row["expected_move_pct"]), reverse=True)
+    return ranked
+
+
+def rank_early_warnings(states: Iterable[Any]) -> list[dict]:
+    """Rank watch-only early warnings even before a technical setup exists.
+
+    This separate list is for anticipation/monitoring only: it cannot create a
+    setup, pass the governor, or authorize execution. Stale/future warning data
+    is rejected rather than presented as an actionable early signal.
+    """
+    if isinstance(states, dict):
+        states = states.values()
+    ranked = []
+    for state in states:
+        metadata = getattr(state, "metadata", {}) or {}
+        if not isinstance(metadata, dict):
+            continue
+        warning = metadata.get("early_warning", {})
+        if not isinstance(warning, dict):
+            warning = {}
+        direction = _direction(warning.get("direction", metadata.get("early_warning_direction", "NONE")))
+        stage = str(warning.get("stage", metadata.get("early_warning_stage", "UNKNOWN")) or "UNKNOWN").upper()
+        score = max(0.0, min(100.0, _num(warning.get("score", metadata.get("early_warning_score", 0)))))
+        if direction not in {"LONG", "SHORT"} or stage not in {"EARLY_WARNING", "LATE_MOVE"}:
+            continue
+        price = _num(getattr(state, "price", 0))
+        atr = _num(getattr(state, "atr", 0))
+        if price <= 0 or atr <= 0 or not bool(getattr(state, "live", False)) or not bool(getattr(state, "data_ok", False)):
+            continue
+        age = getattr(state, "data_age_seconds", None)
+        if age is None:
+            continue
+        age_num = _num(age, -1.0)
+        if age_num < 0 or age_num > 1800.0:
+            continue
+        # Missing timestamp age is unknown, not fresh: fail closed.
+        if "latest_timestamp_age_seconds" not in warning:
+            continue
+        warning_age = _num(warning.get("latest_timestamp_age_seconds"), -1.0)
+        if warning_age < 0 or warning_age > 1800.0:
+            continue
+        ranked.append({
+            "commodity": str(getattr(state, "commodity", "") or ""),
+            "symbol": str(getattr(state, "symbol", "") or ""),
+            "direction": direction,
+            "stage": stage,
+            "score": round(score, 1),
+            "price": price,
+            "data_age_seconds": round(age_num, 1),
+            "warning_age_seconds": round(warning_age, 1),
+            "reasons": list(warning.get("reasons", []) or [])[:4],
+            "execution_authorized": False,
+            "paper_only": True,
+        })
+    ranked.sort(key=lambda row: (row["stage"] == "EARLY_WARNING", row["score"]), reverse=True)
     return ranked
 
 
