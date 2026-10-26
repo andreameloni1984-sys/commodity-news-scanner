@@ -299,6 +299,31 @@ def _parse_datetime(value: Any) -> datetime | None:
         return None
 
 
+def _catalyst_delivery_timing(published_at: Any, now: datetime) -> dict[str, Any]:
+    """Revalidate source age at delivery; never treat unknown time as actionable."""
+    published = _parse_datetime(published_at)
+    if published is None:
+        return {"timing": "TIME_UNVERIFIED", "age_minutes": None,
+                "future_skew_minutes": None, "reason": "timestamp di pubblicazione assente/non interpretabile"}
+    now_utc = now.replace(tzinfo=timezone.utc) if now.tzinfo is None else now.astimezone(timezone.utc)
+    age = (now_utc - published).total_seconds() / 60.0
+    future_skew = round(max(0.0, -age), 1)
+    if age < -5:
+        timing = "FUTURE_TIMESTAMP_INVALID"
+        reason = "timestamp fonte nel futuro oltre la tolleranza di 5 minuti"
+    elif age <= 30:
+        timing = "FRESH_CATALYST"
+        reason = "timestamp verificato; impatto da confermare sul prezzo"
+    elif age <= 240:
+        timing = "RECENT_CATALYST"
+        reason = "timestamp verificato; impatto da confermare sul prezzo"
+    else:
+        timing = "STALE_CATALYST"
+        reason = "fonte oltre la finestra di freschezza di quattro ore"
+    return {"timing": timing, "age_minutes": round(max(0.0, age), 1),
+            "future_skew_minutes": future_skew, "reason": reason}
+
+
 def _normalise_title(title: str) -> str:
     text = " ".join((title or "").lower().split())
     stop = {"the", "and", "for", "with", "from", "after", "before", "says", "said", "over", "into", "its"}
@@ -860,6 +885,30 @@ def poll_news_once(
                             "aligned_setup_count": len(matches),
                         })
                         break
+                # A pending event can age beyond the four-hour source window
+                # while waiting for price confirmation. Recheck before Telegram.
+                delivery_timing = _catalyst_delivery_timing(event.get("published_at"), now)
+                if delivery_timing["timing"] in {
+                    "STALE_CATALYST", "FUTURE_TIMESTAMP_INVALID", "TIME_UNVERIFIED"
+                }:
+                    if not event.get("alert_suppressed_reason"):
+                        event["alert_suppressed_reason"] = delivery_timing["timing"]
+                        _journal({
+                            "kind": "NEWS_ALERT_SUPPRESSED",
+                            "event_id": event.get("event_id"),
+                            "title": event.get("title"),
+                            "source": event.get("source"),
+                            "url": event.get("url"),
+                            "published_at": event.get("published_at"),
+                            "catalyst_timing": delivery_timing["timing"],
+                            "catalyst_age_minutes": delivery_timing.get("age_minutes"),
+                            "reason": delivery_timing["reason"],
+                        })
+                    # Drop an undelivered stale event. If already sent, retain
+                    # it below so the post-alert scorecard can finish observing it.
+                    if not event.get("alert_sent"):
+                        continue
+
                 delivered = bool(event.get("alert_sent"))
                 for setup in ([] if delivered else matches):
                     if send_telegram(_format_news_alert(event, setup)):
