@@ -632,11 +632,8 @@ def _capture_baseline(event: dict[str, Any], states: list[Any]) -> dict[str, flo
         for state in states:
             if not _asset_matches(asset, state) or not bool(getattr(state, "live", False)):
                 continue
-            try:
-                value = float(getattr(state, "price", None))
-            except (TypeError, ValueError):
-                continue
-            if value > 0:
+            value = _finite_positive(getattr(state, "price", None))
+            if value is not None:
                 baseline[asset] = value
                 break
     return baseline
@@ -690,11 +687,8 @@ def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str
         impact = classified["impact"].get(asset, "MISTA")
         if impact == "MISTA":
             continue
-        try:
-            baseline = float(baselines.get(asset))
-        except (TypeError, ValueError):
-            continue
-        if baseline <= 0:
+        baseline = _finite_positive(baselines.get(asset))
+        if baseline is None:
             continue
         expected_direction = "LONG" if impact == "RIALZISTA" else "SHORT"
         for state in states:
@@ -721,8 +715,12 @@ def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str
                 direction, price, entry, stop, tp1, getattr(state, "tp2", None)
             ):
                 continue
-            price_value = float(price)
+            price_value = _finite_positive(price)
+            if price_value is None:
+                continue
             move_pct = (price_value / baseline - 1.0) * 100.0
+            if not math.isfinite(move_pct):
+                continue
             if impact == "RIALZISTA" and move_pct < min_reaction_pct:
                 continue
             if impact == "RIBASSISTA" and move_pct > -min_reaction_pct:
