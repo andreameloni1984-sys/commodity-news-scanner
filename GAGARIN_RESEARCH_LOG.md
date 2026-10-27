@@ -45,3 +45,33 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+
+## 2026-10-26 — Add a numeric reference regression for RSI Wilder
+
+- **Finding:** `engine/regime.py::_rsi_wilder` already uses the Wilder recursive average, but existing tests covered only monotonic rise/fall, flat data, insufficient history and invalid values. Those cases would not reliably detect accidental replacement of the smoothing recurrence with a simple moving average.
+- **Implemented:** added a deterministic mixed-gain/loss fixture with independently calculated expected values: RSI 65.0 after the 14-change seed and approximately 68.4027777778 after one additional +2 change. Also verifies invalid periods fail closed.
+- **Files:** `tests/test_pipeline.py`; implementation under test remains `engine/regime.py::_rsi_wilder`.
+- **Validation status:** GitHub CI on the new PR must pass before this regression is considered verified. No market data or trading outcome is inferred from the synthetic fixture.
+- **Scope:** test coverage only; no RSI threshold, regime, entry, risk or execution behavior changed. PAPER/DEMO only.
+
+
+## 2026-10-26 — Fail closed on malformed RSI periods
+
+- **Finding:** `_rsi_wilder` converted `period` directly with `int()`. Fractional values were silently truncated, and `NaN`/infinity could raise or be mishandled instead of returning an invalid/insufficient result.
+- **Implemented:** require a finite, positive integer period; reject booleans, fractional values, non-finite numbers and malformed strings without changing the default period or Wilder smoothing recurrence.
+- **Files:** `engine/regime.py::_rsi_wilder`, `tests/test_pipeline.py`.
+- **Regression tests:** exact mixed-gain/loss Wilder reference values plus invalid period cases (zero, negative, fractional, boolean, NaN, infinities and text).
+- **Validation status:** CI on PR #73 must pass before this fix is considered verified. Synthetic reference data validates arithmetic only, not profitability.
+- **Safety:** PAPER/DEMO only; no entry thresholds or order paths changed.
+
+## 2026-10-27 — Reject overflow produced inside RSI Wilder
+
+- **Finding:** validating each close as finite is insufficient. Subtracting two finite extremes (for example `-1e308` to `1e308`) can overflow; a sum/recursive average of individually finite changes can also become non-finite and contaminate RSI.
+- **Change:** `engine/regime.py::_rsi_wilder` now rejects non-finite price changes, seed averages, recursive averages, relative strength, or final RSI. Ordinary Wilder smoothing and established reference values remain unchanged.
+- **Files / path:** `engine/regime.py::_rsi_wilder`; `tests/test_pipeline.py`; runtime path `closes -> differences -> gains/losses -> Wilder averages -> RSI`.
+- **Regression:** finite inputs whose difference overflows, plus alternating finite extremes whose gain seed sum overflows, must return `None`; existing numeric Wilder reference tests remain in the same PR branch.
+- **Commit:** code `fc79c9df73da363c6c39263d0ab7873f33578621`; tests `0d18e96e2fad2c57df829449d55e62401039058b`.
+- **CI:** pending on the updated PR #73 head; no status is assumed until GitHub reports completed workflows.
+- **Empirical validation:** not performed. This is numeric-integrity hardening, not a market-performance result.
+- **Safety:** PAPER/DEMO ONLY; no threshold, entry, stop, target, broker, or order behavior changed.

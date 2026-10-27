@@ -180,11 +180,18 @@ RSI_WILDER_PERIOD = 14
 
 
 def _rsi_wilder(closes, period=RSI_WILDER_PERIOD):
-    """Return Wilder RSI from closes; None if there are too few valid values."""
-    try:
-        period = int(period)
-    except (TypeError, ValueError):
+    """Return Wilder RSI from closes; None if inputs or history are invalid."""
+    # Do not silently truncate a fractional period or let int(inf) raise.
+    # A configured indicator period must be a finite positive integer.
+    if isinstance(period, bool):
         return None
+    try:
+        period_value = float(period)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not math.isfinite(period_value) or not period_value.is_integer():
+        return None
+    period = int(period_value)
     if period < 1:
         return None
     values = []
@@ -196,13 +203,20 @@ def _rsi_wilder(closes, period=RSI_WILDER_PERIOD):
     if len(values) < period + 1:
         return None
     changes = [values[i] - values[i - 1] for i in range(1, len(values))]
+    # Finite closes can still overflow when differenced (e.g. -1e308 to 1e308).
+    if not all(math.isfinite(change) for change in changes):
+        return None
     gains = [max(change, 0.0) for change in changes]
     losses = [max(-change, 0.0) for change in changes]
     avg_gain = sum(gains[:period]) / period
     avg_loss = sum(losses[:period]) / period
+    if not math.isfinite(avg_gain) or not math.isfinite(avg_loss):
+        return None
     for gain, loss in zip(gains[period:], losses[period:]):
         avg_gain = ((period - 1) * avg_gain + gain) / period
         avg_loss = ((period - 1) * avg_loss + loss) / period
+        if not math.isfinite(avg_gain) or not math.isfinite(avg_loss):
+            return None
     if avg_gain == 0 and avg_loss == 0:
         return 50.0
     if avg_loss == 0:
@@ -210,7 +224,10 @@ def _rsi_wilder(closes, period=RSI_WILDER_PERIOD):
     if avg_gain == 0:
         return 0.0
     relative_strength = avg_gain / avg_loss
-    return 100.0 - (100.0 / (1.0 + relative_strength))
+    if not math.isfinite(relative_strength):
+        return None
+    result = 100.0 - (100.0 / (1.0 + relative_strength))
+    return result if math.isfinite(result) else None
 
 
 VOLATILITY_RANGE_LOOKBACK = 8

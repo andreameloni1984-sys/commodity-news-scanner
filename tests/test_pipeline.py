@@ -871,3 +871,36 @@ def test_safety_recomputes_rr_from_actual_bracket_prices():
     assert state.safety == "BLOCKED"
     assert "RR_GEOMETRY_MISMATCH" in state.blockers
     assert "RR_FAIL" in state.blockers
+
+
+
+def test_rsi_wilder_matches_reference_values_after_recursive_smoothing():
+    # Deterministic reference fixture: the first 14 changes seed Wilder's
+    # average gains/losses (RSI=65); the 15th change must use Wilder's RMA
+    # recurrence, not a fresh simple average over the latest window.
+    closes = [100.0]
+    for change in (1, -1, 2, -1, 2, -1, 2, -1, 2, -1, 2, -1, 2, -1, 2):
+        closes.append(closes[-1] + change)
+
+    assert abs(_rsi_wilder(closes[:15], 14) - 65.0) < 1e-12
+    assert abs(_rsi_wilder(closes, 14) - 68.40277777777777) < 1e-10
+    assert _rsi_wilder(closes, 0) is None
+    assert _rsi_wilder(closes, "invalid-period") is None
+
+
+
+def test_rsi_wilder_rejects_fractional_boolean_and_non_finite_periods():
+    closes = [float(i) for i in range(20)]
+    for period in (0, -1, 14.5, True, float("nan"), float("inf"), float("-inf"), "invalid-period"):
+        assert _rsi_wilder(closes, period) is None
+
+
+def test_rsi_wilder_rejects_overflow_from_finite_closes():
+    # Input closes are finite, but the first subtraction overflows to infinity.
+    overflowing_difference = [-1e308, 1e308] + [1e308] * 14
+    assert _rsi_wilder(overflowing_difference, 14) is None
+
+    # Every alternating difference is finite, but the seed sum of gains can
+    # overflow. The indicator must fail closed instead of returning NaN.
+    alternating_extremes = [5e307 if i % 2 else -5e307 for i in range(16)]
+    assert _rsi_wilder(alternating_extremes, 14) is None
