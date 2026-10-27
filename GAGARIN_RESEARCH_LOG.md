@@ -45,3 +45,16 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+## 2026-10-27 — Fail closed on invalid recent closes in regime classification
+
+- **Finding:** `engine/regime.py::_recent_net_move` silently skipped invalid close values and then calculated a multi-bar move from non-adjacent candles. This could misclassify the recent regime by bridging a missing/corrupt bar. The single-bar fallback also accepted non-finite current prices/ATR through simple comparisons.
+- **Change:** validate the current price and ATR as finite positive numeric inputs; reject the recent regime window if any close in that window is invalid; make the multi-bar helper refuse invalid values instead of filtering them out; validate the fallback move and normalized ATR move are finite. Diagnostic statuses are `INVALID_PRICE_OR_ATR` and `INVALID_RECENT_CLOSE`.
+- **Files:** `engine/regime.py`; `tests/test_pipeline.py`.
+- **Operational path:** market data → regime classification → setup. On invalid current price/ATR or invalid recent close, regime remains `UNKNOWN`, so the normal downstream setup path cannot rely on a fabricated trend.
+- **Regression tests:** NaN in the recent close window; non-finite current price; infinite ATR. Deterministic tests only.
+- **Code commit:** `21a97be96b945f3c67f8dc08662df573ddba4895`; **test commit:** `22048110eaf151ac2ade2e35a3119cb9466d6897`.
+- **CI:** pending on the new PR; no passing result claimed until GitHub Actions completes.
+- **Empirical validation:** no historical walk-forward or live-data replay performed; no predictive-performance claim.
+- **Deployment:** research branch only; no merge or Render deploy due exhausted build-pipeline minutes.
+- **Safety:** PAPER/DEMO only; no Telegram test messages, broker or orders.
