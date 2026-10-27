@@ -575,3 +575,25 @@ def test_alert_scorecard_rejects_boolean_and_overflowing_prices_and_levels():
     assert report["sl_observed"] == 0
     assert report["open_at_last_check"] == 1
 
+
+
+
+def test_valid_signal_levels_enforces_minimum_rr_for_each_target(monkeypatch):
+    from telegram.news_monitor import _valid_signal_levels
+
+    monkeypatch.setenv("MIN_ENTRY_RR_TP1", "1.5")
+    monkeypatch.setenv("MIN_ENTRY_RR_TP2", "2.0")
+    monkeypatch.setenv("MIN_ENTRY_RR_TP3", "2.5")
+
+    # Risk is 2.0: TP1=1.5R, TP2=2R, TP3=2.5R is valid exactly at each floor.
+    assert _valid_signal_levels("LONG", 100.0, 100.0, 98.0, 103.0, 104.0, 105.0)
+    assert not _valid_signal_levels("LONG", 100.0, 100.0, 98.0, 102.98, 104.0, 105.0)
+    assert not _valid_signal_levels("LONG", 100.0, 100.0, 98.0, 103.0, 103.98, 105.0)
+    assert not _valid_signal_levels("LONG", 100.0, 100.0, 98.0, 103.0, 104.0, 104.98)
+
+
+def test_valid_signal_levels_fails_closed_on_invalid_rr_configuration(monkeypatch):
+    from telegram.news_monitor import _valid_signal_levels
+
+    monkeypatch.setenv("MIN_ENTRY_RR_TP1", "nan")
+    assert not _valid_signal_levels("LONG", 100.0, 100.0, 98.0, 103.0, 104.0, 105.0)
