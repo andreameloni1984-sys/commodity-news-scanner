@@ -66,3 +66,12 @@
 - **Recovered historical PRs:** PR #11 (merged 2026-10-06) recorded RR1/RR2/RR3 thresholds 1.5/2.0/configured minimum and a legacy timestamp-freshness check; PR #15 (merged 2026-10-07) recorded a contextual historical-analog forecast, not a calibrated probability.
 - **Current code mapping:** engine/data.py::_request_json → HTTP 429 handling → bounded retry or provider fallback; regression file tests/test_data_retry_after.py; PR #85. CI passed on code/test head b5a00833410ddd637489e7c657236e856c9d27bd (five workflow runs listed above). No live provider experiment or return uplift claimed.
 - **Catalog status:** the complete original 100-point numbered catalog was not found in the retrievable records; no missing entries are reconstructed or presented as original.
+
+
+## 2026-10-28 — honor HTTP-date Retry-After in source cooldowns
+- **Finding:** `engine/data.py::_request_json` supports numeric and HTTP-date `Retry-After`, but the separate exception-driven news-source cooldown `telegram/news_monitor.py::_source_failed` parsed numeric seconds only. A valid HTTP-date could be ignored and a 429 source retried after the default cooldown rather than the provider's requested time.
+- **Change/files:** `telegram/news_monitor.py::_source_failed` now parses timezone-aware HTTP-date values using the existing `email.utils` import; invalid/naive values keep the exponential fallback and valid delays remain capped at `SOURCE_BACKOFF_MAX_SECONDS`.
+- **Regression:** `tests/test_news_monitor.py::test_source_failed_honors_http_date_retry_after` uses a mocked 429 with a future HTTP-date and verifies the source cooldown is near 40 minutes rather than the 15-minute default.
+- **Operational path:** feed request exception → source failure cooldown → next eligible poll. No market direction is inferred from rate-limit metadata.
+- **Validation:** mocked regression only; no live provider call or measured reduction in throttling. CI result and commit SHA will be recorded in PR #85 after the run completes.
+- **Deployment/safety:** research PR #85 only; no merge/deploy. If runtime `DATABASE_URL` is absent, journal persistence is not considered durable. PAPER/DEMO ONLY.

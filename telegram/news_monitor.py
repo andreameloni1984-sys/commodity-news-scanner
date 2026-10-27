@@ -377,15 +377,31 @@ def _source_failed(source: str, exc: Exception) -> int:
     response = getattr(exc, "response", None)
     status = getattr(response, "status_code", None)
     retry_after = None
+    raw_retry_after = (getattr(response, "headers", {}) or {}).get("Retry-After", "")
     try:
-        raw_retry_after = (getattr(response, "headers", {}) or {}).get("Retry-After", "")
         candidate_retry_after = float(raw_retry_after)
         # Treat server-provided headers as untrusted input. NaN/Infinity can
         # otherwise raise during int() below and abort the whole poll cycle.
         if math.isfinite(candidate_retry_after) and candidate_retry_after >= 0:
             retry_after = int(min(candidate_retry_after, SOURCE_BACKOFF_MAX_SECONDS))
     except (TypeError, ValueError, OverflowError):
-        retry_after = None
+        pass
+
+    # requests-style exceptions can carry an HTTP-date Retry-After too.
+    # Parse only timezone-aware dates; malformed/naive values use our normal
+    # exponential fallback instead of inventing a timezone.
+    if retry_after is None and raw_retry_after:
+        try:
+            retry_at = email.utils.parsedate_to_datetime(str(raw_retry_after))
+            if retry_at.tzinfo is not None and retry_at.utcoffset() is not None:
+                candidate_seconds = max(
+                    0.0,
+                    (retry_at.astimezone(timezone.utc) - datetime.now(timezone.utc)).total_seconds(),
+                )
+                if math.isfinite(candidate_seconds):
+                    retry_after = int(min(candidate_seconds, SOURCE_BACKOFF_MAX_SECONDS))
+        except (TypeError, ValueError, OverflowError):
+            pass
 
     with _SOURCE_LOCK:
         failures = _SOURCE_FAILURES.get(source, 0) + 1
