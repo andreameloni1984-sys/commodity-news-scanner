@@ -630,3 +630,30 @@ def test_scorecard_excludes_alerts_sent_after_decision_time():
     assert report["scored"] == 0
     assert report["pending"] == 0
     assert report["unscored_expired"] == 0
+
+def test_scorecard_requires_event_and_asset_identity_to_match_reactions():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 27, 8, 0, tzinfo=timezone.utc)
+    rows = [
+        # Missing event_id must not match a reaction whose event_id is also absent.
+        {"kind": "NEWS_ALERT_SENT", "asset": "WTI", "direction": "LONG",
+         "price": 80.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "asset": "WTI", "current_price": 82.0,
+         "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+        # Missing asset must not match another reaction whose asset is also absent.
+        {"kind": "NEWS_ALERT_SENT", "event_id": "missing-asset", "direction": "LONG",
+         "price": 80.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "missing-asset", "current_price": 82.0,
+         "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=sent + timedelta(minutes=30))
+
+    assert report["decision_time_valid"] is True
+    assert report["alerts"] == 0
+    assert report["scored"] == 0
+    assert report["pending"] == 0
+    assert report["coverage_pct"] is None
+
