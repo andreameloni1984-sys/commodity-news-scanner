@@ -186,3 +186,15 @@
 - **Deployment/persistence:** PR #79 branch only; no merge/deploy. Render workspace is not selected in this runtime; no live commit or journal durability claim.
 - **Empirical limit:** strict timestamp hygiene only. Non-compliant feeds may yield fewer alerts until their timestamps are fixed; no live-feed replay or walk-forward performance validation.
 - **Safety:** PAPER/DEMO ONLY; no broker, orders, secrets, or Telegram test messages.
+
+
+### 2026-10-27 — Reject overflow in derived scorecard returns
+- **Finding:** individually finite positive prices can still overflow when converted into a percentage return (for example, 1e308 divided by 1e-308). Such a value could contaminate accuracy and mean-return metrics.
+- **Files:** `telegram/news_monitor.py`; `tests/test_news_monitor.py`.
+- **Change:** validate the derived percentage move before adding a price observation to the scorecard; overflow, zero-division and non-finite derived returns are excluded.
+- **Regression:** `test_scorecard_rejects_finite_prices_whose_derived_return_overflows`; expects the alert to remain pending rather than producing an infinite score.
+- **Commits:** code `3aaf33d11adf2de8fb3b6e79cb0cc398bb788ae8`; tests `4a907517c52a7b0888a73ec4fb93f699eb011c2b`.
+- **CI:** all five PR workflows PASS on test commit `4a907517c52a7b0888a73ec4fb93f699eb011c2b`: NEWS alert, Public Event Brain, PAPER, Execution Layer and general tests.
+- **Deployment/persistence:** PR #79 branch only; no merge/deploy. Render workspace was not selected; live commit and current `DATABASE_URL` cannot be verified, so journal durability is not claimed.
+- **Empirical limit:** numeric scorecard integrity only. No historical replay, cost-calibrated backtest or walk-forward performance claim.
+- **Safety:** PAPER/DEMO ONLY; no broker, orders, secrets or Telegram test messages.
