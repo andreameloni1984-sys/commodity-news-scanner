@@ -848,6 +848,33 @@ def test_poll_news_once_rejects_naive_published_at(tmp_path, monkeypatch):
 
 
 
+def test_scorecard_rejects_alerts_without_event_or_asset_identity():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 27, 8, 0, tzinfo=timezone.utc)
+    observed = sent + timedelta(minutes=20)
+    available = observed + timedelta(seconds=1)
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": None, "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": None, "asset": "WTI",
+         "current_price": 90.0, "observed_at": observed.isoformat(),
+         "available_at": available.isoformat()},
+        {"kind": "NEWS_ALERT_SENT", "event_id": "evt-missing-asset", "asset": None,
+         "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "evt-missing-asset", "asset": None,
+         "current_price": 90.0, "observed_at": observed.isoformat(),
+         "available_at": available.isoformat()},
+    ]
+
+    result = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
+    assert result["alerts"] == 0
+    assert result["scored"] == 0
+    assert result["pending"] == 0
+    assert result["correct"] == 0
+
+
 def test_round_trip_cost_rejects_overflowing_aggregate():
     from telegram.news_monitor import _explicit_round_trip_cost_pct
 

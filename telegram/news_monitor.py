@@ -129,6 +129,14 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         except (TypeError, ValueError, OverflowError):
             continue
         direction = str(row.get("direction") or "").upper()
+        # Reactions are joined by event and instrument. Never allow missing
+        # identities to match each other through Python's None == None.
+        event_id = row.get("event_id")
+        asset = row.get("asset")
+        if not isinstance(event_id, str) or not event_id.strip():
+            continue
+        if not isinstance(asset, str) or not asset.strip():
+            continue
         # Future-dated alert rows must not enter the denominator or be
         # counted as pending in a historical scorecard.
         if sent_at and cutoff <= sent_at <= now and math.isfinite(price) and price > 0 and direction in {"LONG", "SHORT"}:
