@@ -892,7 +892,12 @@ def poll_news_once(
     now: datetime | None = None,
 ) -> dict[str, int]:
     """One polling pass; immediate analysis on new news, then 5-minute rechecks."""
-    now = (now or _utc_now()).astimezone(timezone.utc)
+    clock_is_injected = now is not None
+    if now is None:
+        now = _utc_now()
+    elif now.tzinfo is None or now.utcoffset() is None:
+        raise ValueError("poll_news_once requires a timezone-aware clock")
+    now = now.astimezone(timezone.utc)
     state = _load_state()
     seen = set(state.get("seen", []))
     clusters = set(state.get("clusters", []))
@@ -967,6 +972,9 @@ def poll_news_once(
         try:
             raw_results = run_analysis()
             states = list(raw_results or [])
+            # In live operation, stamp availability after analysis has returned
+            # the price snapshot. An injected clock remains deterministic for tests.
+            analysis_available_at = now if clock_is_injected else _utc_now()
             state["last_analysis_at"] = now.timestamp()
             still_pending = []
             for event in pending:
@@ -976,7 +984,7 @@ def poll_news_once(
                     baseline = _capture_baseline(event, states)
                     if baseline:
                         event["baseline_prices"] = baseline
-                        event["baseline_at"] = now.isoformat()
+                        event["baseline_at"] = analysis_available_at.isoformat()
                         _journal({
                             "kind": "NEWS_BASELINE",
                             "event_id": event.get("event_id"),
@@ -1013,8 +1021,9 @@ def poll_news_once(
                             "asset": asset,
                             "impact": classified.get("impact", {}).get(asset, "MISTA"),
                             "baseline_at": event.get("baseline_at"),
-                            "observed_at": now.isoformat(),
-                            "available_at": now.isoformat(),
+                            "observed_at": analysis_available_at.isoformat(),
+                            "available_at": analysis_available_at.isoformat(),
+                            "observation_time_basis": "MONITOR_SNAPSHOT",
                             "baseline_price": baseline_price,
                             "current_price": current_price,
                             "move_pct": round(move_pct, 6),
@@ -1058,14 +1067,18 @@ def poll_news_once(
                         sent += 1
                         delivered = True
                         event["alert_sent"] = True
-                        event["alert_sent_at"] = now.isoformat()
-                        # Measure the full four-hour reaction window from delivery,
-                        # not from the original headline detection.
-                        event["expires_at"] = (now + timedelta(seconds=PENDING_TTL_SECONDS)).isoformat()
+                        delivery_time = now if clock_is_injected else _utc_now()
+                        event["alert_sent_at"] = delivery_time.isoformat()
+                        # Measure the full four-hour reaction window from actual
+                        # successful delivery, not from poll start or headline detection.
+                        event["expires_at"] = (delivery_time + timedelta(seconds=PENDING_TTL_SECONDS)).isoformat()
                         _journal({
                             "kind": "NEWS_ALERT_SENT",
                             "event_id": event.get("event_id"),
                             "title": event.get("title"),
+                            "event_time": event.get("published_at"),
+                            "available_at": event.get("first_seen_at"),
+                            "decision_time": analysis_available_at.isoformat(),
                             "asset": setup.get("asset"),
                             "impact": setup.get("impact"),
                             "direction": setup.get("direction"),
@@ -1075,7 +1088,7 @@ def poll_news_once(
                             "entry": setup.get("entry"),
                             "stop": setup.get("stop"),
                             "tp1": setup.get("tp1"),
-                            "sent_at": now.isoformat(),
+                            "sent_at": delivery_time.isoformat(),
                         })
                         break
                 # Keep sent alerts under observation for four hours, without resending them.
