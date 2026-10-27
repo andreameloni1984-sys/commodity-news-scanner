@@ -79,3 +79,14 @@
 - **Telegram/runtime evidence:** logs at 2026-10-27 13:32 UTC show webhook verified/active and startup welcome delivered; an /aggressivo212 command was logged as delivered. Subsequent news polls (13:38–13:47 UTC) fetched 150–162 items but reported `new_relevant=0`, `pending=0`, `analysis=NO`, `alerts=0`. This verifies the observed runtime path but does not prove alert coverage or predictive performance. DATABASE_URL/durable journal status remains unverified.
 - **Empirical limit:** input integrity only; no live replay or out-of-sample profitability test.
 - **Safety:** PAPER/DEMO ONLY; no secrets, broker, orders, or Telegram test messages.
+
+
+## 2026-10-27 — Fail closed on overflowing NEWS scorecard values
+
+- **Finding:** the baseline/setup boundary rejects booleans and overflowing numeric inputs through `_finite_positive()`, but the NEWS scorecard independently converted alert prices, reaction prices, stop and TP1 with `float()`. A very large integer can raise `OverflowError`; booleans can silently become 1.0 in paths that do not reject them first.
+- **Change:** `telegram/news_monitor.py::build_alert_scorecard` now routes all four numeric fields through the shared finite-positive validator. Invalid alert prices are excluded; invalid reaction observations are skipped; invalid SL/TP levels leave the outcome unclassified instead of crashing or fabricating a stop/target result.
+- **Regression:** `tests/test_news_monitor.py::test_alert_scorecard_rejects_boolean_and_overflowing_prices_and_levels` covers boolean/overflowing alert and reaction prices and overflowing SL/TP levels while retaining a valid directional observation.
+- **Operational path:** NEWS_ALERT_SENT / NEWS_REACTION journal rows → scorecard parsing → directional and TP/SL outcome counters.
+- **Verification:** implementation and regression test are committed on `fix/baseline-price-finite-validation`; final-head CI is running/queued and must pass before the change is considered verified.
+- **Limits:** deterministic input-integrity regression only; no market replay or profitability claim. PR #82 remains draft/unmerged. No Render deployment, Telegram test message, broker, or order. `DATABASE_URL`/durable journal remain unverified.
+- **Safety:** PAPER/DEMO ONLY.
