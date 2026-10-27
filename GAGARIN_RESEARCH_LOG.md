@@ -220,3 +220,14 @@
 - **Deployment/persistence:** PR #79 branch only; no merge/deploy. Render workspace is not selected; live commit and `DATABASE_URL` remain unverified, so durable-journal status is not claimed.
 - **Empirical limit:** this prevents unauthorized simulated entries in the identified path; it does not establish trading edge. No replay/walk-forward performance test.
 - **Safety:** PAPER/DEMO ONLY; no broker, real orders, secrets or Telegram test messages.
+
+
+## R&D update — 2026-10-27: preserve distinct target geometry in scorecard identity
+- **Finding:** scorecard duplicate identity included entry price, stop and TP1, but omitted TP2/TP3. Two alerts for the same event/time with different later target levels could be collapsed as a duplicate despite having different exit plans.
+- **Change:** `telegram/news_monitor.py::build_alert_scorecard` now includes TP2 and TP3 in the exact-alert deduplication key.
+- **Regression:** `tests/test_news_monitor.py::test_scorecard_keeps_alerts_with_distinct_tp2_tp3_geometry` asserts two otherwise-identical alerts with different TP2/TP3 remain two records and are both evaluated; exact duplicates continue to be suppressed.
+- **Commits:** code `db4513323015cd778874c9e99a2cbff256813600`; test `f6640d9114d8ae0e41bcdf6275a800e29a959a21`.
+- **CI:** five PR-triggered workflows passed on the test commit: PAPER [40514122735](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40514122735), Public Event Brain [40514122667](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40514122667), Execution Layer [40514122805](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40514122805), NEWS alert [40514122769](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40514122769), general tests [40514122737](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40514122737).
+- **Operational path:** journal alert → exact identity (event/asset/direction/time/entry/SL/TP1/TP2/TP3) → deduplication → point-in-time reaction join → outcome scorecard.
+- **Empirical limit:** scorecard accounting only; no live replay or walk-forward/out-of-sample predictive validation. PR branch only; no merge/deploy. Render live commit and database persistence remain unverified.
+- **Safety:** PAPER/DEMO ONLY; no broker, real orders, secrets, or Telegram test messages.
