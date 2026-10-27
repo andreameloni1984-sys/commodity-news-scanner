@@ -64,3 +64,14 @@
 - **Regression tests:** exact mixed-gain/loss Wilder reference values plus invalid period cases (zero, negative, fractional, boolean, NaN, infinities and text).
 - **Validation status:** CI on PR #73 must pass before this fix is considered verified. Synthetic reference data validates arithmetic only, not profitability.
 - **Safety:** PAPER/DEMO only; no entry thresholds or order paths changed.
+
+## 2026-10-27 — Reject overflow produced inside RSI Wilder
+
+- **Finding:** validating each close as finite is insufficient. Subtracting two finite extremes (for example `-1e308` to `1e308`) can overflow; a sum/recursive average of individually finite changes can also become non-finite and contaminate RSI.
+- **Change:** `engine/regime.py::_rsi_wilder` now rejects non-finite price changes, seed averages, recursive averages, relative strength, or final RSI. Ordinary Wilder smoothing and established reference values remain unchanged.
+- **Files / path:** `engine/regime.py::_rsi_wilder`; `tests/test_pipeline.py`; runtime path `closes -> differences -> gains/losses -> Wilder averages -> RSI`.
+- **Regression:** finite inputs whose difference overflows, plus alternating finite extremes whose gain seed sum overflows, must return `None`; existing numeric Wilder reference tests remain in the same PR branch.
+- **Commit:** code `fc79c9df73da363c6c39263d0ab7873f33578621`; tests `0d18e96e2fad2c57df829449d55e62401039058b`.
+- **CI:** pending on the updated PR #73 head; no status is assumed until GitHub reports completed workflows.
+- **Empirical validation:** not performed. This is numeric-integrity hardening, not a market-performance result.
+- **Safety:** PAPER/DEMO ONLY; no threshold, entry, stop, target, broker, or order behavior changed.
