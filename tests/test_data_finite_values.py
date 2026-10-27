@@ -173,6 +173,28 @@ def test_validate_candles_fails_closed_on_conflicting_duplicate_timestamp():
     assert cleaned == []
     assert error == "CONFLICTING_DUPLICATE_TIMESTAMP"
 
+def test_validate_candles_treats_volume_difference_as_duplicate_conflict():
+    now = time.time()
+    candles = [
+        {
+            "timestamp": now - (MIN_CANDLES_REQUIRED - i) * 60,
+            "open": 100.0,
+            "high": 102.0,
+            "low": 99.0,
+            "close": 101.0,
+            "volume": 10.0,
+        }
+        for i in range(MIN_CANDLES_REQUIRED + 1)
+    ]
+    conflicting = candles[-1].copy()
+    conflicting["volume"] = 11.0
+    candles.append(conflicting)
+
+    cleaned, error = _validate_candles(candles)
+
+    assert cleaned == []
+    assert error == "CONFLICTING_DUPLICATE_TIMESTAMP"
+
 
 
 @pytest.mark.parametrize(
