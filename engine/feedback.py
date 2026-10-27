@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import math
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,25 +37,40 @@ def _number(value):
         return None
 
 
+def _epoch_seconds(value):
+    """Accept finite positive Unix seconds, rejecting booleans and likely millisecond epochs."""
+    if isinstance(value, bool):
+        return None
+    try:
+        timestamp = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    # Match engine/data.py's unit guard: current candle inputs use epoch seconds.
+    if not math.isfinite(timestamp) or timestamp <= 0 or timestamp >= 100_000_000_000:
+        return None
+    return timestamp
+
+
 def _timestamp(value):
-    if value in (None, ""):
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    if isinstance(value, bool):
         return None
     try:
         if isinstance(value, (int, float)):
-            return float(value)
+            return _epoch_seconds(value)
         text = str(value).strip()
         try:
             parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
             # Outcome scoring must not invent a timezone for a naive timestamp.
             # Reject it so ambiguous bars cannot shift into the forward-outcome window.
-            if parsed.tzinfo is None:
+            if parsed.tzinfo is None or parsed.utcoffset() is None:
                 return None
-            return parsed.astimezone(timezone.utc).timestamp()
+            return _epoch_seconds(parsed.astimezone(timezone.utc).timestamp())
         except ValueError:
-            return float(text)
+            return _epoch_seconds(text)
     except (TypeError, ValueError, OverflowError):
         return None
-
 
 def _candles(state):
     raw = list(getattr(state, "candles", []) or [])

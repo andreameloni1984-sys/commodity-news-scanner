@@ -183,6 +183,21 @@ def test_naive_iso_timestamp_is_rejected_but_explicit_utc_is_accepted():
     assert aware == zulu
 
 
+def test_timestamp_rejects_boolean_non_finite_and_millisecond_epochs():
+    invalid_values = [
+        True, False, 0, -1,
+        float("nan"), float("inf"), float("-inf"),
+        "NaN", "Infinity",
+        1_800_000_000_000, "1800000000000",
+    ]
+    for value in invalid_values:
+        assert _timestamp(value) is None
+
+    # Plausible epoch seconds remain accepted, including numeric strings.
+    assert _timestamp(1_800_000_000) == 1_800_000_000.0
+    assert _timestamp("1800000000") == 1_800_000_000.0
+
+
 def test_candles_are_sorted_deduplicated_and_invalid_ranges_rejected():
     s = state([
         {"timestamp": 3000, "high": 103, "low": 101},
