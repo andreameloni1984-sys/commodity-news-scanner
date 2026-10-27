@@ -45,3 +45,11 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+## 2026-10-27 — point-in-time: rifiuto dei timestamp senza fuso orario
+
+- **Finding:** il parser generale interpreta timestamp ISO/RFC privi di timezone come UTC. Nel gate della baseline questo poteva trasformare un orario locale ambiguo in un istante apparentemente affidabile e far passare una verifica temporale.
+- **Modifica:** `telegram/news_monitor.py` aggiunge `_parse_aware_datetime()` e lo usa per `event_time`, `available_at`, `first_seen_at`, `decision_time` e `baseline_at`. I valori senza timezone esplicita sono rifiutati; anche un `now` privo di timezone fallisce chiuso.
+- **Test:** `tests/test_news_monitor.py` copre tutti e cinque i campi timezone-naive e il caso di decision clock senza timezone; i timestamp ISO con offset restano validi nel test di riferimento.
+- **Percorso operativo:** evento news → baseline point-in-time → decisione → eventuale alert. Nessun alert può superare il gate con un timestamp ambiguo.
+- **Stato:** modifica su branch della PR #71; CI da verificare dopo il push. Nessun deploy live o replay empirico eseguito in questo ciclo. Possibile effetto collaterale intenzionale: feed che omettono il fuso orario verranno soppressi fino a normalizzazione affidabile.
