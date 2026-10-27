@@ -180,37 +180,76 @@ RSI_WILDER_PERIOD = 14
 
 
 def _rsi_wilder(closes, period=RSI_WILDER_PERIOD):
-    """Return Wilder RSI from closes; None if there are too few valid values."""
+    """Return Wilder RSI, failing closed on invalid periods or non-finite intermediates."""
     try:
-        period = int(period)
-    except (TypeError, ValueError):
+        if isinstance(period, bool):
+            return None
+        numeric_period = float(period)
+        if not math.isfinite(numeric_period) or not numeric_period.is_integer():
+            return None
+        period = int(numeric_period)
+    except (TypeError, ValueError, OverflowError):
         return None
     if period < 1:
         return None
+
     values = []
-    for value in closes or []:
-        number = _safe_float(value)
-        if number is None:
-            return None
-        values.append(number)
+    try:
+        for value in closes or []:
+            number = _safe_float(value)
+            if number is None:
+                return None
+            values.append(number)
+    except (TypeError, ValueError, OverflowError):
+        return None
     if len(values) < period + 1:
         return None
-    changes = [values[i] - values[i - 1] for i in range(1, len(values))]
+
+    changes = []
+    for previous, current in zip(values, values[1:]):
+        change = current - previous
+        if not math.isfinite(change):
+            return None
+        changes.append(change)
+
     gains = [max(change, 0.0) for change in changes]
     losses = [max(-change, 0.0) for change in changes]
-    avg_gain = sum(gains[:period]) / period
-    avg_loss = sum(losses[:period]) / period
+    gain_sum = sum(gains[:period])
+    loss_sum = sum(losses[:period])
+    if not math.isfinite(gain_sum) or not math.isfinite(loss_sum):
+        return None
+    avg_gain = gain_sum / period
+    avg_loss = loss_sum / period
+    if not math.isfinite(avg_gain) or not math.isfinite(avg_loss):
+        return None
+
     for gain, loss in zip(gains[period:], losses[period:]):
-        avg_gain = ((period - 1) * avg_gain + gain) / period
-        avg_loss = ((period - 1) * avg_loss + loss) / period
+        gain_total = (period - 1) * avg_gain + gain
+        loss_total = (period - 1) * avg_loss + loss
+        if not math.isfinite(gain_total) or not math.isfinite(loss_total):
+            return None
+        avg_gain = gain_total / period
+        avg_loss = loss_total / period
+        if not math.isfinite(avg_gain) or not math.isfinite(avg_loss):
+            return None
+
     if avg_gain == 0 and avg_loss == 0:
         return 50.0
     if avg_loss == 0:
         return 100.0
     if avg_gain == 0:
         return 0.0
+
     relative_strength = avg_gain / avg_loss
-    return 100.0 - (100.0 / (1.0 + relative_strength))
+    if not math.isfinite(relative_strength):
+        return None
+    denominator = 1.0 + relative_strength
+    if not math.isfinite(denominator):
+        return None
+    result = 100.0 - (100.0 / denominator)
+    if not math.isfinite(result) or not 0.0 <= result <= 100.0:
+        return None
+    return result
 
 
 VOLATILITY_RANGE_LOOKBACK = 8
