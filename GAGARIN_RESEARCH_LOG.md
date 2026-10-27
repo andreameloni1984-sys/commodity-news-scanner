@@ -45,3 +45,15 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+## 2026-10-27 — Reject non-finite prices when capturing news baselines
+
+- **Finding:** `_capture_baseline()` checked `value > 0` but did not require a finite value. Positive infinity satisfies that comparison and could be stored as the initial price baseline, contaminating the measured post-news reaction.
+- **Implemented:** use the existing `_finite_positive()` validator before recording a baseline; non-numeric, NaN, infinite, zero, and negative prices are skipped.
+- **Files:** `telegram/news_monitor.py`; `tests/test_news_monitor.py`.
+- **Operational path:** news event → `_capture_baseline()` → stored `baseline_prices` → `_confirmed_setups()` reaction calculation.
+- **Regression tests:** reject positive/negative infinity, NaN, zero, and negative prices; preserve a finite positive baseline.
+- **CI:** triggered by PR; results pending. No CI pass is claimed until all relevant workflows complete.
+- **Deployment:** not deployed; Render build-pipeline minutes remain exhausted. No merge or manual deploy.
+- **Empirical validation:** no live-news replay or outcome study performed. This protects baseline data integrity; it does not prove news has predictive value.
+- **Safety:** PAPER/DEMO ONLY; no broker, order, or Telegram test message.
