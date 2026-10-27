@@ -199,7 +199,8 @@ def test_validate_candles_drops_rows_with_boolean_market_fields(field):
     assert all(not isinstance(row[field], bool) for row in cleaned)
 
 
-def test_validate_candles_drops_negative_epoch_timestamps():
+@pytest.mark.parametrize("invalid_timestamp", [-1.0, 0.0])
+def test_validate_candles_drops_non_positive_epoch_timestamps(invalid_timestamp):
     now = time.time()
     candles = [
         {
@@ -212,13 +213,13 @@ def test_validate_candles_drops_negative_epoch_timestamps():
         }
         for i in range(MIN_CANDLES_REQUIRED + 1)
     ]
-    candles[0]["timestamp"] = -1.0
+    candles[0]["timestamp"] = invalid_timestamp
 
     cleaned, error = _validate_candles(candles)
 
     assert error is None
     assert len(cleaned) == MIN_CANDLES_REQUIRED
-    assert all(row["timestamp"] >= 0 for row in cleaned)
+    assert all(row["timestamp"] > 0 for row in cleaned)
 
 
 @pytest.mark.parametrize("boolean_field", ["timestamp", "ohlc", "volume"])
