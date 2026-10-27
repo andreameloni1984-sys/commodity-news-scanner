@@ -192,6 +192,27 @@ def test_regime_long():
     }
 
 
+def test_regime_fails_closed_on_invalid_close_in_recent_window():
+    state = _make_state("LONG")
+    state.closes[-2] = float("nan")
+
+    apply_regime(state)
+
+    assert state.regime == "UNKNOWN"
+    assert state.metadata["regime_diagnostics"]["status"] == "INVALID_RECENT_CLOSE"
+
+
+def test_regime_fails_closed_on_nonfinite_current_price_or_atr():
+    for field, value in (("price", float("nan")), ("atr", float("inf"))):
+        state = _make_state("LONG")
+        setattr(state, field, value)
+
+        apply_regime(state)
+
+        assert state.regime == "UNKNOWN"
+        assert state.metadata["regime_diagnostics"]["status"] == "INVALID_PRICE_OR_ATR"
+
+
 def test_regime_short():
     state = _make_state("SHORT")
 
