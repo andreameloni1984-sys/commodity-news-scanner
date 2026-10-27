@@ -74,3 +74,17 @@
 - **100-point catalog:** no separate Gagarin 100-point/100-rule catalog, exact lesson-title list, or retrievable PR #11 research appendix was found in the available historical context. Do not reconstruct one from these PRs.
 - **Mapping to this PR:** the historical lesson that provider data quality must be explicit maps to `engine/data.py::_validate_candles`; conflicting duplicate bars now fail closed before ATR/RSI/structure. Tests are synthetic; no recovered historical WTI outcome or agriculture diagnostic output was replayed.
 
+## Mapping from the retrieved IBKR session 9 record to current code
+
+Source: Library file `Registro Studio IBKR - aggiornato 2026-10-20 sessione 9.md` (updated 2026-10-20).
+
+| Recovered lesson | Current mapping | Test / status | Evidence limit |
+|---|---|---|---|
+| Historical API pacing: 10 requests/sec global; historical endpoint 10/sec and 50/min; maximum 1,000 bars/request; HTTP 429 requires backoff | Potential future IBKR data adapter only. Current `engine/data.py` uses Twelve Data, Biquote and Yahoo; do not apply IBKR quotas to those providers as if they were the same API. | No IBKR API call or adapter implemented in this PR. Existing provider request/backoff tests are separate. | Documentation fact, not a current Gagarin rate-limit measurement. |
+| Vectorized research must not execute at the same close used to create the signal; use chronological/event-driven replay with costs, slippage and execution timestamps | `engine/trigger.py` closed-candle checks and existing scorecard/backtest work; this PR changes only candle ingestion integrity. | No new backtest or OOS metric in this PR. | No profitability claim. |
+| Futures: expiry, physical delivery, certified inventories and calendar spreads can matter for coffee/energy; spot alone is insufficient near expiry | Instrument/contract metadata and expiry-aware provider routing remain a separate gap; current `engine/data.py` normalizes OHLCV but this change does not add a futures calendar. | No expiry/rollover test added here. | Required contract/inventory historical series were not validated in this run. |
+| Options effects (positioning, skew/tail protection, dealer hedging, activity/dispersion, implied/spot dislocation and directional pressure) are context, not automatic direction | No options feed is currently validated in the operational path; no options-based direction rule was added. | Not implemented; must be tested as one feature against the baseline only if reliable point-in-time data are available. | The session 9 presentation explicitly says its visuals are illustrative, not a backtest; no predictive edge is inferred. |
+| For every feature require `available_at <= decision_time` and keep event time separate from availability time | News/forecast timestamps and closed-candle trigger checks exist in current code; source-specific availability and decision-time auditing still needs end-to-end validation. | Existing timestamp tests plus PR #84 candle-conflict tests; no full end-to-end point-in-time replay in this PR. | Current tests prove local invariants, not global absence of look-ahead bias. |
+
+This mapping distinguishes documented lessons from implemented and empirically validated behavior. The recovered session 9 file is a study register; it is not a Gagarin 100-rule catalog.
+
