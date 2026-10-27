@@ -53,6 +53,6 @@
 - **Files:** `telegram/news_monitor.py`; `tests/test_news_monitor.py`.
 - **Regression coverage:** standard slash/no-slash spot symbols match; substring lookalikes and a futures ticker without contract metadata do not.
 - **Code commit:** `5ddc3df2053132a54efca94eb27a5ee434b1edf7`; **test commit:** `f80f595f7f9a812074564b0b457bf6fc6e90cfd7`.
-- **CI:** pending on PR branch; no result claimed until GitHub Actions completes.
+- **CI:** PASS on PR head commit `298715530e50ff549a8cde5d765083404a9463a6`: NEWS alert run `40460787644`, Execution Layer `40460787647`, Public Event Brain `40460787728`, PAPER `40460787705`, general tests `40460787744`. No empirical signal-performance test was run.
 - **Deployment / limits:** research branch only; no Render deploy. No empirical signal-performance test was run.
 - **Safety:** PAPER/DEMO ONLY; no secrets read, Telegram test message, broker or order.
