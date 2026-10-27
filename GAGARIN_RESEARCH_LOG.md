@@ -100,3 +100,14 @@
 - **Deployment:** PR #79 only, not merged. Render workspace was not selected in this run; no deploy was triggered and live commit was not re-verified. `DATABASE_URL` was not inspected; journal durability is not asserted.
 - **Empirical limit:** temporal eligibility fix only; no replay, cost/slippage model or out-of-sample profitability validation.
 - **Safety:** PAPER/DEMO ONLY; no broker, orders, secrets or Telegram test messages.
+
+
+## 2026-10-27 08:53 UTC — Require event and instrument identity in scorecard rows
+
+- **Finding:** `build_alert_scorecard()` compared event IDs and assets directly. If both an alert and reaction omitted an identity field, Python's `None == None` allowed an unrelated price move to match and score.
+- **Change:** `telegram/news_monitor.py` now excludes alert rows without a non-empty `event_id` and `asset`; reactions can match only an alert with explicit identity.
+- **Regression:** `tests/test_news_monitor.py::test_scorecard_requires_event_and_asset_identity_to_match_reactions` covers missing event IDs and missing instrument identities, with large price moves that must not enter the scorecard.
+- **CI:** new code/test commit triggers the five Gagarin PR workflows; final status is to be recorded after GitHub Actions completes.
+- **Deployment:** PR #79 branch only; no merge/deploy. Render build-pipeline minutes remain exhausted; journal durability is not asserted without a verified `DATABASE_URL`.
+- **Empirical limit:** scorecard matching integrity only; no replay, cost/slippage model, or out-of-sample profitability validation.
+- **Safety:** PAPER/DEMO ONLY; no broker, orders, secrets, or Telegram test messages.
