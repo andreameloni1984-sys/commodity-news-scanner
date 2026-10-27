@@ -153,3 +153,11 @@
 - **Deployment:** PR #82 draft branch only; no merge/deploy.
 - **Empirical limit:** this is a configuration-safety correction, not a measured improvement in trade expectancy.
 
+## 2026-10-27 — Historical research retrieval audit (late September / early October)
+
+- **Recovered summary, not verbatim catalog:** the 2026-10-02 conversation summary says the prior research had not all been incorporated and names term structure, liquidity regime, order flow/CVD/open interest, session engine, regime hysteresis, volatility curve, macro transmission, tail dependence, episodic memory and adaptive policy. These are research topics, not claims of implemented features.
+- **Recovered implementation themes:** the 2026-10-05 summary refers to 12 implementation themes; retrievable topic labels include fail-closed validation, Governor pipeline, MT5 recheck, multi-timeframe/structure/trigger, ATR range 0.80–2.50, target RR 1.5/2.0/2.5, data quality, macro context, OOS/falsification, Telegram states and PAPER ONLY. The complete verbatim 12-item list was not retrieved; do not invent the missing wording.
+- **Historical catalog integrity:** neither the Library file “Registro Studio IBKR - aggiornato 2026-10-20 sessione 9.md” nor the retrieved conversation summaries contain the original numbered 1–100 catalog. The session-9 file is a separate study register, including backtesting, execution costs, futures curve/rollover and API pacing. Its options material is explicitly illustrative, not a backtest.
+- **Current mapping:** the NEWS path requires a valid Gagarin trigger, price reaction, finite price levels and configured target-specific R/R. The latest improvement makes invalid GAGARIN_NEWS_MIN_REACTION_PCT fail closed. This does not establish that RSI Wilder, all regime/ATR diagnostics, the complete Governor path, cost-aware OOS scorecards, or futures expiry/rollover controls are fully wired and empirically validated.
+- **Validation/deployment:** recovered topics are not evidence of implementation. PR #82 remains a draft and unmerged; no deploy or profitability claim.
+
