@@ -88,3 +88,11 @@
 - **Empirical limit:** numeric RSI guard only; no market replay, OOS performance or profitability claim.
 - **Safety:** PAPER/DEMO only; no broker, orders, or Telegram test messages.
 
+## 2026-10-27 — Main workflow and deployment inspection
+
+- Current `main`: `99ad72b69cddbed0f80ef9f671c5b70deb9df024`.
+- Main scheduled workflow [DAY RESEARCH 40540264711](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40540264711) completed successfully at 16:22 UTC; [aggressive-alert 40521212912](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40521212912) completed successfully at 14:27 UTC, both on current `main`.
+- Render deployment of the same `main` commit failed at 12:48 UTC with an explicit `pipeline_minutes_exhausted` event. Workflow success is not production deployment.
+- Runtime log sample at 15:31 UTC: 150 news rows fetched, 0 new relevant, 0 pending and 0 alerts. GDELT logs in the queried period contain HTTP 429, ReadTimeout and JSONDecodeError with backoff. Logs report `DATABASE_URL missing` / `LOCAL_CSV_NO_DATABASE_URL`; do not claim a durable journal.
+- PR #83 remains open/draft. The RSI overflow guard is CI-verified on the PR branch but not merged or live.
+
