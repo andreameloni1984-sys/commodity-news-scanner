@@ -77,3 +77,14 @@
 - **Catalog status:** no authentic numbered 100-rule list was found in the searched Library or prior-conversation retrieval. Do not repeat unverified component weights as if they were present in the source document.
 - **Current code path:** `telegram/news_monitor.py::_parse_datetime(require_timezone=True)` → `build_alert_scorecard()` now rejects naive alert/observation times and invalid naive decision clocks. CI on the code/test commit passed all five workflows; no empirical profitability claim.
 - **Safety/deployment:** PR #79 only, not live; Render build quota remains exhausted; PAPER/DEMO ONLY.
+
+## 2026-10-27 — Reject boolean values in scorecard prices and risk levels
+
+- **Finding:** Python converts `True` to `1.0`. The scorecard accepted boolean alert/reaction prices and boolean stop/TP1 levels, potentially turning a type error into a false price move or risk outcome.
+- **Change:** explicitly reject boolean alert prices, observed prices and stop/TP1 values in `build_alert_scorecard`; preserve the existing finite/positive checks and point-in-time observation cutoff.
+- **Files/path:** `telegram/news_monitor.py::build_alert_scorecard`; `tests/test_news_monitor.py`.
+- **Regression:** covers boolean alert price, boolean reaction price and boolean TP1; valid numeric observation remains scorable, invalid reaction remains pending, and boolean TP1 cannot trigger SL/TP outcome classification.
+- **Commits:** code `7ecd582c8383473ea6acdf583d6163d0304d6566`; test `bf44f0a4a8adb4b151a7d7844453553c6a6f521e`.
+- **CI:** pending for the new code/test commits.
+- **Deployment/empirical limits:** branch/PR #79 only; no merge/deploy, live replay or out-of-sample profitability test. Render build capacity remains constrained.
+- **Safety:** PAPER/DEMO ONLY; no broker/orders or Telegram test messages.
