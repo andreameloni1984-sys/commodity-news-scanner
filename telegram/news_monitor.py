@@ -71,9 +71,8 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         if row.get("kind") != "NEWS_ALERT_SENT":
             continue
         sent_at = _parse_datetime(row.get("sent_at") or row.get("recorded_at"))
-        try:
-            price = float(row.get("price"))
-        except (TypeError, ValueError):
+        price = _finite_positive(row.get("price"))
+        if price is None:
             continue
         direction = str(row.get("direction") or "").upper()
         if sent_at and sent_at >= cutoff and math.isfinite(price) and price > 0 and direction in {"LONG", "SHORT"}:
@@ -87,9 +86,8 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
             observed_at = _parse_datetime(row.get("observed_at") or row.get("recorded_at"))
             if not observed_at or not (sent_at <= observed_at <= sent_at + timedelta(hours=4)):
                 continue
-            try:
-                price = float(row.get("current_price"))
-            except (TypeError, ValueError):
+            price = _finite_positive(row.get("current_price"))
+            if price is None:
                 continue
             if math.isfinite(price) and price > 0:
                 reaction_observations.append((observed_at, price))
@@ -109,11 +107,8 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         observed_at, current_price = observations[-1]
         raw_pct = (current_price / alert_price - 1) * 100
         signed_pct = raw_pct if direction == "LONG" else -raw_pct
-        try:
-            stop = float(alert.get("stop"))
-            tp1 = float(alert.get("tp1"))
-        except (TypeError, ValueError):
-            stop, tp1 = None, None
+        stop = _finite_positive(alert.get("stop"))
+        tp1 = _finite_positive(alert.get("tp1"))
         outcome = "OPEN_AT_LAST_CHECK"
         levels_valid = (
             stop is not None and tp1 is not None
