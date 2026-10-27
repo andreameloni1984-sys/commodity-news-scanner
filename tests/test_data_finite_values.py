@@ -146,3 +146,29 @@ def test_validate_candles_fails_closed_on_conflicting_duplicate_timestamp():
     assert cleaned == []
     assert error == "CONFLICTING_DUPLICATE_TIMESTAMP"
 
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["timestamp", "open", "high", "low", "close", "volume"],
+)
+def test_validate_candles_drops_rows_with_boolean_market_fields(field):
+    now = time.time()
+    candles = [
+        {
+            "timestamp": now - (MIN_CANDLES_REQUIRED - i) * 60,
+            "open": 100.0,
+            "high": 102.0,
+            "low": 99.0,
+            "close": 101.0,
+            "volume": 10.0,
+        }
+        for i in range(MIN_CANDLES_REQUIRED + 1)
+    ]
+    candles[0][field] = True
+
+    cleaned, error = _validate_candles(candles)
+
+    assert error is None
+    assert len(cleaned) == MIN_CANDLES_REQUIRED
+    assert all(not isinstance(row[field], bool) for row in cleaned)
