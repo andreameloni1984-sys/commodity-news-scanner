@@ -200,3 +200,11 @@ This mapping distinguishes documented lessons from implemented and empirically v
 - **Operational path:** provider response → normalization → `_validate_candles` → OHLCV/timestamp/duplicate checks → freshness/ATR/RSI/structure. A data-quality rejection is not a directional signal.
 - **Render/runtime:** no Render or Telegram log connector was available in this run; no deploy was attempted and the live Render commit was not verified. The last known runtime report had GDELT timeouts with exponential backoff and `DATABASE_URL` missing; that is historical, not a fresh runtime check. The current source code still has per-process source cooldown/backoff, but durable cooldown/journal persistence is not claimed here.
 - **Empirical limit/safety:** synthetic unit tests only; no provider replay, OOS backtest, return uplift or market signal validation. No merge/deploy, broker or order. PAPER/DEMO ONLY.
+
+
+## 2026-10-27 — Open-PR base audit
+
+- **Main SHA:** `99ad72b69cddbed0f80ef9f671c5b70deb9df024`. The latest scheduled `aggressive-alert` run [40574633952](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40574633952) and `Gagarin Paper Monitor` run [40556462273](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40556462273) passed on this SHA.
+- **Open PR inventory:** 38 open PRs were returned. 36 target `main`; 34 of those had a base SHA older than current `main`; 2 are stacked on another branch. The inventory includes overlapping work on RSI validation, point-in-time scorecards, minimum R/R, provider retry/backoff and source cooldown persistence.
+- **Current PR #84:** base SHA matches current main, head `797c30b219c9f54d7e49958ffaf3ddc505207b18`, compare is 34 commits ahead / 0 behind, GitHub metadata says mergeable. The five current-head workflows (general tests, Public Event Brain, NEWS alert, Execution Layer and PAPER) passed; run IDs are recorded in the preceding entry.
+- **Decision:** no automatic rebase, merge or deploy. The many older PRs must be reconciled one at a time because their bases are stale and several are stacked; merging the entire backlog would risk duplicate logic. PAPER/DEMO ONLY.
