@@ -89,7 +89,7 @@
 - **Deployment/empirical limits:** branch/PR #79 only; no merge/deploy, live replay or out-of-sample profitability test. Render build capacity remains constrained.
 - **Safety:** PAPER/DEMO ONLY; no broker/orders or Telegram test messages.
 
-## 2026-10-27 09:33 UTC — Exclude future-dated alerts from point-in-time scorecards
+## 2026-10-27 08:33 UTC (09:33 CET) — Exclude future-dated alerts from point-in-time scorecards
 
 - **Finding:** the scorecard rejected future price observations but still admitted an alert row with `sent_at > now` into its denominator and marked it pending. A historical evaluation could therefore count an alert that had not yet been sent at the decision time.
 - **Change:** `telegram/news_monitor.py::build_alert_scorecard()` now requires `cutoff <= sent_at <= now` before admitting an alert. Future alerts are excluded from alert, pending, coverage and outcome counts.
