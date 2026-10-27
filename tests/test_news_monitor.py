@@ -657,3 +657,51 @@ def test_scorecard_requires_event_and_asset_identity_to_match_reactions():
     assert report["pending"] == 0
     assert report["coverage_pct"] is None
 
+def test_scorecard_reports_net_return_only_with_explicit_round_trip_costs():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 27, 8, 0, tzinfo=timezone.utc)
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "costed", "asset": "WTI", "direction": "LONG",
+         "price": 100.0, "sent_at": sent.isoformat(),
+         "round_trip_spread_cost_bps": 2.0, "round_trip_fees_cost_bps": 1.0,
+         "round_trip_slippage_bps": 3.0},
+        {"kind": "NEWS_REACTION", "event_id": "costed", "asset": "WTI",
+         "current_price": 100.10, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+        {"kind": "NEWS_ALERT_SENT", "event_id": "missing-costs", "asset": "Brent", "direction": "LONG",
+         "price": 100.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "missing-costs", "asset": "Brent",
+         "current_price": 100.10, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
+
+    assert report["scored"] == 2
+    assert report["net_scored"] == 1
+    assert report["net_profitable"] == 1
+    assert report["net_cost_coverage_pct"] == 50.0
+    assert report["mean_net_return_pct"] == 0.04
+
+
+def test_scorecard_does_not_assume_invalid_costs_are_zero():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 27, 8, 0, tzinfo=timezone.utc)
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "bad-costs", "asset": "WTI", "direction": "LONG",
+         "price": 100.0, "sent_at": sent.isoformat(),
+         "round_trip_spread_cost_bps": True, "round_trip_fees_cost_bps": 0.0,
+         "round_trip_slippage_bps": 0.0},
+        {"kind": "NEWS_REACTION", "event_id": "bad-costs", "asset": "WTI",
+         "current_price": 100.10, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
+
+    assert report["scored"] == 1
+    assert report["net_scored"] == 0
+    assert report["mean_net_return_pct"] is None
+    assert report["net_cost_coverage_pct"] == 0.0
+
