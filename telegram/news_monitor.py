@@ -85,7 +85,8 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
             if row.get("kind") != "NEWS_REACTION" or row.get("event_id") != alert.get("event_id") or row.get("asset") != alert.get("asset"):
                 continue
             observed_at = _parse_datetime(row.get("observed_at") or row.get("recorded_at"))
-            if not observed_at or not (sent_at <= observed_at <= sent_at + timedelta(hours=4)):
+            # Point-in-time scorecards must not use an observation that is still in the future at evaluation time.
+            if not observed_at or observed_at > now or not (sent_at <= observed_at <= sent_at + timedelta(hours=4)):
                 continue
             try:
                 price = float(row.get("current_price"))
@@ -651,10 +652,21 @@ def _finite_positive(value: Any) -> float | None:
     return number if math.isfinite(number) and number > 0 else None
 
 
+NEWS_MIN_TP1_RR = 1.5
+NEWS_MIN_TP2_RR = 2.0
+NEWS_MIN_TP3_RR = 2.5
+
+
 def _valid_signal_levels(
-    direction: str, price: Any, entry: Any, stop: Any, tp1: Any, tp2: Any = None
+    direction: str,
+    price: Any,
+    entry: Any,
+    stop: Any,
+    tp1: Any,
+    tp2: Any = None,
+    tp3: Any = None,
 ) -> bool:
-    """Validate finite positive prices and directionally ordered PAPER risk levels."""
+    """Fail closed on invalid brackets, insufficient R/R, or a late live price."""
     current, entry_v, stop_v, tp1_v = (
         _finite_positive(value) for value in (price, entry, stop, tp1)
     )
@@ -662,29 +674,76 @@ def _valid_signal_levels(
         return False
     direction = str(direction or "").upper()
     if direction == "LONG":
-        if not (stop_v < entry_v < tp1_v):
+        if not (stop_v < entry_v < tp1_v and stop_v < current < tp1_v):
             return False
+        risk = entry_v - stop_v
+        live_risk = current - stop_v
+        tp1_entry_reward = tp1_v - entry_v
+        tp1_live_reward = tp1_v - current
     elif direction == "SHORT":
-        if not (tp1_v < entry_v < stop_v):
+        if not (tp1_v < entry_v < stop_v and tp1_v < current < stop_v):
             return False
+        risk = stop_v - entry_v
+        live_risk = stop_v - current
+        tp1_entry_reward = entry_v - tp1_v
+        tp1_live_reward = current - tp1_v
     else:
         return False
+
+    if risk <= 0 or live_risk <= 0:
+        return False
+    if tp1_entry_reward / risk < NEWS_MIN_TP1_RR:
+        return False
+    # A valid entry at the time of analysis is not enough if price has already
+    # travelled too far toward TP1; preserve the minimum R/R from the live quote.
+    if tp1_live_reward / live_risk < NEWS_MIN_TP1_RR:
+        return False
+
+    tp2_v = None
     if tp2 is not None:
         tp2_v = _finite_positive(tp2)
         if tp2_v is None:
             return False
-        if direction == "LONG" and tp2_v <= tp1_v:
+        if direction == "LONG":
+            if tp2_v <= tp1_v or (tp2_v - entry_v) / risk < NEWS_MIN_TP2_RR:
+                return False
+        else:
+            if tp2_v >= tp1_v or (entry_v - tp2_v) / risk < NEWS_MIN_TP2_RR:
+                return False
+
+    if tp3 is not None:
+        tp3_v = _finite_positive(tp3)
+        if tp3_v is None or tp2_v is None:
             return False
-        if direction == "SHORT" and tp2_v >= tp1_v:
-            return False
+        if direction == "LONG":
+            if tp3_v <= tp2_v or (tp3_v - entry_v) / risk < NEWS_MIN_TP3_RR:
+                return False
+        else:
+            if tp3_v >= tp2_v or (entry_v - tp3_v) / risk < NEWS_MIN_TP3_RR:
+                return False
     return True
+
+
+def _configured_news_min_reaction_pct() -> float | None:
+    """Return a finite non-negative reaction threshold, or None for invalid config."""
+    raw = os.getenv("GAGARIN_NEWS_MIN_REACTION_PCT", "0.05")
+    try:
+        value = float(raw)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not math.isfinite(value) or value < 0:
+        return None
+    return value
 
 
 def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str, Any]]:
     """Require a live Gagarin trigger and measurable price movement after news detection."""
     classified = classify_event(event.get("title", ""))
     baselines = event.get("baseline_prices") or {}
-    min_reaction_pct = max(0.0, float(os.getenv("GAGARIN_NEWS_MIN_REACTION_PCT", "0.05")))
+    min_reaction_pct = _configured_news_min_reaction_pct()
+    if min_reaction_pct is None:
+        print("NEWS alert suppressed | invalid GAGARIN_NEWS_MIN_REACTION_PCT", flush=True)
+        return []
     setups: list[dict[str, Any]] = []
     for asset in classified["assets"]:
         impact = classified["impact"].get(asset, "MISTA")
@@ -718,7 +777,8 @@ def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str
             if not price_source or price_source.upper() in {"UNKNOWN", "N/A", "NONE"}:
                 continue
             if not _valid_signal_levels(
-                direction, price, entry, stop, tp1, getattr(state, "tp2", None)
+                direction, price, entry, stop, tp1,
+                getattr(state, "tp2", None), getattr(state, "tp3", None)
             ):
                 continue
             price_value = float(price)
@@ -737,6 +797,7 @@ def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str
                 "stop": stop,
                 "tp1": tp1,
                 "tp2": getattr(state, "tp2", None),
+                "tp3": getattr(state, "tp3", None),
                 "price_source": price_source,
                 "move_pct": move_pct,
             })
@@ -763,7 +824,8 @@ def _format_news_alert(event: dict[str, Any], setup: dict[str, Any]) -> str:
         f"SL: {float(setup['stop']):.6g}\n"
         f"TP1: {float(setup['tp1']):.6g}"
         + (f" | TP2: {float(setup['tp2']):.6g}" if setup.get("tp2") is not None else "")
-        + "\n\nImpatto e direzione sono ipotesi. I livelli usano il feed Gagarin, non quotazioni CFD Trading 212; l'alert non invia ordini."
+        + (f" | TP3: {float(setup['tp3']):.6g}" if setup.get("tp3") is not None else "")
+        + "\n\nImpatto e direzione sono ipotesi. Livelli ammessi solo con RR minimo 1.5R/2R/2.5R e prezzo ancora entro TP1; feed Gagarin, non quotazioni CFD Trading 212. Nessun ordine."
     )
 
 

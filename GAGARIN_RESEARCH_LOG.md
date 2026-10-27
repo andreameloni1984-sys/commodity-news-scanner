@@ -45,3 +45,21 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+## 2026-10-26 — Enforce minimum reward/risk and reject late news alerts
+
+- **Research basis:** the IBKR study register records that volatility and news are not directional proof, and that target geometry, execution costs, and out-of-sample validation must be tested. The existing Gagarin risk path uses TP1/TP2/TP3 targets, but the news-alert boundary only checked positive finite values and directional ordering.
+- **Implemented on branch `fix/gagarin-news-alert-minimum-rr-20261026`:** `telegram/news_monitor.py` now requires TP1 >= 1.5R, TP2 >= 2.0R when present, TP3 >= 2.5R when present, monotonic directional target order, and a live price still inside the stop/TP1 bracket. It also checks that remaining R/R from the current quote to TP1 is at least 1.5R to suppress late entries.
+- **Operational path:** `poll_news_once -> _confirmed_setups -> _valid_signal_levels -> _format_news_alert`. News impact remains a hypothesis; the gate also requires the existing live Gagarin trigger, matching direction, measurable post-baseline reaction, and known price source.
+- **Files:** `telegram/news_monitor.py`, `tests/test_news_monitor.py`, this log.
+- **Regression coverage:** LONG/SHORT valid brackets, TP1/TP2/TP3 below their R minima, quote already beyond TP1, and TP3 without TP2.
+- **Limits:** deterministic tests only; no claim of improved profitability or out-of-sample validation. This gate does not account for spread/slippage and does not replace the main Risk Governor. PAPER/DEMO ONLY; no orders or Telegram test messages. Render deployment remains intentionally untouched while build minutes are exhausted.
+
+## 2026-10-27 — Fail closed on invalid news-reaction threshold configuration
+
+- **Finding:** GAGARIN_NEWS_MIN_REACTION_PCT was parsed inline through max(0.0, float(...)). NaN can silently become a zero threshold, while malformed text can raise during setup classification; either behavior makes configuration handling unreliable.
+- **Implemented:** _configured_news_min_reaction_pct() accepts only finite, non-negative values. An invalid value suppresses news setups and logs the setting name only (never a secret or its value).
+- **Files / path:** telegram/news_monitor.py, tests/test_news_monitor.py; poll_news_once -> _confirmed_setups -> _valid_signal_levels -> alert formatting.
+- **Regression:** NaN, positive/negative infinity, negative and malformed settings suppress an otherwise valid PAPER setup; 0.05% still allows the valid fixture.
+- **Validation:** code commit 4710d7ceb7233d67fe810b8c350dd84f1a3a2b84; test commit fa9c315c6e6b4728be3ca8eaa689e43f60ec64d2. CI must be checked on the final PR head.
+- **Limits:** configuration validation only; no market replay, spread/slippage model or out-of-sample profitability claim. No Render deployment, Telegram test, broker or order. PAPER/DEMO ONLY.

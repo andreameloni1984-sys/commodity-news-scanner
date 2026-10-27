@@ -241,6 +241,24 @@ def test_alert_scorecard_marks_alert_pending_without_later_observation():
     assert report["pending"] == 1
 
 
+def test_alert_scorecard_ignores_reaction_observation_after_evaluation_time():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 27, 0, 0, tzinfo=timezone.utc)
+    future_observation = sent + timedelta(minutes=20)
+    report = build_alert_scorecard([
+        {"kind": "NEWS_ALERT_SENT", "event_id": "future", "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "future", "asset": "WTI",
+         "current_price": 82.0, "observed_at": future_observation.isoformat()},
+    ], now=sent + timedelta(minutes=10))
+
+    assert report["alerts"] == 1
+    assert report["scored"] == 0
+    assert report["pending"] == 1
+
+
 def test_alert_scorecard_tracks_observed_tp1_and_stop_loss():
     from datetime import datetime, timedelta, timezone
     from telegram.news_monitor import build_alert_scorecard
@@ -505,3 +523,60 @@ def test_alert_scorecard_rejects_non_finite_prices_and_invalid_levels():
     assert report["tp1_observed"] == 0
     assert report["sl_observed"] == 0
     assert report["open_at_last_check"] == 1
+
+def test_valid_signal_levels_enforces_minimum_rr_and_blocks_late_prices():
+    from telegram.news_monitor import _valid_signal_levels
+
+    # At entry, the complete LONG and SHORT brackets meet the 1.5R / 2R / 2.5R minima.
+    assert _valid_signal_levels("LONG", 80.0, 80.0, 79.0, 81.5, 82.0, 82.5)
+    assert _valid_signal_levels("SHORT", 80.0, 80.0, 81.0, 78.5, 78.0, 77.5)
+
+    # Reject TP1 below 1.5R, TP2 below 2R, and TP3 below 2.5R.
+    assert not _valid_signal_levels("LONG", 80.0, 80.0, 79.0, 81.49, 82.0, 82.5)
+    assert not _valid_signal_levels("LONG", 80.0, 80.0, 79.0, 81.5, 81.99, 82.5)
+    assert not _valid_signal_levels("LONG", 80.0, 80.0, 79.0, 81.5, 82.0, 82.49)
+
+    # A quote can still be inside the bracket yet have too little reward left.
+    assert not _valid_signal_levels("LONG", 80.5, 80.0, 79.0, 81.5, 82.0, 82.5)
+    assert not _valid_signal_levels("SHORT", 79.5, 80.0, 81.0, 78.5, 78.0, 77.5)
+
+    # A quote that has already reached/passed TP1 is a late entry, not a valid alert.
+    assert not _valid_signal_levels("LONG", 81.6, 80.0, 79.0, 81.5, 82.0, 82.5)
+    assert not _valid_signal_levels("SHORT", 78.4, 80.0, 81.0, 78.5, 78.0, 77.5)
+
+    # TP3 without TP2 cannot establish ordered target geometry.
+    assert not _valid_signal_levels("LONG", 80.0, 80.0, 79.0, 81.5, None, 82.5)
+
+
+def test_confirmed_setups_rejects_levels_below_minimum_rr():
+    from types import SimpleNamespace
+    from telegram.news_monitor import _confirmed_setups
+
+    event = {"title": "OPEC announces production cut", "baseline_prices": {"WTI": 80.0}}
+    state = SimpleNamespace(
+        commodity="Petrolio WTI", symbol="WTI/USD", setup_direction="LONG",
+        final_decision="PAPER_SIGNAL", trigger_confirmed=True, live=True,
+        price=80.0, entry=80.0, stop=79.0, tp1=81.4, tp2=82.0, tp3=82.5,
+        data_source="TEST_FEED",
+    )
+    assert _confirmed_setups(event, [state]) == []
+
+def test_invalid_news_reaction_threshold_fails_closed(monkeypatch):
+    from telegram.news_monitor import _confirmed_setups
+
+    event = {
+        "title": "OPEC announces production cut",
+        "baseline_prices": {"WTI": 79.9},
+    }
+    state = SimpleNamespace(
+        commodity="Petrolio WTI", symbol="WTI/USD", setup_direction="LONG",
+        final_decision="PAPER_SIGNAL", trigger_confirmed=True, live=True,
+        price=80.0, entry=80.0, stop=79.0, tp1=81.5, tp2=82.0, tp3=82.5,
+        data_source="TEST_FEED",
+    )
+    for invalid_threshold in ("NaN", "Infinity", "-Infinity", "-0.1", "not-a-number"):
+        monkeypatch.setenv("GAGARIN_NEWS_MIN_REACTION_PCT", invalid_threshold)
+        assert _confirmed_setups(event, [state]) == []
+
+    monkeypatch.setenv("GAGARIN_NEWS_MIN_REACTION_PCT", "0.05")
+    assert len(_confirmed_setups(event, [state])) == 1
