@@ -200,22 +200,38 @@ def _rsi_wilder(closes, period=RSI_WILDER_PERIOD):
         values.append(number)
     if len(values) < period + 1:
         return None
-    changes = [values[i] - values[i - 1] for i in range(1, len(values))]
+    changes = []
+    for index in range(1, len(values)):
+        change = values[index] - values[index - 1]
+        # Finite closes can still overflow when subtracted (e.g. +/-1e308).
+        # Do not let an infinite delta turn into a plausible-looking RSI.
+        if not math.isfinite(change):
+            return None
+        changes.append(change)
     gains = [max(change, 0.0) for change in changes]
     losses = [max(-change, 0.0) for change in changes]
     avg_gain = sum(gains[:period]) / period
     avg_loss = sum(losses[:period]) / period
+    if not math.isfinite(avg_gain) or not math.isfinite(avg_loss):
+        return None
     for gain, loss in zip(gains[period:], losses[period:]):
         avg_gain = ((period - 1) * avg_gain + gain) / period
         avg_loss = ((period - 1) * avg_loss + loss) / period
+        if not math.isfinite(avg_gain) or not math.isfinite(avg_loss):
+            return None
     if avg_gain == 0 and avg_loss == 0:
         return 50.0
     if avg_loss == 0:
         return 100.0
     if avg_gain == 0:
         return 0.0
-    relative_strength = avg_gain / avg_loss
-    return 100.0 - (100.0 / (1.0 + relative_strength))
+    denominator = avg_gain + avg_loss
+    if not math.isfinite(denominator) or denominator <= 0:
+        return None
+    # Algebraically equivalent to 100 - 100 / (1 + gain/loss), but avoids
+    # overflowing the intermediate gain/loss ratio for extreme finite inputs.
+    rsi = 100.0 * avg_gain / denominator
+    return rsi if math.isfinite(rsi) else None
 
 
 VOLATILITY_RANGE_LOOKBACK = 8
