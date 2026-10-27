@@ -892,3 +892,12 @@ def test_safety_recomputes_rr_from_actual_bracket_prices():
     assert state.safety == "BLOCKED"
     assert "RR_GEOMETRY_MISMATCH" in state.blockers
     assert "RR_FAIL" in state.blockers
+
+def test_rsi_wilder_rejects_overflowed_close_differences():
+    # Each close is finite, but subtracting opposite extreme floats overflows.
+    # The indicator must not turn that invalid intermediate into RSI=0/100/NaN.
+    from engine.regime import _rsi_wilder
+
+    assert _rsi_wilder([-1e308, 1e308, -1e308], 2) is None
+    assert _rsi_wilder([1e308, -1e308, 1e308], 2) is None
+
