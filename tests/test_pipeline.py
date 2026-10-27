@@ -893,3 +893,14 @@ def test_rsi_wilder_rejects_fractional_boolean_and_non_finite_periods():
     closes = [float(i) for i in range(20)]
     for period in (0, -1, 14.5, True, float("nan"), float("inf"), float("-inf"), "invalid-period"):
         assert _rsi_wilder(closes, period) is None
+
+
+def test_rsi_wilder_rejects_overflow_from_finite_closes():
+    # Input closes are finite, but the first subtraction overflows to infinity.
+    overflowing_difference = [-1e308, 1e308] + [1e308] * 14
+    assert _rsi_wilder(overflowing_difference, 14) is None
+
+    # Every alternating difference is finite, but the seed sum of gains can
+    # overflow. The indicator must fail closed instead of returning NaN.
+    alternating_extremes = [5e307 if i % 2 else -5e307 for i in range(16)]
+    assert _rsi_wilder(alternating_extremes, 14) is None
