@@ -149,7 +149,7 @@
 - **Files:** telegram/news_monitor.py, tests/test_news_monitor.py.
 - **Regression:** added test_confirmed_setups_fail_closed_on_invalid_reaction_threshold; it proves a valid setup passes at 0.05%, while NaN, infinity, negative, and nonnumeric settings produce no setup.
 - **Commits:** implementation b1813a5af904a34f66868e7573f0a805b95b3720; test 05b40ab98e25290fbfe0d913e35b922686cbf3a3.
-- **CI:** pending at log update; report only the workflow result visible after this commit.
+- **CI:** all five relevant workflows passed on code/test and research-log revision d52295718cdc659824ca9a2ee93daf1e8abd3fa0: NEWS alert [40542182459](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40542182459), Execution Layer [40542182878](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40542182878), Public Event Brain [40542182615](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40542182615), general tests [40542182783](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40542182783), and PAPER [40542182844](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40542182844). The additional log-only commit follows this verified revision.
 - **Deployment:** PR #82 draft branch only; no merge/deploy.
 - **Empirical limit:** this is a configuration-safety correction, not a measured improvement in trade expectancy.
 
