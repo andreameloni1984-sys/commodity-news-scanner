@@ -45,3 +45,128 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+## 2026-10-27 — Fail closed on invalid news baseline prices
+
+- **Finding:** `_capture_baseline()` accepted positive infinity and booleans as prices because it converted with `float()` and only checked `value > 0`. Python treats `True` as 1.0; infinity is positive.
+- **Implemented:** route baseline capture through `_finite_positive()`; explicitly reject booleans and retain finite-positive validation for numeric prices.
+- **Files:** `telegram/news_monitor.py`; `tests/test_news_monitor.py`.
+- **Regression tests:** True/False, NaN, positive/negative infinity, zero, negative, malformed string, and a valid 80.25 baseline.
+- **Commit:** code `63f8234a30b6fa09bae2580646e1e534810b5099`; tests `33089074a762b7c8a187ba25b451ee0dbcce8af4`.
+- **CI:** PASS on PR head `c02abdb07c1e1b8fefdbf4eee8c097eb4c3589e3`: Gagarin integration run 40461251707, PAPER run 40461251833, NEWS alert run 40461251773, Public Event Brain run 40461251764, and Execution Layer run 40461251955. The research-log-only commit follows those test runs.
+- **Deployment:** research branch only; no merge/deploy. Render pipeline minutes are exhausted.
+- **Empirical validation:** no live replay or out-of-sample test; baseline input integrity only.
+- **Persistence:** live `DATABASE_URL` not verified; journal durability is not claimed.
+- **Safety:** PAPER/DEMO ONLY; no broker, orders, secrets or Telegram test messages.
+
+
+## 2026-10-27 — Revalidate persisted news baselines before creating setups
+
+- **Finding:** capture-time validation rejected booleans and non-finite prices, but `_confirmed_setups()` still coerced the event's persisted `baseline_prices` with `float()`. Corrupted state could therefore bypass the earlier guard: `True` becomes 1.0 and NaN can evade a simple `<= 0` check.
+- **Change:** `telegram/news_monitor.py::_confirmed_setups` now applies the shared finite-positive validator at the final decision boundary and skips invalid baselines.
+- **Regression:** `tests/test_news_monitor.py::test_confirmed_setups_rejects_corrupt_persisted_baselines` covers booleans, NaN, infinities, zero, negative, and malformed values while retaining the valid-signal path.
+- **Operational path:** stored event baseline → news catalyst classification → live Gagarin setup gate → baseline move check → PAPER alert eligibility.
+- **Validation limit:** integrity guard only; no profitability or live-delivery claim. Await CI on the final PR head. No merge, Render deploy, Telegram test message, broker, or order. DATABASE_URL and durable journal are not verified.
+- **Safety:** PAPER/DEMO ONLY.
+
+
+## 2026-10-27 — CI and Render verification for persisted news baseline guard
+
+- **Code commit:** `be218a518c61a7ea7c7b4a8ca2471d9bc2cea872`; **final regression-test commit:** `f864b6431a3ef44a677fa2ffda3bae55d6fb4864`; **research-log update before this entry:** `00f60e2c41384086a71307c7cead9613a336a66e`.
+- **CI:** all five relevant workflows PASS on the final code/test revision: general tests [40525930346](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40525930346), Public Event Brain [40525930379](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40525930379), NEWS alert [40525930399](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40525930399), Execution Layer [40525930428](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40525930428), and PAPER [40525930437](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40525930437).
+- **PR:** #82 remains open/unmerged; no merge or deployment.
+- **Render:** last observed live Gagarin Telegram deployment is commit `86068d701c860670a9d9e0e4e65af98860a57cfa` (2026-10-21). Latest build attempt on main commit `99ad72b69cddbed0f80ef9f671c5b70deb9df024` failed at 2026-10-27 12:48 UTC; Render logs explicitly say the workspace exhausted build-pipeline minutes. No deploy was triggered by this PR.
+- **Telegram/runtime evidence:** logs at 2026-10-27 13:32 UTC show webhook verified/active and startup welcome delivered; an /aggressivo212 command was logged as delivered. Subsequent news polls (13:38–13:47 UTC) fetched 150–162 items but reported `new_relevant=0`, `pending=0`, `analysis=NO`, `alerts=0`. This verifies the observed runtime path but does not prove alert coverage or predictive performance. DATABASE_URL/durable journal status remains unverified.
+- **Empirical limit:** input integrity only; no live replay or out-of-sample profitability test.
+- **Safety:** PAPER/DEMO ONLY; no secrets, broker, orders, or Telegram test messages.
+
+
+## 2026-10-27 — Fail closed on overflowing NEWS scorecard values
+
+- **Finding:** the baseline/setup boundary rejects booleans and overflowing numeric inputs through `_finite_positive()`, but the NEWS scorecard independently converted alert prices, reaction prices, stop and TP1 with `float()`. A very large integer can raise `OverflowError`; booleans can silently become 1.0 in paths that do not reject them first.
+- **Change:** `telegram/news_monitor.py::build_alert_scorecard` now routes all four numeric fields through the shared finite-positive validator. Invalid alert prices are excluded; invalid reaction observations are skipped; invalid SL/TP levels leave the outcome unclassified instead of crashing or fabricating a stop/target result.
+- **Regression:** `tests/test_news_monitor.py::test_alert_scorecard_rejects_boolean_and_overflowing_prices_and_levels` covers boolean/overflowing alert and reaction prices and overflowing SL/TP levels while retaining a valid directional observation.
+- **Operational path:** NEWS_ALERT_SENT / NEWS_REACTION journal rows → scorecard parsing → directional and TP/SL outcome counters.
+- **Verification:** code commit `1b4d72bb9304283c9574a94ae0c4b2d707ca556c`; test commit `712c6222d22801441a02bd3823670c89a9e52ff8`; all five relevant workflows passed on final PR head `748343028bc2cdda90e4326b3588ebe2d98fe02f`: general tests [40526403036](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40526403036) (366 passed), NEWS alert [40526402888](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40526402888), Execution Layer [40526402917](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40526402917), PAPER [40526402881](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40526402881), and Public Event Brain [40526402873](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40526402873).
+- **Limits:** deterministic input-integrity regression only; no market replay or profitability claim. PR #82 remains draft/unmerged. No Render deployment, Telegram test message, broker, or order. `DATABASE_URL`/durable journal remain unverified.
+- **Safety:** PAPER/DEMO ONLY.
+
+
+## 2026-10-27 — Historical research source audit and mapping
+
+- **Direct Library source:** `Registro Studio IBKR - aggiornato 2026-10-20 sessione 9.md` contains numbered study entries through **36**. Its session 9 records item 32 as an options-data presentation; the presentation itself states that its illustrations are not empirical data or a backtest. Search found no literal “100 punti” or “punto 100” in that file, so it is not the missing 100-rule catalog.
+- **Recovered only from historical conversation context:** point 100 “Execution Regime: Volatility × Liquidity”; point 101 “Overnight Risk Engine / Next-Session Volatility Forecast”; point 102 “Setup Transferability / Instrument-Specific Edge”; point 103 “Sweep Validity / Continuation-vs-Reversal”. The original points 1–99 were not recovered in full and are not reconstructed.
+- **Mapping/status:** point 100 — Gagarin has regime/ATR diagnostics, but no fully validated volatility × liquidity matrix; point 101 — no verified next-session volatility forecast; point 102 — instrument-transferability needs explicit cross-instrument walk-forward evidence; point 103 — no dedicated sweep/continuation-vs-reversal detector is claimed. Options positioning remains optional context only when reliable data exist and must be tested against the existing baseline, never used as automatic direction proof.
+- **Current code increment:** persisted NEWS baseline validation in `telegram/news_monitor.py::_confirmed_setups`, with regression coverage in `tests/test_news_monitor.py`; it is a fail-closed data-integrity guard, not implementation of points 100–103.
+- **Validation/deployment:** relevant CI workflows passed on code/test commit `f864b6431a3ef44a677fa2ffda3bae55d6fb4864`; PR #82 is open and unmerged. Render live code is older; latest build failed due exhausted build-pipeline minutes. No out-of-sample profitability test or durable-journal claim.
+
+
+## 2026-10-27 — Historical notes recovered from prior conversation context (not a reconstructed catalog)
+
+- **Exact names recovered:** `ORDER_FLOW_DATA_INTEGRITY_GATE`; `ORDER_FLOW_PROVIDER_AUDIT`; `SELECTIVE_LLM_ARCHITECTURE`. The recovered architecture note says LLMs are for ambiguous text/context, while deterministic code owns calculations, sizing, stop loss, exposure, and final authorization. The recovered experiment discipline is: preregister → full grid → costs → falsification → out-of-sample (OOS) → promote/reject.
+- **Numbered catalog boundary:** no original complete 100-point file is available in the retrieved context. Points 51–99 are not retrievable; only the titles of 100–103 are explicitly recoverable, without their verbatim original explanations. The Library file `Registro Studio IBKR - aggiornato 2026-10-20 sessione 9.md` contains numbered study entries through 36 and explicitly treats its options presentation as illustrative, not a backtest. Do not present paraphrases as the original catalog.
+
+- **Gagarin mapping/status:** `telegram/news_monitor.py::_confirmed_setups` now revalidates persisted baseline prices at the final decision boundary; tests cover bool/NaN/infinity/non-positive/malformed values. This is a data-integrity sub-gate, not a complete `ORDER_FLOW_DATA_INTEGRITY_GATE` or provider audit. No LLM owns arithmetic, sizing, SL, exposure or final authorization in this change. The full preregistered grid/cost/falsification/OOS promotion process is not claimed complete.
+- **Architecture records recovered:** `DATA → REGIME → STRUCTURE → SETUP → TRIGGER → EXECUTION → RISK → SAFETY → VALIDATION`; an expanded Gagarin version is `DATA → CONTRACT → LIQUIDITY → VOLATILITY → REGIME → SESSION → STRUCTURE → SETUP → TRIGGER → EXECUTION → RISK GOVERNOR → SAFETY → PAPER TEST`. Treat these as architecture maps, not proof every gate is wired into the deployed decision path.
+- **Validation/deployment:** relevant CI passed on the code/test revision (five workflows listed in the preceding verification entry); PR #82 remains open. Render's latest build failed because build-pipeline minutes were exhausted; live commit is older. No out-of-sample profitability claim, durable-journal claim, broker or order.
+
+
+## 2026-10-27 — Audit of the original 100-point research catalog
+
+- **Recovery attempt:** searched the Library (including `Registro Studio IBKR - aggiornato 2026-10-20 sessione 9.md`) and retrieved prior-conversation summaries dated 2026-10-03.
+- **Verified result:** the earlier conversation explicitly recorded that the original numbered 1–100 catalog and complete list of roughly 100 points had not been recovered; only incremental summaries were available. The IBKR session-9 file is a separate study register, with numbered study items through item 32 and later hypotheses; it is not evidence of the missing 100-point catalog.
+- **Decision:** do not reconstruct or relabel missing items as original lessons. Apply only directly retrievable, source-backed findings and record inferred hypotheses separately. Items 100–103 appearing in recent implementation notes remain implementation hypotheses, not proof that the original catalog has been recovered.
+- **Scope:** this is a provenance/research-integrity finding, not a code feature or empirical trading result.
+
+
+## 2026-10-27 — Enforce target-specific reward/risk floors at the NEWS alert gate
+
+- **Finding:** `_valid_signal_levels` checked finite positive prices and LONG/SHORT target ordering, but an otherwise ordered setup could pass with TP1, TP2 or TP3 closer than the project's documented target-specific reward/risk floors.
+- **Implemented:** require finite positive `MIN_ENTRY_RR_TP1` (default 1.5R), `MIN_ENTRY_RR_TP2` (default 2.0R when TP2 is present), and `MIN_ENTRY_RR_TP3` (default 2.5R when TP3 is present). Invalid/non-finite/non-positive configuration fails closed. The final NEWS setup gate passes TP3 when supplied by the state.
+- **Files:** `telegram/news_monitor.py`; `tests/test_news_monitor.py`.
+- **Regression:** exact 1.5R/2R/2.5R boundary accepted; each just-below-boundary case rejected; NaN configuration rejected.
+- **Operational path:** news event → provisional catalyst classification → live Gagarin setup → `_confirmed_setups` → `_valid_signal_levels` → Telegram PAPER alert eligibility. This does not change the engine's order/risk path and does not place orders.
+- **CI:** all five relevant workflows passed on final code/test/log head `fef4207c86a5485a0cd9ca755162e95c0c4d7391`: NEWS alert [40530969195](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40530969195), Execution Layer [40530969420](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40530969420), Public Event Brain [40530969373](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40530969373), general tests [40530969396](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40530969396), and PAPER [40530969223](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40530969223).
+- **Deployment:** PR #82 branch only; no merge/deploy while Render build-pipeline minutes are exhausted.
+- **Empirical validation:** geometry and threshold tests only; no live replay, OOS scorecard or profitability claim.
+
+
+## Recovered from prior conversation summaries — 2026-10-03/05 (not the missing 100-point catalog)
+
+- **2026-10-03 07:04 UTC summary:** accepted project boundary: Sputnik = public-disclosure/intelligence; Gagarin = market/trading validation, with no automatic code/config fusion. The reusable research ideas were event clustering, source deduplication, source weighting and evidence confidence.
+- **2026-10-03 21:17 UTC summary:** keyword-to-market causality and automatic LONG/SHORT from keywords were explicitly rejected.
+- **2026-10-05 05:33 UTC summary:** distinguish verified facts, signals and correlations; rumours must not be promoted to certainty.
+- **Mapping to current code:** `telegram/news_monitor.py::classify_event` labels the news impact as heuristic/provisional; `_confirmed_setups` requires a live, trigger-confirmed Gagarin setup, price reaction and valid entry/SL/TP geometry. This is not yet a full price-volume gate because the NEWS handoff does not independently verify a volume baseline.
+- **New alert risk gate:** TP1/TP2/TP3 must meet configured minimum R/R of 1.5R/2R/2.5R (defaults) when each target is supplied. Regression tests and all five relevant workflows passed on code/test head `fef4207c86a5485a0cd9ca755162e95c0c4d7391`; docs-only checks passed in [40531123729](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40531123729) and [40531123780](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40531123780).
+- **Deployment/persistence:** PR #82 remains draft and unmerged; no Render deploy. `DATABASE_URL` and durable journal persistence are not confirmed.
+- **Empirical status:** R/R geometry is unit-tested, but there is no live replay/OOS evidence that this filter improves expectancy. These are recovered conversation summaries, not the missing original numbered catalog.
+ 
+## 2026-10-27 — Fail closed on invalid NEWS price-reaction threshold
+
+- **Finding:** _confirmed_setups parsed GAGARIN_NEWS_MIN_REACTION_PCT with max(0.0, float(...)). A negative value silently became zero and could disable the minimum-reaction gate; NaN could also collapse to zero, while a malformed string could raise and interrupt polling.
+- **Implemented:** malformed, non-finite, or negative threshold values now cause _confirmed_setups to return no eligible setups. A valid non-negative threshold retains existing behavior.
+- **Operational path:** news event → provisional classification → _confirmed_setups → validated configured reaction threshold → price-reaction gate → PAPER alert eligibility.
+- **Files:** telegram/news_monitor.py, tests/test_news_monitor.py.
+- **Regression:** added test_confirmed_setups_fail_closed_on_invalid_reaction_threshold; it proves a valid setup passes at 0.05%, while NaN, infinity, negative, and nonnumeric settings produce no setup.
+- **Commits:** implementation b1813a5af904a34f66868e7573f0a805b95b3720; test 05b40ab98e25290fbfe0d913e35b922686cbf3a3.
+- **CI:** all five relevant workflows passed on code/test and research-log revision d52295718cdc659824ca9a2ee93daf1e8abd3fa0: NEWS alert [40542182459](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40542182459), Execution Layer [40542182878](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40542182878), Public Event Brain [40542182615](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40542182615), general tests [40542182783](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40542182783), and PAPER [40542182844](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40542182844). The additional log-only commit follows this verified revision.
+- **Deployment:** PR #82 draft branch only; no merge/deploy.
+- **Empirical limit:** this is a configuration-safety correction, not a measured improvement in trade expectancy.
+
+## 2026-10-27 — Historical research retrieval audit (late September / early October)
+
+- **Recovered summary, not verbatim catalog:** the 2026-10-02 conversation summary says the prior research had not all been incorporated and names term structure, liquidity regime, order flow/CVD/open interest, session engine, regime hysteresis, volatility curve, macro transmission, tail dependence, episodic memory and adaptive policy. These are research topics, not claims of implemented features.
+- **Recovered implementation themes:** the 2026-10-05 summary refers to 12 implementation themes; retrievable topic labels include fail-closed validation, Governor pipeline, MT5 recheck, multi-timeframe/structure/trigger, ATR range 0.80–2.50, target RR 1.5/2.0/2.5, data quality, macro context, OOS/falsification, Telegram states and PAPER ONLY. The complete verbatim 12-item list was not retrieved; do not invent the missing wording.
+- **Historical catalog integrity:** neither the Library file “Registro Studio IBKR - aggiornato 2026-10-20 sessione 9.md” nor the retrieved conversation summaries contain the original numbered 1–100 catalog. The session-9 file is a separate study register, including backtesting, execution costs, futures curve/rollover and API pacing. Its options material is explicitly illustrative, not a backtest.
+- **Current mapping:** the NEWS path requires a valid Gagarin trigger, price reaction, finite price levels and configured target-specific R/R. The latest improvement makes invalid GAGARIN_NEWS_MIN_REACTION_PCT fail closed. This does not establish that RSI Wilder, all regime/ATR diagnostics, the complete Governor path, cost-aware OOS scorecards, or futures expiry/rollover controls are fully wired and empirically validated.
+- **Validation/deployment:** recovered topics are not evidence of implementation. PR #82 remains a draft and unmerged; no deploy or profitability claim.
+
+## 2026-10-27 — Repository/CI and runtime-access audit
+
+- **main:** current default-branch SHA observed as 99ad72b69cddbed0f80ef9f671c5b70deb9df024. Visible main runs DAY RESEARCH [40540264711](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40540264711) and aggressive-alert [40521212912](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40521212912) succeeded on that SHA.
+- **Open PR:** PR #82 remains draft/open/unmerged. No merge or deployment was attempted.
+- **Current feature CI:** all five relevant workflows passed on research-log head d4c364db2c34aa2a5806a9f56d9947152ece1f3e: NEWS alert [40542551179](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40542551179), Execution Layer [40542551093](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40542551093), PAPER [40542551042](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40542551042), Public Event Brain [40542550952](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40542550952), and general tests [40542551019](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40542551019).
+- **Data-source/backoff audit:** main defines a 12-second GDELT timeout, a 15-minute minimum poll interval, source-specific exponential backoff capped at 60 minutes, and guarded Retry-After parsing. These are code facts, not proof the source succeeded in production during this run.
+- **Persistence audit:** main state_store.py reads DATABASE_URL and returns no PostgreSQL connection when it is absent; news state and journal have file fallbacks. Production environment presence and durable persistence were not verified, so the journal is not claimed durable.
+- **Deployment/log limitation:** no Render or production Telegram-log connector was exposed in this run. Live commit, actual GDELT runtime outcomes, webhook delivery and database environment could not be revalidated. Previously recorded live SHA is stale evidence only and is not asserted as current. No deploy was attempted; the workspace was previously reported out of build-pipeline minutes.
+

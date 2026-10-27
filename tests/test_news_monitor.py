@@ -505,3 +505,117 @@ def test_alert_scorecard_rejects_non_finite_prices_and_invalid_levels():
     assert report["tp1_observed"] == 0
     assert report["sl_observed"] == 0
     assert report["open_at_last_check"] == 1
+
+
+def test_confirmed_setups_rejects_corrupt_persisted_baselines():
+    from telegram.news_monitor import _confirmed_setups
+
+    state = SimpleNamespace(
+        commodity="Petrolio WTI", symbol="WTI/USD", setup_direction="LONG",
+        final_decision="PAPER_SIGNAL", trigger_confirmed=True, live=True,
+        price=80.1, entry=80.1, stop=78.5, tp1=83.0, tp2=84.0,
+        data_source="TEST_FEED",
+    )
+    for bad_baseline in (True, False, float("nan"), float("inf"), float("-inf"), 0, -1, "bad"):
+        event = {"title": "OPEC announces production cut", "baseline_prices": {"WTI": bad_baseline}}
+        assert _confirmed_setups(event, [state]) == []
+
+
+
+
+def test_baseline_capture_rejects_boolean_and_nonfinite_prices():
+    from telegram.news_monitor import _capture_baseline, _finite_positive
+
+    for bad_price in (True, False, float("nan"), float("inf"), float("-inf"), 0, -1, "bad"):
+        assert _finite_positive(bad_price) is None
+        state = SimpleNamespace(
+            commodity="Petrolio WTI",
+            symbol="WTI/USD",
+            live=True,
+            price=bad_price,
+        )
+        assert _capture_baseline({"assets": ["WTI"]}, [state]) == {}
+
+    valid_state = SimpleNamespace(
+        commodity="Petrolio WTI",
+        symbol="WTI/USD",
+        live=True,
+        price=80.25,
+    )
+    assert _capture_baseline({"assets": ["WTI"]}, [valid_state]) == {"WTI": 80.25}
+
+def test_alert_scorecard_rejects_boolean_and_overflowing_prices_and_levels():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 27, 14, 0, tzinfo=timezone.utc)
+    huge = 10 ** 10000
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "bad-bool", "asset": "WTI",
+         "direction": "LONG", "price": True, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_ALERT_SENT", "event_id": "bad-overflow", "asset": "WTI",
+         "direction": "LONG", "price": huge, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_ALERT_SENT", "event_id": "valid-alert", "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "stop": huge, "tp1": huge,
+         "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "valid-alert", "asset": "WTI",
+         "current_price": True, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "valid-alert", "asset": "WTI",
+         "current_price": huge, "observed_at": (sent + timedelta(minutes=25)).isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "valid-alert", "asset": "WTI",
+         "current_price": 80.2, "observed_at": (sent + timedelta(minutes=30)).isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
+
+    assert report["alerts"] == 1
+    assert report["scored"] == 1
+    assert report["correct"] == 1
+    assert report["tp1_observed"] == 0
+    assert report["sl_observed"] == 0
+    assert report["open_at_last_check"] == 1
+
+
+
+
+def test_valid_signal_levels_enforces_minimum_rr_for_each_target(monkeypatch):
+    from telegram.news_monitor import _valid_signal_levels
+
+    monkeypatch.setenv("MIN_ENTRY_RR_TP1", "1.5")
+    monkeypatch.setenv("MIN_ENTRY_RR_TP2", "2.0")
+    monkeypatch.setenv("MIN_ENTRY_RR_TP3", "2.5")
+
+    # Risk is 2.0: TP1=1.5R, TP2=2R, TP3=2.5R is valid exactly at each floor.
+    assert _valid_signal_levels("LONG", 100.0, 100.0, 98.0, 103.0, 104.0, 105.0)
+    assert not _valid_signal_levels("LONG", 100.0, 100.0, 98.0, 102.98, 104.0, 105.0)
+    assert not _valid_signal_levels("LONG", 100.0, 100.0, 98.0, 103.0, 103.98, 105.0)
+    assert not _valid_signal_levels("LONG", 100.0, 100.0, 98.0, 103.0, 104.0, 104.98)
+
+
+def test_valid_signal_levels_fails_closed_on_invalid_rr_configuration(monkeypatch):
+    from telegram.news_monitor import _valid_signal_levels
+
+    monkeypatch.setenv("MIN_ENTRY_RR_TP1", "nan")
+    assert not _valid_signal_levels("LONG", 100.0, 100.0, 98.0, 103.0, 104.0, 105.0)
+
+def test_confirmed_setups_fail_closed_on_invalid_reaction_threshold(monkeypatch):
+    from types import SimpleNamespace
+    from telegram.news_monitor import _confirmed_setups
+
+    event = {
+        "title": "OPEC announces production cut",
+        "baseline_prices": {"WTI": 80.0},
+    }
+    state = SimpleNamespace(
+        commodity="Petrolio WTI", symbol="WTI/USD", setup_direction="LONG",
+        final_decision="PAPER_SIGNAL", trigger_confirmed=True, live=True,
+        price=80.1, entry=80.1, stop=78.5, tp1=83.0, tp2=84.0,
+        data_source="TEST_FEED",
+    )
+    monkeypatch.setenv("GAGARIN_NEWS_MIN_REACTION_PCT", "0.05")
+    assert len(_confirmed_setups(event, [state])) == 1
+
+    for invalid_threshold in ("nan", "inf", "-0.1", "not-a-number"):
+        monkeypatch.setenv("GAGARIN_NEWS_MIN_REACTION_PCT", invalid_threshold)
+        assert _confirmed_setups(event, [state]) == []
+

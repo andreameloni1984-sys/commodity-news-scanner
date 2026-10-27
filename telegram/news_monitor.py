@@ -71,9 +71,8 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         if row.get("kind") != "NEWS_ALERT_SENT":
             continue
         sent_at = _parse_datetime(row.get("sent_at") or row.get("recorded_at"))
-        try:
-            price = float(row.get("price"))
-        except (TypeError, ValueError):
+        price = _finite_positive(row.get("price"))
+        if price is None:
             continue
         direction = str(row.get("direction") or "").upper()
         if sent_at and sent_at >= cutoff and math.isfinite(price) and price > 0 and direction in {"LONG", "SHORT"}:
@@ -87,9 +86,8 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
             observed_at = _parse_datetime(row.get("observed_at") or row.get("recorded_at"))
             if not observed_at or not (sent_at <= observed_at <= sent_at + timedelta(hours=4)):
                 continue
-            try:
-                price = float(row.get("current_price"))
-            except (TypeError, ValueError):
+            price = _finite_positive(row.get("current_price"))
+            if price is None:
                 continue
             if math.isfinite(price) and price > 0:
                 reaction_observations.append((observed_at, price))
@@ -109,11 +107,8 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         observed_at, current_price = observations[-1]
         raw_pct = (current_price / alert_price - 1) * 100
         signed_pct = raw_pct if direction == "LONG" else -raw_pct
-        try:
-            stop = float(alert.get("stop"))
-            tp1 = float(alert.get("tp1"))
-        except (TypeError, ValueError):
-            stop, tp1 = None, None
+        stop = _finite_positive(alert.get("stop"))
+        tp1 = _finite_positive(alert.get("tp1"))
         outcome = "OPEN_AT_LAST_CHECK"
         levels_valid = (
             stop is not None and tp1 is not None
@@ -632,18 +627,17 @@ def _capture_baseline(event: dict[str, Any], states: list[Any]) -> dict[str, flo
         for state in states:
             if not _asset_matches(asset, state) or not bool(getattr(state, "live", False)):
                 continue
-            try:
-                value = float(getattr(state, "price", None))
-            except (TypeError, ValueError):
-                continue
-            if value > 0:
+            value = _finite_positive(getattr(state, "price", None))
+            if value is not None:
                 baseline[asset] = value
                 break
     return baseline
 
 
 def _finite_positive(value: Any) -> float | None:
-    """Return a finite positive price/level, rejecting NaN, infinity and non-numbers."""
+    """Return a finite positive price/level, rejecting booleans, NaN, infinity and non-numbers."""
+    if isinstance(value, bool):
+        return None
     try:
         number = float(value)
     except (TypeError, ValueError, OverflowError):
@@ -651,10 +645,20 @@ def _finite_positive(value: Any) -> float | None:
     return number if math.isfinite(number) and number > 0 else None
 
 
+def _configured_minimum_rr(name: str, default: str) -> float | None:
+    """Read a finite positive target-RR floor; invalid configuration fails closed."""
+    try:
+        value = float(os.getenv(name, default))
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return value if math.isfinite(value) and value > 0 else None
+
+
 def _valid_signal_levels(
-    direction: str, price: Any, entry: Any, stop: Any, tp1: Any, tp2: Any = None
+    direction: str, price: Any, entry: Any, stop: Any, tp1: Any,
+    tp2: Any = None, tp3: Any = None,
 ) -> bool:
-    """Validate finite positive prices and directionally ordered PAPER risk levels."""
+    """Validate finite PAPER levels, directional geometry and configured minimum target R/R."""
     current, entry_v, stop_v, tp1_v = (
         _finite_positive(value) for value in (price, entry, stop, tp1)
     )
@@ -669,6 +673,16 @@ def _valid_signal_levels(
             return False
     else:
         return False
+
+    risk = abs(entry_v - stop_v)
+    min_tp1_rr = _configured_minimum_rr("MIN_ENTRY_RR_TP1", "1.5")
+    if min_tp1_rr is None:
+        return False
+    tp1_reward = (tp1_v - entry_v) if direction == "LONG" else (entry_v - tp1_v)
+    if tp1_reward / risk < min_tp1_rr:
+        return False
+
+    tp2_v = None
     if tp2 is not None:
         tp2_v = _finite_positive(tp2)
         if tp2_v is None:
@@ -677,6 +691,28 @@ def _valid_signal_levels(
             return False
         if direction == "SHORT" and tp2_v >= tp1_v:
             return False
+        min_tp2_rr = _configured_minimum_rr("MIN_ENTRY_RR_TP2", "2.0")
+        if min_tp2_rr is None:
+            return False
+        tp2_reward = (tp2_v - entry_v) if direction == "LONG" else (entry_v - tp2_v)
+        if tp2_reward / risk < min_tp2_rr:
+            return False
+
+    if tp3 is not None:
+        tp3_v = _finite_positive(tp3)
+        if tp3_v is None:
+            return False
+        previous_target = tp2_v if tp2_v is not None else tp1_v
+        if direction == "LONG" and tp3_v <= previous_target:
+            return False
+        if direction == "SHORT" and tp3_v >= previous_target:
+            return False
+        min_tp3_rr = _configured_minimum_rr("MIN_ENTRY_RR_TP3", "2.5")
+        if min_tp3_rr is None:
+            return False
+        tp3_reward = (tp3_v - entry_v) if direction == "LONG" else (entry_v - tp3_v)
+        if tp3_reward / risk < min_tp3_rr:
+            return False
     return True
 
 
@@ -684,17 +720,23 @@ def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str
     """Require a live Gagarin trigger and measurable price movement after news detection."""
     classified = classify_event(event.get("title", ""))
     baselines = event.get("baseline_prices") or {}
-    min_reaction_pct = max(0.0, float(os.getenv("GAGARIN_NEWS_MIN_REACTION_PCT", "0.05")))
+    try:
+        min_reaction_pct = float(os.getenv("GAGARIN_NEWS_MIN_REACTION_PCT", "0.05"))
+    except (TypeError, ValueError, OverflowError):
+        # A malformed threshold must not disable the price-reaction gate or crash polling.
+        return []
+    if not math.isfinite(min_reaction_pct) or min_reaction_pct < 0:
+        return []
     setups: list[dict[str, Any]] = []
     for asset in classified["assets"]:
         impact = classified["impact"].get(asset, "MISTA")
         if impact == "MISTA":
             continue
-        try:
-            baseline = float(baselines.get(asset))
-        except (TypeError, ValueError):
-            continue
-        if baseline <= 0:
+        # Persisted/handed-off event state can bypass capture-time validation.
+        # Revalidate at the decision boundary so bool/NaN/Infinity cannot create a
+        # false post-news percentage move.
+        baseline = _finite_positive(baselines.get(asset))
+        if baseline is None:
             continue
         expected_direction = "LONG" if impact == "RIALZISTA" else "SHORT"
         for state in states:
@@ -718,7 +760,7 @@ def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str
             if not price_source or price_source.upper() in {"UNKNOWN", "N/A", "NONE"}:
                 continue
             if not _valid_signal_levels(
-                direction, price, entry, stop, tp1, getattr(state, "tp2", None)
+                direction, price, entry, stop, tp1, getattr(state, "tp2", None), getattr(state, "tp3", None)
             ):
                 continue
             price_value = float(price)
