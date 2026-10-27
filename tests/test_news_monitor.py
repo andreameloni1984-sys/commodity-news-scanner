@@ -609,3 +609,24 @@ def test_alert_scorecard_rejects_boolean_alert_reaction_and_risk_prices():
     assert report["pending"] == 1
     assert report["tp1_observed"] == 0
     assert report["sl_observed"] == 0
+
+def test_scorecard_excludes_alerts_sent_after_decision_time():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    now = datetime(2026, 10, 27, 9, 30, tzinfo=timezone.utc)
+    sent = now + timedelta(minutes=5)
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "future-alert", "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "future-alert", "asset": "WTI",
+         "current_price": 82.0, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=now)
+
+    assert report["decision_time_valid"] is True
+    assert report["alerts"] == 0
+    assert report["scored"] == 0
+    assert report["pending"] == 0
+    assert report["unscored_expired"] == 0
