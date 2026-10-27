@@ -45,3 +45,14 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+## 2026-10-27 — Reject invalid RSI Wilder periods
+
+- **Finding:** `engine/regime.py::_rsi_wilder` converted periods with `int()`, silently truncating fractional values such as 14.5 and not catching `OverflowError` for infinity.
+- **Change:** reject booleans, non-finite values and fractional periods; catch type/value/overflow conversion errors. Valid positive integer periods retain the existing Wilder calculation.
+- **Files:** `engine/regime.py`; `tests/test_rsi_wilder_input_validation.py`.
+- **Regression coverage:** fractional, boolean, NaN, positive/negative infinity, malformed text, rising-series and flat-series cases.
+- **Commit:** code change `4e9cf2a434419a856d34aa1aa49aec35efec7df0`; test `ff26a3bdb76bb57567798e4df069b59aab38977d`.
+- **CI on code/test head `5bc48d90514907e4aed754a54e71fa08edb883ce`:** all five PR-triggered workflows passed: runs `40445176899`, `40445176824`, `40445176877`, `40445176901`, `40445176923`. A documentation-only follow-up may trigger a fresh run; do not treat that new run as verified until it completes.
+- **Empirical validation:** not performed; this is input-integrity validation, not evidence of trading performance.
+- **Safety:** PAPER/DEMO ONLY; no broker, orders, merge or Render deploy.
