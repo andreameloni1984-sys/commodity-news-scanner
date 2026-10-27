@@ -231,3 +231,10 @@
 - **Operational path:** journal alert → exact identity (event/asset/direction/time/entry/SL/TP1/TP2/TP3) → deduplication → point-in-time reaction join → outcome scorecard.
 - **Empirical limit:** scorecard accounting only; no live replay or walk-forward/out-of-sample predictive validation. PR branch only; no merge/deploy. Render live commit and database persistence remain unverified.
 - **Safety:** PAPER/DEMO ONLY; no broker, real orders, secrets, or Telegram test messages.
+
+
+## Historical-source recovery status — 2026-10-27
+- Retrieved and inspected the Library file `Registro Studio IBKR - aggiornato 2026-10-20 sessione 9.md` (535 lines). Its documented priorities include point-in-time `event_time`/`available_at`/`decision_time`, and testing any options/positioning feature against a baseline rather than treating it as directional proof. The options webinar's presentation was consulted; the video was not recorded as watched.
+- Library search did **not** recover an authentic numbered 100-rule catalog. Searches for the exact phrases `catalogo dei 100 punti`, `100 regole`, `ORB_RETEST_TIMING_GATE`, and the named Feedback Engine record did not locate a source document that could substantiate a complete catalog. Do not invent or reconstruct missing rules from memory.
+- Search did surface historical code snapshots such as `commodity_bot_v3.9.py` and `commodity_bot_v4.0.py` containing descriptive MAE/MFE and adaptive SL/TP logic. These are code snapshots, not proof of a complete research catalog, current production behavior, or empirical profitability.
+- This recovery is a source audit only. Any lesson still requires an operational code path, regression test, CI result, deployment confirmation, and out-of-sample evidence before it can be called implemented/validated.
