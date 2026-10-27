@@ -197,3 +197,36 @@ def test_validate_candles_drops_rows_with_boolean_market_fields(field):
     assert error is None
     assert len(cleaned) == MIN_CANDLES_REQUIRED
     assert all(not isinstance(row[field], bool) for row in cleaned)
+
+
+@pytest.mark.parametrize("boolean_field", ["timestamp", "ohlc", "volume"])
+def test_validate_candles_rejects_boolean_numeric_values(boolean_field):
+    now = time.time()
+    candles = [
+        {
+            "timestamp": now - (MIN_CANDLES_REQUIRED - i) * 60,
+            "open": 100.0,
+            "high": 102.0,
+            "low": 99.0,
+            "close": 101.0,
+            "volume": 10.0,
+        }
+        for i in range(MIN_CANDLES_REQUIRED + 1)
+    ]
+
+    row = candles[0]
+    if boolean_field == "timestamp":
+        row["timestamp"] = True
+    elif boolean_field == "volume":
+        row["volume"] = True
+    else:
+        # All-boolean OHLC remains numerically plausible after float(True)=1.0
+        # unless the validator explicitly rejects booleans.
+        for field in ("open", "high", "low", "close"):
+            row[field] = True
+
+    cleaned, error = _validate_candles(candles)
+
+    assert error is None
+    assert len(cleaned) == MIN_CANDLES_REQUIRED
+    assert all(not isinstance(value, bool) for candle in cleaned for value in candle.values())
