@@ -720,7 +720,13 @@ def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str
     """Require a live Gagarin trigger and measurable price movement after news detection."""
     classified = classify_event(event.get("title", ""))
     baselines = event.get("baseline_prices") or {}
-    min_reaction_pct = max(0.0, float(os.getenv("GAGARIN_NEWS_MIN_REACTION_PCT", "0.05")))
+    try:
+        min_reaction_pct = float(os.getenv("GAGARIN_NEWS_MIN_REACTION_PCT", "0.05"))
+    except (TypeError, ValueError, OverflowError):
+        # A malformed threshold must not disable the price-reaction gate or crash polling.
+        return []
+    if not math.isfinite(min_reaction_pct) or min_reaction_pct < 0:
+        return []
     setups: list[dict[str, Any]] = []
     for asset in classified["assets"]:
         impact = classified["impact"].get(asset, "MISTA")
