@@ -543,3 +543,18 @@ def test_confirmed_setups_rejects_levels_below_minimum_rr():
     )
     assert _confirmed_setups(event, [state]) == []
 
+def test_confirmed_setups_rejects_non_finite_or_non_positive_baselines():
+    from telegram.news_monitor import _confirmed_setups
+
+    state = SimpleNamespace(
+        commodity="Petrolio WTI", symbol="WTI/USD", setup_direction="LONG",
+        final_decision="PAPER_SIGNAL", trigger_confirmed=True, live=True,
+        price=80.0, entry=80.0, stop=79.0, tp1=81.5, tp2=82.0, tp3=82.5,
+        data_source="TEST_FEED",
+    )
+    for baseline in (float("nan"), float("inf"), 0.0, -1.0, "invalid"):
+        event = {
+            "title": "OPEC announces production cut",
+            "baseline_prices": {"WTI": baseline},
+        }
+        assert _confirmed_setups(event, [state]) == []
