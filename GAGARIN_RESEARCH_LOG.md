@@ -45,3 +45,14 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+## 2026-10-27 — Exact spot-symbol matching for news baselines
+
+- **Finding:** `_asset_matches()` used substring checks such as `"XAU" in symbol`, which could match unrelated symbols (for example `XAUTUSDT` or `NOTXAUUSD`) and contaminate a news baseline. Futures symbols must not be silently mixed with spot prices before contract metadata/rollover is modeled.
+- **Change:** normalize separators and match a finite allowlist of complete known spot aliases for WTI, Brent and precious-metal spot pairs; retain commodity-name matching. Futures tickers such as `GC=F` remain unmatched by symbol alone until an explicit contract/calendar mapping exists.
+- **Files:** `telegram/news_monitor.py`; `tests/test_news_monitor.py`.
+- **Regression coverage:** standard slash/no-slash spot symbols match; substring lookalikes and a futures ticker without contract metadata do not.
+- **Code commit:** `5ddc3df2053132a54efca94eb27a5ee434b1edf7`; **test commit:** `f80f595f7f9a812074564b0b457bf6fc6e90cfd7`.
+- **CI:** pending on PR branch; no result claimed until GitHub Actions completes.
+- **Deployment / limits:** research branch only; no Render deploy. No empirical signal-performance test was run.
+- **Safety:** PAPER/DEMO ONLY; no secrets read, Telegram test message, broker or order.
