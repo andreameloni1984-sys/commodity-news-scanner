@@ -30,6 +30,9 @@ def _value(state, name, default=""):
 
 
 def _number(value):
+    # bool is an int subclass in Python; never treat True/False as market data.
+    if isinstance(value, bool):
+        return None
     try:
         number = float(value)
         return number if number == number and abs(number) != float("inf") else None
