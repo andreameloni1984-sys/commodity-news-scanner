@@ -391,6 +391,13 @@ def _normalize(
     Normalize one provider candle.
     """
 
+    # bool is a subclass of int in Python, so float(True) silently
+    # becomes 1.0. Reject boolean market fields before numeric coercion.
+    if any(isinstance(value, bool) for value in (
+        timestamp, open_price, high_price, low_price, close_price, volume,
+    )):
+        return None
+
     try:
         ts = _parse_time(timestamp)
 
@@ -585,6 +592,18 @@ def _validate_candles(
             candle,
             dict,
         ):
+            continue
+
+        raw_fields = (
+            candle.get("timestamp"),
+            candle.get("open"),
+            candle.get("high"),
+            candle.get("low"),
+            candle.get("close"),
+            candle.get("volume", 0),
+        )
+        # Do this at the validator boundary too: callers may bypass _normalize.
+        if any(isinstance(value, bool) for value in raw_fields):
             continue
 
         ts = candle.get(
