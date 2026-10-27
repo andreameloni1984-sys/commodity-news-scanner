@@ -69,3 +69,12 @@
 - **Empirical limit:** numerical-integrity regression only; no OOS profitability claim.
 - **Safety:** PAPER/DEMO ONLY; no broker, order, or Telegram test message.
 
+## 2026-10-27 — Recover the late-September agricultural-data diagnostic record
+
+- **Historical source:** prior conversation record from 2026-09-25 says the GitHub Actions run executing `python main.py` marked four Yahoo-backed agricultural feeds STALE: Caffè, Cacao, Riso and Zucchero.
+- **Artifacts named in the historical record:** repository-root `diagnostic_agri.py` (v1.0, with v2.0/v3.0 variants supplied in the same chat) and `engine/data.py` v5.0; the prior record cites `de28b59` as the earlier v5.0 commit and says v5.1 later broke data loading. The actual diagnostic output resolving symbols/titles was not recovered, so this is not a current reproduction of the stale-data result.
+- **Current code mapping:** `engine/data.py` provider routing → OHLC/timestamp/history validation → freshness and market-status classification → Gagarin engine; `diagnostic_agri.py` is a separate Twelve Data catalog/symbol/freshness diagnostic. The current `main` file header still identifies `engine/data.py` as v5.0 and the diagnostic file exists.
+- **Tests / CI:** no agriculture-feed diagnostic was executed in this run; the RSI overflow regression is a separate numeric-integrity change. A follow-up should replay the diagnostic with non-secret, timestamped provider responses and assert that STALE data never enters the decision path.
+- **Empirical limit:** the historical note establishes that a stale-data incident was reported, not that the same feeds are stale now or that any agricultural signal was profitable.
+- **Safety:** PAPER/DEMO only; no provider secrets read, no broker, no orders, no Telegram test message.
+
