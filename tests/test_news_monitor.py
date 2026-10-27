@@ -903,6 +903,33 @@ def test_scorecard_drops_conflicting_prices_at_same_observation_time():
     assert report["ambiguous_reaction_timestamps_dropped"] == 1
 
 
+def test_scorecard_keeps_alerts_with_distinct_tp2_tp3_geometry():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 27, 8, 0, tzinfo=timezone.utc)
+    observed = sent + timedelta(minutes=30)
+    base_alert = {
+        "kind": "NEWS_ALERT_SENT", "event_id": "evt-distinct-targets", "asset": "WTI",
+        "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat(),
+        "stop": 79.0, "tp1": 82.0, "tp2": 83.0, "tp3": 84.0,
+    }
+    second_alert = dict(base_alert, tp2=84.0, tp3=86.0)
+    reaction = {
+        "kind": "NEWS_REACTION", "event_id": "evt-distinct-targets", "asset": "WTI",
+        "current_price": 81.0, "observed_at": observed.isoformat(),
+        "available_at": (observed + timedelta(seconds=1)).isoformat(),
+    }
+
+    report = build_alert_scorecard(
+        [base_alert, second_alert, reaction], now=sent + timedelta(minutes=40)
+    )
+
+    assert report["alerts"] == 2
+    assert report["duplicate_alerts_dropped"] == 0
+    assert report["scored"] == 2
+
+
 def test_scorecard_deduplicates_exact_duplicate_alert_rows():
     from datetime import datetime, timedelta, timezone
     from telegram.news_monitor import build_alert_scorecard
