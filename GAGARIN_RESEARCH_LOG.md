@@ -69,3 +69,11 @@
 - **Deployment:** PR #79 branch only; no merge/deploy. Render build-pipeline minutes remain exhausted.
 - **Empirical limits:** no historical replay, cost/slippage model, or out-of-sample profitability evaluation. This is temporal data-integrity work only.
 - **Safety:** PAPER/DEMO ONLY; no broker, orders, secret-value inspection, or Telegram test messages.
+
+## 2026-10-27 — Research provenance: session 9 and early-October records
+
+- **Library source:** `Registro Studio IBKR - aggiornato 2026-10-20 sessione 9.md`, lines 473–483 and 520–525. The options presentation was consulted as slides only, not watched as a video; its visuals are illustrative and explicitly not a backtest. Options/positioning may be tested only as one feature against a baseline, when reliable data exist; preserve `event_time`, `available_at`, `decision_time`, and require `available_at <= decision_time`.
+- **Recovered early-October context (2026-10-03/06):** Sputnik's actual recorded research emphasized evidence quality, transaction/document normalization, deduplication, recency, disclosure lag, concentration and event correlation. The historical 0–100 score was a ranking concept, not 100 separate lessons.
+- **Catalog status:** no authentic numbered 100-rule list was found in the searched Library or prior-conversation retrieval. Do not repeat unverified component weights as if they were present in the source document.
+- **Current code path:** `telegram/news_monitor.py::_parse_datetime(require_timezone=True)` → `build_alert_scorecard()` now rejects naive alert/observation times and invalid naive decision clocks. CI on the code/test commit passed all five workflows; no empirical profitability claim.
+- **Safety/deployment:** PR #79 only, not live; Render build quota remains exhausted; PAPER/DEMO ONLY.
