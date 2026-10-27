@@ -517,8 +517,6 @@ def test_confirmed_setups_rejects_corrupt_persisted_baselines():
         data_source="TEST_FEED",
     )
     for bad_baseline in (True, False, float("nan"), float("inf"), float("-inf"), 0, -1, "bad"):
-        with __import__("pytest").raises((TypeError, ValueError, AssertionError)) if False else __import__("contextlib").nullcontext():
-            pass
         event = {"title": "OPEC announces production cut", "baseline_prices": {"WTI": bad_baseline}}
         assert _confirmed_setups(event, [state]) == []
 
