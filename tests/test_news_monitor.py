@@ -783,3 +783,65 @@ def test_poll_news_once_rejects_naive_decision_clock():
         assert "timezone-aware" in str(exc)
     else:
         raise AssertionError("naive polling clock must fail closed")
+
+
+
+def test_rss_ingestion_rejects_naive_pubdate(monkeypatch):
+    import telegram.news_monitor as monitor
+
+    xml = b"""<rss><channel><item><title>OPEC announces production cut</title><link>https://example.test/opec-cut</link><pubDate>Tue, 27 Oct 2026 11:00:00</pubDate></item></channel></rss>"""
+
+    class Response:
+        content = xml
+
+        def raise_for_status(self):
+            return None
+
+    monkeypatch.setattr(monitor.requests, "get", lambda *args, **kwargs: Response())
+    assert monitor._get_rss_items("Test RSS", "https://example.test/feed") == []
+
+
+def test_gdelt_ingestion_rejects_naive_publication_datetime(monkeypatch):
+    import telegram.news_monitor as monitor
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"articles": [{
+                "title": "OPEC announces production cut",
+                "url": "https://example.test/opec-cut",
+                "datetime": "2026-10-27T11:00:00",
+                "domain": "example.test",
+            }]}
+
+    monkeypatch.setattr(monitor.requests, "get", lambda *args, **kwargs: Response())
+    assert monitor._get_gdelt_items() == []
+
+
+def test_poll_news_once_rejects_naive_published_at(tmp_path, monkeypatch):
+    from datetime import datetime, timezone
+    import telegram.news_monitor as monitor
+
+    monkeypatch.setattr(monitor, "STATE_PATH", tmp_path / "news_state.json")
+    now = datetime(2026, 10, 27, 11, 0, tzinfo=timezone.utc)
+    item = {
+        "source": "Test RSS",
+        "title": "OPEC announces production cut",
+        "url": "https://example.test/opec-cut",
+        "published_at": "2026-10-27T10:59:00",
+    }
+    analyzed, messages = [], []
+
+    report = monitor.poll_news_once(
+        lambda message: messages.append(message) or True,
+        lambda: analyzed.append(True),
+        fetcher=lambda: [item],
+        now=now,
+    )
+
+    assert report["analysis"] == 0
+    assert report["alerts"] == 0
+    assert analyzed == []
+    assert messages == []
