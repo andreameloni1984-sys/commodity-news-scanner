@@ -54,3 +54,12 @@
 - **Files:** `telegram/news_monitor.py`, `tests/test_news_monitor.py`, this log.
 - **Regression coverage:** LONG/SHORT valid brackets, TP1/TP2/TP3 below their R minima, quote already beyond TP1, and TP3 without TP2.
 - **Limits:** deterministic tests only; no claim of improved profitability or out-of-sample validation. This gate does not account for spread/slippage and does not replace the main Risk Governor. PAPER/DEMO ONLY; no orders or Telegram test messages. Render deployment remains intentionally untouched while build minutes are exhausted.
+
+## 2026-10-27 — Reject non-finite news reaction baselines
+
+- **Finding:** _confirmed_setups() converted the baseline with float() and rejected only values <= 0. IEEE NaN compares false to both positive and negative thresholds, so a NaN baseline could yield a NaN reaction percentage and pass both direction checks.
+- **Implemented:** reuse _finite_positive() for the event baseline; malformed, non-finite, zero and negative values now fail closed before reaction calculation.
+- **Files / path:** telegram/news_monitor.py, tests/test_news_monitor.py; poll_news_once -> _confirmed_setups -> _valid_signal_levels.
+- **Regression:** test covers NaN, infinity, zero, negative and malformed baselines with an otherwise valid PAPER setup.
+- **Validation:** code commit e2f4c0f708bb00bbb650dbf47132b28d9f912550; test commit abda1ee92390cfd9943e2663dcdea28da9b4b12e. CI is triggered by the updated PR head; results must be checked before treating the change as verified.
+- **Limits:** deterministic input-validation test only; no live feed replay, spread/slippage model, or out-of-sample profitability claim. No Render deployment, Telegram test, broker, or order. PAPER/DEMO ONLY.
