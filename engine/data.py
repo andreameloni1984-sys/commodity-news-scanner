@@ -623,20 +623,6 @@ def _validate_candles(
         if any(isinstance(value, bool) for value in raw_fields):
             continue
 
-        # bool is a subclass of int in Python, so float(True) silently
-        # becomes 1.0. Reject boolean numerics at the ingestion boundary even
-        # when a caller bypasses _normalize().
-        raw_numeric_values = (
-            candle.get("timestamp"),
-            candle.get("open"),
-            candle.get("high"),
-            candle.get("low"),
-            candle.get("close"),
-            candle.get("volume", 0),
-        )
-        if any(isinstance(value, bool) for value in raw_numeric_values):
-            continue
-
         ts = candle.get(
             "timestamp"
         )
