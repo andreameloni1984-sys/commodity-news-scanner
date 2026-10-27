@@ -157,7 +157,15 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
             except (TypeError, ValueError, OverflowError):
                 continue
             if math.isfinite(price) and price > 0:
-                reaction_observations.append((observed_at, price))
+                # Finite positive prices can still overflow when converted to a
+                # percentage move (e.g. 1e308 / 1e-308). Do not let an invalid
+                # derived return contaminate accuracy or mean-return metrics.
+                try:
+                    candidate_return_pct = (price / alert_price - 1) * 100
+                except (OverflowError, ZeroDivisionError):
+                    continue
+                if math.isfinite(candidate_return_pct):
+                    reaction_observations.append((observed_at, price))
         # Directional accuracy uses a minimum 15-minute horizon to avoid
         # treating immediate noise as a forecast result. TP/SL, however,
         # must include every post-delivery observation, including the first 15m.
