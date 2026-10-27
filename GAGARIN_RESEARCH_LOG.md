@@ -134,3 +134,16 @@
 - **CI:** all five workflows passed on code/test head `f54989a4029996eb7be91d2c33ca40b6920d7625`: NEWS alert [40478737821](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40478737821), PAPER [40478737898](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40478737898), general tests [40478737944](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40478737944), Public Event Brain [40478738008](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40478738008), Execution Layer [40478738009](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40478738009). All five also passed on the subsequent research-log-only head `ea19c6ca94e6d6b5436771de3193c448aaaf5932` (runs 40478771995, 40478771988, 40478771925, 40478771917, 40478773300).
 - **Deployment:** PR #79 branch only; no merge/deploy. Render workspace not selected; live commit not verified. `DATABASE_URL` not checked; journal durability not asserted.
 - **Empirical limit:** net returns are reported only when explicit round-trip spread, fees and slippage are all present and valid; missing/invalid cost data yields no net estimate, never zero-cost assumption. No historical replay or walk-forward validation.
+
+
+## 2026-10-27 — Require reaction availability time in scorecard (point-in-time)
+
+- **Finding:** the scorecard checked a reaction's market observation timestamp against the evaluation clock, but did not separately record when that observation became available to the system. A delayed quote could have an old `observed_at` while being ingested only after the historical decision cutoff.
+- **Change:** `build_alert_scorecard()` now requires timezone-aware `available_at` for reaction rows, rejects `available_at > decision_time` and impossible `observed_at > available_at`, and does not fall back to journal `recorded_at`. New `NEWS_REACTION` journal rows record `available_at` alongside `observed_at`.
+- **Operational path:** quote observation → journal (`observed_at`, `available_at`) → scorecard decision clock → eligible reaction → outcome.
+- **Regression:** `tests/test_news_monitor.py` now supplies explicit availability timestamps in existing fixtures and tests late availability, missing availability, and impossible timestamp ordering.
+- **CI:** pending for the updated code/test commits; record workflow results after GitHub Actions completes.
+- **Deployment:** PR #79 branch only; no merge/deploy. Render build-pipeline quota remains exhausted; live commit not verified.
+- **Persistence limit:** older journal rows without `available_at` will be excluded from scorecard outcomes; this is intentional rather than inferring availability from persistence time. Journal durability is not claimed without confirming `DATABASE_URL`.
+- **Empirical limit:** point-in-time data-integrity change only; no historical replay or walk-forward profitability test.
+- **Safety:** PAPER/DEMO ONLY; no secrets, broker, orders, or Telegram test messages.
