@@ -111,3 +111,15 @@
 - **Deployment:** PR #79 branch only; no merge/deploy. Render build-pipeline minutes remain exhausted; journal durability is not asserted without a verified `DATABASE_URL`.
 - **Empirical limit:** scorecard matching integrity only; no replay, cost/slippage model, or out-of-sample profitability validation.
 - **Safety:** PAPER/DEMO ONLY; no broker, orders, secrets, or Telegram test messages.
+
+
+## 2026-10-27 09:07 UTC — Add explicit net-of-cost scorecard diagnostics
+
+- **Finding:** the scorecard reports directional returns but does not distinguish gross movement from the result after spread, fees, and slippage. The IBKR research notes explicitly require execution costs to be measured rather than ignored.
+- **Change:** `build_alert_scorecard()` now reports net-return diagnostics only when the alert record contains all three explicit round-trip inputs: `round_trip_spread_cost_bps`, `round_trip_fees_cost_bps`, and `round_trip_slippage_bps`. Inputs must be finite, non-negative, and non-boolean. Missing or invalid costs yield no net estimate; the code never silently assumes zero cost.
+- **Operational path:** PAPER alert row → later eligible price observation → gross directional return → explicit round-trip cost adjustment → net coverage/mean/profitable counts. These diagnostics do not change alert direction or authorize entries.
+- **Regression:** `tests/test_news_monitor.py` checks a +0.10% gross move less 6 bps explicit costs (= +0.04% net) and verifies boolean cost data is not treated as zero.
+- **CI:** pending for this update; record workflow results after GitHub Actions completes.
+- **Deployment:** PR #79 branch only; no merge/deploy. Render workspace was not selected; current live commit not re-verified.
+- **Empirical limit:** this adds a reporting path only. It does not create costs when provider/broker data are absent and is not a walk-forward or profitability study.
+- **Safety:** PAPER/DEMO ONLY; no broker, orders, secrets, or Telegram test messages.
