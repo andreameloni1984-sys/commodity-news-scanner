@@ -81,6 +81,13 @@ def _state_json(state):
     }
 
 
+def _is_authorized_paper_candidate(candidate: dict) -> bool:
+    """Only Risk-Governor-authorized actions may open a simulated position."""
+    if not isinstance(candidate, dict):
+        return False
+    return str(candidate.get("action") or "").strip().upper() in {"PAPER_ENTRY", "PAPER_SIGNAL"}
+
+
 def _run_gagarin(*, on_demand: bool = False):
     errors = validate_universe()
     if errors:
@@ -141,6 +148,9 @@ def _run_gagarin(*, on_demand: bool = False):
         symbol = str(candidate.get("symbol") or "").upper()
         if not symbol or symbol in aggressive_closed_symbols:
             continue
+        # Do not turn a WATCH/WAIT candidate into an entry by overwriting its action.
+        if not _is_authorized_paper_candidate(candidate):
+            continue
         if float(candidate.get("probability") or 0) < 45:
             continue
         paper_candidate = dict(candidate)
@@ -161,7 +171,11 @@ def _run_gagarin(*, on_demand: bool = False):
     forex_candidates = sorted(forex_rows, key=lambda x: (-(float(x.get("opportunity_score") or 0)), -(float(x.get("probability") or 0)), -(float(x.get("quality") or 0))))
     for candidate in forex_candidates:
         symbol = str(candidate.get("symbol") or "").upper()
-        if not symbol or symbol in forex_closed_symbols or float(candidate.get("probability") or 0) < 45:
+        if not symbol or symbol in forex_closed_symbols:
+            continue
+        if not _is_authorized_paper_candidate(candidate):
+            continue
+        if float(candidate.get("probability") or 0) < 45:
             continue
         paper_candidate = dict(candidate)
         paper_candidate["action"] = "PAPER_SIGNAL"
