@@ -53,7 +53,7 @@
 - **Files:** `engine/regime.py`; `tests/test_pipeline.py`.
 - **Regression coverage:** fractional, boolean, NaN, positive/negative infinity, malformed text, zero, negative, an integer too large to convert to float, and a valid integral float. Existing rising/falling/flat reference cases remain covered.
 - **Operational path:** OHLC closes → `_rsi_wilder()` → regime diagnostics; invalid configuration yields `None`, not a guessed period.
-- **CI:** pending on branch `fix/gagarin-rsi-period-validation-20261027`; no test success is claimed yet.
+- **CI:** PASS on PR head `0de6e53b0d2be0d4ce0a49960e4a35a1d32eda12`: Public Event Brain `40469309164`, PAPER `40469309231`, NEWS alert `40469309091`, Execution Layer `40469309175`, and main tests `40469309188`.
 - **Deployment:** no merge or deploy. Render workspace build-pipeline minutes are exhausted. Latest observed Gagarin cloud logs explicitly reported `DATABASE_URL missing` and `GAGARIN PERSISTENCE DISABLED`; the journal is not confirmed durable. GDELT emitted `ReadTimeout` with a 300-second retry.
 - **Empirical validation:** no out-of-sample or profitability test; this is indicator-input integrity only.
 - **Safety:** PAPER/DEMO ONLY; no broker, order, or Telegram test message.
