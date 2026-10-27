@@ -733,11 +733,11 @@ def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str
         impact = classified["impact"].get(asset, "MISTA")
         if impact == "MISTA":
             continue
-        # Fail closed on NaN/Infinity as well as zero/negative baselines.
-        # NaN comparisons are false in both directions and could otherwise pass
-        # the post-news reaction gate without a measurable price move.
-        baseline = _finite_positive(baselines.get(asset))
-        if baseline is None:
+        try:
+            baseline = float(baselines.get(asset))
+        except (TypeError, ValueError):
+            continue
+        if baseline <= 0:
             continue
         expected_direction = "LONG" if impact == "RIALZISTA" else "SHORT"
         for state in states:
