@@ -543,3 +543,35 @@ def test_baseline_capture_rejects_boolean_and_nonfinite_prices():
         price=80.25,
     )
     assert _capture_baseline({"assets": ["WTI"]}, [valid_state]) == {"WTI": 80.25}
+
+def test_alert_scorecard_rejects_boolean_and_overflowing_prices_and_levels():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 27, 14, 0, tzinfo=timezone.utc)
+    huge = 10 ** 10000
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "bad-bool", "asset": "WTI",
+         "direction": "LONG", "price": True, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_ALERT_SENT", "event_id": "bad-overflow", "asset": "WTI",
+         "direction": "LONG", "price": huge, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_ALERT_SENT", "event_id": "valid-alert", "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "stop": huge, "tp1": huge,
+         "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "valid-alert", "asset": "WTI",
+         "current_price": True, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "valid-alert", "asset": "WTI",
+         "current_price": huge, "observed_at": (sent + timedelta(minutes=25)).isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "valid-alert", "asset": "WTI",
+         "current_price": 80.2, "observed_at": (sent + timedelta(minutes=30)).isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
+
+    assert report["alerts"] == 1
+    assert report["scored"] == 1
+    assert report["correct"] == 1
+    assert report["tp1_observed"] == 0
+    assert report["sl_observed"] == 0
+    assert report["open_at_last_check"] == 1
+
