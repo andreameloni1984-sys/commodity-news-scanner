@@ -52,7 +52,17 @@
 - **Change:** parse numeric and HTTP-date `Retry-After`; honor delays up to 30 seconds; when the requested delay is longer, return a typed 429 cooldown error so provider fallback can proceed without retrying early. Missing/malformed headers retain the prior exponential fallback.
 - **Operational path:** provider request → HTTP status handling → bounded retry or provider fallback → normal data validation. No market direction is inferred from rate limits.
 - **Files:** `engine/data.py`; regression coverage in `tests/test_data_retry_after.py`.
-- **Tests:** four tests cover numeric seconds, HTTP-date, long cooldown/no premature retry, and malformed header fallback. CI pending at log creation.
+- **Tests:** four tests cover numeric seconds, HTTP-date, long cooldown/no premature retry, and malformed header fallback. CI PASS on code/test head b5a00833410ddd637489e7c657236e856c9d27bd: NEWS run 40559762340, Public Event Brain 40559762342, general tests 40559762420, PAPER 40559762284, Execution Layer 40559762374. The follow-up commit in this log is documentation-only.
 - **Research mapping:** IBKR session 9 documents API pacing limits and HTTP 429; this implementation applies the general backoff principle to Gagarin's existing data-provider client, not IBKR-specific numerical limits to other providers.
 - **Deployment:** research branch only; no merge/deploy. Render build-pipeline quota remains exhausted.
 - **Empirical limits:** tests are mocked; no live provider call or measured reduction in throttling has been claimed. PAPER/DEMO ONLY.
+
+
+## Recovered historical records — 2026-10-27
+- **Library source:** “Registro Studio IBKR - aggiornato 2026-10-20 sessione 9.md” records API pacing, the distinction between observed facts and author interpretations, point-in-time availability, spread/liquidity, futures expiry/rollover and the need to compare optional features with a baseline. It explicitly states that options webinar material was a presentation consulted, not a backtest.
+- **API limits in the IBKR record:** 10 requests/second globally; historical endpoint 10 requests/second and 50/minute; up to 1,000 bars per historical response and documented concurrency limits. These limits are IBKR-specific and are not copied numerically to Yahoo/Twelve Data/Biquote.
+- **Session 9 priorities:** test Wilder RSI against a simple-average reference and edge cases; record event_time, available_at, decision_time; compare options/positioning features against baseline; study futures expiry/rollover; use spread/liquidity and costs in empirical validation.
+- **Recovered late-September note (2026-09-25):** a historical PAPER run recorded a WTI LONG candidate with entry 91.357, SL 91.1224, TP1 91.709, TP2 91.8263, TP3 91.9436, RR3 2.50. No subsequent outcome was recovered; this is not counted as a win or loss.
+- **Recovered historical PRs:** PR #11 (merged 2026-10-06) recorded RR1/RR2/RR3 thresholds 1.5/2.0/configured minimum and a legacy timestamp-freshness check; PR #15 (merged 2026-10-07) recorded a contextual historical-analog forecast, not a calibrated probability.
+- **Current code mapping:** engine/data.py::_request_json → HTTP 429 handling → bounded retry or provider fallback; regression file tests/test_data_retry_after.py; PR #85. CI passed on code/test head b5a00833410ddd637489e7c657236e856c9d27bd (five workflow runs listed above). No live provider experiment or return uplift claimed.
+- **Catalog status:** the complete original 100-point numbered catalog was not found in the retrievable records; no missing entries are reconstructed or presented as original.
