@@ -161,3 +161,14 @@ This mapping distinguishes documented lessons from implemented and empirically v
 - **Historical records:** the available record includes the 2026-09-21 Shadow error `extract_structure_ok() missing ... direction`, 2026-09-22 Rame `SETUP NONE / TRIGGER False / REGIME UNKNOWN`, and 2026-09-25 PAPER WTI LONG levels without a recovered outcome. None is counted as a completed win/loss or proof of edge.
 - **100-point catalog:** no complete original 1–100 catalog was found in the Library or repository search. The session-9 file is a study register, not that catalog. Missing lessons are not inferred.
 - **Deployment/empirical status:** PR #84 branch only, no merge/deploy. Render runtime/workspace logs are not accessible through this run, so the live commit, GDELT logs and `DATABASE_URL` state cannot be freshly confirmed here. Synthetic test only; no OOS scorecard or profitability result.
+
+
+## 2026-10-27 — Reject timezone-naive candle timestamps outside an explicit UTC adapter
+
+- **Finding:** `engine/data.py::_parse_time` silently interpreted every naive ISO datetime as UTC. That is only justified when the provider request explicitly declares UTC; for other providers it can shift candle times and contaminate freshness/session diagnostics.
+- **Implemented on PR #84 branch:** generic parsing now rejects naive datetime strings (and boolean timestamp values). The Twelve Data adapter may attach UTC to naive response timestamps only because its request explicitly sends `timezone=UTC`; other provider timestamps with no timezone are rejected so the normal provider fallback can try another source.
+- **Files:** `engine/data.py`; regression coverage in `tests/test_data_finite_values.py`.
+- **Tests:** naive ISO rejected; explicit UTC accepted; mocked Twelve Data response proves the adapter requests UTC and normalizes the naive response without network access.
+- **CI:** pending for this commit. Prior PR #84 CI passed on head `a9da3012fbb9bc63e7471811299d40203b4f6b66` for its earlier duplicate/millisecond/boolean checks; that result does not cover this new timezone change.
+- **Runtime/deployment:** no merge/deploy; Render build-pipeline minutes are exhausted. Runtime logs at 2026-10-27 20:02 UTC show GDELT ReadTimeout backoff (300/600/1200s) and `LOCAL_CSV_NO_DATABASE_URL` / `DATABASE_URL missing`; the journal is not claimed durable. Telegram webhook was active in that sample, but that does not prove market-alert delivery.
+- **Limits:** mocked adapter test only; Biquote's live timestamp format was not re-queried, and may now fall back if it returns naive timestamps. No OHLCV replay, OOS scorecard or profitability claim. PAPER/DEMO ONLY.

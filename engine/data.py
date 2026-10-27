@@ -346,7 +346,7 @@ def _parse_time(value: Any) -> Optional[float]:
     """
 
     try:
-        if value is None:
+        if value is None or isinstance(value, bool):
             return None
 
         if isinstance(value, (int, float)):
@@ -363,9 +363,8 @@ def _parse_time(value: Any) -> Optional[float]:
         dt = datetime.fromisoformat(text)
 
         if dt.tzinfo is None:
-            dt = dt.replace(
-                tzinfo=timezone.utc
-            )
+            # Do not guess the timezone of a provider's naive datetime.
+            return None
 
         return dt.astimezone(
             timezone.utc
@@ -373,6 +372,24 @@ def _parse_time(value: Any) -> Optional[float]:
 
     except Exception:
         return None
+
+
+def _twelve_data_timestamp_utc(value: Any) -> Any:
+    """Attach UTC only to naive timestamps from a request explicitly made with timezone=UTC."""
+    if not isinstance(value, str):
+        return value
+    text = value.strip()
+    if not text:
+        return value
+    try:
+        parsed = datetime.fromisoformat(
+            text[:-1] + "+00:00" if text.endswith("Z") else text
+        )
+    except ValueError:
+        return value
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc).isoformat()
+    return parsed.isoformat()
 
 
 # ============================================================
@@ -1110,8 +1127,8 @@ def _fetch_twelve_symbol(
             continue
 
         candle = _normalize(
-            row.get(
-                "datetime"
+            _twelve_data_timestamp_utc(
+                row.get("datetime")
             ),
             row.get("open"),
             row.get("high"),

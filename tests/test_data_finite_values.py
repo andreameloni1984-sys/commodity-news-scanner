@@ -2,10 +2,12 @@
 
 import math
 import time
+from datetime import datetime, timedelta, timezone
 
 import pytest
+import engine.data as data
 
-from engine.data import MIN_CANDLES_REQUIRED, _normalize, _validate_candles
+from engine.data import MIN_CANDLES_REQUIRED, _normalize, _parse_time, _validate_candles
 
 
 @pytest.mark.parametrize(
@@ -274,3 +276,37 @@ def test_validate_candles_fails_closed_on_millisecond_epoch_timestamps():
 
     assert cleaned == []
     assert error == "TIMESTAMP_UNIT_MISMATCH_OR_OUT_OF_RANGE"
+
+
+
+def test_parse_time_rejects_naive_datetime_strings():
+    assert _parse_time("2026-10-27 20:00:00") is None
+    assert _normalize("2026-10-27 20:00:00", 100.0, 102.0, 99.0, 101.0, 10.0) is None
+    aware = datetime(2026, 10, 27, 20, 0, tzinfo=timezone.utc)
+    assert _parse_time("2026-10-27T20:00:00+00:00") == pytest.approx(aware.timestamp())
+
+
+def test_twelve_data_naive_timestamp_is_utc_only_for_explicit_utc_request(monkeypatch):
+    now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+    values = []
+    for offset in range(MIN_CANDLES_REQUIRED + 1):
+        stamp = now - timedelta(minutes=offset)
+        values.append({
+            "datetime": stamp.strftime("%Y-%m-%d %H:%M:%S"),
+            "open": "100.0", "high": "102.0", "low": "99.0",
+            "close": "101.0", "volume": "10",
+        })
+    captured = {}
+
+    def fake_request(url, params=None, retries=1):
+        captured["params"] = params
+        return {"values": values}, None
+
+    monkeypatch.setattr(data, "TWELVE_DATA_API_KEY", "test-key")
+    monkeypatch.setattr(data, "_request_json", fake_request)
+    candles, error = data._fetch_twelve_symbol("CL=F")
+
+    assert captured["params"]["timezone"] == "UTC"
+    assert error is None
+    assert len(candles) == MIN_CANDLES_REQUIRED + 1
+    assert candles[-1]["timestamp"] == pytest.approx(now.timestamp())
