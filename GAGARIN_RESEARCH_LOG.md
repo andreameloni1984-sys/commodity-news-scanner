@@ -45,3 +45,22 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+## 2026-10-27 — Fail closed when duplicate timestamps disagree on OHLCV
+
+- **Finding:** `engine/data.py::_validate_candles` silently kept the first candle for a timestamp and discarded all later rows, even when a duplicate carried different valid OHLCV values. The chosen price then depended on provider row order, which can alter RSI, ATR and downstream structure without a visible data-quality error.
+- **Change:** keep an OHLCV signature per timestamp. Exact duplicate rows are deduplicated as before; a second valid candle at the same timestamp with conflicting OHLCV returns an empty result and `CONFLICTING_DUPLICATE_TIMESTAMP`, allowing the normal fail-closed provider/data-error path to handle it.
+- **Regression tests:** `tests/test_data_finite_values.py::test_validate_candles_deduplicates_identical_timestamp_rows` preserves exact deduplication; `test_validate_candles_fails_closed_on_conflicting_duplicate_timestamp` asserts that conflicting bars do not enter the indicator pipeline.
+- **Operational path:** provider candles → `_normalize` → `_validate_candles` → freshness/ATR/regime → structure/setup/risk. The validation is data-integrity protection, not a directional signal.
+- **CI:** code commit `e0600cc2a63cf0d625e27d447fba241a59ba2ac3`; test commit `f39ad794dfbe26f7d0908935d637e4e6e1d36ec3`. New PR workflows are pending; do not count this change as CI-verified until they complete.
+- **Deployment:** branch only; no merge/deploy. Render build-pipeline minutes remain exhausted.
+- **Empirical limit:** synthetic regression only; no market replay or profitability claim.
+- **Safety:** PAPER/DEMO only; no broker, orders, or Telegram test messages.
+
+## Historical record recovered — 2026-09-25 agricultural feed freshness
+
+- A prior conversation record says the GitHub Actions run of `python main.py` marked four Yahoo-backed agricultural feeds STALE: Caffè, Cacao, Riso and Zucchero.
+- The recorded artifacts were repository-root `diagnostic_agri.py` (v1.0, with v2.0/v3.0 variants in the same chat) and `engine/data.py` v5.0; the record references prior commit prefix `de28b59` and says a later v5.1 broke data loading. The exact diagnostic output with resolved symbols/titles was not recovered.
+- Current mapping: `engine/data.py` provider routing and candle validation → freshness classification; `diagnostic_agri.py` checks Twelve Data catalog/symbols/freshness separately. No current stale-feed result is inferred from the old incident, and no agricultural feed replay was run in this change.
+- Follow-up required: reproduce provider response timestamps without secrets, verify stale candles remain excluded from decision logic, and compare current provider coverage against the historical incident.
+
