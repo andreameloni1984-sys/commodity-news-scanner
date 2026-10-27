@@ -90,3 +90,12 @@
 - **Verification:** implementation and regression test are committed on `fix/baseline-price-finite-validation`; final-head CI is running/queued and must pass before the change is considered verified.
 - **Limits:** deterministic input-integrity regression only; no market replay or profitability claim. PR #82 remains draft/unmerged. No Render deployment, Telegram test message, broker, or order. `DATABASE_URL`/durable journal remain unverified.
 - **Safety:** PAPER/DEMO ONLY.
+
+
+## 2026-10-27 — Historical research source audit and mapping
+
+- **Direct Library source:** `Registro Studio IBKR - aggiornato 2026-10-20 sessione 9.md` contains numbered study entries through **36**. Its session 9 records item 32 as an options-data presentation; the presentation itself states that its illustrations are not empirical data or a backtest. Search found no literal “100 punti” or “punto 100” in that file, so it is not the missing 100-rule catalog.
+- **Recovered only from historical conversation context:** point 100 “Execution Regime: Volatility × Liquidity”; point 101 “Overnight Risk Engine / Next-Session Volatility Forecast”; point 102 “Setup Transferability / Instrument-Specific Edge”; point 103 “Sweep Validity / Continuation-vs-Reversal”. The original points 1–99 were not recovered in full and are not reconstructed.
+- **Mapping/status:** point 100 — Gagarin has regime/ATR diagnostics, but no fully validated volatility × liquidity matrix; point 101 — no verified next-session volatility forecast; point 102 — instrument-transferability needs explicit cross-instrument walk-forward evidence; point 103 — no dedicated sweep/continuation-vs-reversal detector is claimed. Options positioning remains optional context only when reliable data exist and must be tested against the existing baseline, never used as automatic direction proof.
+- **Current code increment:** persisted NEWS baseline validation in `telegram/news_monitor.py::_confirmed_setups`, with regression coverage in `tests/test_news_monitor.py`; it is a fail-closed data-integrity guard, not implementation of points 100–103.
+- **Validation/deployment:** relevant CI workflows passed on code/test commit `f864b6431a3ef44a677fa2ffda3bae55d6fb4864`; PR #82 is open and unmerged. Render live code is older; latest build failed due exhausted build-pipeline minutes. No out-of-sample profitability test or durable-journal claim.
