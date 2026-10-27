@@ -857,3 +857,25 @@ def test_round_trip_cost_rejects_overflowing_aggregate():
         "round_trip_slippage_bps": 1e308,
     }
     assert _explicit_round_trip_cost_pct(alert) is None
+
+
+def test_scorecard_rejects_finite_prices_whose_derived_return_overflows():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 27, 4, 0, tzinfo=timezone.utc)
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "overflow-return", "asset": "WTI",
+         "direction": "LONG", "price": 1e-308, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "overflow-return", "asset": "WTI",
+         "current_price": 1e308,
+         "observed_at": (sent + timedelta(minutes=20)).isoformat(),
+         "available_at": (sent + timedelta(minutes=20)).isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=sent + timedelta(minutes=30))
+
+    assert report["alerts"] == 1
+    assert report["scored"] == 0
+    assert report["pending"] == 1
+    assert report["mean_directional_return_pct"] is None
