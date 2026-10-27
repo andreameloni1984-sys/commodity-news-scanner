@@ -175,3 +175,14 @@
 - **CI:** all five workflows PASS on final code/test/log head `2071ed46642b639bb2dc0d6286b3ae21e32d3c07`: NEWS alert [40484626245](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40484626245), Public Event Brain [40484626220](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40484626220), PAPER [40484626530](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40484626530), general tests [40484626334](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40484626334), Execution Layer [40484626156](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40484626156).
 - **Deployment/persistence:** PR #79 only, no merge/deploy. Render workspace not available; journal durability is not asserted without a verified `DATABASE_URL`.
 - **Empirical limit:** timestamp/order integrity only; no historical replay or walk-forward profitability test.
+
+
+## 2026-10-27 — Require explicit timezone on news publication timestamps
+
+- **Finding:** \`_parse_datetime()\` supports a permissive default that assigns UTC to naive timestamps. The RSS parser, GDELT parser, and poll intake used that default, allowing ambiguous publication wall-times to pass point-in-time freshness checks.
+- **Change:** \`telegram/news_monitor.py\` now calls \`_parse_datetime(..., require_timezone=True)\` at RSS ingestion, GDELT ingestion, and \`poll_news_once()\`. Explicit-offset timestamps are still normalized to UTC; naive or malformed publication times are skipped.
+- **Regression:** \`tests/test_news_monitor.py\` adds RSS, GDELT, and polling tests for timezone-less publication timestamps.
+- **CI:** triggered on the code/test head; final run IDs and outcomes are recorded in the PR discussion after completion.
+- **Deployment/persistence:** PR #79 branch only; no merge/deploy. Render workspace is not selected in this runtime; no live commit or journal durability claim.
+- **Empirical limit:** strict timestamp hygiene only. Non-compliant feeds may yield fewer alerts until their timestamps are fixed; no live-feed replay or walk-forward performance validation.
+- **Safety:** PAPER/DEMO ONLY; no broker, orders, secrets, or Telegram test messages.
