@@ -640,7 +640,9 @@ def _capture_baseline(event: dict[str, Any], states: list[Any]) -> dict[str, flo
 
 
 def _finite_positive(value: Any) -> float | None:
-    """Return a finite positive price/level, rejecting NaN, infinity and non-numbers."""
+    """Return a finite positive price/level, rejecting booleans and invalid numbers."""
+    if isinstance(value, bool):
+        return None
     try:
         number = float(value)
     except (TypeError, ValueError, OverflowError):
