@@ -705,6 +705,27 @@ def test_rsi_wilder_handles_up_down_flat_and_insufficient_series():
     assert _rsi_wilder([100.0] * 15, 14) == 50.0
     assert _rsi_wilder([1.0, 2.0, 3.0], 14) is None
 
+def test_rsi_wilder_rejects_ambiguous_or_nonfinite_periods():
+    from engine.regime import _rsi_wilder
+
+    closes = list(range(15))
+    invalid_periods = (
+        14.5,
+        True,
+        float("nan"),
+        float("inf"),
+        float("-inf"),
+        "not-a-period",
+        0,
+        -1,
+        10 ** 10000,
+    )
+    for period in invalid_periods:
+        assert _rsi_wilder(closes, period) is None
+
+    # An integral numeric value remains valid and preserves Wilder behavior.
+    assert _rsi_wilder(closes, 14.0) == 100.0
+
 
 def test_rsi_wilder_rejects_invalid_values():
     from engine.regime import _rsi_wilder
