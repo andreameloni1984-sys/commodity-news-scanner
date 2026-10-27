@@ -85,7 +85,8 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
             if row.get("kind") != "NEWS_REACTION" or row.get("event_id") != alert.get("event_id") or row.get("asset") != alert.get("asset"):
                 continue
             observed_at = _parse_datetime(row.get("observed_at") or row.get("recorded_at"))
-            if not observed_at or not (sent_at <= observed_at <= sent_at + timedelta(hours=4)):
+            # Point-in-time scorecards must not use an observation that is still in the future at evaluation time.
+            if not observed_at or observed_at > now or not (sent_at <= observed_at <= sent_at + timedelta(hours=4)):
                 continue
             try:
                 price = float(row.get("current_price"))
