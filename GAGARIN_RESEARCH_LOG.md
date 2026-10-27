@@ -45,3 +45,15 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+## 2026-10-27 — Reject ambiguous RSI Wilder periods
+
+- **Finding:** `engine/regime.py::_rsi_wilder` used `int(period)`, which silently truncated fractional periods such as 14.5 and accepted booleans; infinity could raise an uncaught `OverflowError`.
+- **Change:** reject booleans, non-finite and fractional periods; catch type, value and overflow conversion errors. Positive integer periods and integral numeric values preserve the existing Wilder calculation.
+- **Files:** `engine/regime.py`; `tests/test_pipeline.py`.
+- **Regression coverage:** fractional, boolean, NaN, positive/negative infinity, malformed text, zero, negative, an integer too large to convert to float, and a valid integral float. Existing rising/falling/flat reference cases remain covered.
+- **Operational path:** OHLC closes → `_rsi_wilder()` → regime diagnostics; invalid configuration yields `None`, not a guessed period.
+- **CI:** pending on branch `fix/gagarin-rsi-period-validation-20261027`; no test success is claimed yet.
+- **Deployment:** no merge or deploy. Render workspace build-pipeline minutes are exhausted. Latest observed Gagarin cloud logs explicitly reported `DATABASE_URL missing` and `GAGARIN PERSISTENCE DISABLED`; the journal is not confirmed durable. GDELT emitted `ReadTimeout` with a 300-second retry.
+- **Empirical validation:** no out-of-sample or profitability test; this is indicator-input integrity only.
+- **Safety:** PAPER/DEMO ONLY; no broker, order, or Telegram test message.
