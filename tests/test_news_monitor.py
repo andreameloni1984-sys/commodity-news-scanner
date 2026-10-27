@@ -526,3 +526,28 @@ def test_alert_scorecard_rejects_non_finite_prices_and_invalid_levels():
     assert report["tp1_observed"] == 0
     assert report["sl_observed"] == 0
     assert report["open_at_last_check"] == 1
+
+
+def test_scorecard_rejects_naive_timestamps_and_decision_clock():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 27, 4, 0, tzinfo=timezone.utc)
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "naive-sent", "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "sent_at": "2026-10-27T04:00:00"},
+        {"kind": "NEWS_ALERT_SENT", "event_id": "naive-observation", "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "naive-observation", "asset": "WTI",
+         "current_price": 81.0, "observed_at": "2026-10-27T04:20:00"},
+    ]
+
+    report = build_alert_scorecard(rows, now=sent + timedelta(minutes=30))
+    assert report["alerts"] == 1
+    assert report["scored"] == 0
+    assert report["pending"] == 1
+    assert report["decision_time_valid"] is True
+
+    invalid_clock = build_alert_scorecard(rows, now=datetime(2026, 10, 27, 4, 30))
+    assert invalid_clock["scored"] == 0
+    assert invalid_clock["decision_time_valid"] is False
