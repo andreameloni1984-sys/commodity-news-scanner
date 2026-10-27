@@ -80,7 +80,8 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
     for row in rows:
         if row.get("kind") != "NEWS_ALERT_SENT":
             continue
-        sent_at = _parse_datetime(row.get("sent_at") or row.get("recorded_at"), require_timezone=True)
+        # recorded_at is journal persistence time, not proof of when Telegram sent the alert.
+        sent_at = _parse_datetime(row.get("sent_at"), require_timezone=True)
         raw_alert_price = row.get("price")
         # bool is a subclass of int in Python; True must not become a price of 1.0.
         if isinstance(raw_alert_price, bool):
@@ -98,7 +99,8 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         for row in rows:
             if row.get("kind") != "NEWS_REACTION" or row.get("event_id") != alert.get("event_id") or row.get("asset") != alert.get("asset"):
                 continue
-            observed_at = _parse_datetime(row.get("observed_at") or row.get("recorded_at"), require_timezone=True)
+            # recorded_at is ingestion time; only an explicit market observation time is scoreable.
+            observed_at = _parse_datetime(row.get("observed_at"), require_timezone=True)
             # Point-in-time scorecards may only use observations available by
             # the evaluation time; future-dated rows must remain pending.
             if not observed_at or observed_at > now or not (sent_at <= observed_at <= sent_at + timedelta(hours=4)):

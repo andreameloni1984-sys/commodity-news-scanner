@@ -201,6 +201,30 @@ def test_sputnik_tariff_pause_does_not_match_escalation_pattern():
     assert [item["id"] for item in matches] == ["tariff_pause_2025_04"]
 
 
+def test_scorecard_requires_explicit_sent_and_observed_times_not_recorded_at():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 27, 8, 0, tzinfo=timezone.utc)
+    rows = [
+        # A journal timestamp cannot substitute for the actual alert delivery time.
+        {"kind": "NEWS_ALERT_SENT", "event_id": "missing-sent", "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "recorded_at": sent.isoformat()},
+        # Nor can a journal timestamp substitute for when the market price was observed.
+        {"kind": "NEWS_ALERT_SENT", "event_id": "missing-observation", "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "missing-observation", "asset": "WTI",
+         "current_price": 90.0, "recorded_at": (sent + timedelta(minutes=20)).isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
+
+    assert report["alerts"] == 1
+    assert report["scored"] == 0
+    assert report["pending"] == 1
+    assert report["unscored_expired"] == 0
+
+
 def test_alert_scorecard_scores_only_prices_observed_after_alert():
     from datetime import datetime, timedelta, timezone
     from telegram.news_monitor import build_alert_scorecard
