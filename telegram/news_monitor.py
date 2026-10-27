@@ -108,9 +108,11 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
                 "net_scored": 0, "net_profitable": 0,
                 "net_cost_coverage_pct": None, "mean_net_return_pct": None,
                 "tp1_observed": 0, "sl_observed": 0, "open_at_last_check": 0,
-                "decision_time_valid": False}
+                "duplicate_alerts_dropped": 0, "decision_time_valid": False}
     cutoff = now - timedelta(days=7)
     alerts = []
+    seen_alerts = set()
+    duplicate_alerts_dropped = 0
     for row in rows:
         if row.get("kind") != "NEWS_ALERT_SENT":
             continue
@@ -140,6 +142,16 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         # Future-dated alert rows must not enter the denominator or be
         # counted as pending in a historical scorecard.
         if sent_at and cutoff <= sent_at <= now and math.isfinite(price) and price > 0 and direction in {"LONG", "SHORT"}:
+            # Exact duplicate journal rows must not inflate alert counts or accuracy.
+            # Distinct sends at different times remain separate observations.
+            alert_key = (
+                event_id, asset, direction, sent_at.isoformat(), price,
+                str(row.get("stop")), str(row.get("tp1")),
+            )
+            if alert_key in seen_alerts:
+                duplicate_alerts_dropped += 1
+                continue
+            seen_alerts.add(alert_key)
             alerts.append((row, sent_at, price, direction))
     scored, pending, unscored_expired = [], 0, 0
     for alert, sent_at, alert_price, direction in alerts:
@@ -238,7 +250,7 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
             "net_cost_coverage_pct": round(len(net_scored)/len(scored)*100, 2) if scored else None,
             "mean_net_return_pct": round(sum(x["net_return_pct"] for x in net_scored)/len(net_scored), 4) if net_scored else None,
             "tp1_observed": tp1_observed, "sl_observed": sl_observed, "open_at_last_check": open_count,
-            "decision_time_valid": True}
+            "duplicate_alerts_dropped": duplicate_alerts_dropped, "decision_time_valid": True}
 
 
 def _maybe_send_daily_scorecard(state: dict[str, Any], send_telegram: Callable[[str], bool], now: datetime) -> bool:
