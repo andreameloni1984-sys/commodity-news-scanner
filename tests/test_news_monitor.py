@@ -575,6 +575,9 @@ def test_scorecard_rejects_naive_timestamps_and_decision_clock():
     invalid_clock = build_alert_scorecard(rows, now=datetime(2026, 10, 27, 4, 30))
     assert invalid_clock["scored"] == 0
     assert invalid_clock["decision_time_valid"] is False
+    assert invalid_clock["net_scored"] == 0
+    assert invalid_clock["net_cost_coverage_pct"] is None
+    assert invalid_clock["mean_net_return_pct"] is None
 
 
 def test_alert_scorecard_rejects_boolean_alert_reaction_and_risk_prices():
