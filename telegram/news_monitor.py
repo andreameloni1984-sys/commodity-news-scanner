@@ -140,7 +140,7 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
             # are distinct. A price observed in the past but ingested after the
             # evaluation cutoff is still look-ahead for this scorecard.
             if (not observed_at or not available_at
-                    or observed_at > available_at or available_at > now
+                    or observed_at > available_at or available_at <= sent_at or available_at > now
                     or not (sent_at <= observed_at <= sent_at + timedelta(hours=4))):
                 continue
             raw_observed_price = row.get("current_price")
