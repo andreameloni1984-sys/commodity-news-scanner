@@ -126,6 +126,6 @@
 - **Files:** `telegram/news_monitor.py`; `tests/test_news_monitor.py`.
 - **Regression:** exact 1.5R/2R/2.5R boundary accepted; each just-below-boundary case rejected; NaN configuration rejected.
 - **Operational path:** news event → provisional catalyst classification → live Gagarin setup → `_confirmed_setups` → `_valid_signal_levels` → Telegram PAPER alert eligibility. This does not change the engine's order/risk path and does not place orders.
-- **CI:** awaiting new branch runs; no local test execution is claimed.
+- **CI:** all five relevant workflows passed on final code/test/log head `fef4207c86a5485a0cd9ca755162e95c0c4d7391`: NEWS alert [40530969195](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40530969195), Execution Layer [40530969420](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40530969420), Public Event Brain [40530969373](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40530969373), general tests [40530969396](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40530969396), and PAPER [40530969223](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40530969223).
 - **Deployment:** PR #82 branch only; no merge/deploy while Render build-pipeline minutes are exhausted.
 - **Empirical validation:** geometry and threshold tests only; no live replay, OOS scorecard or profitability claim.
