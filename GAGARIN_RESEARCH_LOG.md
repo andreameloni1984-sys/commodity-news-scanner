@@ -99,3 +99,15 @@ This mapping distinguishes documented lessons from implemented and empirically v
 - **CI:** triggered by this PR branch update; record actual workflow results before considering the change verified.
 - **Deployment:** PR #84 branch only; no merge/deploy. Render build-pipeline quota remains exhausted.
 - **Empirical limit:** ingestion-integrity tests only; no historical OHLCV replay or trading-performance claim. PAPER/DEMO only; no secrets, broker, orders, or Telegram test messages.
+
+
+## 2026-10-27 — Reject boolean numerics in candle ingestion
+
+- **Finding:** `_validate_candles()` is an ingestion boundary that may be called independently of `_normalize()`. Python treats `bool` as a subclass of `int`, so `float(True)` silently becomes `1.0`; a boolean timestamp, volume or internally consistent all-boolean OHLC row could otherwise pass numeric checks.
+- **Change:** `engine/data.py::_validate_candles` now rejects boolean values in timestamp, OHLC and volume fields before float conversion. Existing identical-duplicate deduplication and conflicting-duplicate fail-closed behavior are unchanged.
+- **Regression:** `tests/test_data_finite_values.py::test_validate_candles_rejects_boolean_numeric_values` checks boolean timestamp, volume, and all-boolean OHLC cases while retaining the minimum required valid history.
+- **Commits:** code `1fb0a53a711c1305390ed668436b7d9dfe4e9845`; tests `e3a06af954e4fb6404032aaf2d2018d534ac3ef6`.
+- **CI:** pending fresh Actions result for the latest branch head at time of logging; previous green workflows do not validate these new commits.
+- **Operational path:** provider response → `_validate_candles` → freshness/market status → indicator and setup calculation. Invalid rows are dropped before indicators; no trade direction is inferred.
+- **Empirical limit:** synthetic regression tests only; no live-provider replay or OOS P&L result. This is data-integrity work, not a profitability claim.
+- **Deployment:** PR #84 branch only; no merge/deploy. PAPER/DEMO only; no broker, real orders, secrets, or Telegram test messages.
