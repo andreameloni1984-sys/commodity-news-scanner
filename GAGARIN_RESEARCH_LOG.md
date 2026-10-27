@@ -88,3 +88,14 @@ Source: Library file `Registro Studio IBKR - aggiornato 2026-10-20 sessione 9.md
 
 This mapping distinguishes documented lessons from implemented and empirically validated behavior. The recovered session 9 file is a study register; it is not a Gagarin 100-rule catalog.
 
+
+
+## 2026-10-27 — Reject boolean values at candle ingestion
+
+- **Finding:** Python treats `bool` as a numeric subtype; `float(True)` becomes `1.0`. The candle normalizer and direct validator could therefore accept boolean timestamps, OHLC values, or volume as numeric market data. This is the same class of coercion that earlier scorecard fixes addressed for prices, now fixed at the market-data boundary.
+- **Change:** `engine/data.py::_normalize()` rejects boolean inputs before coercion; `_validate_candles()` independently rejects rows with boolean timestamp/OHLCV fields for callers that bypass normalization.
+- **Operational path:** provider payload → normalization → direct candle validation → duplicate/timestamp/OHLC checks → downstream ATR/RSI/structure.
+- **Regression:** parameterized tests cover all six fields in both the normalizer and direct validator.
+- **CI:** triggered by this PR branch update; record actual workflow results before considering the change verified.
+- **Deployment:** PR #84 branch only; no merge/deploy. Render build-pipeline quota remains exhausted.
+- **Empirical limit:** ingestion-integrity tests only; no historical OHLCV replay or trading-performance claim. PAPER/DEMO only; no secrets, broker, orders, or Telegram test messages.
