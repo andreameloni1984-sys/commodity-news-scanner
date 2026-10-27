@@ -738,3 +738,29 @@ def test_scorecard_requires_observation_availability_before_decision_time():
     assert report["scored"] == 0
     assert report["pending"] == 3
     assert report["coverage_pct"] == 0.0
+
+
+def test_scorecard_does_not_use_pre_delivery_reaction_for_stop_outcome():
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime.fromisoformat("2026-10-27T04:00:00+00:00")
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "post-delivery", "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "stop": 79.0, "tp1": 82.0,
+         "sent_at": sent.isoformat()},
+        # The monitor can log a reaction in the same polling pass before the
+        # Telegram send completes. Equal availability/sent timestamps are
+        # ambiguous and must not be counted as a post-delivery stop.
+        {"kind": "NEWS_REACTION", "event_id": "post-delivery", "asset": "WTI",
+         "current_price": 78.9, "observed_at": sent.isoformat(),
+         "available_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "post-delivery", "asset": "WTI",
+         "current_price": 80.1, "observed_at": (sent + timedelta(minutes=20)).isoformat(),
+         "available_at": (sent + timedelta(minutes=20)).isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=sent + timedelta(minutes=30))
+    assert report["scored"] == 1
+    assert report["sl_observed"] == 0
+    assert report["open_at_last_check"] == 1
+    assert report["correct"] == 1
