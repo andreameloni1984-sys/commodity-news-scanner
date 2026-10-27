@@ -394,7 +394,7 @@ def _normalize(
     # bool is a subclass of int in Python, so float(True) silently
     # becomes 1.0. Reject boolean market fields before numeric coercion.
     if any(isinstance(value, bool) for value in (
-        timestamp, open_price, high_price, low_price, close_price, volume,
+        timestamp, open_price, high, low, close, volume,
     )):
         return None
 
