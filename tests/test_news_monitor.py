@@ -505,3 +505,26 @@ def test_alert_scorecard_rejects_non_finite_prices_and_invalid_levels():
     assert report["tp1_observed"] == 0
     assert report["sl_observed"] == 0
     assert report["open_at_last_check"] == 1
+
+
+def test_capture_baseline_rejects_nonfinite_and_nonpositive_live_prices():
+    from telegram.news_monitor import _capture_baseline
+
+    event = {"assets": ["WTI"]}
+    invalid_prices = [float("inf"), float("-inf"), float("nan"), 0.0, -1.0]
+    for price in invalid_prices:
+        state = SimpleNamespace(
+            commodity="Petrolio WTI",
+            symbol="WTI/USD",
+            live=True,
+            price=price,
+        )
+        assert _capture_baseline(event, [state]) == {}
+
+    valid_state = SimpleNamespace(
+        commodity="Petrolio WTI",
+        symbol="WTI/USD",
+        live=True,
+        price=80.25,
+    )
+    assert _capture_baseline(event, [valid_state]) == {"WTI": 80.25}
