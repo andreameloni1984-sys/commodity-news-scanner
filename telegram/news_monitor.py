@@ -645,10 +645,20 @@ def _finite_positive(value: Any) -> float | None:
     return number if math.isfinite(number) and number > 0 else None
 
 
+def _configured_minimum_rr(name: str, default: str) -> float | None:
+    """Read a finite positive target-RR floor; invalid configuration fails closed."""
+    try:
+        value = float(os.getenv(name, default))
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return value if math.isfinite(value) and value > 0 else None
+
+
 def _valid_signal_levels(
-    direction: str, price: Any, entry: Any, stop: Any, tp1: Any, tp2: Any = None
+    direction: str, price: Any, entry: Any, stop: Any, tp1: Any,
+    tp2: Any = None, tp3: Any = None,
 ) -> bool:
-    """Validate finite positive prices and directionally ordered PAPER risk levels."""
+    """Validate finite PAPER levels, directional geometry and configured minimum target R/R."""
     current, entry_v, stop_v, tp1_v = (
         _finite_positive(value) for value in (price, entry, stop, tp1)
     )
@@ -663,6 +673,16 @@ def _valid_signal_levels(
             return False
     else:
         return False
+
+    risk = abs(entry_v - stop_v)
+    min_tp1_rr = _configured_minimum_rr("MIN_ENTRY_RR_TP1", "1.5")
+    if min_tp1_rr is None:
+        return False
+    tp1_reward = (tp1_v - entry_v) if direction == "LONG" else (entry_v - tp1_v)
+    if tp1_reward / risk < min_tp1_rr:
+        return False
+
+    tp2_v = None
     if tp2 is not None:
         tp2_v = _finite_positive(tp2)
         if tp2_v is None:
@@ -670,6 +690,28 @@ def _valid_signal_levels(
         if direction == "LONG" and tp2_v <= tp1_v:
             return False
         if direction == "SHORT" and tp2_v >= tp1_v:
+            return False
+        min_tp2_rr = _configured_minimum_rr("MIN_ENTRY_RR_TP2", "2.0")
+        if min_tp2_rr is None:
+            return False
+        tp2_reward = (tp2_v - entry_v) if direction == "LONG" else (entry_v - tp2_v)
+        if tp2_reward / risk < min_tp2_rr:
+            return False
+
+    if tp3 is not None:
+        tp3_v = _finite_positive(tp3)
+        if tp3_v is None:
+            return False
+        previous_target = tp2_v if tp2_v is not None else tp1_v
+        if direction == "LONG" and tp3_v <= previous_target:
+            return False
+        if direction == "SHORT" and tp3_v >= previous_target:
+            return False
+        min_tp3_rr = _configured_minimum_rr("MIN_ENTRY_RR_TP3", "2.5")
+        if min_tp3_rr is None:
+            return False
+        tp3_reward = (tp3_v - entry_v) if direction == "LONG" else (entry_v - tp3_v)
+        if tp3_reward / risk < min_tp3_rr:
             return False
     return True
 
@@ -712,7 +754,7 @@ def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str
             if not price_source or price_source.upper() in {"UNKNOWN", "N/A", "NONE"}:
                 continue
             if not _valid_signal_levels(
-                direction, price, entry, stop, tp1, getattr(state, "tp2", None)
+                direction, price, entry, stop, tp1, getattr(state, "tp2", None), getattr(state, "tp3", None)
             ):
                 continue
             price_value = float(price)
