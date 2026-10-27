@@ -165,3 +165,13 @@
 - **CI:** all five workflows PASS on final code/test/log head `c481726e6945a6c13bebe1018bc8a7ded9a2ec6c`: NEWS alert [40484377283](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40484377283), Public Event Brain [40484377162](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40484377162), PAPER [40484377235](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40484377235), general tests [40484377314](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40484377314), Execution Layer [40484377234](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40484377234).
 - **Deployment:** PR #79 only, no merge/deploy; Render live commit unavailable in this runtime.
 - **Empirical limit:** prevents an ordering ambiguity in the scorecard; no historical replay or walk-forward profitability validation.
+
+
+## 2026-10-27 — Timestamp the actual price-analysis availability and Telegram delivery
+
+- **Finding:** the polling clock was captured before source fetch and price analysis, yet reused as `available_at` and `sent_at`. In live operation this can understate when the quote/alert actually became available and blur the ordering of a pre-delivery reaction versus Telegram delivery.
+- **Change:** `poll_news_once()` now rejects a naive injected clock. For live operation it stamps `analysis_available_at` after `run_analysis()` returns; it stamps `sent_at` and the four-hour expiry after Telegram delivery succeeds. `NEWS_ALERT_SENT` records `event_time` (publisher timestamp), `available_at` (first-seen time), `decision_time` (price-analysis completion), and `sent_at` (delivery completion). Reaction rows mark `observation_time_basis=MONITOR_SNAPSHOT` because a provider-native bar timestamp is not currently available in this path.
+- **Regression:** the monitor test checks the four timestamps and adds a naive-clock fail-closed test; the scorecard tests separately exclude reactions whose availability is at/before delivery.
+- **CI:** pending for this follow-up; previous availability/ordering guard passed all five workflows on head `c481726e6945a6c13bebe1018bc8a7ded9a2ec6c`.
+- **Deployment/persistence:** PR #79 only, no merge/deploy. Render workspace not available; journal durability is not asserted without a verified `DATABASE_URL`.
+- **Empirical limit:** timestamp/order integrity only; no historical replay or walk-forward profitability test.
