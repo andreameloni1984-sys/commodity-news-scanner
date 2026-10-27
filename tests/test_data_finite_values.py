@@ -41,6 +41,31 @@ def test_normalize_rejects_non_finite_values(field, value):
     ) is None
 
 
+@pytest.mark.parametrize(
+    "field",
+    ["timestamp", "open", "high", "low", "close", "volume"],
+)
+def test_normalize_rejects_boolean_market_fields(field):
+    candle = {
+        "timestamp": time.time(),
+        "open": 100.0,
+        "high": 102.0,
+        "low": 99.0,
+        "close": 101.0,
+        "volume": 10.0,
+    }
+    candle[field] = True
+
+    assert _normalize(
+        candle["timestamp"],
+        candle["open"],
+        candle["high"],
+        candle["low"],
+        candle["close"],
+        candle["volume"],
+    ) is None
+
+
 def test_normalize_rejects_negative_volume():
     assert _normalize(time.time(), 100, 102, 99, 101, -1) is None
 
