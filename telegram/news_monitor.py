@@ -135,9 +135,13 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
                 continue
             # recorded_at is ingestion time; only an explicit market observation time is scoreable.
             observed_at = _parse_datetime(row.get("observed_at"), require_timezone=True)
-            # Point-in-time scorecards may only use observations available by
-            # the evaluation time; future-dated rows must remain pending.
-            if not observed_at or observed_at > now or not (sent_at <= observed_at <= sent_at + timedelta(hours=4)):
+            available_at = _parse_datetime(row.get("available_at"), require_timezone=True)
+            # The market timestamp and the time this system could use the quote
+            # are distinct. A price observed in the past but ingested after the
+            # evaluation cutoff is still look-ahead for this scorecard.
+            if (not observed_at or not available_at
+                    or observed_at > available_at or available_at > now
+                    or not (sent_at <= observed_at <= sent_at + timedelta(hours=4))):
                 continue
             raw_observed_price = row.get("current_price")
             if isinstance(raw_observed_price, bool):
@@ -1010,6 +1014,7 @@ def poll_news_once(
                             "impact": classified.get("impact", {}).get(asset, "MISTA"),
                             "baseline_at": event.get("baseline_at"),
                             "observed_at": now.isoformat(),
+                            "available_at": now.isoformat(),
                             "baseline_price": baseline_price,
                             "current_price": current_price,
                             "move_pct": round(move_pct, 6),
