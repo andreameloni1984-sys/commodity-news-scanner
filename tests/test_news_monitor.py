@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 from telegram.news_monitor import classify_event, _confirmed_setups  # selected commodity universe is authoritative
@@ -234,13 +235,13 @@ def test_alert_scorecard_scores_only_prices_observed_after_alert():
         {"kind": "NEWS_ALERT_SENT", "event_id": "evt-1", "asset": "WTI", "direction": "LONG",
          "price": 80.0, "sent_at": sent.isoformat()},
         {"kind": "NEWS_REACTION", "event_id": "evt-1", "asset": "WTI",
-         "current_price": 80.2, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+         "current_price": 80.2, "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
         {"kind": "NEWS_ALERT_SENT", "event_id": "evt-2", "asset": "Oro", "direction": "SHORT",
          "price": 4000.0, "sent_at": sent.isoformat()},
         {"kind": "NEWS_REACTION", "event_id": "evt-2", "asset": "Oro",
-         "current_price": 4010.0, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+         "current_price": 4010.0, "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
         {"kind": "NEWS_REACTION", "event_id": "evt-2", "asset": "Oro",
-         "current_price": 3990.0, "observed_at": (sent + timedelta(minutes=5)).isoformat()},
+         "current_price": 3990.0, "observed_at": (sent + timedelta(minutes=5)).isoformat(), "available_at": (sent + timedelta(minutes=5)).isoformat()},
     ]
     report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
     assert report["alerts"] == 2
@@ -275,7 +276,7 @@ def test_alert_scorecard_excludes_observation_after_evaluation_time():
         {"kind": "NEWS_ALERT_SENT", "event_id": "future-observation", "asset": "WTI",
          "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat()},
         {"kind": "NEWS_REACTION", "event_id": "future-observation", "asset": "WTI",
-         "current_price": 81.0, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+         "current_price": 81.0, "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
     ]
 
     report = build_alert_scorecard(rows, now=decision_time)
@@ -295,11 +296,11 @@ def test_alert_scorecard_tracks_observed_tp1_and_stop_loss():
         {"kind": "NEWS_ALERT_SENT", "event_id": "tp", "asset": "WTI", "direction": "LONG",
          "price": 80.0, "stop": 79.0, "tp1": 81.0, "sent_at": sent.isoformat()},
         {"kind": "NEWS_REACTION", "event_id": "tp", "asset": "WTI",
-         "current_price": 81.1, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+         "current_price": 81.1, "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
         {"kind": "NEWS_ALERT_SENT", "event_id": "sl", "asset": "Oro", "direction": "SHORT",
          "price": 4000.0, "stop": 4050.0, "tp1": 3900.0, "sent_at": sent.isoformat()},
         {"kind": "NEWS_REACTION", "event_id": "sl", "asset": "Oro",
-         "current_price": 4060.0, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+         "current_price": 4060.0, "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
     ]
     report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
     assert report["tp1_observed"] == 1
@@ -324,9 +325,9 @@ def test_alert_scorecard_does_not_miss_stop_hit_in_first_15_minutes():
         {"kind": "NEWS_ALERT_SENT", "event_id": "early-sl", "asset": "WTI", "direction": "LONG",
          "price": 80.0, "stop": 79.0, "tp1": 81.0, "sent_at": sent.isoformat()},
         {"kind": "NEWS_REACTION", "event_id": "early-sl", "asset": "WTI",
-         "current_price": 78.9, "observed_at": (sent + timedelta(minutes=5)).isoformat()},
+         "current_price": 78.9, "observed_at": (sent + timedelta(minutes=5)).isoformat(), "available_at": (sent + timedelta(minutes=5)).isoformat()},
         {"kind": "NEWS_REACTION", "event_id": "early-sl", "asset": "WTI",
-         "current_price": 80.1, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+         "current_price": 80.1, "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
     ]
     report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
     assert report["scored"] == 1
@@ -539,9 +540,9 @@ def test_alert_scorecard_rejects_non_finite_prices_and_invalid_levels():
         {"kind": "NEWS_ALERT_SENT", "event_id": "bad-levels", "asset": "WTI", "direction": "LONG",
          "price": 80.0, "stop": float("nan"), "tp1": 82.0, "sent_at": sent.isoformat()},
         {"kind": "NEWS_REACTION", "event_id": "bad-levels", "asset": "WTI",
-         "current_price": float("inf"), "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+         "current_price": float("inf"), "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
         {"kind": "NEWS_REACTION", "event_id": "bad-levels", "asset": "WTI",
-         "current_price": 80.2, "observed_at": (sent + timedelta(minutes=25)).isoformat()},
+         "current_price": 80.2, "observed_at": (sent + timedelta(minutes=25)).isoformat(), "available_at": (sent + timedelta(minutes=25)).isoformat()},
     ]
     report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
     assert report["alerts"] == 1
@@ -563,7 +564,7 @@ def test_scorecard_rejects_naive_timestamps_and_decision_clock():
         {"kind": "NEWS_ALERT_SENT", "event_id": "naive-observation", "asset": "WTI",
          "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat()},
         {"kind": "NEWS_REACTION", "event_id": "naive-observation", "asset": "WTI",
-         "current_price": 81.0, "observed_at": "2026-10-27T04:20:00"},
+         "current_price": 81.0, "observed_at": "2026-10-27T04:20:00", "available_at": "2026-10-27T04:20:00"},
     ]
 
     report = build_alert_scorecard(rows, now=sent + timedelta(minutes=30))
@@ -590,19 +591,19 @@ def test_alert_scorecard_rejects_boolean_alert_reaction_and_risk_prices():
         {"kind": "NEWS_ALERT_SENT", "event_id": "bool-alert", "asset": "WTI",
          "direction": "LONG", "price": True, "sent_at": sent.isoformat()},
         {"kind": "NEWS_REACTION", "event_id": "bool-alert", "asset": "WTI",
-         "current_price": 80.2, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+         "current_price": 80.2, "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
         # A boolean reaction price must not become a false crash to 1.0.
         {"kind": "NEWS_ALERT_SENT", "event_id": "bool-reaction", "asset": "WTI",
          "direction": "LONG", "price": 80.0, "stop": 78.0, "tp1": 82.0,
          "sent_at": sent.isoformat()},
         {"kind": "NEWS_REACTION", "event_id": "bool-reaction", "asset": "WTI",
-         "current_price": True, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+         "current_price": True, "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
         # Boolean risk levels must not be treated as real numeric stop/target.
         {"kind": "NEWS_ALERT_SENT", "event_id": "bool-levels", "asset": "Brent",
          "direction": "SHORT", "price": 80.0, "stop": 90.0, "tp1": True,
          "sent_at": sent.isoformat()},
         {"kind": "NEWS_REACTION", "event_id": "bool-levels", "asset": "Brent",
-         "current_price": 79.0, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+         "current_price": 79.0, "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
     ]
 
     report = build_alert_scorecard(rows, now=sent + timedelta(minutes=30))
@@ -623,7 +624,7 @@ def test_scorecard_excludes_alerts_sent_after_decision_time():
         {"kind": "NEWS_ALERT_SENT", "event_id": "future-alert", "asset": "WTI",
          "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat()},
         {"kind": "NEWS_REACTION", "event_id": "future-alert", "asset": "WTI",
-         "current_price": 82.0, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+         "current_price": 82.0, "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
     ]
 
     report = build_alert_scorecard(rows, now=now)
@@ -644,12 +645,12 @@ def test_scorecard_requires_event_and_asset_identity_to_match_reactions():
         {"kind": "NEWS_ALERT_SENT", "asset": "WTI", "direction": "LONG",
          "price": 80.0, "sent_at": sent.isoformat()},
         {"kind": "NEWS_REACTION", "asset": "WTI", "current_price": 82.0,
-         "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+         "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
         # Missing asset must not match another reaction whose asset is also absent.
         {"kind": "NEWS_ALERT_SENT", "event_id": "missing-asset", "direction": "LONG",
          "price": 80.0, "sent_at": sent.isoformat()},
         {"kind": "NEWS_REACTION", "event_id": "missing-asset", "current_price": 82.0,
-         "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+         "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
     ]
 
     report = build_alert_scorecard(rows, now=sent + timedelta(minutes=30))
@@ -671,11 +672,11 @@ def test_scorecard_reports_net_return_only_with_explicit_round_trip_costs():
          "round_trip_spread_cost_bps": 2.0, "round_trip_fees_cost_bps": 1.0,
          "round_trip_slippage_bps": 3.0},
         {"kind": "NEWS_REACTION", "event_id": "costed", "asset": "WTI",
-         "current_price": 100.10, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+         "current_price": 100.10, "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
         {"kind": "NEWS_ALERT_SENT", "event_id": "missing-costs", "asset": "Brent", "direction": "LONG",
          "price": 100.0, "sent_at": sent.isoformat()},
         {"kind": "NEWS_REACTION", "event_id": "missing-costs", "asset": "Brent",
-         "current_price": 100.10, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+         "current_price": 100.10, "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
     ]
 
     report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
@@ -698,7 +699,7 @@ def test_scorecard_does_not_assume_invalid_costs_are_zero():
          "round_trip_spread_cost_bps": True, "round_trip_fees_cost_bps": 0.0,
          "round_trip_slippage_bps": 0.0},
         {"kind": "NEWS_REACTION", "event_id": "bad-costs", "asset": "WTI",
-         "current_price": 100.10, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+         "current_price": 100.10, "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
     ]
 
     report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
@@ -708,3 +709,32 @@ def test_scorecard_does_not_assume_invalid_costs_are_zero():
     assert report["mean_net_return_pct"] is None
     assert report["net_cost_coverage_pct"] == 0.0
 
+
+
+def test_scorecard_requires_observation_availability_before_decision_time():
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime.fromisoformat("2026-10-27T04:00:00+00:00")
+    now = datetime.fromisoformat("2026-10-27T04:30:00+00:00")
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "late-available", "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "late-available", "asset": "WTI",
+         "current_price": 82.0, "observed_at": (sent + timedelta(minutes=20)).isoformat(),
+         "available_at": (sent + timedelta(minutes=40)).isoformat()},
+        {"kind": "NEWS_ALERT_SENT", "event_id": "missing-available", "asset": "Brent",
+         "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "missing-available", "asset": "Brent",
+         "current_price": 82.0, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+        {"kind": "NEWS_ALERT_SENT", "event_id": "impossible-order", "asset": "Gold",
+         "direction": "LONG", "price": 4000.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "impossible-order", "asset": "Gold",
+         "current_price": 4010.0, "observed_at": (sent + timedelta(minutes=20)).isoformat(),
+         "available_at": (sent + timedelta(minutes=10)).isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=now)
+    assert report["alerts"] == 3
+    assert report["scored"] == 0
+    assert report["pending"] == 3
+    assert report["coverage_pct"] == 0.0
