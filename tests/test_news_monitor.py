@@ -542,3 +542,23 @@ def test_confirmed_setups_rejects_levels_below_minimum_rr():
         data_source="TEST_FEED",
     )
     assert _confirmed_setups(event, [state]) == []
+
+def test_invalid_news_reaction_threshold_fails_closed(monkeypatch):
+    from telegram.news_monitor import _confirmed_setups
+
+    event = {
+        "title": "OPEC announces production cut",
+        "baseline_prices": {"WTI": 79.9},
+    }
+    state = SimpleNamespace(
+        commodity="Petrolio WTI", symbol="WTI/USD", setup_direction="LONG",
+        final_decision="PAPER_SIGNAL", trigger_confirmed=True, live=True,
+        price=80.0, entry=80.0, stop=79.0, tp1=81.5, tp2=82.0, tp3=82.5,
+        data_source="TEST_FEED",
+    )
+    for invalid_threshold in ("NaN", "Infinity", "-Infinity", "-0.1", "not-a-number"):
+        monkeypatch.setenv("GAGARIN_NEWS_MIN_REACTION_PCT", invalid_threshold)
+        assert _confirmed_setups(event, [state]) == []
+
+    monkeypatch.setenv("GAGARIN_NEWS_MIN_REACTION_PCT", "0.05")
+    assert len(_confirmed_setups(event, [state])) == 1
