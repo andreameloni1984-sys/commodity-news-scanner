@@ -874,6 +874,31 @@ def test_scorecard_rejects_alerts_without_event_or_asset_identity():
     assert result["pending"] == 0
     assert result["correct"] == 0
 
+def test_scorecard_deduplicates_exact_duplicate_alert_rows():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 27, 8, 0, tzinfo=timezone.utc)
+    observed = sent + timedelta(minutes=20)
+    alert = {
+        "kind": "NEWS_ALERT_SENT", "event_id": "evt-duplicate", "asset": "WTI",
+        "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat(),
+        "stop": 79.0, "tp1": 82.0,
+    }
+    reaction = {
+        "kind": "NEWS_REACTION", "event_id": "evt-duplicate", "asset": "WTI",
+        "current_price": 81.0, "observed_at": observed.isoformat(),
+        "available_at": (observed + timedelta(seconds=1)).isoformat(),
+    }
+
+    report = build_alert_scorecard([alert, dict(alert), reaction], now=sent + timedelta(minutes=30))
+
+    assert report["alerts"] == 1
+    assert report["scored"] == 1
+    assert report["correct"] == 1
+    assert report["duplicate_alerts_dropped"] == 1
+
+
 
 def test_round_trip_cost_rejects_overflowing_aggregate():
     from telegram.news_monitor import _explicit_round_trip_cost_pct
