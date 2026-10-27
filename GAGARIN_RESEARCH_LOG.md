@@ -78,3 +78,13 @@
 - **Empirical limit:** the historical note establishes that a stale-data incident was reported, not that the same feeds are stale now or that any agricultural signal was profitable.
 - **Safety:** PAPER/DEMO only; no provider secrets read, no broker, no orders, no Telegram test message.
 
+## 2026-10-27 — Final verification of Wilder RSI overflow guard
+
+- **Code/test:** `engine/regime.py` commit `8ee3266bb07483ebd735c4e7a4916eb5390c4ae5`; `tests/test_pipeline.py` commit `2ba4a45b47e0db895227f74ebe41a8307458db32`; research-log commit `c9e9683866fdbdde1ff6126107cbe883da432bcf`.
+- **CI:** all five workflows PASS on the current branch head: general tests [40541207280](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40541207280), NEWS alert [40541207748](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40541207748), Public Event Brain [40541207489](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40541207489), Execution Layer [40541207426](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40541207426), PAPER [40541206989](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40541206989).
+- **Main / PR:** current `main` SHA observed: `99ad72b69cddbed0f80ef9f671c5b70deb9df024`. PR #83 remains open/draft; the change is not merged.
+- **Render:** latest successful deploy found after paging the deploy history is `86068d701c860670a9d9e0e4e65af98860a57cfa` (2026-10-21). The latest attempt on `99ad72b69cddbed0f80ef9f671c5b70deb9df024` failed on 2026-10-27; Render event history explicitly reports `pipeline_minutes_exhausted`. No deploy was triggered by this work.
+- **Runtime observations:** GDELT logs show repeated HTTP 429 and ReadTimeout/JSONDecodeError with backoff during 2026-10-26/27. Logs also report `DATABASE_URL missing` / `LOCAL_CSV_NO_DATABASE_URL`; persistent journal durability is not confirmed. The sampled news poll at 2026-10-27 15:31 UTC reported 150 fetched, zero new relevant, zero pending and zero alerts.
+- **Empirical limit:** numeric RSI guard only; no market replay, OOS performance or profitability claim.
+- **Safety:** PAPER/DEMO only; no broker, orders, or Telegram test messages.
+
