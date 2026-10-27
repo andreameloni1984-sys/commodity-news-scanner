@@ -123,3 +123,14 @@
 - **Deployment:** PR #79 branch only; no merge/deploy. Render workspace was not selected; current live commit not re-verified.
 - **Empirical limit:** this adds a reporting path only. It does not create costs when provider/broker data are absent and is not a walk-forward or profitability study.
 - **Safety:** PAPER/DEMO ONLY; no broker, orders, secrets, or Telegram test messages.
+
+
+## Verification — 2026-10-27 09:07 UTC (explicit net-of-cost scorecard diagnostics)
+
+- **Scorecard code commit:** `4e1edf85d061d30c3404f58c286502386e7fabee`
+- **Stable invalid-clock output schema commit:** `838695013594dbcb4e5f9c8e92855ec0c97e5708`
+- **Regression tests commit:** `2b84f3207745e90bb78435eb9cff6dbbff746160`
+- **Invalid-clock schema test commit:** `f54989a4029996eb7be91d2c33ca40b6920d7625`
+- **Current CI:** final code/test head checks are being verified; record final statuses after completion. Previous scorecard branch checks passed on head `95d5875855df3674e4597d7ffc83feeca8bdf040` before this cost-diagnostics follow-up.
+- **Deployment:** PR #79 branch only; no merge/deploy. Render workspace not selected; live commit not verified. `DATABASE_URL` not checked; journal durability not asserted.
+- **Empirical limit:** net returns are reported only when explicit round-trip spread, fees and slippage are all present and valid; missing/invalid cost data yields no net estimate, never zero-cost assumption. No historical replay or walk-forward validation.
