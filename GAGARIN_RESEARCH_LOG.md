@@ -57,3 +57,15 @@
 - **Deployment:** no merge or deploy. Render workspace build-pipeline minutes are exhausted. Latest observed Gagarin cloud logs explicitly reported `DATABASE_URL missing` and `GAGARIN PERSISTENCE DISABLED`; the journal is not confirmed durable. GDELT emitted `ReadTimeout` with a 300-second retry.
 - **Empirical validation:** no out-of-sample or profitability test; this is indicator-input integrity only.
 - **Safety:** PAPER/DEMO ONLY; no broker, order, or Telegram test message.
+
+## 2026-10-27 — Reject overflowed price deltas in Wilder RSI
+
+- **Finding:** validating each close as finite is insufficient: subtracting opposite extreme finite floats (for example, -1e308 and +1e308) overflows to infinity. The previous RSI calculation could then return a plausible endpoint or NaN from invalid intermediate arithmetic.
+- **Change:** `engine/regime.py::_rsi_wilder` now rejects non-finite close deltas and non-finite smoothed gain/loss values, checks the denominator, and uses the algebraically equivalent `100 * avg_gain / (avg_gain + avg_loss)` formula to avoid an unnecessary gain/loss ratio overflow.
+- **Regression:** `tests/test_pipeline.py::test_rsi_wilder_rejects_overflowed_close_differences` checks both signs of extreme finite closes.
+- **Operational path:** OHLC closes → `_rsi_wilder` → regime diagnostics. Invalid arithmetic returns `None`; no directional value is fabricated.
+- **CI:** code and test have been committed to PR #83; the new CI run is pending at time of this log entry. Prior PR head checks passed, but they do not validate this new change.
+- **Deployment:** no merge/deploy; Render build-pipeline minutes remain exhausted.
+- **Empirical limit:** numerical-integrity regression only; no OOS profitability claim.
+- **Safety:** PAPER/DEMO ONLY; no broker, order, or Telegram test message.
+
