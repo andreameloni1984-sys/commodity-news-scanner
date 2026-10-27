@@ -632,18 +632,17 @@ def _capture_baseline(event: dict[str, Any], states: list[Any]) -> dict[str, flo
         for state in states:
             if not _asset_matches(asset, state) or not bool(getattr(state, "live", False)):
                 continue
-            try:
-                value = float(getattr(state, "price", None))
-            except (TypeError, ValueError):
-                continue
-            if value > 0:
+            value = _finite_positive(getattr(state, "price", None))
+            if value is not None:
                 baseline[asset] = value
                 break
     return baseline
 
 
 def _finite_positive(value: Any) -> float | None:
-    """Return a finite positive price/level, rejecting NaN, infinity and non-numbers."""
+    """Return a finite positive price/level, rejecting booleans and invalid numbers."""
+    if isinstance(value, bool):
+        return None
     try:
         number = float(value)
     except (TypeError, ValueError, OverflowError):

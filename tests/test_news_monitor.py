@@ -361,6 +361,7 @@ def test_valid_signal_levels_enforces_directional_order_and_finite_values():
 
     assert _valid_signal_levels("LONG", 80.1, 80.1, 78.5, 83.0, 84.0)
     assert _valid_signal_levels("SHORT", 79.9, 80.0, 81.0, 78.0, 77.0)
+    assert not _valid_signal_levels("LONG", True, 80.1, 78.5, 83.0, 84.0)
     assert not _valid_signal_levels("LONG", float("nan"), 80.1, 78.5, 83.0, 84.0)
     assert not _valid_signal_levels("LONG", 80.1, float("inf"), 78.5, 83.0, 84.0)
     assert not _valid_signal_levels("LONG", 80.1, 80.1, 80.2, 83.0, 84.0)
@@ -505,3 +506,26 @@ def test_alert_scorecard_rejects_non_finite_prices_and_invalid_levels():
     assert report["tp1_observed"] == 0
     assert report["sl_observed"] == 0
     assert report["open_at_last_check"] == 1
+
+
+def test_capture_baseline_rejects_nonfinite_and_nonpositive_live_prices():
+    from telegram.news_monitor import _capture_baseline
+
+    event = {"assets": ["WTI"]}
+    invalid_prices = [True, float("inf"), float("-inf"), float("nan"), 0.0, -1.0]
+    for price in invalid_prices:
+        state = SimpleNamespace(
+            commodity="Petrolio WTI",
+            symbol="WTI/USD",
+            live=True,
+            price=price,
+        )
+        assert _capture_baseline(event, [state]) == {}
+
+    valid_state = SimpleNamespace(
+        commodity="Petrolio WTI",
+        symbol="WTI/USD",
+        live=True,
+        price=80.25,
+    )
+    assert _capture_baseline(event, [valid_state]) == {"WTI": 80.25}
