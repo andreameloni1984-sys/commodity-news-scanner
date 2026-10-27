@@ -53,7 +53,7 @@
 - **Files:** `telegram/news_monitor.py`; `tests/test_news_monitor.py`.
 - **Operational path:** journal rows → `build_alert_scorecard(rows, now)` → post-alert reaction filtering → outcome/coverage counters.
 - **Regression test:** an alert at 04:00 with a reaction timestamp at 04:20, evaluated at 04:10, remains unscored/pending and is not counted as expired.
-- **CI:** pending on the new PR branch; no pass is claimed until all relevant workflows complete.
+- **CI:** all five relevant workflows passed on code/test commit `d6802ef577569b0261114df0412e22c1656b3bea`: [main tests](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40451541544), [NEWS alert](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40451541383), [Public Event Brain](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40451541398), [Execution Layer](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40451541546), and [PAPER](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40451541515). This research-log update will receive its own workflow run.
 - **Deployment:** branch only; no Render deploy triggered. Live commit not confirmed in this run.
 - **Empirical validation:** no historical replay or out-of-sample performance test performed. This fixes temporal eligibility, not predictive accuracy.
 - **Safety:** scorecard-only change; no entry authorization or order execution changed. PAPER/DEMO ONLY.
