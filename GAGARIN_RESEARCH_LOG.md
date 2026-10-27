@@ -53,6 +53,6 @@
 - **Files:** `engine/regime.py`; `tests/test_rsi_wilder_input_validation.py`.
 - **Regression coverage:** fractional, boolean, NaN, positive/negative infinity, malformed text, rising-series and flat-series cases.
 - **Commit:** code change `4e9cf2a434419a856d34aa1aa49aec35efec7df0`; test `ff26a3bdb76bb57567798e4df069b59aab38977d`.
-- **CI:** no workflow run is currently associated with the branch commits; automated validation remains pending. A pull request could not be opened through the available GitHub action in this run.
+- **CI on code/test head `5bc48d90514907e4aed754a54e71fa08edb883ce`:** all five PR-triggered workflows passed: runs `40445176899`, `40445176824`, `40445176877`, `40445176901`, `40445176923`. A documentation-only follow-up may trigger a fresh run; do not treat that new run as verified until it completes.
 - **Empirical validation:** not performed; this is input-integrity validation, not evidence of trading performance.
 - **Safety:** PAPER/DEMO ONLY; no broker, orders, merge or Render deploy.
