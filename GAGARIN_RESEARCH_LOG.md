@@ -209,3 +209,14 @@
 - **Deployment/persistence:** PR #79 branch only; no merge/deploy. Render workspace and live `DATABASE_URL` remain unverified; journal durability is not claimed.
 - **Empirical limits:** deduplication improves scorecard accounting only. It does not validate predictive edge or profitability; no historical replay/walk-forward test is claimed.
 - **Safety:** PAPER/DEMO ONLY; no broker, orders, secrets or Telegram test messages.
+
+
+## 2026-10-27 13:10 UTC — Keep WATCH/WAIT rows out of aggressive paper portfolios
+- **Finding:** the scheduled PAPER Monitor run `40502048512` returned `signals: []` and an XAU/USD row with `action=PAPER_WATCH`, `reason=TRIGGER_NOT_CONFIRMED`, while the response's aggressive portfolio contained a newly opened LONG at the same timestamp. Inspection of `cloud_api.py` showed the aggressive loops overwrote every candidate action with `PAPER_SIGNAL` before calling `PaperPortfolio.open_signal()`, bypassing the Risk Governor action.
+- **Change:** added `_is_authorized_paper_candidate()` and applied it to both commodity and Forex aggressive loops. A candidate must already have `PAPER_ENTRY` or `PAPER_SIGNAL` from the normal decision path before the aggressive portfolio can size/open it; `PAPER_WATCH` and `WAIT` are not promoted.
+- **Regression:** new `tests/test_cloud_api_candidate_gate.py` covers WATCH, WAIT, missing action, and the two authorized actions.
+- **Operational path:** market analysis → Risk Governor action → authorized candidate gate → paper portfolio geometry/risk checks → simulated position.
+- **CI:** pending for code/test commit; previous green scorecard workflows do not validate this additional gate.
+- **Deployment/persistence:** PR #79 branch only; no merge/deploy. Render workspace is not selected; live commit and `DATABASE_URL` remain unverified, so durable-journal status is not claimed.
+- **Empirical limit:** this prevents unauthorized simulated entries in the identified path; it does not establish trading edge. No replay/walk-forward performance test.
+- **Safety:** PAPER/DEMO ONLY; no broker, real orders, secrets or Telegram test messages.
