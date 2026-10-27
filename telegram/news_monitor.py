@@ -81,9 +81,13 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         if row.get("kind") != "NEWS_ALERT_SENT":
             continue
         sent_at = _parse_datetime(row.get("sent_at") or row.get("recorded_at"), require_timezone=True)
+        raw_alert_price = row.get("price")
+        # bool is a subclass of int in Python; True must not become a price of 1.0.
+        if isinstance(raw_alert_price, bool):
+            continue
         try:
-            price = float(row.get("price"))
-        except (TypeError, ValueError):
+            price = float(raw_alert_price)
+        except (TypeError, ValueError, OverflowError):
             continue
         direction = str(row.get("direction") or "").upper()
         if sent_at and sent_at >= cutoff and math.isfinite(price) and price > 0 and direction in {"LONG", "SHORT"}:
@@ -99,9 +103,12 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
             # the evaluation time; future-dated rows must remain pending.
             if not observed_at or observed_at > now or not (sent_at <= observed_at <= sent_at + timedelta(hours=4)):
                 continue
+            raw_observed_price = row.get("current_price")
+            if isinstance(raw_observed_price, bool):
+                continue
             try:
-                price = float(row.get("current_price"))
-            except (TypeError, ValueError):
+                price = float(raw_observed_price)
+            except (TypeError, ValueError, OverflowError):
                 continue
             if math.isfinite(price) and price > 0:
                 reaction_observations.append((observed_at, price))
@@ -121,11 +128,15 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         observed_at, current_price = observations[-1]
         raw_pct = (current_price / alert_price - 1) * 100
         signed_pct = raw_pct if direction == "LONG" else -raw_pct
-        try:
-            stop = float(alert.get("stop"))
-            tp1 = float(alert.get("tp1"))
-        except (TypeError, ValueError):
+        raw_stop, raw_tp1 = alert.get("stop"), alert.get("tp1")
+        if isinstance(raw_stop, bool) or isinstance(raw_tp1, bool):
             stop, tp1 = None, None
+        else:
+            try:
+                stop = float(raw_stop)
+                tp1 = float(raw_tp1)
+            except (TypeError, ValueError, OverflowError):
+                stop, tp1 = None, None
         outcome = "OPEN_AT_LAST_CHECK"
         levels_valid = (
             stop is not None and tp1 is not None
