@@ -68,3 +68,14 @@
 - **Operational path:** stored event baseline → news catalyst classification → live Gagarin setup gate → baseline move check → PAPER alert eligibility.
 - **Validation limit:** integrity guard only; no profitability or live-delivery claim. Await CI on the final PR head. No merge, Render deploy, Telegram test message, broker, or order. DATABASE_URL and durable journal are not verified.
 - **Safety:** PAPER/DEMO ONLY.
+
+
+## 2026-10-27 — CI and Render verification for persisted news baseline guard
+
+- **Code commit:** `be218a518c61a7ea7c7b4a8ca2471d9bc2cea872`; **final regression-test commit:** `f864b6431a3ef44a677fa2ffda3bae55d6fb4864`; **research-log update before this entry:** `00f60e2c41384086a71307c7cead9613a336a66e`.
+- **CI:** all five relevant workflows PASS on the final code/test revision: general tests [40525930346](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40525930346), Public Event Brain [40525930379](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40525930379), NEWS alert [40525930399](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40525930399), Execution Layer [40525930428](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40525930428), and PAPER [40525930437](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40525930437).
+- **PR:** #82 remains open/unmerged; no merge or deployment.
+- **Render:** last observed live Gagarin Telegram deployment is commit `86068d701c860670a9d9e0e4e65af98860a57cfa` (2026-10-21). Latest build attempt on main commit `99ad72b69cddbed0f80ef9f671c5b70deb9df024` failed at 2026-10-27 12:48 UTC; Render logs explicitly say the workspace exhausted build-pipeline minutes. No deploy was triggered by this PR.
+- **Telegram/runtime evidence:** logs at 2026-10-27 13:32 UTC show webhook verified/active and startup welcome delivered; an /aggressivo212 command was logged as delivered. Subsequent news polls (13:38–13:47 UTC) fetched 150–162 items but reported `new_relevant=0`, `pending=0`, `analysis=NO`, `alerts=0`. This verifies the observed runtime path but does not prove alert coverage or predictive performance. DATABASE_URL/durable journal status remains unverified.
+- **Empirical limit:** input integrity only; no live replay or out-of-sample profitability test.
+- **Safety:** PAPER/DEMO ONLY; no secrets, broker, orders, or Telegram test messages.
