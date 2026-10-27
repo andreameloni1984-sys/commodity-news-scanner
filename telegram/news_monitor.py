@@ -525,7 +525,7 @@ def _get_rss_items(source: str, url: str) -> list[dict[str, Any]]:
         title = fields.get("title", "")
         link = fields.get("link", "")
         published = fields.get("pubdate") or fields.get("published") or fields.get("updated") or fields.get("date")
-        parsed = _parse_datetime(published)
+        parsed = _parse_datetime(published, require_timezone=True)
         if title and link and parsed:
             items.append({"source": source, "title": title, "url": link, "published_at": parsed.isoformat()})
     return items
@@ -560,7 +560,7 @@ def _get_gdelt_items() -> list[dict[str, Any]]:
             continue
         title = str(row.get("title") or "").strip()
         url = str(row.get("url") or "").strip()
-        published = _parse_datetime(row.get("seendate") or row.get("datetime"))
+        published = _parse_datetime(row.get("seendate") or row.get("datetime"), require_timezone=True)
         if title and url and published:
             items.append({
                 "source": str(row.get("domain") or "GDELT"),
@@ -909,7 +909,7 @@ def poll_news_once(
     bootstrap_cutoff = now - timedelta(minutes=3)
 
     for item in fetched:
-        published = _parse_datetime(item.get("published_at"))
+        published = _parse_datetime(item.get("published_at"), require_timezone=True)
         if published is None or published < fresh_cutoff or published > now + timedelta(minutes=2):
             continue
         fp = _fingerprint(item)
