@@ -58,3 +58,13 @@
 - **Empirical validation:** no live replay or out-of-sample test; baseline input integrity only.
 - **Persistence:** live `DATABASE_URL` not verified; journal durability is not claimed.
 - **Safety:** PAPER/DEMO ONLY; no broker, orders, secrets or Telegram test messages.
+
+
+## 2026-10-27 — Revalidate persisted news baselines before creating setups
+
+- **Finding:** capture-time validation rejected booleans and non-finite prices, but `_confirmed_setups()` still coerced the event's persisted `baseline_prices` with `float()`. Corrupted state could therefore bypass the earlier guard: `True` becomes 1.0 and NaN can evade a simple `<= 0` check.
+- **Change:** `telegram/news_monitor.py::_confirmed_setups` now applies the shared finite-positive validator at the final decision boundary and skips invalid baselines.
+- **Regression:** `tests/test_news_monitor.py::test_confirmed_setups_rejects_corrupt_persisted_baselines` covers booleans, NaN, infinities, zero, negative, and malformed values while retaining the valid-signal path.
+- **Operational path:** stored event baseline → news catalyst classification → live Gagarin setup gate → baseline move check → PAPER alert eligibility.
+- **Validation limit:** integrity guard only; no profitability or live-delivery claim. Await CI on the final PR head. No merge, Render deploy, Telegram test message, broker, or order. DATABASE_URL and durable journal are not verified.
+- **Safety:** PAPER/DEMO ONLY.
