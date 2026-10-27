@@ -117,3 +117,15 @@
 - **Verified result:** the earlier conversation explicitly recorded that the original numbered 1–100 catalog and complete list of roughly 100 points had not been recovered; only incremental summaries were available. The IBKR session-9 file is a separate study register, with numbered study items through item 32 and later hypotheses; it is not evidence of the missing 100-point catalog.
 - **Decision:** do not reconstruct or relabel missing items as original lessons. Apply only directly retrievable, source-backed findings and record inferred hypotheses separately. Items 100–103 appearing in recent implementation notes remain implementation hypotheses, not proof that the original catalog has been recovered.
 - **Scope:** this is a provenance/research-integrity finding, not a code feature or empirical trading result.
+
+
+## 2026-10-27 — Enforce target-specific reward/risk floors at the NEWS alert gate
+
+- **Finding:** `_valid_signal_levels` checked finite positive prices and LONG/SHORT target ordering, but an otherwise ordered setup could pass with TP1, TP2 or TP3 closer than the project's documented target-specific reward/risk floors.
+- **Implemented:** require finite positive `MIN_ENTRY_RR_TP1` (default 1.5R), `MIN_ENTRY_RR_TP2` (default 2.0R when TP2 is present), and `MIN_ENTRY_RR_TP3` (default 2.5R when TP3 is present). Invalid/non-finite/non-positive configuration fails closed. The final NEWS setup gate passes TP3 when supplied by the state.
+- **Files:** `telegram/news_monitor.py`; `tests/test_news_monitor.py`.
+- **Regression:** exact 1.5R/2R/2.5R boundary accepted; each just-below-boundary case rejected; NaN configuration rejected.
+- **Operational path:** news event → provisional catalyst classification → live Gagarin setup → `_confirmed_setups` → `_valid_signal_levels` → Telegram PAPER alert eligibility. This does not change the engine's order/risk path and does not place orders.
+- **CI:** awaiting new branch runs; no local test execution is claimed.
+- **Deployment:** PR #82 branch only; no merge/deploy while Render build-pipeline minutes are exhausted.
+- **Empirical validation:** geometry and threshold tests only; no live replay, OOS scorecard or profitability claim.
