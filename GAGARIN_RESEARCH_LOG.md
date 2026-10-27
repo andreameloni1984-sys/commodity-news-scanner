@@ -129,3 +129,14 @@
 - **CI:** all five relevant workflows passed on final code/test/log head `fef4207c86a5485a0cd9ca755162e95c0c4d7391`: NEWS alert [40530969195](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40530969195), Execution Layer [40530969420](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40530969420), Public Event Brain [40530969373](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40530969373), general tests [40530969396](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40530969396), and PAPER [40530969223](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40530969223).
 - **Deployment:** PR #82 branch only; no merge/deploy while Render build-pipeline minutes are exhausted.
 - **Empirical validation:** geometry and threshold tests only; no live replay, OOS scorecard or profitability claim.
+
+
+## Recovered from prior conversation summaries — 2026-10-03/05 (not the missing 100-point catalog)
+
+- **2026-10-03 07:04 UTC summary:** accepted project boundary: Sputnik = public-disclosure/intelligence; Gagarin = market/trading validation, with no automatic code/config fusion. The reusable research ideas were event clustering, source deduplication, source weighting and evidence confidence.
+- **2026-10-03 21:17 UTC summary:** keyword-to-market causality and automatic LONG/SHORT from keywords were explicitly rejected.
+- **2026-10-05 05:33 UTC summary:** distinguish verified facts, signals and correlations; rumours must not be promoted to certainty.
+- **Mapping to current code:** `telegram/news_monitor.py::classify_event` labels the news impact as heuristic/provisional; `_confirmed_setups` requires a live, trigger-confirmed Gagarin setup, price reaction and valid entry/SL/TP geometry. This is not yet a full price-volume gate because the NEWS handoff does not independently verify a volume baseline.
+- **New alert risk gate:** TP1/TP2/TP3 must meet configured minimum R/R of 1.5R/2R/2.5R (defaults) when each target is supplied. Regression tests and all five relevant workflows passed on code/test head `fef4207c86a5485a0cd9ca755162e95c0c4d7391`; docs-only checks passed in [40531123729](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40531123729) and [40531123780](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40531123780).
+- **Deployment/persistence:** PR #82 remains draft and unmerged; no Render deploy. `DATABASE_URL` and durable journal persistence are not confirmed.
+- **Empirical status:** R/R geometry is unit-tested, but there is no live replay/OOS evidence that this filter improves expectancy. These are recovered conversation summaries, not the missing original numbered catalog.
