@@ -519,3 +519,25 @@ def test_asset_matches_requires_exact_known_spot_symbol_aliases():
     assert not _asset_matches("Oro", SimpleNamespace(commodity="", symbol="NOTXAUUSD"))
     # Do not mix a futures contract into a spot baseline without contract/roll metadata.
     assert not _asset_matches("Oro", SimpleNamespace(commodity="", symbol="GC=F"))
+
+
+def test_alert_scorecard_rejects_boolean_prices():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 27, 14, 0, tzinfo=timezone.utc)
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "bool-alert", "asset": "WTI",
+         "direction": "LONG", "price": True, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "bool-alert", "asset": "WTI",
+         "current_price": 81.0, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+        {"kind": "NEWS_ALERT_SENT", "event_id": "valid-alert", "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "valid-alert", "asset": "WTI",
+         "current_price": True, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+    ]
+    report = build_alert_scorecard(rows, now=sent + timedelta(minutes=30))
+    assert report["alerts"] == 1
+    assert report["scored"] == 0
+    assert report["pending"] == 1
+
