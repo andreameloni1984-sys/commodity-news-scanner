@@ -182,7 +182,7 @@
 - **Finding:** \`_parse_datetime()\` supports a permissive default that assigns UTC to naive timestamps. The RSS parser, GDELT parser, and poll intake used that default, allowing ambiguous publication wall-times to pass point-in-time freshness checks.
 - **Change:** \`telegram/news_monitor.py\` now calls \`_parse_datetime(..., require_timezone=True)\` at RSS ingestion, GDELT ingestion, and \`poll_news_once()\`. Explicit-offset timestamps are still normalized to UTC; naive or malformed publication times are skipped.
 - **Regression:** \`tests/test_news_monitor.py\` adds RSS, GDELT, and polling tests for timezone-less publication timestamps.
-- **CI:** triggered on the code/test head; final run IDs and outcomes are recorded in the PR discussion after completion.
+- **CI:** all five workflows PASS on code/test commit `e318c146509d4a9cfcd35b4675fede6d637bfb7b`: Execution Layer `40491701197`, PAPER `40491701154`, general tests `40491701259`, NEWS alert `40491701234`, Public Event Brain `40491701224`. The later research-log-only commit `f00d5f9da64bca3bca54d19bed7f745809a26329` contains no executable changes.
 - **Deployment/persistence:** PR #79 branch only; no merge/deploy. Render workspace is not selected in this runtime; no live commit or journal durability claim.
 - **Empirical limit:** strict timestamp hygiene only. Non-compliant feeds may yield fewer alerts until their timestamps are fixed; no live-feed replay or walk-forward performance validation.
 - **Safety:** PAPER/DEMO ONLY; no broker, orders, secrets, or Telegram test messages.
