@@ -147,3 +147,11 @@
 - **Persistence limit:** older journal rows without `available_at` will be excluded from scorecard outcomes; this is intentional rather than inferring availability from persistence time. Journal durability is not claimed without confirming `DATABASE_URL`.
 - **Empirical limit:** point-in-time data-integrity change only; no historical replay or walk-forward profitability test.
 - **Safety:** PAPER/DEMO ONLY; no secrets, broker, orders, or Telegram test messages.
+
+
+## Final CI verification — reaction available_at guard (2026-10-27 09:50 UTC)
+
+- **Code commit:** `9a6d65164da316061dcafae23075b19ae10992da`; **regression tests:** `e4dc96b709421caf0b86ed76dc645479ce5c5df5`; **research log:** `eb2a2cf5f588a4146c24aa6b711d710d47783f4a`.
+- The first code-only NEWS alert run failed because the fixtures had not yet been updated with the new required availability field. After adding explicit availability timestamps and regression cases, all five workflows passed on final PR head `eb2a2cf5f588a4146c24aa6b711d710d47783f4a`: NEWS alert [40483851895](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40483851895), PAPER [40483851899](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40483851899), Public Event Brain [40483851947](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40483851947), general tests [40483851975](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40483851975), and Execution Layer [40483852046](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40483852046).
+- **Deployment/persistence:** PR #79 only; no merge/deploy. Render workspace unavailable in this runtime; no current live-commit claim. Older journal rows without `available_at` are intentionally unscored; durable persistence is not asserted without verified `DATABASE_URL`.
+- **Empirical limit:** point-in-time eligibility only; no historical replay or walk-forward performance result.
