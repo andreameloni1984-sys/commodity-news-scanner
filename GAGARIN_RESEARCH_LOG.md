@@ -140,3 +140,16 @@
 - **New alert risk gate:** TP1/TP2/TP3 must meet configured minimum R/R of 1.5R/2R/2.5R (defaults) when each target is supplied. Regression tests and all five relevant workflows passed on code/test head `fef4207c86a5485a0cd9ca755162e95c0c4d7391`; docs-only checks passed in [40531123729](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40531123729) and [40531123780](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40531123780).
 - **Deployment/persistence:** PR #82 remains draft and unmerged; no Render deploy. `DATABASE_URL` and durable journal persistence are not confirmed.
 - **Empirical status:** R/R geometry is unit-tested, but there is no live replay/OOS evidence that this filter improves expectancy. These are recovered conversation summaries, not the missing original numbered catalog.
+ 
+## 2026-10-27 — Fail closed on invalid NEWS price-reaction threshold
+
+- **Finding:** _confirmed_setups parsed GAGARIN_NEWS_MIN_REACTION_PCT with max(0.0, float(...)). A negative value silently became zero and could disable the minimum-reaction gate; NaN could also collapse to zero, while a malformed string could raise and interrupt polling.
+- **Implemented:** malformed, non-finite, or negative threshold values now cause _confirmed_setups to return no eligible setups. A valid non-negative threshold retains existing behavior.
+- **Operational path:** news event → provisional classification → _confirmed_setups → validated configured reaction threshold → price-reaction gate → PAPER alert eligibility.
+- **Files:** telegram/news_monitor.py, tests/test_news_monitor.py.
+- **Regression:** added test_confirmed_setups_fail_closed_on_invalid_reaction_threshold; it proves a valid setup passes at 0.05%, while NaN, infinity, negative, and nonnumeric settings produce no setup.
+- **Commits:** implementation b1813a5af904a34f66868e7573f0a805b95b3720; test 05b40ab98e25290fbfe0d913e35b922686cbf3a3.
+- **CI:** pending at log update; report only the workflow result visible after this commit.
+- **Deployment:** PR #82 draft branch only; no merge/deploy.
+- **Empirical limit:** this is a configuration-safety correction, not a measured improvement in trade expectancy.
+
