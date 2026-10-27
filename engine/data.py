@@ -574,7 +574,10 @@ def _validate_candles(
 
     cleaned = []
 
-    seen = set()
+    # Map timestamp to its first validated OHLCV signature. Identical
+    # duplicates can be deduplicated; conflicting bars at the same instant
+    # make the provider response ambiguous and must fail closed.
+    seen = {}
 
     for candle in candles:
 
@@ -597,9 +600,6 @@ def _validate_candles(
             TypeError,
             ValueError,
         ):
-            continue
-
-        if ts in seen:
             continue
 
         if (
@@ -660,8 +660,13 @@ def _validate_candles(
         if l > min(o, c):
             continue
 
-        seen.add(ts)
+        signature = (o, h, l, c, v)
+        if ts in seen:
+            if seen[ts] != signature:
+                return [], "CONFLICTING_DUPLICATE_TIMESTAMP"
+            continue
 
+        seen[ts] = signature
         cleaned.append(
             {
                 "timestamp": ts,
