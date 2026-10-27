@@ -49,7 +49,7 @@
 ## 2026-10-27 — Reject non-finite prices when capturing news baselines
 
 - **Finding:** `_capture_baseline()` checked `value > 0` but did not require a finite value. Positive infinity satisfies that comparison and could be stored as the initial price baseline, contaminating the measured post-news reaction.
-- **Implemented:** use the existing `_finite_positive()` validator before recording a baseline; non-numeric, NaN, infinite, zero, and negative prices are skipped.
+- **Implemented:** use the existing `_finite_positive()` validator before recording a baseline; booleans, non-numeric, NaN, infinite, zero, and negative prices are skipped. The shared validator also rejects booleans for risk levels, since `True` must not be coerced to price 1.0.
 - **Files:** `telegram/news_monitor.py`; `tests/test_news_monitor.py`.
 - **Operational path:** news event → `_capture_baseline()` → stored `baseline_prices` → `_confirmed_setups()` reaction calculation.
 - **Regression tests:** reject positive/negative infinity, NaN, zero, and negative prices; preserve a finite positive baseline.
