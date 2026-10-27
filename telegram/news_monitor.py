@@ -80,6 +80,10 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
     for row in rows:
         if row.get("kind") != "NEWS_ALERT_SENT":
             continue
+        # Without a stable event ID and instrument identity, a reaction row with
+        # the same missing fields could match via None == None and score an unrelated move.
+        if not str(row.get("event_id") or "").strip() or not str(row.get("asset") or "").strip():
+            continue
         # recorded_at is journal persistence time, not proof of when Telegram sent the alert.
         sent_at = _parse_datetime(row.get("sent_at"), require_timezone=True)
         raw_alert_price = row.get("price")
