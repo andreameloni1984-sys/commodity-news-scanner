@@ -45,3 +45,14 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+
+## 2026-10-27 — Respect provider Retry-After on HTTP 429
+- **Finding:** `engine/data.py::_request_json` used fixed exponential sleeps after HTTP 429 and ignored a provider's `Retry-After` header. This can retry too early or keep the synchronous monitor waiting when the server requests a long cooldown.
+- **Change:** parse numeric and HTTP-date `Retry-After`; honor delays up to 30 seconds; when the requested delay is longer, return a typed 429 cooldown error so provider fallback can proceed without retrying early. Missing/malformed headers retain the prior exponential fallback.
+- **Operational path:** provider request → HTTP status handling → bounded retry or provider fallback → normal data validation. No market direction is inferred from rate limits.
+- **Files:** `engine/data.py`; regression coverage in `tests/test_data_retry_after.py`.
+- **Tests:** four tests cover numeric seconds, HTTP-date, long cooldown/no premature retry, and malformed header fallback. CI pending at log creation.
+- **Research mapping:** IBKR session 9 documents API pacing limits and HTTP 429; this implementation applies the general backoff principle to Gagarin's existing data-provider client, not IBKR-specific numerical limits to other providers.
+- **Deployment:** research branch only; no merge/deploy. Render build-pipeline quota remains exhausted.
+- **Empirical limits:** tests are mocked; no live provider call or measured reduction in throttling has been claimed. PAPER/DEMO ONLY.
