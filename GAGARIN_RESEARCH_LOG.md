@@ -155,3 +155,13 @@
 - The first code-only NEWS alert run failed because the fixtures had not yet been updated with the new required availability field. After adding explicit availability timestamps and regression cases, all five workflows passed on final PR head `eb2a2cf5f588a4146c24aa6b711d710d47783f4a`: NEWS alert [40483851895](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40483851895), PAPER [40483851899](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40483851899), Public Event Brain [40483851947](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40483851947), general tests [40483851975](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40483851975), and Execution Layer [40483852046](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40483852046).
 - **Deployment/persistence:** PR #79 only; no merge/deploy. Render workspace unavailable in this runtime; no current live-commit claim. Older journal rows without `available_at` are intentionally unscored; durable persistence is not asserted without verified `DATABASE_URL`.
 - **Empirical limit:** point-in-time eligibility only; no historical replay or walk-forward performance result.
+
+
+## 2026-10-27 — Exclude pre-delivery/equal-time reactions from outcomes
+
+- **Finding:** the polling pass can journal a `NEWS_REACTION` before the Telegram send is recorded, with the same cycle timestamp as `sent_at`. If the price crossed SL in that row, the scorecard could count a pre-delivery move as a post-alert stop.
+- **Change:** a reaction is eligible for post-alert outcomes only when its timezone-aware `available_at` is strictly later than `sent_at`, in addition to `observed_at <= available_at <= decision_time`.
+- **Regression:** `test_scorecard_does_not_use_pre_delivery_reaction_for_stop_outcome` ensures an equal-time stop touch is ignored while a later valid observation remains scoreable.
+- **CI:** pending for the refinement; previous available_at guard passed all five workflows on head `b4fff699cc65ed977c2f429e099a50bcae2f2ebc`.
+- **Deployment:** PR #79 only, no merge/deploy; Render live commit unavailable in this runtime.
+- **Empirical limit:** prevents an ordering ambiguity in the scorecard; no historical replay or walk-forward profitability validation.
