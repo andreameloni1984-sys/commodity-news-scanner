@@ -505,3 +505,17 @@ def test_alert_scorecard_rejects_non_finite_prices_and_invalid_levels():
     assert report["tp1_observed"] == 0
     assert report["sl_observed"] == 0
     assert report["open_at_last_check"] == 1
+
+
+
+def test_asset_matches_requires_exact_known_spot_symbol_aliases():
+    from types import SimpleNamespace
+    from telegram.news_monitor import _asset_matches
+
+    assert _asset_matches("Oro", SimpleNamespace(commodity="", symbol="XAU/USD"))
+    assert _asset_matches("Oro", SimpleNamespace(commodity="", symbol="XAUUSD"))
+    assert _asset_matches("WTI", SimpleNamespace(commodity="", symbol="WTI/USD"))
+    assert not _asset_matches("Oro", SimpleNamespace(commodity="", symbol="XAUTUSDT"))
+    assert not _asset_matches("Oro", SimpleNamespace(commodity="", symbol="NOTXAUUSD"))
+    # Do not mix a futures contract into a spot baseline without contract/roll metadata.
+    assert not _asset_matches("Oro", SimpleNamespace(commodity="", symbol="GC=F"))
