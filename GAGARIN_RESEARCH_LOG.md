@@ -85,6 +85,6 @@
 - **Files/path:** `telegram/news_monitor.py::build_alert_scorecard`; `tests/test_news_monitor.py`.
 - **Regression:** covers boolean alert price, boolean reaction price and boolean TP1; valid numeric observation remains scorable, invalid reaction remains pending, and boolean TP1 cannot trigger SL/TP outcome classification.
 - **Commits:** code `7ecd582c8383473ea6acdf583d6163d0304d6566`; test `bf44f0a4a8adb4b151a7d7844453553c6a6f521e`.
-- **CI:** pending for the new code/test commits.
+- **CI:** PASS on code/test commit `bf44f0a4a8adb4b151a7d7844453553c6a6f521e`: NEWS alert `40468967173`; Execution Layer `40468967152`; general tests `40468967131`; PAPER `40468967155`; Public Event Brain `40468967142`. The following commit updates this log only.
 - **Deployment/empirical limits:** branch/PR #79 only; no merge/deploy, live replay or out-of-sample profitability test. Render build capacity remains constrained.
 - **Safety:** PAPER/DEMO ONLY; no broker/orders or Telegram test messages.
