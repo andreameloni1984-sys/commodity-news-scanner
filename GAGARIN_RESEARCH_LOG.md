@@ -198,3 +198,14 @@
 - **Deployment/persistence:** PR #79 branch only; no merge/deploy. Render workspace was not selected; live commit and current `DATABASE_URL` cannot be verified, so journal durability is not claimed.
 - **Empirical limit:** numeric scorecard integrity only. No historical replay, cost-calibrated backtest or walk-forward performance claim.
 - **Safety:** PAPER/DEMO ONLY; no broker, orders, secrets or Telegram test messages.
+
+
+## 2026-10-27 13:00 UTC — Deduplicate exact duplicate alert journal rows
+- **Finding:** `build_alert_scorecard()` counted every valid `NEWS_ALERT_SENT` row independently. An exact duplicate journal row could inflate the denominator, scored count and apparent directional accuracy.
+- **Change:** `telegram/news_monitor.py` now suppresses exact duplicate alert identities within the seven-day evaluation window using event ID, asset, direction, sent timestamp, price and SL/TP values. Separate sends at different times remain distinct. The report exposes `duplicate_alerts_dropped`; invalid decision-clock reports return zero for that diagnostic.
+- **Regression:** `tests/test_news_monitor.py::test_scorecard_deduplicates_exact_duplicate_alert_rows` verifies that two identical alert rows plus one valid later reaction yield one alert, one scored outcome and one dropped duplicate.
+- **Operational path:** event journal → identity/time/price validation → exact-row deduplication → point-in-time reaction matching → outcome scorecard.
+- **CI:** pending for the new code/test commit; earlier green runs do not validate this change.
+- **Deployment/persistence:** PR #79 branch only; no merge/deploy. Render workspace and live `DATABASE_URL` remain unverified; journal durability is not claimed.
+- **Empirical limits:** deduplication improves scorecard accounting only. It does not validate predictive edge or profitability; no historical replay/walk-forward test is claimed.
+- **Safety:** PAPER/DEMO ONLY; no broker, orders, secrets or Telegram test messages.
