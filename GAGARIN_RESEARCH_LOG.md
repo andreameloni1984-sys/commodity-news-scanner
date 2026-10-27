@@ -96,7 +96,7 @@ This mapping distinguishes documented lessons from implemented and empirically v
 - **Change:** `engine/data.py::_normalize()` rejects boolean inputs before coercion; `_validate_candles()` independently rejects rows with boolean timestamp/OHLCV fields for callers that bypass normalization.
 - **Operational path:** provider payload → normalization → direct candle validation → duplicate/timestamp/OHLC checks → downstream ATR/RSI/structure.
 - **Regression:** parameterized tests cover all six fields in both the normalizer and direct validator.
-- **CI:** triggered by this PR branch update; record actual workflow results before considering the change verified.
+- **CI:** corrected code commit `d8b1c83d58ca0dc2e68f21f59398b3a8af3c3d1c` passed NEWS and Execution Layer; the latest PR head `a6c45d208d46f9cf4ca92c82070c3cef22864210` then passed all five workflows: general tests [40549192069](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40549192069), Execution Layer [40549192068](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40549192068), NEWS alert [40549192023](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40549192023), Public Event Brain [40549191997](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40549191997), and PAPER [40549191992](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40549191992).
 - **Deployment:** PR #84 branch only; no merge/deploy. Render build-pipeline quota remains exhausted.
 - **Empirical limit:** ingestion-integrity tests only; no historical OHLCV replay or trading-performance claim. PAPER/DEMO only; no secrets, broker, orders, or Telegram test messages.
 
@@ -116,4 +116,4 @@ This mapping distinguishes documented lessons from implemented and empirically v
 ### Follow-up CI correction — boolean candle guard
 
 - The first general Gagarin integration run failed because the new guard referred to parameter names `high_price`/`low_price`/`close_price`, while `_normalize()` names them `high`/`low`/`close`. The failure was observed in the CI log (14 failures, 363 passed), not hidden.
-- Corrected the identifier list in `engine/data.py`; a fresh workflow is required to validate the corrected head. No runtime deployment was triggered.
+- Corrected the identifier list in `engine/data.py`. The initial general test run on the earlier head failed (14 failed, 363 passed); after the correction, the general suite and all four other workflows passed on the later head as listed above. No runtime deployment was triggered.
