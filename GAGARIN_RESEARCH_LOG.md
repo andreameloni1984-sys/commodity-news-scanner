@@ -45,3 +45,16 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+## 2026-10-27 — Fail closed on invalid news baseline prices
+
+- **Finding:** `_capture_baseline()` accepted positive infinity and booleans as prices because it converted with `float()` and only checked `value > 0`. Python treats `True` as 1.0; infinity is positive.
+- **Implemented:** route baseline capture through `_finite_positive()`; explicitly reject booleans and retain finite-positive validation for numeric prices.
+- **Files:** `telegram/news_monitor.py`; `tests/test_news_monitor.py`.
+- **Regression tests:** True/False, NaN, positive/negative infinity, zero, negative, malformed string, and a valid 80.25 baseline.
+- **Commit:** code `63f8234a30b6fa09bae2580646e1e534810b5099`; tests `33089074a762b7c8a187ba25b451ee0dbcce8af4`.
+- **CI:** pending PR-triggered workflows; no pass claimed yet.
+- **Deployment:** research branch only; no merge/deploy. Render pipeline minutes are exhausted.
+- **Empirical validation:** no live replay or out-of-sample test; baseline input integrity only.
+- **Persistence:** live `DATABASE_URL` not verified; journal durability is not claimed.
+- **Safety:** PAPER/DEMO ONLY; no broker, orders, secrets or Telegram test messages.
