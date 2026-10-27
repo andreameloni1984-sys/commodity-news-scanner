@@ -52,8 +52,9 @@
 - **Implemented:** use the existing `_finite_positive()` validator before recording a baseline; booleans, non-numeric, NaN, infinite, zero, and negative prices are skipped. The shared validator also rejects booleans for risk levels, since `True` must not be coerced to price 1.0.
 - **Files:** `telegram/news_monitor.py`; `tests/test_news_monitor.py`.
 - **Operational path:** news event → `_capture_baseline()` → stored `baseline_prices` → `_confirmed_setups()` reaction calculation.
-- **Regression tests:** reject positive/negative infinity, NaN, zero, and negative prices; preserve a finite positive baseline.
-- **CI:** triggered by PR; results pending. No CI pass is claimed until all relevant workflows complete.
+- **Regression tests:** reject booleans, positive/negative infinity, NaN, zero, and negative prices; preserve a finite positive baseline; boolean current-price values are rejected by the shared risk-level validator.
+- **Commits:** code `9067e0f973f96c085ed3c8dde2b9a0a61f5ac7f0`; tests `e9465ceefbd5d97d2092793e348eebc8f6f463e9`; research log `516033df95b8786a74419af20070991655c85bcb`.
+- **CI:** PAPER PASS (run 40454375757); general tests PASS, 364 tests (run 40454375746); NEWS alert PASS (run 40454375858); Public Event Brain PASS (run 40454375742); Execution Layer PASS, 3 safety tests (run 40454381732). The research-log-only follow-up does not change executable code/tests.
 - **Deployment:** not deployed; Render build-pipeline minutes remain exhausted. No merge or manual deploy.
 - **Empirical validation:** no live-news replay or outcome study performed. This protects baseline data integrity; it does not prove news has predictive value.
 - **Safety:** PAPER/DEMO ONLY; no broker, order, or Telegram test message.
