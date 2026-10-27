@@ -139,3 +139,14 @@ This mapping distinguishes documented lessons from implemented and empirically v
 - **CI at log update:** five relevant workflows were triggered and were in progress: General tests [40566882116](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40566882116), Public Event Brain [40566882441](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40566882441), PAPER [40566882541](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40566882541), NEWS alert [40566882660](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40566882660), Execution Layer [40566882513](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40566882513). Recheck before treating the revision as validated.
 - **Operational path:** provider candles → timestamp validation → duplicate/OHLCV validation → freshness/regime/ATR/RSI. This does not validate instrument-specific sessions or futures expiry/rollover.
 - **Deployment/empirical limits:** PR #84 branch only; no merge/deploy. Synthetic regression only; no provider replay, OOS scorecard or profitability claim. PAPER/DEMO ONLY.
+
+## 2026-10-27 — Diagnose epoch-millisecond timestamps at candle ingestion
+
+- **Finding:** `_validate_candles()` treated an epoch-millisecond value (~1e12 today) as an ordinary future timestamp and skipped it. If enough second-based rows remained, a mixed-unit provider response could pass without an explicit unit-mismatch diagnostic.
+- **Change:** `engine/data.py::_validate_candles` now fails closed with `TIMESTAMP_UNIT_MISMATCH_OR_OUT_OF_RANGE` for numeric timestamps >= 100,000,000,000, a conservative boundary well above plausible current Unix seconds. It does not silently divide by 1000 or guess provider units.
+- **Regression:** `tests/test_data_finite_values.py::test_validate_candles_fails_closed_on_millisecond_epoch_timestamps` supplies a millisecond epoch alongside otherwise valid candles and asserts an empty result plus the explicit error.
+- **Operational path:** provider payload → timestamp parsing/unit sanity → future/duplicate/OHLCV checks → freshness/ATR/RSI/regime. The provider fallback/error path can now distinguish this case from a merely short history.
+- **Commits:** code 5dc0e5a629bed4f414a9d7f5f3dec4e0cfa23032; regression test 248dbab453d9ee28b66b584115fe4a2a48b5d849.
+- **CI:** pending for the latest test commit at the time this note was written; recheck the five relevant workflows before treating it as verified.
+- **Deployment:** PR #84 branch only; no merge/deploy. Render runtime/workspace logs are not accessible through this run's connected tools, so the live deploy commit and Telegram/GDELT runtime status cannot be freshly confirmed.
+- **Empirical limit:** synthetic regression only; no live provider replay, futures contract calendar/rollover validation, OOS scorecard or P&L result. PAPER/DEMO only; no broker or orders.
