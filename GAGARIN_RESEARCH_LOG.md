@@ -45,3 +45,15 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+## 2026-10-27 — Fail closed on RSI Wilder period ambiguity and arithmetic overflow
+
+- **Finding:** `_rsi_wilder` silently truncated fractional periods through `int(period)`. Finite close inputs could also overflow during subtraction, initial gain/loss sums, Wilder recursion, or relative-strength calculation and contaminate the regime diagnostic.
+- **Change:** reject boolean, fractional, non-finite, and malformed periods; catch conversion overflow; check every RSI intermediate for finiteness and require the final result to remain within [0, 100]. Valid integer-period Wilder cases preserve their established reference outputs.
+- **Operational path:** `apply_regime` → `_rsi_wilder`; invalid result remains unavailable rather than becoming a regime input.
+- **Files:** `engine/regime.py`, `tests/test_pipeline.py`, `GAGARIN_RESEARCH_LOG.md`.
+- **Regression coverage:** fractional/bool/NaN/infinite/text periods; overflow in close differences, initial average sums and recursive smoothing; rising, falling and flat reference series.
+- **CI:** pending on PR; no result claimed until GitHub Actions completes.
+- **Empirical validation:** not a trading-performance test; no backtest or out-of-sample evidence is claimed.
+- **Deployment:** no merge/deploy. Render build-pipeline minutes remain exhausted.
+- **Safety:** PAPER/DEMO ONLY; no broker, orders, secrets, or Telegram test messages.
