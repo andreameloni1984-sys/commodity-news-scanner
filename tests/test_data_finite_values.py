@@ -130,6 +130,51 @@ def test_validate_candles_rejects_negative_volume():
     assert len(cleaned) == MIN_CANDLES_REQUIRED
     assert all(row["volume"] >= 0 for row in cleaned)
 
+def test_validate_candles_rejects_non_monotonic_timestamp_order():
+    now = time.time()
+    candles = [
+        {
+            "timestamp": now - (MIN_CANDLES_REQUIRED - i) * 60,
+            "open": 100.0,
+            "high": 102.0,
+            "low": 99.0,
+            "close": 101.0,
+            "volume": 10.0,
+        }
+        for i in range(MIN_CANDLES_REQUIRED + 1)
+    ]
+    candles[3]["timestamp"] = candles[1]["timestamp"] - 30
+
+    cleaned, error = _validate_candles(candles)
+
+    assert cleaned == []
+    assert error == "NON_MONOTONIC_CANDLE_ORDER"
+
+
+def test_validate_candles_accepts_reverse_chronological_order():
+    now = time.time()
+    candles = [
+        {
+            "timestamp": now - (MIN_CANDLES_REQUIRED - i) * 60,
+            "open": 100.0,
+            "high": 102.0,
+            "low": 99.0,
+            "close": 101.0,
+            "volume": 10.0,
+        }
+        for i in range(MIN_CANDLES_REQUIRED + 1)
+    ]
+    candles.reverse()
+
+    cleaned, error = _validate_candles(candles)
+
+    assert error is None
+    assert len(cleaned) == MIN_CANDLES_REQUIRED + 1
+    assert [row["timestamp"] for row in cleaned] == sorted(
+        row["timestamp"] for row in cleaned
+    )
+
+
 def test_validate_candles_deduplicates_identical_timestamp_rows():
     now = time.time()
     candles = [
