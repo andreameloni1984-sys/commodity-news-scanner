@@ -635,6 +635,11 @@ def _validate_candles(
         ):
             continue
 
+        # A negative Unix epoch is not a plausible market-candle timestamp
+        # for the currently supported live instruments.
+        if ts < 0:
+            continue
+
         if (
             ts
             > now + MAX_CANDLE_FUTURE_SECONDS
