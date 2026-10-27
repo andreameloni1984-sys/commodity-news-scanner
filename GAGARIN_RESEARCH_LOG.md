@@ -45,3 +45,15 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+## 2026-10-27 05:44 UTC — Exclude future observations from news scorecard
+
+- **Finding:** `build_alert_scorecard()` accepted any reaction timestamp inside the four-hour post-alert window, including rows whose `observed_at` was later than the scorecard's `now`/evaluation time. A historical evaluation could therefore use information not yet available at the decision point.
+- **Change:** ignore reaction observations later than `now`; alerts with no eligible observation remain pending until the evaluation horizon expires.
+- **Files:** `telegram/news_monitor.py`; `tests/test_news_monitor.py`.
+- **Operational path:** journal rows → `build_alert_scorecard(rows, now)` → post-alert reaction filtering → outcome/coverage counters.
+- **Regression test:** an alert at 04:00 with a reaction timestamp at 04:20, evaluated at 04:10, remains unscored/pending and is not counted as expired.
+- **CI:** pending on the new PR branch; no pass is claimed until all relevant workflows complete.
+- **Deployment:** branch only; no Render deploy triggered. Live commit not confirmed in this run.
+- **Empirical validation:** no historical replay or out-of-sample performance test performed. This fixes temporal eligibility, not predictive accuracy.
+- **Safety:** scorecard-only change; no entry authorization or order execution changed. PAPER/DEMO ONLY.
