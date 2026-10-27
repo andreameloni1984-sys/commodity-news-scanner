@@ -66,6 +66,8 @@ def test_new_news_triggers_immediate_analysis_then_waits_for_price_confirmation(
     from datetime import datetime, timedelta, timezone
 
     monkeypatch.setattr(monitor, "STATE_PATH", tmp_path / "news_state.json")
+    journal_rows = []
+    monkeypatch.setattr(monitor, "_journal", lambda row: journal_rows.append(dict(row)))
     now = datetime(2026, 10, 18, 14, 0, tzinfo=timezone.utc)
     item = {
         "source": "Test RSS",
@@ -123,6 +125,11 @@ def test_new_news_triggers_immediate_analysis_then_waits_for_price_confirmation(
     sent_event = next(event for event in saved["pending"] if event.get("alert_sent"))
     assert sent_event["alert_sent_at"] == (now + timedelta(minutes=5)).isoformat()
     assert sent_event["expires_at"] == (now + timedelta(minutes=5, hours=4)).isoformat()
+    sent_record = next(row for row in journal_rows if row.get("kind") == "NEWS_ALERT_SENT")
+    assert sent_record["event_time"] == item["published_at"]
+    assert sent_record["available_at"] == now.isoformat()
+    assert sent_record["decision_time"] == (now + timedelta(minutes=5)).isoformat()
+    assert sent_record["sent_at"] == (now + timedelta(minutes=5)).isoformat()
 
 
 
@@ -764,3 +771,15 @@ def test_scorecard_does_not_use_pre_delivery_reaction_for_stop_outcome():
     assert report["sl_observed"] == 0
     assert report["open_at_last_check"] == 1
     assert report["correct"] == 1
+
+
+def test_poll_news_once_rejects_naive_decision_clock():
+    import telegram.news_monitor as monitor
+
+    try:
+        monitor.poll_news_once(lambda message: True, lambda: [], fetcher=lambda: [],
+                               now=datetime(2026, 10, 27, 4, 0))
+    except ValueError as exc:
+        assert "timezone-aware" in str(exc)
+    else:
+        raise AssertionError("naive polling clock must fail closed")
