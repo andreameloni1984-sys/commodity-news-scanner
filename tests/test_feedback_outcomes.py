@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from engine.feedback import _candles, _timestamp, append_signal, load_feedback, record_forecasts, summarize, update_open_outcomes
+from engine.feedback import _candles, _number, _timestamp, append_signal, load_feedback, record_forecasts, summarize, update_open_outcomes
 
 
 def state(candles):
@@ -175,10 +175,27 @@ def test_forecast_identity_includes_timeframe(tmp_path):
 
 
 
-def test_naive_iso_timestamp_is_interpreted_as_utc():
-    naive = _timestamp("2026-10-21T08:00:00")
+def test_naive_iso_timestamp_is_rejected_but_explicit_utc_is_accepted():
+    assert _timestamp("2026-10-21T08:00:00") is None
     aware = _timestamp("2026-10-21T08:00:00+00:00")
-    assert naive == aware
+    zulu = _timestamp("2026-10-21T08:00:00Z")
+    assert aware is not None
+    assert aware == zulu
+
+
+def test_timestamp_rejects_boolean_non_finite_and_millisecond_epochs():
+    invalid_values = [
+        True, False, 0, -1,
+        float("nan"), float("inf"), float("-inf"),
+        "NaN", "Infinity",
+        1_800_000_000_000, "1800000000000",
+    ]
+    for value in invalid_values:
+        assert _timestamp(value) is None
+
+    # Plausible epoch seconds remain accepted, including numeric strings.
+    assert _timestamp(1_800_000_000) == 1_800_000_000.0
+    assert _timestamp("1800000000") == 1_800_000_000.0
 
 
 def test_candles_are_sorted_deduplicated_and_invalid_ranges_rejected():
@@ -192,3 +209,11 @@ def test_candles_are_sorted_deduplicated_and_invalid_ranges_rejected():
         (1000.0, 101.0, 99.0),
         (3000.0, 104.0, 102.0),
     ]
+
+
+
+def test_number_rejects_boolean_market_values():
+    assert _number(True) is None
+    assert _number(False) is None
+    assert _number(100) == 100.0
+    assert _number("100.5") == 100.5

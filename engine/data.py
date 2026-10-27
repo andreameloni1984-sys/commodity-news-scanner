@@ -346,7 +346,7 @@ def _parse_time(value: Any) -> Optional[float]:
     """
 
     try:
-        if value is None:
+        if value is None or isinstance(value, bool):
             return None
 
         if isinstance(value, (int, float)):
@@ -363,9 +363,8 @@ def _parse_time(value: Any) -> Optional[float]:
         dt = datetime.fromisoformat(text)
 
         if dt.tzinfo is None:
-            dt = dt.replace(
-                tzinfo=timezone.utc
-            )
+            # Do not guess the timezone of a provider's naive datetime.
+            return None
 
         return dt.astimezone(
             timezone.utc
@@ -373,6 +372,24 @@ def _parse_time(value: Any) -> Optional[float]:
 
     except Exception:
         return None
+
+
+def _twelve_data_timestamp_utc(value: Any) -> Any:
+    """Attach UTC only to naive timestamps from a request explicitly made with timezone=UTC."""
+    if not isinstance(value, str):
+        return value
+    text = value.strip()
+    if not text:
+        return value
+    try:
+        parsed = datetime.fromisoformat(
+            text[:-1] + "+00:00" if text.endswith("Z") else text
+        )
+    except ValueError:
+        return value
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc).isoformat()
+    return parsed.isoformat()
 
 
 # ============================================================
@@ -390,6 +407,13 @@ def _normalize(
     """
     Normalize one provider candle.
     """
+
+    # bool is a subclass of int in Python, so float(True) silently
+    # becomes 1.0. Reject boolean market fields before numeric coercion.
+    if any(isinstance(value, bool) for value in (
+        timestamp, open_price, high, low, close, volume,
+    )):
+        return None
 
     try:
         ts = _parse_time(timestamp)
@@ -574,7 +598,10 @@ def _validate_candles(
 
     cleaned = []
 
-    seen = set()
+    # Map timestamp to its first validated OHLCV signature. Identical
+    # duplicates can be deduplicated; conflicting bars at the same instant
+    # make the provider response ambiguous and must fail closed.
+    seen = {}
 
     for candle in candles:
 
@@ -582,6 +609,18 @@ def _validate_candles(
             candle,
             dict,
         ):
+            continue
+
+        raw_fields = (
+            candle.get("timestamp"),
+            candle.get("open"),
+            candle.get("high"),
+            candle.get("low"),
+            candle.get("close"),
+            candle.get("volume", 0),
+        )
+        # Do this at the validator boundary too: callers may bypass _normalize.
+        if any(isinstance(value, bool) for value in raw_fields):
             continue
 
         ts = candle.get(
@@ -599,8 +638,16 @@ def _validate_candles(
         ):
             continue
 
-        if ts in seen:
+        # Non-positive Unix epochs are not plausible candle timestamps
+        # for the currently supported live instruments.
+        if ts <= 0:
             continue
+
+        # Unix millisecond epochs (~1e12 today) must not be mistaken for
+        # seconds and silently dropped as ordinary future candles. Treat a
+        # mixed-unit provider response as ambiguous and fail closed.
+        if ts >= 100_000_000_000:
+            return [], "TIMESTAMP_UNIT_MISMATCH_OR_OUT_OF_RANGE"
 
         if (
             ts
@@ -660,8 +707,13 @@ def _validate_candles(
         if l > min(o, c):
             continue
 
-        seen.add(ts)
+        signature = (o, h, l, c, v)
+        if ts in seen:
+            if seen[ts] != signature:
+                return [], "CONFLICTING_DUPLICATE_TIMESTAMP"
+            continue
 
+        seen[ts] = signature
         cleaned.append(
             {
                 "timestamp": ts,
@@ -673,9 +725,20 @@ def _validate_candles(
             }
         )
 
-    cleaned.sort(
-        key=lambda x: x["timestamp"]
-    )
+    # Accept provider batches that are consistently ascending or descending,
+    # but do not silently sort a mixed-order response: it can hide a data-source
+    # ordering defect at the point where bars enter the indicator pipeline.
+    timestamps = [row["timestamp"] for row in cleaned]
+    deltas = [
+        timestamps[index] - timestamps[index - 1]
+        for index in range(1, len(timestamps))
+    ]
+    has_increasing = any(delta > 0 for delta in deltas)
+    has_decreasing = any(delta < 0 for delta in deltas)
+    if has_increasing and has_decreasing:
+        return [], "NON_MONOTONIC_CANDLE_ORDER"
+    if has_decreasing:
+        cleaned.reverse()
 
     if len(cleaned) < MIN_CANDLES_REQUIRED:
 
@@ -1061,8 +1124,8 @@ def _fetch_twelve_symbol(
             continue
 
         candle = _normalize(
-            row.get(
-                "datetime"
+            _twelve_data_timestamp_utc(
+                row.get("datetime")
             ),
             row.get("open"),
             row.get("high"),
