@@ -91,38 +91,23 @@ def _recent_net_move(state: SoyuzState):
         None, None
     """
 
-    if (
-        state.atr is None
-        or state.atr <= 0
-    ):
+    atr = _safe_float(state.atr)
+    if atr is None or atr <= 0:
         return None, None
 
     closes = state.closes or []
+    lookback = min(REGIME_LOOKBACK_BARS, len(closes))
+    if lookback < MIN_REGIME_BARS:
+        return None, None
 
-    numeric_closes = []
-
-    for value in closes:
-
+    # Do not bridge a malformed/missing candle by silently dropping it.
+    raw_recent = closes[-lookback:]
+    recent = []
+    for value in raw_recent:
         price = _safe_float(value)
-
-        if price is not None:
-
-            numeric_closes.append(price)
-
-    if len(numeric_closes) < MIN_REGIME_BARS:
-
-        return None, None
-
-    lookback = min(
-        REGIME_LOOKBACK_BARS,
-        len(numeric_closes),
-    )
-
-    recent = numeric_closes[-lookback:]
-
-    if len(recent) < 2:
-
-        return None, None
+        if price is None:
+            return None, None
+        recent.append(price)
 
     first_price = recent[0]
     last_price = recent[-1]
@@ -132,15 +117,12 @@ def _recent_net_move(state: SoyuzState):
         - first_price
     )
 
-    normalized_move = (
-        abs(net_change)
-        / state.atr
-    )
+    atr = _safe_float(state.atr)
+    normalized_move = abs(net_change) / atr if atr is not None and atr > 0 else None
+    if normalized_move is None or not math.isfinite(normalized_move):
+        return None, None
 
-    return (
-        net_change,
-        normalized_move,
-    )
+    return net_change, normalized_move
 
 
 def _single_move(state: SoyuzState):
@@ -151,28 +133,18 @@ def _single_move(state: SoyuzState):
     una serie sufficiente di chiusure.
     """
 
-    if (
-        state.price is None
-        or state.previous_price is None
-        or state.atr is None
-        or state.atr <= 0
-    ):
+    price = _safe_float(state.price)
+    previous_price = _safe_float(state.previous_price)
+    atr = _safe_float(state.atr)
+    if price is None or previous_price is None or atr is None or atr <= 0:
         return None, None
 
-    change = (
-        state.price
-        - state.previous_price
-    )
+    change = price - previous_price
+    normalized_move = abs(change) / atr
+    if not math.isfinite(change) or not math.isfinite(normalized_move):
+        return None, None
 
-    normalized_move = (
-        abs(change)
-        / state.atr
-    )
-
-    return (
-        change,
-        normalized_move,
-    )
+    return change, normalized_move
 
 
 
@@ -284,13 +256,20 @@ def apply_regime(
     # DATA GATE
     # ========================================================
 
-    if (
-        not state.data_ok
-        or state.price is None
-        or state.atr is None
-        or state.atr <= 0
-    ):
+    current_price = _safe_float(state.price)
+    atr = _safe_float(state.atr)
+    if not state.data_ok or current_price is None or atr is None or atr <= 0:
+        state.metadata["regime_diagnostics"] = {
+            "status": "INVALID_PRICE_OR_ATR",
+        }
+        return state
 
+    recent_raw = (state.closes or [])[-REGIME_LOOKBACK_BARS:]
+    if any(_safe_float(value) is None for value in recent_raw):
+        state.metadata["regime_diagnostics"] = {
+            "status": "INVALID_RECENT_CLOSE",
+            "lookback_bars": len(recent_raw),
+        }
         return state
 
     # ========================================================
