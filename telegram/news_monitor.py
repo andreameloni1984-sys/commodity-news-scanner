@@ -723,11 +723,26 @@ def _valid_signal_levels(
     return True
 
 
+def _configured_news_min_reaction_pct() -> float | None:
+    """Return a finite non-negative reaction threshold, or None for invalid config."""
+    raw = os.getenv("GAGARIN_NEWS_MIN_REACTION_PCT", "0.05")
+    try:
+        value = float(raw)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not math.isfinite(value) or value < 0:
+        return None
+    return value
+
+
 def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str, Any]]:
     """Require a live Gagarin trigger and measurable price movement after news detection."""
     classified = classify_event(event.get("title", ""))
     baselines = event.get("baseline_prices") or {}
-    min_reaction_pct = max(0.0, float(os.getenv("GAGARIN_NEWS_MIN_REACTION_PCT", "0.05")))
+    min_reaction_pct = _configured_news_min_reaction_pct()
+    if min_reaction_pct is None:
+        print("NEWS alert suppressed | invalid GAGARIN_NEWS_MIN_REACTION_PCT", flush=True)
+        return []
     setups: list[dict[str, Any]] = []
     for asset in classified["assets"]:
         impact = classified["impact"].get(asset, "MISTA")
