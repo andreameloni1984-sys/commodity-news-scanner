@@ -175,10 +175,12 @@ def test_forecast_identity_includes_timeframe(tmp_path):
 
 
 
-def test_naive_iso_timestamp_is_interpreted_as_utc():
-    naive = _timestamp("2026-10-21T08:00:00")
+def test_naive_iso_timestamp_is_rejected_but_explicit_utc_is_accepted():
+    assert _timestamp("2026-10-21T08:00:00") is None
     aware = _timestamp("2026-10-21T08:00:00+00:00")
-    assert naive == aware
+    zulu = _timestamp("2026-10-21T08:00:00Z")
+    assert aware is not None
+    assert aware == zulu
 
 
 def test_candles_are_sorted_deduplicated_and_invalid_ranges_rejected():

@@ -221,3 +221,12 @@ This mapping distinguishes documented lessons from implemented and empirically v
 - **IBKR session 9 crosswalk:** the recorded point-in-time/event-driven lesson maps to the candle-ingestion boundary; this protects timestamp order but does not by itself prove global absence of look-ahead bias. Spread, costs, slippage and out-of-sample testing remain separate.
 - **Deployment/limits:** PR #84 branch only; no merge/deploy. Render workspace and Telegram runtime logs were not accessible through the tools in this run. Synthetic data-order tests only; no live-provider replay, market outcome validation or profitability claim. PAPER/DEMO ONLY.
 - **Historical research:** the session 9 Library file and session 4 record were retrieved. The complete original 100-rule catalog was not found in the available Library results and is not reconstructed here.
+
+## 2026-10-27 — Reject timezone-naive timestamps in legacy outcome feedback
+
+- **Finding:** `engine/feedback.py::_timestamp` assigned UTC to ISO timestamps without an offset, while the newer candle parser in `engine/data.py` rejects them. This left the legacy forward-outcome path with a different time interpretation and could move bars across the scoring boundary.
+- **Change:** the feedback parser now returns `None` for timezone-naive ISO timestamps; explicit offsets and `Z` remain accepted. The old test that asserted naive==UTC was replaced with a fail-closed regression.
+- **Operational path:** signal/candle timestamp → `engine/feedback.py::_timestamp` → `_candles` chronological deduplication → forward-outcome matching → scorecard. This does not alter signal direction or execution.
+- **Files/tests:** `engine/feedback.py`, `tests/test_feedback_outcomes.py::test_naive_iso_timestamp_is_rejected_but_explicit_utc_is_accepted`, `docs/gagarin-implementation-ledger.md` (DATA-002).
+- **Validation:** code, test, ledger and research note committed together; CI on the new PR head is pending verification.
+- **Deployment/limits:** research PR only; no merge/deploy. Synthetic timestamp regression only; no historical replay, walk-forward or profitability claim. Runtime `DATABASE_URL` was not checked in this run, so journal durability is not claimed. PAPER/DEMO ONLY.

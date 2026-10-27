@@ -45,10 +45,10 @@ def _timestamp(value):
         text = str(value).strip()
         try:
             parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
-            # Provider timestamps without an explicit offset are treated as UTC,
-            # never as the host machine's local timezone.
+            # Outcome scoring must not invent a timezone for a naive timestamp.
+            # Reject it so ambiguous bars cannot shift into the forward-outcome window.
             if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
+                return None
             return parsed.astimezone(timezone.utc).timestamp()
         except ValueError:
             return float(text)
