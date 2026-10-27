@@ -874,6 +874,35 @@ def test_scorecard_rejects_alerts_without_event_or_asset_identity():
     assert result["pending"] == 0
     assert result["correct"] == 0
 
+def test_scorecard_drops_conflicting_prices_at_same_observation_time():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 27, 8, 0, tzinfo=timezone.utc)
+    observed = sent + timedelta(minutes=20)
+    available = observed + timedelta(seconds=1)
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "ambiguous-snapshot", "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat(),
+         "stop": 79.0, "tp1": 82.0},
+        {"kind": "NEWS_REACTION", "event_id": "ambiguous-snapshot", "asset": "WTI",
+         "current_price": 83.0, "observed_at": observed.isoformat(),
+         "available_at": available.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "ambiguous-snapshot", "asset": "WTI",
+         "current_price": 78.0, "observed_at": observed.isoformat(),
+         "available_at": available.isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=sent + timedelta(minutes=30))
+
+    assert report["alerts"] == 1
+    assert report["scored"] == 0
+    assert report["pending"] == 1
+    assert report["tp1_observed"] == 0
+    assert report["sl_observed"] == 0
+    assert report["ambiguous_reaction_timestamps_dropped"] == 1
+
+
 def test_scorecard_deduplicates_exact_duplicate_alert_rows():
     from datetime import datetime, timedelta, timezone
     from telegram.news_monitor import build_alert_scorecard

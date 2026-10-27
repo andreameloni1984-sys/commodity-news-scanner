@@ -108,11 +108,12 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
                 "net_scored": 0, "net_profitable": 0,
                 "net_cost_coverage_pct": None, "mean_net_return_pct": None,
                 "tp1_observed": 0, "sl_observed": 0, "open_at_last_check": 0,
-                "duplicate_alerts_dropped": 0, "decision_time_valid": False}
+                "duplicate_alerts_dropped": 0, "ambiguous_reaction_timestamps_dropped": 0, "decision_time_valid": False}
     cutoff = now - timedelta(days=7)
     alerts = []
     seen_alerts = set()
     duplicate_alerts_dropped = 0
+    ambiguous_reaction_timestamps_dropped = 0
     for row in rows:
         if row.get("kind") != "NEWS_ALERT_SENT":
             continue
@@ -186,6 +187,21 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
                     continue
                 if math.isfinite(candidate_return_pct):
                     reaction_observations.append((observed_at, price))
+        # A timestamp can arrive more than once in the journal. Collapse exact
+        # duplicates, but exclude a timestamp entirely if different prices claim
+        # to represent the same observation instant; row order is not market truth.
+        prices_by_time: dict[datetime, set[float]] = {}
+        for observed_time, observed_price in reaction_observations:
+            prices_by_time.setdefault(observed_time, set()).add(observed_price)
+        ambiguous_times = {observed_time for observed_time, prices in prices_by_time.items() if len(prices) > 1}
+        ambiguous_reaction_timestamps_dropped += len(ambiguous_times)
+        reaction_observations = [
+            (observed_time, next(iter(prices)))
+            for observed_time, prices in prices_by_time.items()
+            if len(prices) == 1
+        ]
+        reaction_observations.sort(key=lambda item: item[0])
+
         # Directional accuracy uses a minimum 15-minute horizon to avoid
         # treating immediate noise as a forecast result. TP/SL, however,
         # must include every post-delivery observation, including the first 15m.
@@ -250,7 +266,9 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
             "net_cost_coverage_pct": round(len(net_scored)/len(scored)*100, 2) if scored else None,
             "mean_net_return_pct": round(sum(x["net_return_pct"] for x in net_scored)/len(net_scored), 4) if net_scored else None,
             "tp1_observed": tp1_observed, "sl_observed": sl_observed, "open_at_last_check": open_count,
-            "duplicate_alerts_dropped": duplicate_alerts_dropped, "decision_time_valid": True}
+            "duplicate_alerts_dropped": duplicate_alerts_dropped,
+            "ambiguous_reaction_timestamps_dropped": ambiguous_reaction_timestamps_dropped,
+            "decision_time_valid": True}
 
 
 def _maybe_send_daily_scorecard(state: dict[str, Any], send_telegram: Callable[[str], bool], now: datetime) -> bool:
