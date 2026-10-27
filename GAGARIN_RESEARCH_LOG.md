@@ -53,7 +53,7 @@
 - **Files:** `telegram/news_monitor.py`; `tests/test_news_monitor.py`.
 - **Regression tests:** True/False, NaN, positive/negative infinity, zero, negative, malformed string, and a valid 80.25 baseline.
 - **Commit:** code `63f8234a30b6fa09bae2580646e1e534810b5099`; tests `33089074a762b7c8a187ba25b451ee0dbcce8af4`.
-- **CI:** pending PR-triggered workflows; no pass claimed yet.
+- **CI:** PASS on PR head `c02abdb07c1e1b8fefdbf4eee8c097eb4c3589e3`: Gagarin integration run 40461251707, PAPER run 40461251833, NEWS alert run 40461251773, Public Event Brain run 40461251764, and Execution Layer run 40461251955. The research-log-only commit follows those test runs.
 - **Deployment:** research branch only; no merge/deploy. Render pipeline minutes are exhausted.
 - **Empirical validation:** no live replay or out-of-sample test; baseline input integrity only.
 - **Persistence:** live `DATABASE_URL` not verified; journal durability is not claimed.
