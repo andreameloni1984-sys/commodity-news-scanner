@@ -314,7 +314,7 @@ def _parse_aware_datetime(value: Any) -> datetime | None:
         return None
     text = str(value).strip()
     try:
-        if re.fullmatch(r"\\d{8}T\\d{6}Z", text):
+        if re.fullmatch(r"\d{8}T\d{6}Z", text):
             return datetime.strptime(text, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
         parsed = email.utils.parsedate_to_datetime(text)
         if parsed.tzinfo is None or parsed.utcoffset() is None:
