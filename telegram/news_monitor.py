@@ -91,7 +91,9 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         except (TypeError, ValueError, OverflowError):
             continue
         direction = str(row.get("direction") or "").upper()
-        if sent_at and sent_at >= cutoff and math.isfinite(price) and price > 0 and direction in {"LONG", "SHORT"}:
+        # Future-dated alert rows must not enter the denominator or be
+        # counted as pending in a historical scorecard.
+        if sent_at and cutoff <= sent_at <= now and math.isfinite(price) and price > 0 and direction in {"LONG", "SHORT"}:
             alerts.append((row, sent_at, price, direction))
     scored, pending, unscored_expired = [], 0, 0
     for alert, sent_at, alert_price, direction in alerts:
