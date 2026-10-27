@@ -111,3 +111,9 @@ This mapping distinguishes documented lessons from implemented and empirically v
 - **Operational path:** provider response → `_validate_candles` → freshness/market status → indicator and setup calculation. Invalid rows are dropped before indicators; no trade direction is inferred.
 - **Empirical limit:** synthetic regression tests only; no live-provider replay or OOS P&L result. This is data-integrity work, not a profitability claim.
 - **Deployment:** PR #84 branch only; no merge/deploy. PAPER/DEMO only; no broker, real orders, secrets, or Telegram test messages.
+
+
+### Follow-up CI correction — boolean candle guard
+
+- The first general Gagarin integration run failed because the new guard referred to parameter names `high_price`/`low_price`/`close_price`, while `_normalize()` names them `high`/`low`/`close`. The failure was observed in the CI log (14 failures, 363 passed), not hidden.
+- Corrected the identifier list in `engine/data.py`; a fresh workflow is required to validate the corrected head. No runtime deployment was triggered.
