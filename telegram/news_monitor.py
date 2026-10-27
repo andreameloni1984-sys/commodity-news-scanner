@@ -85,7 +85,13 @@ def _explicit_round_trip_cost_pct(alert: dict[str, Any]) -> float | None:
         if not math.isfinite(value) or value < 0:
             return None
         costs.append(value)
-    return sum(costs) / 100.0
+    total_bps = sum(costs)
+    # Individually finite values can still overflow when aggregated (e.g. 1e308 + 1e308).
+    # Such an aggregate is not a usable cost estimate and must not enter net-return scoring.
+    if not math.isfinite(total_bps):
+        return None
+    cost_pct = total_bps / 100.0
+    return cost_pct if math.isfinite(cost_pct) else None
 
 
 def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = None) -> dict[str, Any]:

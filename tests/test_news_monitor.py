@@ -845,3 +845,15 @@ def test_poll_news_once_rejects_naive_published_at(tmp_path, monkeypatch):
     assert report["alerts"] == 0
     assert analyzed == []
     assert messages == []
+
+
+
+def test_round_trip_cost_rejects_overflowing_aggregate():
+    from telegram.news_monitor import _explicit_round_trip_cost_pct
+
+    alert = {
+        "round_trip_spread_cost_bps": 1e308,
+        "round_trip_fees_cost_bps": 1e308,
+        "round_trip_slippage_bps": 1e308,
+    }
+    assert _explicit_round_trip_cost_pct(alert) is None
