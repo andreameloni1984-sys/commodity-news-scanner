@@ -129,3 +129,13 @@ This mapping distinguishes documented lessons from implemented and empirically v
 - **Historical mapping:** IBKR session 9 requires explicit handling of malformed/missing/delayed market data and point-in-time timestamps; this change addresses only negative numeric epoch values, not session calendars, contract expiry/rollover, or stale positive timestamps.
 - **Empirical limit:** synthetic regression only; no provider replay, outcome scorecard, OOS P&L, or profitability claim. It does not replace instrument-specific session/futures-calendar validation.
 - **Deployment:** PR #84 branch only; no merge/deploy. PAPER/DEMO only; no broker, orders, secrets, or Telegram test messages.
+
+## 2026-10-27 follow-up — reject epoch-zero market-candle timestamps
+
+- **Finding:** the candle validator rejected negative Unix epochs but accepted timestamp `0`. For the currently supported live market instruments, epoch zero is not a plausible candle time and should not be allowed to proceed into freshness/indicator processing.
+- **Change:** `engine/data.py::_validate_candles` now rejects `timestamp <= 0`, while retaining existing finite-value, future-time, duplicate/conflict, and OHLCV checks.
+- **Regression:** `tests/test_data_finite_values.py::test_validate_candles_drops_non_positive_epoch_timestamps` is parameterized for both `-1.0` and `0.0`.
+- **Commits:** code `25a4462af08abe2c16b2132a980bf25827826556`; test `2aba50c686f9e18719b471a8a343a8aaf92b2fd6`.
+- **CI at log update:** five relevant workflows were triggered and were in progress: General tests [40566882116](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40566882116), Public Event Brain [40566882441](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40566882441), PAPER [40566882541](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40566882541), NEWS alert [40566882660](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40566882660), Execution Layer [40566882513](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40566882513). Recheck before treating the revision as validated.
+- **Operational path:** provider candles → timestamp validation → duplicate/OHLCV validation → freshness/regime/ATR/RSI. This does not validate instrument-specific sessions or futures expiry/rollover.
+- **Deployment/empirical limits:** PR #84 branch only; no merge/deploy. Synthetic regression only; no provider replay, OOS scorecard or profitability claim. PAPER/DEMO ONLY.
