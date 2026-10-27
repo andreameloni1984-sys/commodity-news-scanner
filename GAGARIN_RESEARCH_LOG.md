@@ -57,3 +57,15 @@
 - **Deployment:** branch only; no deploy triggered. Render read-only check: last live `gagarin-cloud` commit `86068d701c860670a9d9e0e4e65af98860a57cfa` (2026-10-21); latest attempt `57916b6d792cd7e65776f483d71ad0a50df1ab01` (2026-10-26) failed with `pipeline_minutes_exhausted`. Telegram v2's latest attempted commit also failed for the same quota condition. This PR is not live.
 - **Empirical validation:** no historical replay or out-of-sample performance test performed. This fixes temporal eligibility, not predictive accuracy.
 - **Safety:** scorecard-only change; no entry authorization or order execution changed. PAPER/DEMO ONLY.
+
+## 2026-10-27 — Fail closed on ambiguous scorecard timestamps
+
+- **Finding:** the shared `_parse_datetime()` assumed UTC for naive values. That is unsafe for historical scorecards: both alert time and observed reaction time must represent unambiguous instants, and the evaluation clock (`now`) must also be timezone-aware.
+- **Change:** add an opt-in `require_timezone` parser mode and use it for scorecard `sent_at` and `observed_at`. A naive/invalid decision clock returns an explicitly invalid, empty scorecard (`decision_time_valid=False`) rather than scoring with an invented UTC interpretation. Existing non-scorecard callers retain their prior parsing behavior.
+- **Files/path:** `telegram/news_monitor.py::_parse_datetime`; journal rows → `build_alert_scorecard(rows, now)` → strict timestamp eligibility → outcomes.
+- **Regression:** `tests/test_news_monitor.py::test_scorecard_rejects_naive_timestamps_and_decision_clock` verifies naive alert/observation timestamps are excluded, valid alert remains pending, and naive `now` is rejected.
+- **Commits:** code `56c8ef2b41b6bf4d8dad677e1d878cd749740a3d`; test `44f162c19827054714c93ce37bfd7f89c17fa88f`.
+- **CI:** pending after these commits; no new result claimed yet.
+- **Deployment:** PR #79 branch only; no merge/deploy. Render build-pipeline minutes remain exhausted.
+- **Empirical limits:** no historical replay, cost/slippage model, or out-of-sample profitability evaluation. This is temporal data-integrity work only.
+- **Safety:** PAPER/DEMO ONLY; no broker, orders, secret-value inspection, or Telegram test messages.
