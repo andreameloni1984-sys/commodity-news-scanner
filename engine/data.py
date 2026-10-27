@@ -640,6 +640,12 @@ def _validate_candles(
         if ts <= 0:
             continue
 
+        # Unix millisecond epochs (~1e12 today) must not be mistaken for
+        # seconds and silently dropped as ordinary future candles. Treat a
+        # mixed-unit provider response as ambiguous and fail closed.
+        if ts >= 100_000_000_000:
+            return [], "TIMESTAMP_UNIT_MISMATCH_OR_OUT_OF_RANGE"
+
         if (
             ts
             > now + MAX_CANDLE_FUTURE_SECONDS
