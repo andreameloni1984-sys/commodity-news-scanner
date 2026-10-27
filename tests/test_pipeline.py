@@ -871,3 +871,27 @@ def test_safety_recomputes_rr_from_actual_bracket_prices():
     assert state.safety == "BLOCKED"
     assert "RR_GEOMETRY_MISMATCH" in state.blockers
     assert "RR_FAIL" in state.blockers
+
+
+def test_rsi_wilder_rejects_fractional_boolean_and_nonfinite_periods():
+    for period in (14.5, True, float("nan"), float("inf"), float("-inf"), "bad"):
+        assert _rsi_wilder(list(range(20)), period) is None
+
+
+def test_rsi_wilder_rejects_overflowing_close_changes_and_initial_averages():
+    # Finite closes can still overflow when a difference is calculated.
+    assert _rsi_wilder([-1e308, 1e308], period=1) is None
+
+    # Each change is finite, but the sum of three positive changes overflows.
+    assert _rsi_wilder([-1.4e308, -7e307, 0.0, 7e307], period=3) is None
+
+
+def test_rsi_wilder_rejects_overflow_during_wilder_recursion():
+    # Initial average gain is finite; adding the next gain overflows before division.
+    assert _rsi_wilder([-1.6e308, -8e307, 0.0, 1e308], period=2) is None
+
+
+def test_rsi_wilder_preserves_valid_period_and_reference_cases():
+    assert _rsi_wilder(list(range(15)), period=14) == 100.0
+    assert _rsi_wilder(list(range(15, 0, -1)), period=14) == 0.0
+    assert _rsi_wilder([100.0] * 15, period=14) == 50.0
