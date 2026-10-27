@@ -505,3 +505,188 @@ def test_alert_scorecard_rejects_non_finite_prices_and_invalid_levels():
     assert report["tp1_observed"] == 0
     assert report["sl_observed"] == 0
     assert report["open_at_last_check"] == 1
+
+
+def test_source_backoff_survives_monitor_process_restart(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    import time
+    import telegram.news_monitor as monitor
+
+    now = datetime(2026, 10, 26, 13, 0, tzinfo=timezone.utc)
+    for mapping in (monitor._SOURCE_FAILURES, monitor._SOURCE_RETRY_AT, monitor._SOURCE_LAST_SUCCESS):
+        mapping.clear()
+
+    monitor._source_failed("GDELT", RuntimeError("timeout"))
+    monitor._SOURCE_LAST_SUCCESS["EIA"] = time.monotonic() - 45
+    state = {}
+    monitor._snapshot_source_backoff(state, now=now)
+
+    saved = state["source_backoff"]
+    assert saved["GDELT"]["failures"] == 1
+    assert monitor._parse_datetime(saved["GDELT"]["retry_at_utc"]) > now
+    assert monitor._parse_datetime(saved["EIA"]["last_success_at_utc"]) <= now
+
+    for mapping in (monitor._SOURCE_FAILURES, monitor._SOURCE_RETRY_AT, monitor._SOURCE_LAST_SUCCESS):
+        mapping.clear()
+    monitor._restore_source_backoff(state, now=now)
+
+    assert monitor._SOURCE_FAILURES["GDELT"] == 1
+    assert not monitor._source_allowed("GDELT")
+    assert not monitor._source_allowed("EIA", min_interval=300)
+
+
+def test_source_backoff_restore_ignores_expired_and_malformed_timestamps():
+    from datetime import datetime, timezone
+    import telegram.news_monitor as monitor
+
+    for mapping in (monitor._SOURCE_FAILURES, monitor._SOURCE_RETRY_AT, monitor._SOURCE_LAST_SUCCESS):
+        mapping.clear()
+    now = datetime(2026, 10, 26, 13, 0, tzinfo=timezone.utc)
+    monitor._restore_source_backoff({
+        "source_backoff": {
+            "OLD": {"failures": 2, "retry_at_utc": "2026-10-26T12:00:00Z"},
+            "BAD": {"failures": "not-a-number", "retry_at_utc": "not-a-date"},
+        }
+    }, now=now)
+
+    assert monitor._SOURCE_FAILURES["OLD"] == 2
+    assert "OLD" not in monitor._SOURCE_RETRY_AT
+    assert monitor._SOURCE_FAILURES.get("BAD", 0) == 0
+    assert "BAD" not in monitor._SOURCE_RETRY_AT
+
+def test_load_state_restores_persisted_source_backoff_before_polling(monkeypatch, tmp_path):
+    from datetime import datetime, timedelta, timezone
+    import json
+    import time
+    import telegram.news_monitor as monitor
+
+    now = datetime(2026, 10, 26, 13, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(monitor, "STATE_PATH", tmp_path / "news_state.json")
+    monkeypatch.setattr(monitor, "_utc_now", lambda: now)
+    for mapping in (monitor._SOURCE_FAILURES, monitor._SOURCE_RETRY_AT, monitor._SOURCE_LAST_SUCCESS):
+        mapping.clear()
+    state = {
+        "seen": [],
+        "clusters": [],
+        "pending": [],
+        "last_analysis_at": 0,
+        "initialized": True,
+        "source_backoff": {
+            "GDELT": {
+                "failures": 2,
+                "retry_at_utc": (now + timedelta(minutes=20)).isoformat(),
+            }
+        },
+    }
+    (tmp_path / "news_state.json").write_text(json.dumps(state), encoding="utf-8")
+
+    loaded = monitor._load_state()
+
+    assert loaded["source_backoff"]["GDELT"]["failures"] == 2
+    assert monitor._SOURCE_FAILURES["GDELT"] == 2
+    assert not monitor._source_allowed("GDELT")
+    assert monitor._SOURCE_RETRY_AT["GDELT"] > time.monotonic()
+
+
+def test_save_state_persists_current_source_backoff(monkeypatch, tmp_path):
+    from datetime import datetime, timezone
+    import json
+    import time
+    import telegram.news_monitor as monitor
+
+    now = datetime(2026, 10, 26, 13, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(monitor, "STATE_PATH", tmp_path / "news_state.json")
+    monkeypatch.setattr(monitor, "_utc_now", lambda: now)
+    for mapping in (monitor._SOURCE_FAILURES, monitor._SOURCE_RETRY_AT, monitor._SOURCE_LAST_SUCCESS):
+        mapping.clear()
+    monitor._SOURCE_FAILURES["GDELT"] = 1
+    monitor._SOURCE_RETRY_AT["GDELT"] = time.monotonic() + 600
+
+    monitor._save_state({
+        "seen": [],
+        "clusters": [],
+        "pending": [],
+        "last_analysis_at": 0,
+        "initialized": True,
+    })
+
+    saved = json.loads((tmp_path / "news_state.json").read_text(encoding="utf-8"))
+    assert saved["source_backoff"]["GDELT"]["failures"] == 1
+    assert monitor._parse_datetime(saved["source_backoff"]["GDELT"]["retry_at_utc"]) > now
+
+def test_restore_source_backoff_caps_corrupt_far_future_deadline(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    import time
+    import telegram.news_monitor as monitor
+
+    now = datetime(2026, 10, 26, 15, 0, tzinfo=timezone.utc)
+    for mapping in (monitor._SOURCE_FAILURES, monitor._SOURCE_RETRY_AT, monitor._SOURCE_LAST_SUCCESS):
+        mapping.clear()
+
+    monitor._restore_source_backoff(
+        {
+            "source_backoff": {
+                "GDELT": {
+                    "failures": 1,
+                    "retry_at_utc": (now + timedelta(days=7)).isoformat(),
+                }
+            }
+        },
+        now=now,
+    )
+
+    remaining = monitor._SOURCE_RETRY_AT["GDELT"] - time.monotonic()
+    assert 0 < remaining <= monitor.PERMANENT_HTTP_BACKOFF_SECONDS
+
+
+def test_fetcher_failure_does_not_abort_pending_price_recheck(tmp_path, monkeypatch):
+    import json
+    import telegram.news_monitor as monitor
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime(2026, 10, 26, 14, 0, tzinfo=timezone.utc)
+    event = {
+        "event_id": "pending-event",
+        "title": "OPEC announces production cut",
+        "source": "Test RSS",
+        "url": "https://example.test/opec-cut",
+        "published_at": (now - timedelta(minutes=1)).isoformat(),
+        "first_seen_at": (now - timedelta(minutes=5)).isoformat(),
+        "expires_at": (now + timedelta(hours=1)).isoformat(),
+        "assets": ["WTI", "Brent"],
+        "impact": {"WTI": "RIALZISTA", "Brent": "RIALZISTA"},
+        "baseline_prices": {"WTI": 80.0, "Brent": 85.0},
+        "baseline_at": (now - timedelta(minutes=4)).isoformat(),
+    }
+    seeded_state = {
+        "seen": ["already-seen"],
+        "clusters": ["already-clustered"],
+        "pending": [event],
+        "last_analysis_at": 0,
+        "initialized": True,
+    }
+    monkeypatch.setattr(monitor, "STATE_PATH", tmp_path / "news_state.json")
+    monkeypatch.setattr(monitor, "_load_state", lambda: dict(seeded_state))
+    monkeypatch.setattr(monitor, "_maybe_send_daily_scorecard", lambda *args: False)
+
+    analysis_calls = []
+
+    def fail_fetch():
+        raise RuntimeError("simulated aggregate fetch failure")
+
+    def analyze():
+        analysis_calls.append(True)
+        return []
+
+    result = monitor.poll_news_once(
+        lambda message: False,
+        analyze,
+        fetcher=fail_fetch,
+        now=now,
+    )
+
+    assert result == {"fetched": 0, "new_relevant": 0, "pending": 1, "alerts": 0, "analysis": 1}
+    assert analysis_calls == [True]
+    saved = json.loads((tmp_path / "news_state.json").read_text(encoding="utf-8"))
+    assert saved["pending"][0]["event_id"] == "pending-event"
+
