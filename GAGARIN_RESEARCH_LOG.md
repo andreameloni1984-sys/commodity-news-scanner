@@ -96,3 +96,10 @@
 - Runtime log sample at 15:31 UTC: 150 news rows fetched, 0 new relevant, 0 pending and 0 alerts. GDELT logs in the queried period contain HTTP 429, ReadTimeout and JSONDecodeError with backoff. Logs report `DATABASE_URL missing` / `LOCAL_CSV_NO_DATABASE_URL`; do not claim a durable journal.
 - PR #83 remains open/draft. The RSI overflow guard is CI-verified on the PR branch but not merged or live.
 
+## Correction — 2026-10-27: avoid duplicate RSI overflow work
+
+- A later open-PR audit found that existing PR #78, `fix/rsi-wilder-input-overflow-20261027`, already validates Wilder RSI periods and rejects non-finite close differences/intermediates.
+- To avoid carrying a second implementation of the same guard, the additional overflow-delta change and test introduced in commits `8ee3266bb07483ebd735c4e7a4916eb5390c4ae5` and `2ba4a45b47e0db895227f74ebe41a8307458db32` were reverted from PR #83 by commits `58e17b8120040fe9d8caed35b71bc6db60988cdc` and `73755ba55581500c90e77c5af8dfdbf34b043fe0`.
+- Earlier CI passes apply to the superseded code/test revision, not to this revert commit. PR #83's period-validation change also overlaps PR #78 and should not be treated as an independent feature; no merge recommendation is made here.
+- The unique Gagarin improvement from this run is tracked separately in PR #84: conflicting duplicate candle timestamps now fail closed.
+
