@@ -253,3 +253,24 @@ def test_validate_candles_rejects_boolean_numeric_values(boolean_field):
     assert error is None
     assert len(cleaned) == MIN_CANDLES_REQUIRED
     assert all(not isinstance(value, bool) for candle in cleaned for value in candle.values())
+
+
+def test_validate_candles_fails_closed_on_millisecond_epoch_timestamps():
+    now = time.time()
+    candles = [
+        {
+            "timestamp": now - (MIN_CANDLES_REQUIRED - i) * 60,
+            "open": 100.0,
+            "high": 102.0,
+            "low": 99.0,
+            "close": 101.0,
+            "volume": 10.0,
+        }
+        for i in range(MIN_CANDLES_REQUIRED + 1)
+    ]
+    candles[0]["timestamp"] = now * 1000
+
+    cleaned, error = _validate_candles(candles)
+
+    assert cleaned == []
+    assert error == "TIMESTAMP_UNIT_MISMATCH_OR_OUT_OF_RANGE"
