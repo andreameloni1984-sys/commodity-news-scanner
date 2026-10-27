@@ -109,3 +109,11 @@
 - **Gagarin mapping/status:** `telegram/news_monitor.py::_confirmed_setups` now revalidates persisted baseline prices at the final decision boundary; tests cover bool/NaN/infinity/non-positive/malformed values. This is a data-integrity sub-gate, not a complete `ORDER_FLOW_DATA_INTEGRITY_GATE` or provider audit. No LLM owns arithmetic, sizing, SL, exposure or final authorization in this change. The full preregistered grid/cost/falsification/OOS promotion process is not claimed complete.
 - **Architecture records recovered:** `DATA → REGIME → STRUCTURE → SETUP → TRIGGER → EXECUTION → RISK → SAFETY → VALIDATION`; an expanded Gagarin version is `DATA → CONTRACT → LIQUIDITY → VOLATILITY → REGIME → SESSION → STRUCTURE → SETUP → TRIGGER → EXECUTION → RISK GOVERNOR → SAFETY → PAPER TEST`. Treat these as architecture maps, not proof every gate is wired into the deployed decision path.
 - **Validation/deployment:** relevant CI passed on the code/test revision (five workflows listed in the preceding verification entry); PR #82 remains open. Render's latest build failed because build-pipeline minutes were exhausted; live commit is older. No out-of-sample profitability claim, durable-journal claim, broker or order.
+
+
+## 2026-10-27 — Audit of the original 100-point research catalog
+
+- **Recovery attempt:** searched the Library (including `Registro Studio IBKR - aggiornato 2026-10-20 sessione 9.md`) and retrieved prior-conversation summaries dated 2026-10-03.
+- **Verified result:** the earlier conversation explicitly recorded that the original numbered 1–100 catalog and complete list of roughly 100 points had not been recovered; only incremental summaries were available. The IBKR session-9 file is a separate study register, with numbered study items through item 32 and later hypotheses; it is not evidence of the missing 100-point catalog.
+- **Decision:** do not reconstruct or relabel missing items as original lessons. Apply only directly retrievable, source-backed findings and record inferred hypotheses separately. Items 100–103 appearing in recent implementation notes remain implementation hypotheses, not proof that the original catalog has been recovered.
+- **Scope:** this is a provenance/research-integrity finding, not a code feature or empirical trading result.
