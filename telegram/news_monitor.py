@@ -62,6 +62,32 @@ def _journal(record: dict[str, Any]) -> None:
     except OSError as exc:
         print(f"NEWS journal save failed | {type(exc).__name__}: {exc}", flush=True)
 
+def _explicit_round_trip_cost_pct(alert: dict[str, Any]) -> float | None:
+    """Return explicit round-trip trading costs in percent, or None if incomplete.
+
+    Cost fields are supplied in basis points of notional; no cost is assumed
+    when spread, fees, or slippage data are missing or invalid.
+    """
+    fields = (
+        "round_trip_spread_cost_bps",
+        "round_trip_fees_cost_bps",
+        "round_trip_slippage_bps",
+    )
+    costs = []
+    for field in fields:
+        raw = alert.get(field)
+        if raw is None or isinstance(raw, bool):
+            return None
+        try:
+            value = float(raw)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if not math.isfinite(value) or value < 0:
+            return None
+        costs.append(value)
+    return sum(costs) / 100.0
+
+
 def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = None) -> dict[str, Any]:
     """Score alert direction using a later live price observation, not a keyword label."""
     now = _utc_now() if now is None else now
@@ -161,19 +187,28 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
                 if (direction == "LONG" and observed_price >= tp1) or (direction == "SHORT" and observed_price <= tp1):
                     outcome = "TP1_OBSERVED"
                     break
+        cost_pct = _explicit_round_trip_cost_pct(alert)
+        net_return_pct = round(signed_pct - cost_pct, 6) if cost_pct is not None else None
         scored.append({"asset": alert.get("asset"), "direction": direction, "sent_at": sent_at.isoformat(),
                        "observed_at": observed_at.isoformat(), "signed_return_pct": round(signed_pct, 6),
+                       "net_return_pct": net_return_pct,
                        "correct": signed_pct > 0, "outcome": outcome})
     correct = sum(x["correct"] for x in scored)
     tp1_observed = sum(x["outcome"] == "TP1_OBSERVED" for x in scored)
     sl_observed = sum(x["outcome"] == "SL_OBSERVED" for x in scored)
     open_count = sum(x["outcome"] == "OPEN_AT_LAST_CHECK" for x in scored)
+    net_scored = [x for x in scored if x["net_return_pct"] is not None]
+    net_profitable = sum(x["net_return_pct"] > 0 for x in net_scored)
     return {"window_days": 7, "alerts": len(alerts), "scored": len(scored), "pending": pending,
             "unscored_expired": unscored_expired,
             "coverage_pct": round(len(scored)/len(alerts)*100, 2) if alerts else None,
             "correct": correct, "incorrect": len(scored)-correct,
             "accuracy_pct": round(correct/len(scored)*100, 2) if scored else None,
             "mean_directional_return_pct": round(sum(x["signed_return_pct"] for x in scored)/len(scored), 4) if scored else None,
+            "net_scored": len(net_scored),
+            "net_profitable": net_profitable,
+            "net_cost_coverage_pct": round(len(net_scored)/len(scored)*100, 2) if scored else None,
+            "mean_net_return_pct": round(sum(x["net_return_pct"] for x in net_scored)/len(net_scored), 4) if net_scored else None,
             "tp1_observed": tp1_observed, "sl_observed": sl_observed, "open_at_last_check": open_count,
             "decision_time_valid": True}
 
