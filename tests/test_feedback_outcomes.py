@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from engine.feedback import _candles, _timestamp, append_signal, load_feedback, record_forecasts, summarize, update_open_outcomes
+from engine.feedback import _candles, _number, _timestamp, append_signal, load_feedback, record_forecasts, summarize, update_open_outcomes
 
 
 def state(candles):
@@ -209,3 +209,11 @@ def test_candles_are_sorted_deduplicated_and_invalid_ranges_rejected():
         (1000.0, 101.0, 99.0),
         (3000.0, 104.0, 102.0),
     ]
+
+
+
+def test_number_rejects_boolean_market_values():
+    assert _number(True) is None
+    assert _number(False) is None
+    assert _number(100) == 100.0
+    assert _number("100.5") == 100.5
