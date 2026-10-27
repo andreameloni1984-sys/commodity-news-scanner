@@ -181,3 +181,10 @@ This mapping distinguishes documented lessons from implemented and empirically v
 - **Runtime evidence:** at 2026-10-27 20:02 UTC, Render logs recorded GDELT `ReadTimeout` backoff of 300/600/1200 seconds, Telegram webhook active and a command received. The same log window reports `LOCAL_CSV_NO_DATABASE_URL` / `DATABASE_URL missing`; the journal is not durable on the observed configuration.
 - **Deployment:** latest observed Gagarin deploy attempt for main SHA `99ad72b69cddbed0f80ef9f671c5b70deb9df024` failed at 2026-10-27 12:48:24 UTC with `pipeline_minutes_exhausted`. No merge/deploy was performed for PR #84.
 - **Empirical limit:** timezone tests use a mocked Twelve Data response and explicit `timezone=UTC` request parameter. Biquote's current timestamp format was not re-queried; a naive timestamp from that provider will now be rejected so provider fallback can proceed. No market replay, OOS scorecard or profitability claim. PAPER/DEMO ONLY.
+
+
+## Implementation-ledger cross-check — separate candle and feedback timestamp paths (2026-10-27)
+
+- Added `DATA-004` to `docs/gagarin-implementation-ledger.md` for the tested `engine/data.py` candle timestamp policy: generic naive ISO strings are rejected; the Twelve Data adapter attaches UTC only because the request explicitly sets `timezone=UTC`.
+- **Unresolved:** existing `DATA-002` describes a different path in `engine/feedback.py` that still assumes UTC for naive timestamps. PR #84 does not change that feedback path; it needs its own strict parser and regression test. This distinction avoids claiming a system-wide timezone fix from a data-engine change.
+- CI for code/test head `9ce15f6e0534bd97387d818657002584910aacb6` passed all five workflows; this commit changes documentation only. No merge/deploy; no OOS or profitability result.
