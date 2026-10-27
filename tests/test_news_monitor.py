@@ -597,3 +597,25 @@ def test_valid_signal_levels_fails_closed_on_invalid_rr_configuration(monkeypatc
 
     monkeypatch.setenv("MIN_ENTRY_RR_TP1", "nan")
     assert not _valid_signal_levels("LONG", 100.0, 100.0, 98.0, 103.0, 104.0, 105.0)
+
+def test_confirmed_setups_fail_closed_on_invalid_reaction_threshold(monkeypatch):
+    from types import SimpleNamespace
+    from telegram.news_monitor import _confirmed_setups
+
+    event = {
+        "title": "OPEC announces production cut",
+        "baseline_prices": {"WTI": 80.0},
+    }
+    state = SimpleNamespace(
+        commodity="Petrolio WTI", symbol="WTI/USD", setup_direction="LONG",
+        final_decision="PAPER_SIGNAL", trigger_confirmed=True, live=True,
+        price=80.1, entry=80.1, stop=78.5, tp1=83.0, tp2=84.0,
+        data_source="TEST_FEED",
+    )
+    monkeypatch.setenv("GAGARIN_NEWS_MIN_REACTION_PCT", "0.05")
+    assert len(_confirmed_setups(event, [state])) == 1
+
+    for invalid_threshold in ("nan", "inf", "-0.1", "not-a-number"):
+        monkeypatch.setenv("GAGARIN_NEWS_MIN_REACTION_PCT", invalid_threshold)
+        assert _confirmed_setups(event, [state]) == []
+
