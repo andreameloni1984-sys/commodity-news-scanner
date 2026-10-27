@@ -632,11 +632,8 @@ def _capture_baseline(event: dict[str, Any], states: list[Any]) -> dict[str, flo
         for state in states:
             if not _asset_matches(asset, state) or not bool(getattr(state, "live", False)):
                 continue
-            try:
-                value = float(getattr(state, "price", None))
-            except (TypeError, ValueError):
-                continue
-            if value > 0:
+            value = _finite_positive(getattr(state, "price", None))
+            if value is not None:
                 baseline[asset] = value
                 break
     return baseline
