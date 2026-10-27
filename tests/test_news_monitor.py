@@ -241,6 +241,27 @@ def test_alert_scorecard_marks_alert_pending_without_later_observation():
     assert report["pending"] == 1
 
 
+def test_alert_scorecard_excludes_observation_after_evaluation_time():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 27, 4, 0, tzinfo=timezone.utc)
+    decision_time = sent + timedelta(minutes=10)
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "future-observation", "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "future-observation", "asset": "WTI",
+         "current_price": 81.0, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=decision_time)
+
+    assert report["alerts"] == 1
+    assert report["scored"] == 0
+    assert report["pending"] == 1
+    assert report["unscored_expired"] == 0
+
+
 def test_alert_scorecard_tracks_observed_tp1_and_stop_loss():
     from datetime import datetime, timedelta, timezone
     from telegram.news_monitor import build_alert_scorecard
