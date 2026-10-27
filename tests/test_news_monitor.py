@@ -385,6 +385,14 @@ def test_baseline_point_in_time_gate_rejects_missing_reversed_and_future_timesta
     assert _baseline_point_in_time_valid({**valid, "baseline_at": (now + timedelta(seconds=1)).isoformat()}, now) == (False, "BASELINE_AFTER_DECISION")
     assert _baseline_point_in_time_valid({**valid, "baseline_prices": {"WTI": float("nan")}}, now) == (False, "BASELINE_PRICE_INVALID")
 
+    # A timezone-less wall-clock value must not be silently reinterpreted as UTC.
+    for field in ("event_time", "available_at", "first_seen_at", "decision_time", "baseline_at"):
+        with_timezone_missing = {**valid, field: "2026-10-26T10:00:00"}
+        assert _baseline_point_in_time_valid(with_timezone_missing, now)[0] is False
+    assert _baseline_point_in_time_valid(valid, now.replace(tzinfo=None)) == (
+        False, "DECISION_TIMEZONE_MISSING"
+    )
+
 
 def test_valid_signal_levels_enforces_directional_order_and_finite_values():
     from telegram.news_monitor import _valid_signal_levels
