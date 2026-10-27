@@ -148,6 +148,7 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
             alert_key = (
                 event_id, asset, direction, sent_at.isoformat(), price,
                 str(row.get("stop")), str(row.get("tp1")),
+                str(row.get("tp2")), str(row.get("tp3")),
             )
             if alert_key in seen_alerts:
                 duplicate_alerts_dropped += 1
