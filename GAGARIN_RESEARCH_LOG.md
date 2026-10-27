@@ -240,3 +240,13 @@ This mapping distinguishes documented lessons from implemented and empirically v
 - **CI:** NEWS alert PASS [40598245155](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40598245155) and Execution Layer PASS [40598245342](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40598245342), both on the code/test commit. Other workflows did not trigger for these paths and are not claimed as passed.
 - **Deployment/runtime:** PR #84 only; no merge/deploy. Latest attempts on main are build_failed due to exhausted Render pipeline minutes. Read-only logs at 22:09–22:21 UTC show GDELT HTTP 429/ReadTimeout backoff and DATABASE_URL missing; journal durability is not claimed.
 - **Empirical limit/safety:** synthetic timestamp tests only; no provider replay, full end-to-end no-look-ahead proof, walk-forward/OOS or profitability claim. PAPER/DEMO ONLY.
+
+
+## 2026-10-28 — Reject boolean values in feedback price/level parsing
+
+- **Finding:** `engine/feedback.py::_number()` called `float(value)` directly. In Python, `True` and `False` convert to 1.0 and 0.0, so malformed boolean fields could be interpreted as numeric observations in outcome scoring.
+- **Change/files:** reject booleans before numeric conversion in `engine/feedback.py::_number`; numeric finite-value handling and existing scorecard behavior otherwise remain unchanged.
+- **Regression:** `tests/test_feedback_outcomes.py::test_number_rejects_boolean_market_values` verifies both booleans are rejected while ordinary numbers and numeric strings remain accepted.
+- **Operational path:** state/market values → `_number` → feedback row and candle/outcome calculations → scorecard. This is data hygiene, not a trading signal.
+- **Code commit:** 9012dfdd34d5f66ccf0dba9055e156772dad3da1. **Test commit:** 8c7e1dbde727bcc92b969830a9a443d60a8ed3a2.
+- **CI/deployment/limits:** CI status will be checked from the PR branch. No merge/deploy; Render build minutes remain exhausted. Synthetic input regression only; no provider replay, walk-forward/OOS or profitability claim. PAPER/DEMO ONLY. Journal durability is not claimed while runtime `DATABASE_URL` is unverified/missing.
