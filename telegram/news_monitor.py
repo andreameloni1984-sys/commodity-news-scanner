@@ -64,13 +64,23 @@ def _journal(record: dict[str, Any]) -> None:
 
 def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = None) -> dict[str, Any]:
     """Score alert direction using a later live price observation, not a keyword label."""
-    now = now or _utc_now()
+    now = _utc_now() if now is None else now
+    if not isinstance(now, datetime) or now.tzinfo is None or now.utcoffset() is None:
+        # A scorecard without an explicit decision-time offset is not safe to
+        # evaluate; return an empty, explicitly invalid report instead of
+        # silently treating a local wall clock as UTC.
+        return {"window_days": 7, "alerts": 0, "scored": 0, "pending": 0,
+                "unscored_expired": 0, "coverage_pct": None, "correct": 0,
+                "incorrect": 0, "accuracy_pct": None,
+                "mean_directional_return_pct": None, "tp1_observed": 0,
+                "sl_observed": 0, "open_at_last_check": 0,
+                "decision_time_valid": False}
     cutoff = now - timedelta(days=7)
     alerts = []
     for row in rows:
         if row.get("kind") != "NEWS_ALERT_SENT":
             continue
-        sent_at = _parse_datetime(row.get("sent_at") or row.get("recorded_at"))
+        sent_at = _parse_datetime(row.get("sent_at") or row.get("recorded_at"), require_timezone=True)
         try:
             price = float(row.get("price"))
         except (TypeError, ValueError):
@@ -84,7 +94,7 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         for row in rows:
             if row.get("kind") != "NEWS_REACTION" or row.get("event_id") != alert.get("event_id") or row.get("asset") != alert.get("asset"):
                 continue
-            observed_at = _parse_datetime(row.get("observed_at") or row.get("recorded_at"))
+            observed_at = _parse_datetime(row.get("observed_at") or row.get("recorded_at"), require_timezone=True)
             # Point-in-time scorecards may only use observations available by
             # the evaluation time; future-dated rows must remain pending.
             if not observed_at or observed_at > now or not (sent_at <= observed_at <= sent_at + timedelta(hours=4)):
@@ -145,7 +155,8 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
             "correct": correct, "incorrect": len(scored)-correct,
             "accuracy_pct": round(correct/len(scored)*100, 2) if scored else None,
             "mean_directional_return_pct": round(sum(x["signed_return_pct"] for x in scored)/len(scored), 4) if scored else None,
-            "tp1_observed": tp1_observed, "sl_observed": sl_observed, "open_at_last_check": open_count}
+            "tp1_observed": tp1_observed, "sl_observed": sl_observed, "open_at_last_check": open_count,
+            "decision_time_valid": True}
 
 
 def _maybe_send_daily_scorecard(state: dict[str, Any], send_telegram: Callable[[str], bool], now: datetime) -> bool:
@@ -287,7 +298,7 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _parse_datetime(value: Any) -> datetime | None:
+def _parse_datetime(value: Any, require_timezone: bool = False) -> datetime | None:
     if not value:
         return None
     text = str(value).strip()
@@ -295,14 +306,18 @@ def _parse_datetime(value: Any) -> datetime | None:
         if re.fullmatch(r"\d{8}T\d{6}Z", text):
             return datetime.strptime(text, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
         dt = email.utils.parsedate_to_datetime(text)
-        if dt.tzinfo is None:
+        if dt.tzinfo is None or dt.utcoffset() is None:
+            if require_timezone:
+                return None
             dt = dt.replace(tzinfo=timezone.utc)
         return dt.astimezone(timezone.utc)
     except (TypeError, ValueError, OverflowError):
         pass
     try:
         dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
-        if dt.tzinfo is None:
+        if dt.tzinfo is None or dt.utcoffset() is None:
+            if require_timezone:
+                return None
             dt = dt.replace(tzinfo=timezone.utc)
         return dt.astimezone(timezone.utc)
     except (TypeError, ValueError, OverflowError):
