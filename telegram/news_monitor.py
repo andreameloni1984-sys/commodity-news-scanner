@@ -71,9 +71,12 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         if row.get("kind") != "NEWS_ALERT_SENT":
             continue
         sent_at = _parse_datetime(row.get("sent_at") or row.get("recorded_at"))
+        raw_price = row.get("price")
+        if isinstance(raw_price, bool):
+            continue
         try:
-            price = float(row.get("price"))
-        except (TypeError, ValueError):
+            price = float(raw_price)
+        except (TypeError, ValueError, OverflowError):
             continue
         direction = str(row.get("direction") or "").upper()
         if sent_at and sent_at >= cutoff and math.isfinite(price) and price > 0 and direction in {"LONG", "SHORT"}:
@@ -87,9 +90,12 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
             observed_at = _parse_datetime(row.get("observed_at") or row.get("recorded_at"))
             if not observed_at or not (sent_at <= observed_at <= sent_at + timedelta(hours=4)):
                 continue
+            raw_price = row.get("current_price")
+            if isinstance(raw_price, bool):
+                continue
             try:
-                price = float(row.get("current_price"))
-            except (TypeError, ValueError):
+                price = float(raw_price)
+            except (TypeError, ValueError, OverflowError):
                 continue
             if math.isfinite(price) and price > 0:
                 reaction_observations.append((observed_at, price))
