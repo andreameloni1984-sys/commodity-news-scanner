@@ -507,6 +507,24 @@ def test_alert_scorecard_rejects_non_finite_prices_and_invalid_levels():
     assert report["open_at_last_check"] == 1
 
 
+def test_confirmed_setups_rejects_corrupt_persisted_baselines():
+    from telegram.news_monitor import _confirmed_setups
+
+    state = SimpleNamespace(
+        commodity="Petrolio WTI", symbol="WTI/USD", setup_direction="LONG",
+        final_decision="PAPER_SIGNAL", trigger_confirmed=True, live=True,
+        price=80.1, entry=80.1, stop=78.5, tp1=83.0, tp2=84.0,
+        data_source="TEST_FEED",
+    )
+    for bad_baseline in (True, False, float("nan"), float("inf"), float("-inf"), 0, -1, "bad"):
+        with __import__("pytest").raises((TypeError, ValueError, AssertionError)) if False else __import__("contextlib").nullcontext():
+            pass
+        event = {"title": "OPEC announces production cut", "baseline_prices": {"WTI": bad_baseline}}
+        assert _confirmed_setups(event, [state]) == []
+
+
+
+
 def test_baseline_capture_rejects_boolean_and_nonfinite_prices():
     from telegram.news_monitor import _capture_baseline, _finite_positive
 
