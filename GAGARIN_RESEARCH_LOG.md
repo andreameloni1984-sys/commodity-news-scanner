@@ -88,3 +88,15 @@
 - **CI:** PASS on code/test commit `bf44f0a4a8adb4b151a7d7844453553c6a6f521e`: NEWS alert `40468967173`; Execution Layer `40468967152`; general tests `40468967131`; PAPER `40468967155`; Public Event Brain `40468967142`. The following commit updates this log only.
 - **Deployment/empirical limits:** branch/PR #79 only; no merge/deploy, live replay or out-of-sample profitability test. Render build capacity remains constrained.
 - **Safety:** PAPER/DEMO ONLY; no broker/orders or Telegram test messages.
+
+## 2026-10-27 09:33 UTC — Exclude future-dated alerts from point-in-time scorecards
+
+- **Finding:** the scorecard rejected future price observations but still admitted an alert row with `sent_at > now` into its denominator and marked it pending. A historical evaluation could therefore count an alert that had not yet been sent at the decision time.
+- **Change:** `telegram/news_monitor.py::build_alert_scorecard()` now requires `cutoff <= sent_at <= now` before admitting an alert. Future alerts are excluded from alert, pending, coverage and outcome counts.
+- **Files:** `telegram/news_monitor.py`; `tests/test_news_monitor.py`.
+- **Regression:** `test_scorecard_excludes_alerts_sent_after_decision_time` uses an alert five minutes after the evaluation clock and verifies zero eligible alerts/outcomes.
+- **Commits:** code `49b2a76aa3d6f82f191e15ca2a2bd1c2fb2736d4`; tests `fbf5cc4fe18c7c6a418d6c7d07156dfc62644a28`.
+- **CI:** all five workflows PASS on the code/test head: [general tests](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40474540731), [NEWS alert](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40474540785), [Public Event Brain](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40474540826), [Execution Layer](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40474540782), [PAPER](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40474540755).
+- **Deployment:** PR #79 only, not merged. Render workspace was not selected in this run; no deploy was triggered and live commit was not re-verified. `DATABASE_URL` was not inspected; journal durability is not asserted.
+- **Empirical limit:** temporal eligibility fix only; no replay, cost/slippage model or out-of-sample profitability validation.
+- **Safety:** PAPER/DEMO ONLY; no broker, orders, secrets or Telegram test messages.
