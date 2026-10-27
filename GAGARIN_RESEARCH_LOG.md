@@ -56,3 +56,11 @@
 - **CI:** PASS on PR head commit `298715530e50ff549a8cde5d765083404a9463a6`: NEWS alert run `40460787644`, Execution Layer `40460787647`, Public Event Brain `40460787728`, PAPER `40460787705`, general tests `40460787744`. No empirical signal-performance test was run.
 - **Deployment / limits:** research branch only; no Render deploy. No empirical signal-performance test was run.
 - **Safety:** PAPER/DEMO ONLY; no secrets read, Telegram test message, broker or order.
+
+## 2026-10-27 — Reject boolean prices in news outcome scorecard
+
+- **Finding:** Python converts `True` to `1.0` and `False` to `0.0`; the scorecard's direct float conversions could therefore admit a boolean alert price or reaction price, corrupting the outcome ledger.
+- **Change:** reject boolean values before numeric conversion for both alert-entry prices and later reaction prices; treat overflow as invalid input.
+- **Regression test:** a boolean alert price is excluded; a boolean reaction price does not score the valid alert and leaves it pending while the evaluation window remains open.
+- **CI:** code and test committed to the existing exact-symbol PR branch; a fresh Actions run must confirm the new revision. No local execution or live-market replay is claimed.
+- **Limits:** data-integrity fix only; no profitability claim. No merge or deploy. Render quota remains a deployment constraint; no Telegram test message or order was sent.
