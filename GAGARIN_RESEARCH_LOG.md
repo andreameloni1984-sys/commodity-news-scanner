@@ -45,3 +45,36 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+## 2026-10-27 — Exact spot-symbol matching for news baselines
+
+- **Finding:** `_asset_matches()` used substring checks such as `"XAU" in symbol`, which could match unrelated symbols (for example `XAUTUSDT` or `NOTXAUUSD`) and contaminate a news baseline. Futures symbols must not be silently mixed with spot prices before contract metadata/rollover is modeled.
+- **Change:** normalize separators and match a finite allowlist of complete known spot aliases for WTI, Brent and precious-metal spot pairs; retain commodity-name matching. Futures tickers such as `GC=F` remain unmatched by symbol alone until an explicit contract/calendar mapping exists.
+- **Files:** `telegram/news_monitor.py`; `tests/test_news_monitor.py`.
+- **Regression coverage:** standard slash/no-slash spot symbols match; substring lookalikes and a futures ticker without contract metadata do not.
+- **Code commit:** `5ddc3df2053132a54efca94eb27a5ee434b1edf7`; **test commit:** `f80f595f7f9a812074564b0b457bf6fc6e90cfd7`.
+- **CI:** PASS on PR head commit `298715530e50ff549a8cde5d765083404a9463a6`: NEWS alert run `40460787644`, Execution Layer `40460787647`, Public Event Brain `40460787728`, PAPER `40460787705`, general tests `40460787744`. No empirical signal-performance test was run.
+- **Deployment / limits:** research branch only; no Render deploy. No empirical signal-performance test was run.
+- **Safety:** PAPER/DEMO ONLY; no secrets read, Telegram test message, broker or order.
+
+## 2026-10-27 — Reject boolean prices in news outcome scorecard
+
+- **Finding:** Python converts `True` to `1.0` and `False` to `0.0`; the scorecard's direct float conversions could therefore admit a boolean alert price or reaction price, corrupting the outcome ledger.
+- **Change:** reject boolean values before numeric conversion for both alert-entry prices and later reaction prices; treat overflow as invalid input.
+- **Regression test:** a boolean alert price is excluded; a boolean reaction price does not score the valid alert and leaves it pending while the evaluation window remains open.
+- **CI:** code and test committed to the existing exact-symbol PR branch; a fresh Actions run must confirm the new revision. No local execution or live-market replay is claimed.
+- **Limits:** data-integrity fix only; no profitability claim. No merge or deploy. Render quota remains a deployment constraint; no Telegram test message or order was sent.
+
+## 2026-10-27 — Audit of the historical 100+ point register
+
+- **Recovered directly from prior conversation context:** point 100, “Execution Regime: Volatility × Liquidity” (Calm/Liquid, Thin, Fast/Liquid, Stress; proposed module `EXECUTION_REGIME_ENGINE`); point 101, “Overnight Risk Engine / Next-Session Volatility Forecast” (overnight WTI returns/range/realized volatility/volume/jumps as a next-session volatility input, explicitly not direction); point 102, “Setup Transferability / Instrument-Specific Edge”; point 103, “Sweep Validity / Continuation-vs-Reversal” (an isolated sweep is not proof of reversal; distinguish break, follow-through, acceptance/rejection and wait for structure/trigger).
+- **Source audit:** the Library file “Registro Studio IBKR - aggiornato 2026-10-20 sessione 9.md” is the IBKR study register, with numbered session material through 32; it is not the original 100+ point register. Points 1–99 are not fully present in the retrieved historical context and are not reconstructed here.
+- **Implementation mapping:** the current regime engine uses normalized price movement versus ATR, but it does not yet provide a verified volatility × liquidity state matrix (point 100). The scorecard boolean-price guard is data-integrity hygiene, not implementation of points 100–103. Overnight next-session volatility forecasting, instrument-specific out-of-sample transferability and sweep continuation/reversal classification remain open work.
+- **Validation boundary:** do not promote options positioning or a volatility regime into a directional signal without a measured baseline and out-of-sample validation. PAPER/DEMO only; no merge, deploy, broker, or orders.
+
+## 2026-10-27 — Verification follow-up for scorecard boolean-price guard
+
+- **Code commit:** `5b4e52baf07f161852cb4319b28e5a4d05a9777f`; **regression-test commit:** `4f458457903d57d5026fc555e5af5e25d0d047b0`.
+- **CI:** all five relevant workflows passed on the later log-only revision `01ca2a4782d6cfd8fd5ac7dc764a37cef51f3405`: PAPER [40522140898](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40522140898), Public Event Brain [40522141108](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40522141108), Execution Layer [40522140832](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40522140832), NEWS alert [40522140833](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40522140833), and general tests [40522141368](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40522141368). The subsequent historical-register edit is documentation-only.
+- **Deployment:** PR #81 remains open and unmerged. No Render/Telegram runtime-log connector was available in this execution, so live deployment and delivery are not confirmed. The existing repository research log records exhausted Render build minutes and missing `DATABASE_URL`; durable journal persistence is not confirmed.
+- **Safety:** PAPER/DEMO ONLY; no secret values inspected, no Telegram test message, no broker, no orders.

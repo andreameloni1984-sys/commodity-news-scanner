@@ -71,9 +71,12 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         if row.get("kind") != "NEWS_ALERT_SENT":
             continue
         sent_at = _parse_datetime(row.get("sent_at") or row.get("recorded_at"))
+        raw_price = row.get("price")
+        if isinstance(raw_price, bool):
+            continue
         try:
-            price = float(row.get("price"))
-        except (TypeError, ValueError):
+            price = float(raw_price)
+        except (TypeError, ValueError, OverflowError):
             continue
         direction = str(row.get("direction") or "").upper()
         if sent_at and sent_at >= cutoff and math.isfinite(price) and price > 0 and direction in {"LONG", "SHORT"}:
@@ -87,9 +90,12 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
             observed_at = _parse_datetime(row.get("observed_at") or row.get("recorded_at"))
             if not observed_at or not (sent_at <= observed_at <= sent_at + timedelta(hours=4)):
                 continue
+            raw_price = row.get("current_price")
+            if isinstance(raw_price, bool):
+                continue
             try:
-                price = float(row.get("current_price"))
-            except (TypeError, ValueError):
+                price = float(raw_price)
+            except (TypeError, ValueError, OverflowError):
                 continue
             if math.isfinite(price) and price > 0:
                 reaction_observations.append((observed_at, price))
@@ -602,18 +608,34 @@ def classify_event(title: str) -> dict[str, Any]:
 def _asset_matches(asset: str, state: Any) -> bool:
     name = str(getattr(state, "commodity", "") or "").lower()
     symbol = str(getattr(state, "symbol", "") or "").upper()
+    # Match complete known spot symbols, not arbitrary substrings such as
+    # XAUTUSDT or NOTXAUUSD. Futures symbols need explicit contract metadata
+    # and must not silently be treated as spot baselines.
+    normalized_symbol = re.sub(r"[^A-Z0-9]", "", symbol)
+    symbol_aliases = {
+        "WTI": {"WTI", "WTIUSD", "USOIL", "USOILUSD"},
+        "Brent": {"BRENT", "BRENTUSD", "UKOIL", "UKOILUSD"},
+        "Oro": {"XAU", "XAUUSD", "XAUEUR", "XAUGBP", "XAUJPY", "XAUCHF",
+                "XAUCAD", "XAUAUD", "XAUNZD", "XAUCNH", "XAUCNY", "GOLD", "GOLDUSD"},
+        "Argento": {"XAG", "XAGUSD", "XAGEUR", "XAGGBP", "XAGJPY", "XAGCHF",
+                    "XAGCAD", "XAGAUD", "XAGNZD", "XAGCNH", "XAGCNY", "SILVER", "SILVERUSD"},
+        "Platino": {"XPT", "XPTUSD", "XPTEUR", "XPTGBP", "XPTJPY", "XPTCHF",
+                    "XPTCAD", "XPTAUD", "XPTNZD", "PLATINUM", "PLATINUMUSD"},
+        "Palladio": {"XPD", "XPDUSD", "XPDEUR", "XPDGBP", "XPDJPY", "XPDCHF",
+                     "XPDCAD", "XPDAUD", "XPDNZD", "PALLADIUM", "PALLADIUMUSD"},
+    }
     if asset == "WTI":
-        return "wti" in name or "WTI" in symbol or symbol in {"WTI/USD", "USOIL"}
+        return "wti" in name or "us oil" in name or normalized_symbol in symbol_aliases["WTI"]
     if asset == "Brent":
-        return "brent" in name or "BRENT" in symbol or symbol in {"BRENT/USD", "UKOIL"}
+        return "brent" in name or "uk oil" in name or normalized_symbol in symbol_aliases["Brent"]
     if asset == "Oro":
-        return "oro" in name or "gold" in name or "XAU" in symbol
+        return "oro" in name or "gold" in name or normalized_symbol in symbol_aliases["Oro"]
     if asset == "Argento":
-        return "argento" in name or "silver" in name or "XAG" in symbol
+        return "argento" in name or "silver" in name or normalized_symbol in symbol_aliases["Argento"]
     if asset == "Platino":
-        return "platino" in name or "platinum" in name or "XPT" in symbol
+        return "platino" in name or "platinum" in name or normalized_symbol in symbol_aliases["Platino"]
     if asset == "Palladio":
-        return "palladio" in name or "palladium" in name or "XPD" in symbol
+        return "palladio" in name or "palladium" in name or normalized_symbol in symbol_aliases["Palladio"]
     if asset == "Caffè":
         return "caff" in name or "coffee" in name
     if asset == "Cacao":
