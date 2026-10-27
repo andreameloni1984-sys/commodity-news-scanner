@@ -98,8 +98,10 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         return {"window_days": 7, "alerts": 0, "scored": 0, "pending": 0,
                 "unscored_expired": 0, "coverage_pct": None, "correct": 0,
                 "incorrect": 0, "accuracy_pct": None,
-                "mean_directional_return_pct": None, "tp1_observed": 0,
-                "sl_observed": 0, "open_at_last_check": 0,
+                "mean_directional_return_pct": None,
+                "net_scored": 0, "net_profitable": 0,
+                "net_cost_coverage_pct": None, "mean_net_return_pct": None,
+                "tp1_observed": 0, "sl_observed": 0, "open_at_last_check": 0,
                 "decision_time_valid": False}
     cutoff = now - timedelta(days=7)
     alerts = []
