@@ -725,9 +725,20 @@ def _validate_candles(
             }
         )
 
-    cleaned.sort(
-        key=lambda x: x["timestamp"]
-    )
+    # Accept provider batches that are consistently ascending or descending,
+    # but do not silently sort a mixed-order response: it can hide a data-source
+    # ordering defect at the point where bars enter the indicator pipeline.
+    timestamps = [row["timestamp"] for row in cleaned]
+    deltas = [
+        timestamps[index] - timestamps[index - 1]
+        for index in range(1, len(timestamps))
+    ]
+    has_increasing = any(delta > 0 for delta in deltas)
+    has_decreasing = any(delta < 0 for delta in deltas)
+    if has_increasing and has_decreasing:
+        return [], "NON_MONOTONIC_CANDLE_ORDER"
+    if has_decreasing:
+        cleaned.reverse()
 
     if len(cleaned) < MIN_CANDLES_REQUIRED:
 
