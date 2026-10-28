@@ -45,3 +45,14 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+
+## 2026-10-28 — Fail closed on malformed missed-move audit parameters
+
+- **Finding:** `evaluate_missed_moves()` previously coerced `horizon` and `start` with `int()` (silently truncating fractional inputs and accepting booleans) and clamped negative thresholds to zero. A negative threshold could classify trivial movements as events rather than flagging an invalid experiment.
+- **Change:** `_strict_integer_parameter()` accepts integer values only (including integral finite floats and integer strings), rejects booleans/fractions/non-finite values, and validates horizon >= 1 and start >= 0. Non-finite, boolean, malformed, or negative thresholds return `INVALID_PARAMETERS` with zero forecasts. The existing minimum warm-up start of 35 bars remains.
+- **Operational path:** OHLC input → parameter validation → causal forecast from prior bars → future excursion count. Invalid configuration is rejected before forecasting; no trade decision or execution path is changed.
+- **Regression:** `test_invalid_audit_parameters_fail_closed_without_coercion` covers fractional/boolean/non-finite/zero horizon, invalid start, and malformed/negative thresholds. Existing quiet-series, event, insufficient-data and non-finite threshold tests remain.
+- **Validation:** tests added to the branch. No GitHub Actions run or full-suite PASS is visible for this branch; no empirical or OOS result is claimed.
+- **Deployment:** research branch only; no PR, merge, Render build or deploy. The separate timestamp-order guard remains on research branch `fix/gagarin-audit-timestamp-order-20261028-r7` and is not claimed to be in `main`.
+- **Safety:** PAPER/DEMO ONLY; no secrets, Telegram test messages, broker connection or orders.
