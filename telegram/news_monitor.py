@@ -43,10 +43,12 @@ _SOURCE_LAST_SUCCESS: dict[str, float] = {}
 _SOURCE_LOCK = threading.Lock()
 STATE_PATH = Path(os.getenv("GAGARIN_NEWS_STATE_PATH", "data/news_monitor_state.json"))
 JOURNAL_PATH = Path(os.getenv("GAGARIN_NEWS_JOURNAL_PATH", "data/news_event_journal.jsonl"))
+_JOURNAL_FALLBACK_WARNED = False
 
 
 def _journal(record: dict[str, Any]) -> None:
     """Append an audit record to PostgreSQL when configured, with file fallback."""
+    global _JOURNAL_FALLBACK_WARNED
     row = dict(record)
     row.setdefault("recorded_at", _utc_now().isoformat())
     try:
@@ -55,6 +57,17 @@ def _journal(record: dict[str, Any]) -> None:
             return
     except Exception as exc:
         print(f"NEWS journal database unavailable | {type(exc).__name__}: {exc}", flush=True)
+
+    # A false database result can mean DATABASE_URL is absent or the database
+    # backend is unavailable. Make the local fallback visible once per process:
+    # a JSONL file is not necessarily durable across ephemeral deployments.
+    if not _JOURNAL_FALLBACK_WARNED:
+        print(
+            "NEWS journal using local JSONL fallback; durability depends on local storage persistence configuration",
+            flush=True,
+        )
+        _JOURNAL_FALLBACK_WARNED = True
+
     try:
         JOURNAL_PATH.parent.mkdir(parents=True, exist_ok=True)
         with JOURNAL_PATH.open("a", encoding="utf-8") as handle:
@@ -377,15 +390,31 @@ def _source_failed(source: str, exc: Exception) -> int:
     response = getattr(exc, "response", None)
     status = getattr(response, "status_code", None)
     retry_after = None
+    raw_retry_after = (getattr(response, "headers", {}) or {}).get("Retry-After", "")
     try:
-        raw_retry_after = (getattr(response, "headers", {}) or {}).get("Retry-After", "")
         candidate_retry_after = float(raw_retry_after)
         # Treat server-provided headers as untrusted input. NaN/Infinity can
         # otherwise raise during int() below and abort the whole poll cycle.
         if math.isfinite(candidate_retry_after) and candidate_retry_after >= 0:
             retry_after = int(min(candidate_retry_after, SOURCE_BACKOFF_MAX_SECONDS))
     except (TypeError, ValueError, OverflowError):
-        retry_after = None
+        pass
+
+    # requests-style exceptions can carry an HTTP-date Retry-After too.
+    # Parse only timezone-aware dates; malformed/naive values use our normal
+    # exponential fallback instead of inventing a timezone.
+    if retry_after is None and raw_retry_after:
+        try:
+            retry_at = email.utils.parsedate_to_datetime(str(raw_retry_after))
+            if retry_at.tzinfo is not None and retry_at.utcoffset() is not None:
+                candidate_seconds = max(
+                    0.0,
+                    (retry_at.astimezone(timezone.utc) - datetime.now(timezone.utc)).total_seconds(),
+                )
+                if math.isfinite(candidate_seconds):
+                    retry_after = int(min(candidate_seconds, SOURCE_BACKOFF_MAX_SECONDS))
+        except (TypeError, ValueError, OverflowError):
+            pass
 
     with _SOURCE_LOCK:
         failures = _SOURCE_FAILURES.get(source, 0) + 1

@@ -339,6 +339,26 @@ def test_news_monitor_prefers_durable_state_and_event_journal(tmp_path, monkeypa
 
 
 
+def test_news_monitor_warns_once_when_journal_uses_local_fallback(tmp_path, monkeypatch, capsys):
+    import json
+    import state_store
+    import telegram.news_monitor as monitor
+
+    local_journal = tmp_path / "local_journal.jsonl"
+    monkeypatch.setattr(monitor, "JOURNAL_PATH", local_journal)
+    monkeypatch.setattr(monitor, "_JOURNAL_FALLBACK_WARNED", False)
+    monkeypatch.setattr(state_store, "append_event_journal", lambda record: False)
+
+    monitor._journal({"kind": "FALLBACK_TEST_1"})
+    monitor._journal({"kind": "FALLBACK_TEST_2"})
+
+    output = capsys.readouterr().out
+    assert output.count("NEWS journal using local JSONL fallback") == 1
+    assert "durability depends on local storage persistence configuration" in output
+    rows = [json.loads(line) for line in local_journal.read_text(encoding="utf-8").splitlines()]
+    assert [row["kind"] for row in rows] == ["FALLBACK_TEST_1", "FALLBACK_TEST_2"]
+
+
 def test_forbidden_news_source_is_cooled_down_for_six_hours(monkeypatch):
     from types import SimpleNamespace
     import telegram.news_monitor as monitor
@@ -463,6 +483,30 @@ def test_retry_after_header_rejects_nonfinite_and_negative_values(monkeypatch):
 
         assert delay == 120
         assert not monitor._source_allowed(source)
+
+
+def test_source_failed_honors_http_date_retry_after(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from email.utils import format_datetime
+    from types import SimpleNamespace
+    import telegram.news_monitor as monitor
+
+    source = "TEST_RETRY_AFTER_HTTP_DATE"
+    monkeypatch.setitem(monitor._SOURCE_FAILURES, source, 0)
+    monkeypatch.setitem(monitor._SOURCE_RETRY_AT, source, 0.0)
+    retry_at = datetime.now(timezone.utc) + timedelta(minutes=40)
+    error = RuntimeError("rate limited")
+    error.response = SimpleNamespace(
+        status_code=429,
+        headers={"Retry-After": format_datetime(retry_at, usegmt=True)},
+    )
+
+    delay = monitor._source_failed(source, error)
+
+    # The source cooldown must honor the HTTP-date (about 40 minutes), not
+    # fall back to the default 15-minute 429 cooldown.
+    assert 2300 <= delay <= 2400
+    assert not monitor._source_allowed(source)
 
 
 def test_retry_after_header_is_capped_to_maximum_backoff(monkeypatch):

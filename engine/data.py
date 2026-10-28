@@ -116,6 +116,7 @@ GAGARIN
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any, Dict, List, Optional, Tuple
 import math
 import time
@@ -440,6 +441,40 @@ def _normalize(
         return None
 
 
+# Honor provider rate-limit instructions without blocking this worker for a
+# long cooldown. If Retry-After exceeds this bound, return the 429 to the
+# caller so provider fallback can proceed instead of retrying too early.
+MAX_INLINE_RETRY_AFTER_SECONDS = 30.0
+
+
+def _retry_after_seconds(response: Any) -> Optional[float]:
+    """Parse a numeric or HTTP-date Retry-After header, if valid."""
+    try:
+        raw = response.headers.get("Retry-After")
+    except (AttributeError, TypeError):
+        return None
+    if raw is None:
+        return None
+
+    try:
+        seconds = float(str(raw).strip())
+        if math.isfinite(seconds) and seconds >= 0:
+            return seconds
+    except (TypeError, ValueError):
+        pass
+
+    try:
+        retry_at = parsedate_to_datetime(str(raw))
+        if retry_at.tzinfo is None or retry_at.utcoffset() is None:
+            return None
+        return max(
+            0.0,
+            (retry_at.astimezone(timezone.utc) - datetime.now(timezone.utc)).total_seconds(),
+        )
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
 # ============================================================
 # HTTP REQUEST
 # ============================================================
@@ -459,6 +494,7 @@ def _request_json(
     - timeout
     - connection errors
     - HTTP 429
+    - HTTP 503 with a valid Retry-After directive
     - HTTP errors
     - malformed JSON
     """
@@ -477,17 +513,36 @@ def _request_json(
 
             if response.status_code == 429:
 
-                last_error = (
-                    "HTTP_429_TOO_MANY_REQUESTS"
-                )
+                last_error = "HTTP_429_TOO_MANY_REQUESTS"
+                retry_after = _retry_after_seconds(response)
 
                 if attempt < retries:
-                    time.sleep(
-                        2 ** attempt
-                    )
+                    if retry_after is None:
+                        # Preserve the existing exponential fallback when the
+                        # provider omits or malforms Retry-After.
+                        time.sleep(2 ** attempt)
+                    elif retry_after <= MAX_INLINE_RETRY_AFTER_SECONDS:
+                        time.sleep(retry_after)
+                    else:
+                        # Do not retry before the server's requested delay and
+                        # do not stall the monitor for a long cooldown.
+                        return None, f"HTTP_429_RETRY_AFTER_{math.ceil(retry_after)}S"
                     continue
 
                 return None, last_error
+
+            if response.status_code == 503:
+                # RFC 9110 also permits Retry-After on 503. Preserve the
+                # existing immediate provider-fallback behavior when the
+                # header is missing or malformed.
+                retry_after = _retry_after_seconds(response)
+                if retry_after is not None:
+                    if retry_after > MAX_INLINE_RETRY_AFTER_SECONDS:
+                        return None, f"HTTP_503_RETRY_AFTER_{math.ceil(retry_after)}S"
+                    if attempt < retries:
+                        time.sleep(retry_after)
+                        continue
+                    return None, "HTTP_503_SERVICE_UNAVAILABLE"
 
             if response.status_code != 200:
 
