@@ -499,8 +499,13 @@ def test_alert_scorecard_rejects_non_finite_prices_and_invalid_levels():
          "current_price": 80.2, "observed_at": (sent + timedelta(minutes=25)).isoformat()},
     ]
     report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
-    assert report["alerts"] == 1
+    # All three timestamped alerts belong in the coverage denominator.
+    # NaN and infinity baselines are unscorable; invalid SL/TP does not erase a
+    # directionally scorable alert, but cannot count as a TP/SL outcome.
+    assert report["alerts"] == 3
     assert report["scored"] == 1
+    assert report["unscored_invalid"] == 2
+    assert report["coverage_pct"] == 33.33
     assert report["correct"] == 1
     assert report["tp1_observed"] == 0
     assert report["sl_observed"] == 0
