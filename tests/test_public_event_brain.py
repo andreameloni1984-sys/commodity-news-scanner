@@ -84,7 +84,7 @@ def test_generic_data_centre_headline_does_not_create_direction():
 
 def test_market_impact_brief_maps_supply_risk_to_conditional_oil_scenario():
     from engine.public_event_brain import build_market_impact_brief
-    brief = build_market_impact_brief("Oil facility disruption raises crude supply concerns")
+    brief = build_market_impact_brief("Crude supply disruption at an oil facility")
     assert brief["status"] == "CONDITIONAL_HYPOTHESIS"
     oil = next(row for row in brief["scenarios"] if row["theme"] == "ENERGY_SUPPLY_RISK")
     assert {"WTI", "BRENT"} <= set(oil["instruments"])
