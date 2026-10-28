@@ -93,6 +93,10 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
                 continue
             if math.isfinite(price) and price > 0:
                 reaction_observations.append((observed_at, price))
+        # Resolve barrier hits chronologically. Journal/database rows may arrive
+        # out of order; the first observed SL/TP crossing must win, not whichever
+        # row happened to be returned first by storage.
+        reaction_observations.sort(key=lambda item: item[0])
         # Directional accuracy uses a minimum 15-minute horizon to avoid
         # treating immediate noise as a forecast result. TP/SL, however,
         # must include every post-delivery observation, including the first 15m.
