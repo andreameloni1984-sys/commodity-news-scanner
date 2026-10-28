@@ -449,6 +449,13 @@ def summarize(path=FEEDBACK_FILE):
         "total": len(rows),
         "open": outcomes.get("OPEN", 0),
         "closed": closed,
+        "unscored": max(0, len(rows) - outcomes.get("OPEN", 0) - closed),
+        "outcome_coverage_pct": round(100.0 * closed / len(rows), 2) if rows else None,
+        "evaluation_status": (
+            "NO_SIGNALS" if not rows else
+            "NOT_EVALUABLE" if closed == 0 else
+            "DESCRIPTIVE_ONLY"
+        ),
         "outcomes": outcomes,
         "win_rate_pct": round(100.0 * wins / closed, 2) if closed else None,
         "average_r": round(sum(realized_r) / closed, 4) if closed else None,
@@ -464,8 +471,19 @@ def summarize(path=FEEDBACK_FILE):
 def format_summary(summary):
     win_rate = "N/D" if summary.get("win_rate_pct") is None else f"{summary['win_rate_pct']:.1f}%"
     avg_r = "N/D" if summary.get("average_r") is None else f"{summary['average_r']:.2f}R"
+    coverage_pct = summary.get("outcome_coverage_pct")
+    coverage = (
+        "N/D" if coverage_pct is None
+        else f"{summary.get('closed', 0)}/{summary.get('total', 0)} ({coverage_pct:.1f}%)"
+    )
+    evaluation = summary.get("evaluation_status") or (
+        "NO_SIGNALS" if not summary.get("total", 0)
+        else "NOT_EVALUABLE" if not summary.get("closed", 0)
+        else "DESCRIPTIVE_ONLY"
+    )
     text = (
         f"signals={summary['total']} open={summary['open']} closed={summary['closed']} "
+        f"outcome_coverage={coverage} evaluation={evaluation} unscored={summary.get('unscored', 0)} "
         f"win_rate={win_rate} avg_R={avg_r} total_R={summary.get('realized_r', 0.0)} "
         f"outcomes={summary['outcomes']}"
     )
