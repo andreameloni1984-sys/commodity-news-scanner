@@ -45,3 +45,14 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+
+## 2026-10-28 — Fail closed on unordered timestamps in direct missed-move audits
+
+- **Finding:** engine/missed_move_validation.py::evaluate_missed_moves slices a caller-supplied candle list into past and future windows, but the direct-call path did not validate timestamp order. Unlike the separate CSV loader proposed in PR #61, callers could bypass file validation and pass duplicate, missing, naive or out-of-order timestamps; sorting implicitly would conceal source-order defects and risk look-ahead.
+- **Change:** require every non-empty candle row to have a finite timestamp; accept one consistent representation per series (numeric epoch values or timezone-aware ISO/datetime values); reject booleans, mixed timestamp formats, naive datetimes, duplicates and decreasing timestamps with INVALID_TIMESTAMPS and zero forecasts. Rows are not sorted silently.
+- **Operational path:** offline OHLC input → direct evaluate_missed_moves call → timestamp validation → past-only forecast windows → future excursion audit. This is a research diagnostic, not a live trade signal.
+- **Regression tests:** test_duplicate_timestamps_fail_closed_without_forecasts, test_out_of_order_timestamps_fail_closed_without_sorting, test_missing_or_timezone_naive_timestamps_fail_closed, and test_timezone_aware_iso_timestamps_are_accepted in tests/test_missed_move_validation.py.
+- **Commits:** code bd7f295cc1552b280ce53b5b355b4804469071ee; tests 36d438f3ff5f993381bb90c1e33a994af6481920.
+- **CI/deploy:** no GitHub Actions run or combined status is visible yet for this research branch. No Render workspace was selected in this run, so runtime/deploy state was not checked. No merge or deploy.
+- **Empirical limit:** tests cover synthetic timestamp sequences only. No new walk-forward, holdout or profitability result. PAPER/DEMO ONLY.
