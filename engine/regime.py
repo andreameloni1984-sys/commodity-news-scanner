@@ -219,22 +219,54 @@ VOLATILITY_CONTRACTION_RATIO = 0.80
 
 
 def _volatility_diagnostics(state: SoyuzState):
-    """Classify recent candle-range expansion using medians; diagnostic only."""
+    """Classify recent candle-range expansion; malformed recent bars fail closed."""
     atr = _safe_float(getattr(state, "atr", None))
     if atr is None or atr <= 0:
         return {"status": "UNKNOWN", "reason": "INVALID_ATR"}
+
+    highs = list(getattr(state, "highs", []) or [])
+    lows = list(getattr(state, "lows", []) or [])
+    # Without aligned high/low arrays, zip() would silently truncate history.
+    if len(highs) != len(lows):
+        return {
+            "status": "UNKNOWN",
+            "reason": "OHLC_LENGTH_MISMATCH",
+            "samples": 0,
+        }
+
+    recent_highs = highs[-VOLATILITY_RANGE_LOOKBACK:]
+    recent_lows = lows[-VOLATILITY_RANGE_LOOKBACK:]
     ranges = []
-    for high, low in zip(getattr(state, "highs", []) or [], getattr(state, "lows", []) or []):
+    for high, low in zip(recent_highs, recent_lows):
         high, low = _safe_float(high), _safe_float(low)
-        if high is not None and low is not None and high >= low:
-            ranges.append((high - low) / atr)
-    ranges = ranges[-VOLATILITY_RANGE_LOOKBACK:]
+        if high is None or low is None or high < low:
+            # Do not skip a bad recent bar and silently substitute an older bar.
+            return {
+                "status": "UNKNOWN",
+                "reason": "INVALID_RECENT_RANGE",
+                "samples": len(ranges),
+            }
+        ranges.append((high - low) / atr)
+
     if len(ranges) < 6:
-        return {"status": "UNKNOWN", "reason": "INSUFFICIENT_VALID_RANGES", "samples": len(ranges)}
+        return {
+            "status": "UNKNOWN",
+            "reason": "INSUFFICIENT_VALID_RANGES",
+            "samples": len(ranges),
+        }
+
     midpoint = len(ranges) // 2
     older, recent = sorted(ranges[:midpoint]), sorted(ranges[midpoint:])
-    old_median = older[len(older) // 2]
-    recent_median = recent[len(recent) // 2]
+
+    def median(values):
+        count = len(values)
+        middle = count // 2
+        if count % 2:
+            return values[middle]
+        return (values[middle - 1] + values[middle]) / 2.0
+
+    old_median = median(older)
+    recent_median = median(recent)
     ratio = recent_median / old_median if old_median > 0 else None
     status = "UNKNOWN" if ratio is None else (
         "EXPANDING" if ratio >= VOLATILITY_EXPANSION_RATIO else
@@ -248,7 +280,6 @@ def _volatility_diagnostics(state: SoyuzState):
         "expansion_ratio_threshold": VOLATILITY_EXPANSION_RATIO,
         "contraction_ratio_threshold": VOLATILITY_CONTRACTION_RATIO,
     }
-
 
 
 # ============================================================
