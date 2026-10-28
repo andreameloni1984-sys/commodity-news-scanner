@@ -7,7 +7,7 @@ from soyuz_gagarin.mt5_bridge import build_demo_payload
 
 def approved_decision():
     candidate = Candidate(
-        symbol="XPT/USD",
+        symbol="XAU/USD",
         side="LONG",
         probability=80,
         quality=70,
@@ -37,7 +37,7 @@ def approved_decision():
         curve_ok=True,
     )
     return GagarinEngine().evaluate(
-        MarketSnapshot("XPT/USD", "2026-10-02T00:00:00Z", 100.0, atr=2.0),
+        MarketSnapshot("XAU/USD", "2026-10-02T00:00:00Z", 100.0, atr=2.0),
         candidate,
     )
 
@@ -50,7 +50,7 @@ def test_builds_demo_payload_without_execution():
     assert payload["transport"] == "MT5_DEMO"
     assert payload["paper_only"] is True
     assert payload["execution"] == "DISABLED"
-    assert payload["symbol"] == "XPT/USD"
+    assert payload["symbol"] == "XAU/USD"
     assert payload["side"] == "LONG"
     assert payload["entry"] == 100.0
     assert payload["stop_loss"] == 98.0

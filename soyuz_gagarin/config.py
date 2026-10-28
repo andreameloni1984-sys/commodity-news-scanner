@@ -66,9 +66,10 @@ class GagarinConfig:
     sl_structure_buffer_atr: float = field(default=0.15)
     falsification_min_trades: int = field(default=30)
     allowed_assets: Tuple[str, ...] = (
-        "XAU/USD", "XAG/USD", "XPT/USD", "XPD/USD",
-        "WTI/USD", "BRENT/USD", "RICE/USD", "SUGAR/USD",
-        "COCOA/USD", "COFFEE/USD",
+        # Selected commodity universe: gold, silver, copper, WTI, Brent, wheat, corn, soybean.
+        "XAU/USD", "XAG/USD", "COPPER/USD", "WTI/USD", "BRENT/USD",
+        "WHEAT/USD", "CORN/USD", "SOYBEAN/USD",
+        # Forex remains a separate, retained group.
         "EUR/USD", "GBP/USD", "USD/JPY", "USD/CHF",
         "AUD/USD", "USD/CAD", "NZD/USD", "EUR/JPY",
     )

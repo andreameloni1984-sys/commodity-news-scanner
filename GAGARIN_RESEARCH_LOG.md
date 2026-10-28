@@ -45,3 +45,13 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+
+## 2026-10-28 — Trim Gagarin's active commodity universe
+
+- User asked to remove unnecessary commodities. Active commodity set is now Gold, Silver, Copper, WTI, Brent, Wheat, Corn, and Soybean. The eight Forex instruments are retained as a separate group.
+- Removed Platinum, Palladium, Rice, Sugar, Cocoa, Coffee, Gasoline, and Natural Gas from the active universe.
+- Added explicit Yahoo fallback mappings for Copper (`HG=F`), Wheat (`ZW=F`), Corn (`ZC=F`), and Soybean (`ZS=F`), and registered Wheat/Corn/Soybean in the agriculture symbol/term maps and provider order.
+- Added regression tests for the eight retained commodities, removed symbols, preserved Forex group, and explicit provider routing.
+- This verifies configured routing only; live availability and data freshness still require the scheduled run to confirm. CI must pass before merge.
+- Change is on branch `chore/gagarin-trim-commodity-universe-20261028`. No merge/deploy, no Telegram test message, PAPER/DEMO only.

@@ -9,10 +9,21 @@ from __future__ import annotations
 from typing import Iterable, Any
 
 from engine.prediction_ranker import rank_predictions
+from .config import GagarinConfig
 
 
 def format_aggressive_desk(states: Iterable[Any]) -> str:
-    ranked = rank_predictions(states)
+    # The aggressive desk must obey the same active universe as the governor.
+    # Fail closed for missing/unknown symbols so removed instruments cannot
+    # leak back into Telegram rankings from stale or wider scan results.
+    allowed = {symbol.upper() for symbol in GagarinConfig().allowed_assets}
+    if isinstance(states, dict):
+        states = states.values()
+    eligible = [
+        state for state in states
+        if str(getattr(state, "symbol", "") or "").strip().upper() in allowed
+    ]
+    ranked = rank_predictions(eligible)
     lines = [
         "🚀 GAGARIN — REPARTO AGGRESSIVE",
         "━━━━━━━━━━━━━━━━━━━━━━━━",

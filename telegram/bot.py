@@ -133,11 +133,11 @@ def _resolve_commodity(name: str):
     aliases = {
         "oro": "Oro", "gold": "Oro",
         "argento": "Argento", "silver": "Argento",
-        "platino": "Platino",
-        "palladio": "Palladio",
+        "rame": "Rame", "copper": "Rame",
         "wti": "Petrolio WTI", "brent": "Petrolio Brent",
-        "riso": "Riso",
-        "zucchero": "Zucchero", "cacao": "Cacao", "caffe": "Caffè", "caffè": "Caffè",
+        "grano": "Grano", "wheat": "Grano",
+        "mais": "Mais", "corn": "Mais", "maize": "Mais",
+        "soia": "Soia", "soybean": "Soia", "soybeans": "Soia",
     }
     canonical = aliases.get(key)
     if canonical is None:

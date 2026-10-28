@@ -61,139 +61,39 @@ class Commodity:
 #
 # Manteniamo il paniere che abbiamo deciso per SOYUZ:
 #
-# METALLI
-#   Oro
-#   Argento
-#   Platino
-#   Palladio
-#
-# ENERGY
-#   WTI
-#   Brent
-#
-# AGRICOLTURA / FOOD
-#   Riso
-#   Zucchero
-#   Cacao
-#   Caffè
+# METALLI: Oro, Argento, Rame
+# ENERGY: WTI, Brent
+# AGRICOLTURA: Riso (cereale già mappato nel data engine)
+# Forex resta separato dal paniere commodities.
 #
 # ============================================================
 
 
 COMMODITIES = [
+    # CORE METALS — user-selected
+    Commodity(name="Oro", symbol="XAU/USD", category="Metal", unit="USD", priority=1),
+    Commodity(name="Argento", symbol="XAG/USD", category="Metal", unit="USD", priority=2),
+    Commodity(name="Rame", symbol="COPPER/USD", category="Metal", unit="USD", priority=3),
 
-    # --------------------------------------------------------
-    # METALS
-    # --------------------------------------------------------
+    # CORE ENERGY
+    Commodity(name="Petrolio WTI", symbol="WTI/USD", category="Energy", unit="USD", priority=4),
+    Commodity(name="Petrolio Brent", symbol="BRENT/USD", category="Energy", unit="USD", priority=5),
 
-    Commodity(
-        name="Oro",
-        symbol="XAU/USD",
-        category="Metal",
-        unit="USD",
-        priority=1,
-    ),
+    # CORE CEREALS — explicit Yahoo futures routes are added in engine/data.py
+    Commodity(name="Grano", symbol="WHEAT/USD", category="Agriculture", unit="USD", priority=6),
+    Commodity(name="Mais", symbol="CORN/USD", category="Agriculture", unit="USD", priority=7),
+    Commodity(name="Soia", symbol="SOYBEAN/USD", category="Agriculture", unit="USD", priority=8),
 
-    Commodity(
-        name="Argento",
-        symbol="XAG/USD",
-        category="Metal",
-        unit="USD",
-        priority=2,
-    ),
-
-    Commodity(
-        name="Platino",
-        symbol="XPT/USD",
-        category="Metal",
-        unit="USD",
-        priority=3,
-    ),
-
-    Commodity(
-        name="Palladio",
-        symbol="XPD/USD",
-        category="Metal",
-        unit="USD",
-        priority=4,
-    ),
-
-    # --------------------------------------------------------
-    # ENERGY
-    # --------------------------------------------------------
-
-    Commodity(
-        name="Petrolio WTI",
-        symbol="WTI/USD",
-        category="Energy",
-        unit="USD",
-        priority=5,
-    ),
-
-    Commodity(
-        name="Petrolio Brent",
-        symbol="BRENT/USD",
-        category="Energy",
-        unit="USD",
-        priority=6,
-    ),
-
-    # --------------------------------------------------------
-    # AGRICULTURE / FOOD
-    # --------------------------------------------------------
-
-    Commodity(
-        name="Riso",
-        symbol="RICE/USD",
-        category="Agriculture",
-        unit="USD",
-        priority=7,
-    ),
-
-    Commodity(
-        name="Zucchero",
-        symbol="SUGAR/USD",
-        category="Agriculture",
-        unit="USD",
-        priority=8,
-    ),
-
-    Commodity(
-        name="Cacao",
-        symbol="COCOA/USD",
-        category="Agriculture",
-        unit="USD",
-        priority=9,
-    ),
-
-    Commodity(
-        name="Caffè",
-        symbol="COFFEE/USD",
-        category="Agriculture",
-        unit="USD",
-        priority=10,
-    ),
-
-    # --------------------------------------------------------
-    # EXTRA COMMODITIES — amplia il paniere a 13 materie prime
-    # --------------------------------------------------------
-    Commodity(name="Rame", symbol="COPPER/USD", category="Metal", unit="USD", priority=11),
-    Commodity(name="Benzina", symbol="GASOLINE/USD", category="Energy", unit="USD", priority=12),
-    Commodity(name="Gas naturale", symbol="NATGAS/USD", category="Energy", unit="USD", priority=13),
-
-    # --------------------------------------------------------
-    # FOREX — universo complessivo 21 strumenti
-    # --------------------------------------------------------
-    Commodity(name="EUR/USD", symbol="EUR/USD", category="Forex", unit="USD", priority=14),
-    Commodity(name="GBP/USD", symbol="GBP/USD", category="Forex", unit="USD", priority=15),
-    Commodity(name="USD/JPY", symbol="USD/JPY", category="Forex", unit="JPY", priority=16),
-    Commodity(name="USD/CHF", symbol="USD/CHF", category="Forex", unit="CHF", priority=17),
-    Commodity(name="AUD/USD", symbol="AUD/USD", category="Forex", unit="USD", priority=18),
-    Commodity(name="USD/CAD", symbol="USD/CAD", category="Forex", unit="CAD", priority=19),
-    Commodity(name="NZD/USD", symbol="NZD/USD", category="Forex", unit="USD", priority=20),
-    Commodity(name="EUR/JPY", symbol="EUR/JPY", category="Forex", unit="JPY", priority=21),
+    # FOREX remains a separate instrument group; it is not part of the commodity trim.
+    Commodity(name="EUR/USD", symbol="EUR/USD", category="Forex", unit="USD", priority=9),
+    Commodity(name="GBP/USD", symbol="GBP/USD", category="Forex", unit="USD", priority=10),
+    Commodity(name="USD/JPY", symbol="USD/JPY", category="Forex", unit="JPY", priority=11),
+    Commodity(name="USD/CHF", symbol="USD/CHF", category="Forex", unit="CHF", priority=12),
+    Commodity(name="AUD/USD", symbol="AUD/USD", category="Forex", unit="USD", priority=13),
+    Commodity(name="USD/CAD", symbol="USD/CAD", category="Forex", unit="CAD", priority=14),
+    Commodity(name="NZD/USD", symbol="NZD/USD", category="Forex", unit="USD", priority=15),
+    Commodity(name="EUR/JPY", symbol="EUR/JPY", category="Forex", unit="JPY", priority=16),
 ]
-
 
 # ============================================================
 # HELPERS

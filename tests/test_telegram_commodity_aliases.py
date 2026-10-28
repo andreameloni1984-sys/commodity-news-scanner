@@ -8,19 +8,22 @@ from telegram.bot import _resolve_commodity
     ("alias", "expected"),
     [
         ("oro", "Oro"),
+        ("gold", "Oro"),
         ("argento", "Argento"),
-        ("platino", "Platino"),
-        ("palladio", "Palladio"),
+        ("silver", "Argento"),
+        ("rame", "Rame"),
+        ("copper", "Rame"),
         ("wti", "Petrolio WTI"),
         ("brent", "Petrolio Brent"),
-        ("riso", "Riso"),
-        ("zucchero", "Zucchero"),
-        ("cacao", "Cacao"),
-        ("caffe", "Caffè"),
-        ("caffè", "Caffè"),
+        ("grano", "Grano"),
+        ("wheat", "Grano"),
+        ("mais", "Mais"),
+        ("corn", "Mais"),
+        ("soia", "Soia"),
+        ("soybean", "Soia"),
     ],
 )
-def test_all_enabled_commodities_are_resolvable(alias, expected):
+def test_selected_commodities_are_resolvable(alias, expected):
     commodity = _resolve_commodity(alias)
     assert commodity is not None
     assert commodity.name == expected
@@ -32,8 +35,9 @@ def test_all_enabled_canonical_names_are_resolvable():
         assert _resolve_commodity(commodity.symbol) is commodity
 
 
-def test_unknown_commodity_is_not_resolved():
-    assert _resolve_commodity("grano") is None
+@pytest.mark.parametrize("removed", ["platino", "palladio", "riso", "zucchero", "cacao", "caffe", "caffè"])
+def test_removed_commodities_are_not_resolved(removed):
+    assert _resolve_commodity(removed) is None
 
 
 def test_setup_formatter_distinguishes_pending_setup_from_no_setup():
@@ -41,7 +45,7 @@ def test_setup_formatter_distinguishes_pending_setup_from_no_setup():
     from telegram.bot import _format_setup
 
     pending = SimpleNamespace(
-        commodity="Zucchero",
+        commodity="Grano",
         setup_direction="LONG",
         setup_quality=45.0,
         trigger_confirmed=False,
@@ -51,7 +55,7 @@ def test_setup_formatter_distinguishes_pending_setup_from_no_setup():
     )
 
     text = _format_setup([pending])
-    assert "Zucchero" in text
+    assert "Grano" in text
     assert "IN ATTESA" in text
     assert "Nessun setup LONG/SHORT rilevato" not in text
 
