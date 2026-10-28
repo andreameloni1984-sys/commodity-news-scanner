@@ -213,7 +213,7 @@ OIL_TERMS = {
 }
 METAL_TERMS = {
     "gold", "oro", "bullion", "precious metal", "precious metals", "xau",
-    "silver", "argento", "xag", "copper", "rame", "hg",
+    "silver", "argento", "xag", "copper", "rame",
 }
 AGRI_TERMS = {
     "wheat", "grain", "grano", "corn", "maize", "mais",
@@ -544,7 +544,7 @@ def classify_event(title: str) -> dict[str, Any]:
     metal_terms = {
         "Oro": {"gold", "oro", "bullion", "xau"},
         "Argento": {"silver", "argento", "xag"},
-        "Rame": {"copper", "rame", "hg"},
+        "Rame": {"copper", "rame"},
     }
     if has_macro:
         assets.extend(["Oro", "Argento", "Rame"])
