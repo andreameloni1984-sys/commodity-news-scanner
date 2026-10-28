@@ -22,6 +22,7 @@ def test_unneeded_commodity_symbols_are_not_active():
     removed = {
         "XPT/USD",
         "XPD/USD",
+        "RICE/USD",
         "SUGAR/USD",
         "COCOA/USD",
         "COFFEE/USD",
