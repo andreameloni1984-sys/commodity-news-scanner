@@ -52,5 +52,5 @@
 - **Change/files:** validate finite, integral horizon/start parameters and a finite non-negative threshold before evaluation; return `INVALID_PARAMETERS` with zero forecasts on invalid input. Preserve the existing minimum 35-bar warm-up for valid starts.
 - **Regression:** `tests/test_missed_move_validation.py::test_invalid_audit_parameters_fail_closed_without_coercion` covers booleans, fractional/infinite/malformed horizons, invalid starts and invalid thresholds.
 - **Operational path:** offline OHLC rows → parameter validation → causal forecast on bars before the outcome window → future excursion counts. This is a research audit, not a trade signal.
-- **CI:** branch push workflows will be checked; no CI result is claimed until a visible run completes.
+- **Verification:** isolated regression harness passed 10 invalid-parameter cases plus a valid baseline case. GitHub combined status and PR-triggered workflow lookup returned no checks/runs for this non-PR research branch; repository CI is therefore **not claimed**. The regression test is committed and awaits an eligible CI run.
 - **Deployment/empirical limits:** research branch only; no merge/deploy. Synthetic parameter regressions do not validate predictive performance, walk-forward robustness or profitability. Render build-pipeline minutes remain exhausted. PAPER/DEMO ONLY.
