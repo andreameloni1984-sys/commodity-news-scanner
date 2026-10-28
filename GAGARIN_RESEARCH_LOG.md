@@ -45,3 +45,13 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+
+## 2026-10-28 — Do not infer SL/TP order from tied observation timestamps
+
+- **Finding:** the NEWS scorecard resolved SL/TP by iterating timestamp-sorted price rows. When sparse polling stored a stop-crossing price and a TP1-crossing price with the same timestamp, Python's stable sort retained the database/file row order. That made the trade outcome depend on storage order even though the available data could not establish which barrier was hit first.
+- **Implemented on branch `fix/gagarin-scorecard-simultaneous-barriers-20261028`:** evaluate all prices grouped by timestamp. If both barriers are crossed within the same timestamp group and no earlier barrier was observed, mark `AMBIGUOUS_BARRIER_SAME_TIMESTAMP` and report it separately rather than counting either a win or a loss.
+- **Regression test:** presents the same-time stop and target observations in both row orders; both must yield one ambiguous barrier and zero observed TP1/SL outcomes.
+- **Evidence limits:** this is a scoring-integrity correction, not evidence of trading edge. The current Render workspace was not selected for this run, so live service/database logs and the durable outcome journal could not be queried. No live win rate is claimed.
+- **CI / deployment:** PR CI pending; no merge, Render deploy, Telegram test message, or broker order.
+- **Safety:** PAPER/DEMO only.
