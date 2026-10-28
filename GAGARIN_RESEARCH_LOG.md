@@ -67,3 +67,11 @@
 - **Validation:** source-level inspection only. The full test suite/CI has not run; no live Telegram message was sent.
 - **Critical limitation:** this does not change the running service until the corrected branch is integrated and deployed. Do not claim the extras are gone from live Telegram yet. Render build-pipeline minutes remain exhausted, so no merge or deployment was attempted.
 - **Safety:** PAPER/DEMO only; no broker or real orders.
+
+## 2026-10-28 follow-up — align legacy test fixtures with the selected universe
+
+- **Finding from CI:** the first PR-triggered runs for PR #88 exposed failures in legacy test fixtures that used XPT/USD (Platinum) while expecting PAPER_ENTRY. Platinum is intentionally excluded from the selected eight-symbol universe, so the Governor correctly returned PAPER_WATCH/blocked; loosening the production allowlist would reintroduce the unwanted instrument.
+- **Fix:** updated only the generic legacy fixtures in tests/test_gagarin_core.py and tests/test_mt5_bridge.py to use XAU/USD, which remains in the approved universe. Production allowlist/guard stays strict.
+- **CI before fix:** Commodity trade-plan run 40628771278 failed one assertion; SOYUZ GAGARIN PAPER run 40628771297 failed three assertions; full integration run 40628771588 failed four assertions. Failures trace to the same out-of-universe test fixture assumption, not to journal schema code.
+- **Status:** regression-fixture correction committed on feat/gagarin-core-universe-20261028; new CI pending. No pass claimed until the corrected head completes.
+- **Safety/deploy:** no merge/deploy, no broker or real order; Render build minutes remain exhausted.
