@@ -1,4 +1,4 @@
-"""Regression tests for provider HTTP 429 Retry-After handling."""
+"""Regression tests for provider HTTP 429/503 Retry-After handling."""
 
 from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
@@ -65,6 +65,42 @@ def test_request_json_does_not_retry_before_long_retry_after():
 
     assert payload is None
     assert error == "HTTP_429_RETRY_AFTER_120S"
+    get.assert_called_once()
+    sleep.assert_not_called()
+
+
+def test_request_json_honors_http_503_date_retry_after_before_retrying():
+    retry_at = datetime.now(timezone.utc) + timedelta(seconds=20)
+    unavailable = _response(
+        503,
+        headers={"Retry-After": format_datetime(retry_at, usegmt=True)},
+        text="temporarily unavailable",
+    )
+    success = _response(200, payload={"ok": True})
+
+    with (
+        patch("engine.data.requests.get", side_effect=[unavailable, success]) as get,
+        patch("engine.data.time.sleep") as sleep,
+    ):
+        payload, error = _request_json("https://provider.example/data", retries=1)
+
+    assert payload == {"ok": True}
+    assert error is None
+    assert get.call_count == 2
+    assert 0 <= sleep.call_args.args[0] <= 20
+
+
+def test_request_json_does_not_retry_before_long_503_retry_after():
+    unavailable = _response(503, headers={"Retry-After": "120"}, text="temporarily unavailable")
+
+    with (
+        patch("engine.data.requests.get", return_value=unavailable) as get,
+        patch("engine.data.time.sleep") as sleep,
+    ):
+        payload, error = _request_json("https://provider.example/data", retries=2)
+
+    assert payload is None
+    assert error == "HTTP_503_RETRY_AFTER_120S"
     get.assert_called_once()
     sleep.assert_not_called()
 

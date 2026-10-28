@@ -494,6 +494,7 @@ def _request_json(
     - timeout
     - connection errors
     - HTTP 429
+    - HTTP 503 with a valid Retry-After directive
     - HTTP errors
     - malformed JSON
     """
@@ -529,6 +530,19 @@ def _request_json(
                     continue
 
                 return None, last_error
+
+            if response.status_code == 503:
+                # RFC 9110 also permits Retry-After on 503. Preserve the
+                # existing immediate provider-fallback behavior when the
+                # header is missing or malformed.
+                retry_after = _retry_after_seconds(response)
+                if retry_after is not None:
+                    if retry_after > MAX_INLINE_RETRY_AFTER_SECONDS:
+                        return None, f"HTTP_503_RETRY_AFTER_{math.ceil(retry_after)}S"
+                    if attempt < retries:
+                        time.sleep(retry_after)
+                        continue
+                    return None, "HTTP_503_SERVICE_UNAVAILABLE"
 
             if response.status_code != 200:
 
