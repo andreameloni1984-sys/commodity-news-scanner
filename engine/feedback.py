@@ -290,7 +290,11 @@ def update_open_outcomes(results, path=FEEDBACK_FILE):
                 row.update(outcome="STOP", r_multiple=-1.0)
                 break
             if hit_targets:
-                idx = max(hit_targets)
+                # This tracker treats the first target as the closing barrier.
+                # OHLC high/low alone cannot prove that the furthest target was
+                # the executed exit when one candle spans TP1, TP2 and TP3.
+                # Score the nearest target touched to avoid overstating R.
+                idx = min(hit_targets)
                 reward = (targets[idx] - entry) if side == "LONG" else (entry - targets[idx])
                 row.update(outcome=f"TP{idx + 1}", r_multiple=round(reward / risk, 6))
                 break
