@@ -46,6 +46,7 @@ JOURNAL_PATH = Path(os.getenv("GAGARIN_NEWS_JOURNAL_PATH", "data/news_event_jour
 
 # Runtime heartbeat for the event-driven NEWS monitor. This is deliberately
 # separate from source freshness: it says whether polling itself is progressing.
+_MONITOR_PROCESS_STARTED_AT = datetime.now(timezone.utc)
 _MONITOR_STARTED_AT: datetime | None = None
 _MONITOR_LAST_SUCCESS_AT: datetime | None = None
 
@@ -59,22 +60,21 @@ def news_monitor_health(now: datetime | None = None) -> dict[str, Any]:
         now = now.astimezone(timezone.utc)
 
     stale_after = max(180, POLL_SECONDS * 3)
+    process_started_at = _MONITOR_PROCESS_STARTED_AT
     started_at = _MONITOR_STARTED_AT
     last_success_at = _MONITOR_LAST_SUCCESS_AT
-    reference = last_success_at or started_at
+    reference = last_success_at or started_at or process_started_at
 
-    if reference is None:
-        status = "NOT_STARTED"
-        age_seconds = None
+    age_seconds = max(0, int((now - reference).total_seconds()))
+    if last_success_at is not None:
+        status = "OK" if age_seconds <= stale_after else "STALE"
     else:
-        age_seconds = max(0, int((now - reference).total_seconds()))
-        if last_success_at is not None:
-            status = "OK" if age_seconds <= stale_after else "STALE"
-        else:
-            status = "STARTING" if age_seconds <= stale_after else "STALE"
+        # Bound the startup grace even if the monitor thread never starts.
+        status = "STARTING" if age_seconds <= stale_after else "STALE"
 
     return {
         "status": status,
+        "process_started_at": process_started_at.isoformat(),
         "started_at": started_at.isoformat() if started_at else None,
         "last_success_at": last_success_at.isoformat() if last_success_at else None,
         "age_seconds": age_seconds,
