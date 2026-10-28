@@ -10,9 +10,11 @@ def test_active_commodity_universe_keeps_only_selected_core_commodities():
         "COPPER/USD",
         "WTI/USD",
         "BRENT/USD",
-        "RICE/USD",
+        "WHEAT/USD",
+        "CORN/USD",
+        "SOYBEAN/USD",
     }
-    assert len(commodity_rows) == 6
+    assert len(commodity_rows) == 8
 
 
 def test_unneeded_commodity_symbols_are_not_active():
@@ -42,4 +44,17 @@ def test_forex_universe_is_preserved_separately():
         "NZD/USD",
         "EUR/JPY",
     }
-    assert universe_size() == 14
+    assert universe_size() == 16
+
+
+
+def test_core_metals_and_cereals_have_explicit_data_routes():
+    from engine.data import AGRI_SYMBOLS, PROVIDER_ORDER, YAHOO_SYMBOLS
+
+    assert YAHOO_SYMBOLS["COPPER/USD"] == "HG=F"
+    assert YAHOO_SYMBOLS["WHEAT/USD"] == "ZW=F"
+    assert YAHOO_SYMBOLS["CORN/USD"] == "ZC=F"
+    assert YAHOO_SYMBOLS["SOYBEAN/USD"] == "ZS=F"
+    assert {"WHEAT/USD", "CORN/USD", "SOYBEAN/USD"} <= AGRI_SYMBOLS
+    for symbol in ("COPPER/USD", "WHEAT/USD", "CORN/USD", "SOYBEAN/USD"):
+        assert "YAHOO" in PROVIDER_ORDER[symbol]
