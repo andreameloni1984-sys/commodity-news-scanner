@@ -45,3 +45,13 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+
+## 2026-10-28 — Conservative first-target scoring for multi-target OHLC bars
+
+- Live Render evidence: 96 Gagarin NEWS poll records between 2026-10-28 01:23:48Z and 08:06:06Z; all report zero new relevant events and zero alerts. The latest feedback summary at 07:51:55Z shows one open signal and zero closed outcomes. Feedback storage reports LOCAL_CSV_NO_DATABASE_URL; PostgreSQL read-only access is blocked by the database's empty IP allowlist. No live win rate can be computed.
+- Code defect: update_open_outcomes documented a first-barrier exit policy but selected max(hit_targets) when one candle spanned TP1, TP2 and TP3. OHLC high/low alone does not prove the furthest target was the realized exit.
+- Implemented on branch fix/gagarin-first-target-outcome-20261028: select the nearest target touched for realized R when one OHLC candle spans multiple targets. Stop-loss precedence on same-candle SL/TP collisions is unchanged; MFE remains a separate excursion statistic.
+- Regression test: a candle spanning all three targets must score TP1 at 1.5R while MFE records 3.0R.
+- Deployment limit: Render's latest Gagarin deploy attempt failed at 2026-10-28 13:37:43Z with pipeline_minutes_exhausted. No deployment was triggered by this change.
+- Safety: PAPER/DEMO only; no entry filters changed, no Telegram test message, no broker order, no merge or deployment.
