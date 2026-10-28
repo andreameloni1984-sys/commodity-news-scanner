@@ -45,3 +45,12 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+
+## 2026-10-28 — Resolve Gagarin alert outcomes chronologically
+
+- **Observed defect:** the seven-day NEWS scorecard iterated price observations in storage-return order when deciding whether stop loss or TP1 was observed first. If journal/database rows arrived out of timestamp order, the scorecard could label a losing alert as a take-profit (or vice versa), corrupting the feedback used to judge signal quality.
+- **Implemented on branch `fix/gagarin-scorecard-chronological-outcomes-20261028`:** sort all valid post-alert price observations by their UTC timestamp before resolving the first SL/TP barrier crossing. Directional-return calculation and the 15-minute minimum evaluation horizon remain unchanged.
+- **Regression test:** deliberately supplies a later TP1 observation before an earlier stop-loss observation; expected result is SL observed.
+- **Validation status:** code and regression test committed to the branch. GitHub Actions must confirm the test and related suites; no local execution, merge, deployment, live price feed, or Telegram delivery is claimed.
+- **Safety:** PAPER/DEMO only; no broker orders or production changes.
