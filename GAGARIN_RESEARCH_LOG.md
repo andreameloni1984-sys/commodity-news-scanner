@@ -75,3 +75,14 @@
 - **Operational path:** feed request exception → source failure cooldown → next eligible poll. No market direction is inferred from rate-limit metadata.
 - **Validation:** mocked regression only; no live provider call or measured reduction in throttling. CI result and commit SHA will be recorded in PR #85 after the run completes.
 - **Deployment/safety:** research PR #85 only; no merge/deploy. If runtime `DATABASE_URL` is absent, journal persistence is not considered durable. PAPER/DEMO ONLY.
+
+
+## 2026-10-28 — Make local journal fallback visible
+
+- **Finding:** `telegram/news_monitor.py::_journal` fell back to local JSONL when `state_store.append_event_journal` returned false, but that path was silent unless the database call raised. This could obscure that a local file, whose persistence depends on the runtime filesystem, is being used instead of the database journal.
+- **Change/files:** `telegram/news_monitor.py` now emits one warning per process when the JSONL fallback is used, explicitly saying durability depends on local-storage persistence configuration. The fallback still writes the audit rows; no database or secret values are inspected.
+- **Regression:** `tests/test_news_monitor.py::test_news_monitor_warns_once_when_journal_uses_local_fallback` verifies the warning appears once and both records are written to the temporary JSONL file.
+- **Commits:** code `6dbb94378764c1d5126e326083a0a03ad0792f2d`; test `dfe962b335ae789e42f7d54b7bef8e915c8bbe29`.
+- **CI:** NEWS alert tests passed on the test commit, run [40611279839](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40611279839). Execution Layer, Public Event Brain, PAPER and general tests were still running when this entry was written; no all-green claim is made for those runs here.
+- **Operational path:** event → `_journal()` → PostgreSQL append if configured → explicit local JSONL fallback warning → file append. The warning does not prove runtime `DATABASE_URL` is absent; it makes fallback visible when the DB append returns false.
+- **Deployment/limits:** PR #85 only; no merge/deploy. Render runtime logs were not accessible in this run. Local file durability is not guaranteed without persistent storage. Mocked regression only; no trading performance claim. PAPER/DEMO ONLY.
