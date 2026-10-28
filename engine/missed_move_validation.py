@@ -4,6 +4,30 @@ import math
 from engine.forecast_ensemble import forecast_ensemble
 
 
+def _valid_ohlc_geometry(candle):
+    """Validate finite OHLC values and ensure open/close lie inside the bar."""
+    if not isinstance(candle, dict):
+        return False
+    try:
+        high = float(candle["high"])
+        low = float(candle["low"])
+        close = float(candle["close"])
+        open_value = float(candle["open"]) if "open" in candle else None
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return False
+
+    values = [high, low, close]
+    if open_value is not None:
+        values.append(open_value)
+    if any(not math.isfinite(value) for value in values):
+        return False
+    if low > high or not low <= close <= high:
+        return False
+    if open_value is not None and not low <= open_value <= high:
+        return False
+    return True
+
+
 def evaluate_missed_moves(candles, horizon=4, start=40, threshold_pct=0.5):
     """Count large future up/down excursions not forecast in the same direction.
 
@@ -27,6 +51,11 @@ def evaluate_missed_moves(candles, horizon=4, start=40, threshold_pct=0.5):
         return result
     threshold_pct = max(0.0, threshold_pct)
     result["threshold_pct"] = threshold_pct
+    # Invalid bars must not silently contaminate the forecast history or
+    # undercount future excursions; preserve source order and fail the audit.
+    if any(not _valid_ohlc_geometry(row) for row in rows):
+        result["status"] = "INVALID_OHLC"
+        return result
     if len(rows) <= start + horizon:
         return result
 
