@@ -58,6 +58,10 @@ def format_aggressive_desk(states: Iterable[Any]) -> str:
             f"TP1: {item['tp1']:.6g}" if item["tp1"] is not None else "TP1: N/D",
             f"TP2: {item['tp2']:.6g}" if item["tp2"] is not None else "TP2: N/D",
             f"TP3: {item['tp3']:.6g}" if item["tp3"] is not None else "TP3: N/D",
+            (
+                f"Livelli INDICATIVI generati da ATR/struttura ({item['bracket_basis']}); da validare"
+                if item.get("bracket_generated") else ""
+            ) if item.get("bracket_generated") else "",
             f"Qualità {item['quality']:.0f} | Confidence {item['confidence']:.0f} | Trigger {'CONFERMATO' if item['trigger_confirmed'] else 'DA CONFERMARE'}",
             f"Dati: {item['data_status']} | {'LIVE' if item['live'] else 'NON LIVE'}",
             "STATO: SEGNALE PAPER AUTORIZZATO" if approved else "STATO: CANDIDATO AGGRESSIVO — non ancora autorizzato dal governor",
