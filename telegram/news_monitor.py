@@ -1015,12 +1015,32 @@ def poll_news_once(
     state["clusters"] = list(clusters)[-1500:]
     state["pending"] = pending[-100:]
     _save_state(state)
+    # A zero-alert poll is not evidence of complete coverage if one or more
+    # upstream sources are still failing or cooling down. Include source health
+    # in the same summary line so signal/no-signal reviews can interpret it.
+    with _SOURCE_LOCK:
+        source_failures = {
+            source: count for source, count in _SOURCE_FAILURES.items() if count > 0
+        }
+        monotonic_now = time.monotonic()
+        cooling_down = sorted(
+            source for source, retry_at in _SOURCE_RETRY_AT.items()
+            if retry_at > monotonic_now
+        )
+    failed_names = ",".join(sorted(source_failures)) or "none"
+    cooldown_names = ",".join(cooling_down) or "none"
+    health = "DEGRADED" if source_failures else "OK"
     print(
         f"NEWS poll | fetched={len(fetched)} | new_relevant={len(new_relevant)} | "
-        f"pending={len(pending)} | analysis={'YES' if should_analyze else 'NO'} | alerts={sent}",
+        f"pending={len(pending)} | analysis={'YES' if should_analyze else 'NO'} | alerts={sent} | "
+        f"source_health={health} | source_failures={failed_names} | source_cooldown={cooldown_names}",
         flush=True,
     )
-    return {"fetched": len(fetched), "new_relevant": len(new_relevant), "pending": len(pending), "alerts": sent, "analysis": int(should_analyze)}
+    return {
+        "fetched": len(fetched), "new_relevant": len(new_relevant),
+        "pending": len(pending), "alerts": sent, "analysis": int(should_analyze),
+        "source_failures": len(source_failures),
+    }
 
 
 def news_monitor_loop(
