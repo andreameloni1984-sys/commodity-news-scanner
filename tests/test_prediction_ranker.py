@@ -49,6 +49,31 @@ class PredictionRankerTests(unittest.TestCase):
         self.assertIn("PAPER ONLY", message)
         self.assertIn("MOVIMENTO ATTESO", message)
 
+    def test_generates_indicative_atr_bracket_when_entire_plan_is_missing(self):
+        candidate = state(
+            "Silver", symbol="XAG/USD", price=53.503, atr=0.8,
+            setup_direction="SHORT", pre_move_direction="SHORT",
+            structure_direction="SHORT", mtf_direction="SHORT",
+            opportunity_direction="SHORT", regime="TREND_DOWN",
+            structure="BEARISH", entry=None, stop=None, tp1=None, tp2=None,
+            tp3=None, rr3=None, trigger_confirmed=False,
+        )
+        result = rank_predictions([candidate])[0]
+        self.assertTrue(result["bracket_generated"])
+        self.assertEqual(result["entry"], 53.503)
+        self.assertGreater(result["stop"], result["entry"])
+        self.assertGreater(result["entry"], result["tp1"])
+        self.assertGreater(result["tp1"], result["tp2"])
+        self.assertGreater(result["tp2"], result["tp3"])
+        self.assertIn(result["bracket_basis"], {"ATR_FALLBACK", "RECENT_SWING_PLUS_ATR_BUFFER"})
+
+    def test_does_not_overwrite_partial_plan(self):
+        candidate = state("WTI", entry=None, stop=103.0, tp1=None, tp2=None, tp3=None)
+        result = rank_predictions([candidate])[0]
+        self.assertFalse(result["bracket_generated"])
+        self.assertIsNone(result["entry"])
+        self.assertEqual(result["stop"], 103.0)
+
 
 if __name__ == "__main__":
     unittest.main()
