@@ -735,7 +735,7 @@ def test_rsi_wilder_fails_closed_on_non_finite_closes():
     assert _rsi_wilder(closes) is None
 
 
-def test_volatility_diagnostics_ignore_non_finite_ranges():
+def test_volatility_diagnostics_fail_closed_on_non_finite_recent_ranges():
     state = _make_state("LONG")
     state.highs = [float(value) for value in state.highs]
     state.lows = [float(value) for value in state.lows]
@@ -744,8 +744,9 @@ def test_volatility_diagnostics_ignore_non_finite_ranges():
 
     result = _volatility_diagnostics(state)
 
-    assert result["samples"] == 8
-    assert result["status"] in {"EXPANDING", "CONTRACTING", "STABLE", "UNKNOWN"}
+    assert result["status"] == "UNKNOWN"
+    assert result["reason"] == "INVALID_RECENT_RANGE"
+    assert result["samples"] == 6
 
 
 # ============================================================
