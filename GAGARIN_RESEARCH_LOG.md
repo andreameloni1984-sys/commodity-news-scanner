@@ -55,3 +55,12 @@
 - Added regression tests for the eight retained commodities, removed symbols, preserved Forex group, and explicit provider routing.
 - This verifies configured routing only; live availability and data freshness still require the scheduled run to confirm. CI must pass before merge.
 - Change is on branch `chore/gagarin-trim-commodity-universe-20261028`. No merge/deploy, no Telegram test message, PAPER/DEMO only.
+
+
+## 2026-10-28 — Aggressive desk: remove stale instruments and show indicative levels
+
+- The pasted Telegram output still included Palladium despite the selected universe excluding it. The formatter filters symbols through `GagarinConfig.allowed_assets`; regression coverage now checks that XPD/USD cannot appear while XAG/USD can.
+- The aggressive ranking now builds a transparent indicative entry/SL/TP bracket from the current price, ATR and recent swing structure only when the entire plan is missing. Partial source plans are not overwritten.
+- Generated levels are explicitly labelled indicative and do not authorize an entry. The governor's data freshness, trigger, geometry, risk and PAPER-only checks remain in force.
+- Added tests for SHORT bracket geometry, preserving partial plans, and active-universe filtering.
+- CI must pass before merge. Render deployments were previously blocked by exhausted pipeline minutes, so production/Telegram behavior remains unverified until a successful deployment.
