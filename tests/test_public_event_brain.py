@@ -80,3 +80,62 @@ def test_generic_data_centre_headline_does_not_create_direction():
     assert "DATA_CENTERS" in result["domains"]
     assert result["trade_direction"] is None
     assert result["order_authorized"] is False
+
+
+def test_market_impact_brief_maps_supply_risk_to_conditional_oil_scenario():
+    from engine.public_event_brain import build_market_impact_brief
+    brief = build_market_impact_brief("Crude supply disruption at an oil facility")
+    assert brief["status"] == "CONDITIONAL_HYPOTHESIS"
+    oil = next(row for row in brief["scenarios"] if row["theme"] == "ENERGY_SUPPLY_RISK")
+    assert {"WTI", "BRENT"} <= set(oil["instruments"])
+    assert oil["alternative"] and oil["confirm_with"] and oil["invalidate_if"]
+    assert brief["entry"] is None and brief["stop_loss"] is None and brief["take_profit"] is None
+    assert brief["order_authorized"] is False
+
+
+def test_market_impact_brief_maps_tighter_rates_to_cross_asset_scenario():
+    from engine.public_event_brain import build_market_impact_brief
+    brief = build_market_impact_brief("Federal Reserve signals higher for longer and Treasury yields rise")
+    rates = next(row for row in brief["scenarios"] if row["theme"] == "TIGHTER_RATES")
+    assert {"USD", "GOLD"} <= set(rates["instruments"])
+    assert rates["confirm_with"] and rates["invalidate_if"]
+    assert brief["order_authorized"] is False
+
+
+def test_market_impact_brief_does_not_invent_direction_for_unclassified_text():
+    from engine.public_event_brain import build_market_impact_brief
+    brief = build_market_impact_brief("Local museum opens a new exhibition")
+    assert brief["status"] == "WATCH_ONLY"
+    assert brief["scenarios"] == []
+    assert brief["entry"] is None and brief["order_authorized"] is False
+
+
+def test_gagarin_news_alert_renders_conditional_market_scenarios():
+    from telegram.news_monitor import _format_news_alert
+
+    message = _format_news_alert(
+        {
+            "title": "Crude supply disruption raises oil market concerns",
+            "source": "PUBLIC_RSS",
+            "published_at": "2026-10-28T12:00:00Z",
+            "first_seen_at": "2026-10-28T12:01:00Z",
+            "url": "https://example.invalid/news",
+        },
+        {
+            "asset": "WTI",
+            "impact": "RIALZISTA",
+            "move_pct": 0.8,
+            "direction": "LONG",
+            "price_source": "test fixture",
+            "price": 70.0,
+            "entry": 70.0,
+            "stop": 69.0,
+            "tp1": 72.0,
+        },
+    )
+    assert "SCENARI DI MERCATO" in message
+    assert "Caso base:" in message
+    assert "Alternativa:" in message
+    assert "Conferme:" in message
+    assert "Invalidazione:" in message
+    assert "PAPER/DEMO" in message
