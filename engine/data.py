@@ -21,70 +21,36 @@ PRINCIPI
    nell'universo commodity.
 10. Il DATA ENGINE non prende decisioni di trading.
 
-PROVIDER ROUTING
-----------------
+PROVIDER ROUTING — ACTIVE CORE UNIVERSE
+---------------------------------------
 
 GOLD
-    Twelve Data
-        ↓
-    Biquote
-        ↓
-    Yahoo Futures GC=F
+    Twelve Data → Biquote → Yahoo Futures GC=F
 
 SILVER
-    Biquote
-        ↓
-    Twelve Data
-        ↓
-    Yahoo Futures SI=F
+    Biquote → Twelve Data → Yahoo Futures SI=F
 
-PLATINUM
-    Biquote
-        ↓
-    Twelve Data
-        ↓
-    Yahoo Futures PL=F
-
-PALLADIUM
-    Biquote
-        ↓
-    Twelve Data
-        ↓
-    Yahoo Futures PA=F
+COPPER
+    Twelve Data → Yahoo Futures HG=F
 
 WTI
-    Biquote
-        ↓
-    Twelve Data
-        ↓
-    Yahoo Futures CL=F
+    Biquote → Twelve Data → Yahoo Futures CL=F
 
 BRENT
-    Biquote
-        ↓
-    Twelve Data
-        ↓
-    Yahoo Futures BZ=F
+    Biquote → Twelve Data → Yahoo Futures BZ=F
 
-RICE
-    Yahoo Futures ZR=F
-        ↓
-    Twelve Data commodity catalog
+WHEAT
+    Yahoo Futures ZW=F → filtered Twelve Data commodity catalog
 
-SUGAR
-    Yahoo Futures SB=F
-        ↓
-    Twelve Data commodity catalog
+CORN
+    Yahoo Futures ZC=F → filtered Twelve Data commodity catalog
 
-COCOA
-    Yahoo Futures CC=F
-        ↓
-    Twelve Data commodity catalog
+SOYBEANS
+    Yahoo Futures ZS=F → filtered Twelve Data commodity catalog
 
-COFFEE
-    Yahoo Futures KC=F
-        ↓
-    Twelve Data commodity catalog
+These are explicit routing candidates, not a guarantee of live availability.
+Every provider response still passes OHLC, timestamp, history and freshness
+validation before the instrument can be treated as LIVE.
 
 
 DATA FLOW
