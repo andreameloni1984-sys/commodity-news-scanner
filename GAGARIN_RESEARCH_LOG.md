@@ -56,3 +56,14 @@
 - **Validation:** tests added to the branch. No GitHub Actions run or full-suite PASS is visible for this branch; no empirical or OOS result is claimed.
 - **Deployment:** research branch only; no PR, merge, Render build or deploy. The separate timestamp-order guard remains on research branch `fix/gagarin-audit-timestamp-order-20261028-r7` and is not claimed to be in `main`.
 - **Safety:** PAPER/DEMO ONLY; no secrets, Telegram test messages, broker connection or orders.
+
+
+## 2026-10-28 — Verification snapshot for missed-move parameter guard
+
+- **Base:** `main` at `99ad72b69cddbed0f80ef9f671c5b70deb9df024`; branch is 3 commits ahead, 0 behind.
+- **Code:** `12106e1517eaae2753b94c8434fe74740c74a6f6` (`engine/missed_move_validation.py`).
+- **Regression test:** `8b3b5cd8c56d096e21c4c7f9630c60ea84c55245` (`tests/test_missed_move_validation.py`).
+- **Prior log commit:** `17f28beec75d3d34df9472c59f172f8b8d9db914`.
+- **Checks:** GitHub combined status is empty and the available commit-workflow query returned no runs for the branch; CI is therefore **not verified**. An independent Python smoke harness rejected 10 malformed parameter cases and accepted two valid cases; it is not a substitute for running the repository test suite.
+- **Deployment:** no PR, merge or deploy. Render workspace is not selected; service/deploy/Telegram logs were not inspected.
+- **Limits:** this validates audit configuration only; no market replay, walk-forward, OOS or profitability result is claimed. Timestamp-order validation remains on a separate research branch and is not in `main`.
