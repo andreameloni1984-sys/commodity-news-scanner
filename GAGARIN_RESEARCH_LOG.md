@@ -45,3 +45,12 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+## 2026-10-28 — Fail closed on missed-move audit parameters
+
+- **Finding:** `engine/missed_move_validation.py::evaluate_missed_moves()` previously used `int(horizon)` and `int(start)` directly. Fractional values were silently truncated, booleans acted as integers, and infinite/malformed values could raise before a structured result was returned.
+- **Change/files:** validate finite, integral horizon/start parameters and a finite non-negative threshold before evaluation; return `INVALID_PARAMETERS` with zero forecasts on invalid input. Preserve the existing minimum 35-bar warm-up for valid starts.
+- **Regression:** `tests/test_missed_move_validation.py::test_invalid_audit_parameters_fail_closed_without_coercion` covers booleans, fractional/infinite/malformed horizons, invalid starts and invalid thresholds.
+- **Operational path:** offline OHLC rows → parameter validation → causal forecast on bars before the outcome window → future excursion counts. This is a research audit, not a trade signal.
+- **CI:** branch push workflows will be checked; no CI result is claimed until a visible run completes.
+- **Deployment/empirical limits:** research branch only; no merge/deploy. Synthetic parameter regressions do not validate predictive performance, walk-forward robustness or profitability. Render build-pipeline minutes remain exhausted. PAPER/DEMO ONLY.
