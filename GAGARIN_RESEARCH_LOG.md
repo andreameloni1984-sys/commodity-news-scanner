@@ -45,3 +45,13 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+
+## 2026-10-28 — Add conditional cross-asset market-impact briefs
+
+- User goal: make Gagarin's event analysis resemble a market briefing: identify the catalyst, likely transmission channel, affected instruments, alternative scenario, confirming evidence, and invalidation conditions.
+- Implemented on branch `feat/gagarin-market-impact-brief-20261028` in `engine/public_event_brain.py`: the public-event classifier now returns a `market_impact` object with conditional scenario cards for energy supply/easing, rates, trade-policy uncertainty, agriculture, and metals.
+- The brief explicitly leaves entry, stop-loss, and take-profit null; it never authorizes an order. It asks for a fresh quote and event confirmation before a numeric plan can be built.
+- Regression coverage added for an oil supply disruption, a tighter-rates scenario, and unclassified text. Tests are committed; CI status must be checked before calling this verified.
+- Limits: this is a scenario-mapping improvement, not a live news verification, price feed, forecast guarantee, or profitability claim. It is not yet merged or deployed.
+- Safety: PAPER/DEMO only; no Telegram test message, broker order, merge, or deployment.
