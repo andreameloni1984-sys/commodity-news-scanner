@@ -167,8 +167,8 @@ def test_copper_and_silver_are_supported_in_selected_universe():
 
 
 def test_agricultural_mixed_catalysts_remain_mixed():
-    result = classify_event("Coffee harvest improves but drought threatens supply")
-    assert result["impact"]["Caffè"] == "MISTA"
+    result = classify_event("Wheat harvest improves but drought threatens supply")
+    assert result["impact"]["Grano"] == "MISTA"
 
 
 def test_inactive_commodities_do_not_create_selected_universe_assets():
