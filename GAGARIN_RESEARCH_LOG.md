@@ -45,3 +45,14 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+
+## 2026-10-28 — Match Gagarin news keywords as whole terms
+
+- **Finding:** `classify_event()` used substring matching for asset-family and directional keyword sets. This let `oil` match inside `spoiled`, and `war` inside `forward`, potentially adding unrelated oil/metals assets or a false provisional directional hit.
+- **Change/files:** added `_contains_market_term()` in `telegram/news_monitor.py`; asset-family detection, crop-specific asset selection, and bullish/bearish term matching now use case-insensitive whole-word/phrase boundaries. Hyphen variants are normalized to spaces. The headline itself is not rewritten in output.
+- **Regression:** `tests/test_news_monitor.py::test_keyword_fragments_do_not_create_asset_or_direction` rejects both “The deal was spoiled by a routine delay” and “The forward outlook was unchanged after a routine update”. Existing positive tests cover oil inventories, sanctions, crop catalysts and macro terms.
+- **Operational path:** public RSS/GDELT title → event classification → provisional impact → baseline capture → existing live price/volume/trigger checks → PAPER alert. This prevents fragment-only matches; it does not make news a confirmed trade.
+- **Commits:** code `87c12559fb6b00ef062c2565de1e42d3c35899f5`; test `087b91b66cc81bdd0df1179f1effceb8b939d13c`.
+- **CI:** pending GitHub Actions validation; any positive-control failure must be corrected before calling this verified.
+- **Deployment/limits:** new research branch from `main`; no merge/deploy. Synthetic classifier tests only; no live-feed replay, event study, or out-of-sample performance claim. No durable-journal claim while runtime `DATABASE_URL` is unverified. PAPER/DEMO ONLY.
