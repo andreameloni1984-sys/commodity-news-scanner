@@ -45,3 +45,61 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+## 2026-10-27 — Reject ambiguous RSI Wilder periods
+
+- **Finding:** `engine/regime.py::_rsi_wilder` used `int(period)`, which silently truncated fractional periods such as 14.5 and accepted booleans; infinity could raise an uncaught `OverflowError`.
+- **Change:** reject booleans, non-finite and fractional periods; catch type, value and overflow conversion errors. Positive integer periods and integral numeric values preserve the existing Wilder calculation.
+- **Files:** `engine/regime.py`; `tests/test_pipeline.py`.
+- **Regression coverage:** fractional, boolean, NaN, positive/negative infinity, malformed text, zero, negative, an integer too large to convert to float, and a valid integral float. Existing rising/falling/flat reference cases remain covered.
+- **Operational path:** OHLC closes → `_rsi_wilder()` → regime diagnostics; invalid configuration yields `None`, not a guessed period.
+- **CI:** PASS on PR head `0de6e53b0d2be0d4ce0a49960e4a35a1d32eda12`: Public Event Brain `40469309164`, PAPER `40469309231`, NEWS alert `40469309091`, Execution Layer `40469309175`, and main tests `40469309188`.
+- **Deployment:** no merge or deploy. Render workspace build-pipeline minutes are exhausted. Latest observed Gagarin cloud logs explicitly reported `DATABASE_URL missing` and `GAGARIN PERSISTENCE DISABLED`; the journal is not confirmed durable. GDELT emitted `ReadTimeout` with a 300-second retry.
+- **Empirical validation:** no out-of-sample or profitability test; this is indicator-input integrity only.
+- **Safety:** PAPER/DEMO ONLY; no broker, order, or Telegram test message.
+
+## 2026-10-27 — Reject overflowed price deltas in Wilder RSI
+
+- **Finding:** validating each close as finite is insufficient: subtracting opposite extreme finite floats (for example, -1e308 and +1e308) overflows to infinity. The previous RSI calculation could then return a plausible endpoint or NaN from invalid intermediate arithmetic.
+- **Change:** `engine/regime.py::_rsi_wilder` now rejects non-finite close deltas and non-finite smoothed gain/loss values, checks the denominator, and uses the algebraically equivalent `100 * avg_gain / (avg_gain + avg_loss)` formula to avoid an unnecessary gain/loss ratio overflow.
+- **Regression:** `tests/test_pipeline.py::test_rsi_wilder_rejects_overflowed_close_differences` checks both signs of extreme finite closes.
+- **Operational path:** OHLC closes → `_rsi_wilder` → regime diagnostics. Invalid arithmetic returns `None`; no directional value is fabricated.
+- **CI:** code and test have been committed to PR #83; the new CI run is pending at time of this log entry. Prior PR head checks passed, but they do not validate this new change.
+- **Deployment:** no merge/deploy; Render build-pipeline minutes remain exhausted.
+- **Empirical limit:** numerical-integrity regression only; no OOS profitability claim.
+- **Safety:** PAPER/DEMO ONLY; no broker, order, or Telegram test message.
+
+## 2026-10-27 — Recover the late-September agricultural-data diagnostic record
+
+- **Historical source:** prior conversation record from 2026-09-25 says the GitHub Actions run executing `python main.py` marked four Yahoo-backed agricultural feeds STALE: Caffè, Cacao, Riso and Zucchero.
+- **Artifacts named in the historical record:** repository-root `diagnostic_agri.py` (v1.0, with v2.0/v3.0 variants supplied in the same chat) and `engine/data.py` v5.0; the prior record cites `de28b59` as the earlier v5.0 commit and says v5.1 later broke data loading. The actual diagnostic output resolving symbols/titles was not recovered, so this is not a current reproduction of the stale-data result.
+- **Current code mapping:** `engine/data.py` provider routing → OHLC/timestamp/history validation → freshness and market-status classification → Gagarin engine; `diagnostic_agri.py` is a separate Twelve Data catalog/symbol/freshness diagnostic. The current `main` file header still identifies `engine/data.py` as v5.0 and the diagnostic file exists.
+- **Tests / CI:** no agriculture-feed diagnostic was executed in this run; the RSI overflow regression is a separate numeric-integrity change. A follow-up should replay the diagnostic with non-secret, timestamped provider responses and assert that STALE data never enters the decision path.
+- **Empirical limit:** the historical note establishes that a stale-data incident was reported, not that the same feeds are stale now or that any agricultural signal was profitable.
+- **Safety:** PAPER/DEMO only; no provider secrets read, no broker, no orders, no Telegram test message.
+
+## 2026-10-27 — Final verification of Wilder RSI overflow guard
+
+- **Code/test:** `engine/regime.py` commit `8ee3266bb07483ebd735c4e7a4916eb5390c4ae5`; `tests/test_pipeline.py` commit `2ba4a45b47e0db895227f74ebe41a8307458db32`; research-log commit `c9e9683866fdbdde1ff6126107cbe883da432bcf`.
+- **CI:** all five workflows PASS on the current branch head: general tests [40541207280](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40541207280), NEWS alert [40541207748](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40541207748), Public Event Brain [40541207489](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40541207489), Execution Layer [40541207426](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40541207426), PAPER [40541206989](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40541206989).
+- **Main / PR:** current `main` SHA observed: `99ad72b69cddbed0f80ef9f671c5b70deb9df024`. PR #83 remains open/draft; the change is not merged.
+- **Render:** latest successful deploy found after paging the deploy history is `86068d701c860670a9d9e0e4e65af98860a57cfa` (2026-10-21). The latest attempt on `99ad72b69cddbed0f80ef9f671c5b70deb9df024` failed on 2026-10-27; Render event history explicitly reports `pipeline_minutes_exhausted`. No deploy was triggered by this work.
+- **Runtime observations:** GDELT logs show repeated HTTP 429 and ReadTimeout/JSONDecodeError with backoff during 2026-10-26/27. Logs also report `DATABASE_URL missing` / `LOCAL_CSV_NO_DATABASE_URL`; persistent journal durability is not confirmed. The sampled news poll at 2026-10-27 15:31 UTC reported 150 fetched, zero new relevant, zero pending and zero alerts.
+- **Empirical limit:** numeric RSI guard only; no market replay, OOS performance or profitability claim.
+- **Safety:** PAPER/DEMO only; no broker, orders, or Telegram test messages.
+
+## 2026-10-27 — Main workflow and deployment inspection
+
+- Current `main`: `99ad72b69cddbed0f80ef9f671c5b70deb9df024`.
+- Main scheduled workflow [DAY RESEARCH 40540264711](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40540264711) completed successfully at 16:22 UTC; [aggressive-alert 40521212912](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40521212912) completed successfully at 14:27 UTC, both on current `main`.
+- Render deployment of the same `main` commit failed at 12:48 UTC with an explicit `pipeline_minutes_exhausted` event. Workflow success is not production deployment.
+- Runtime log sample at 15:31 UTC: 150 news rows fetched, 0 new relevant, 0 pending and 0 alerts. GDELT logs in the queried period contain HTTP 429, ReadTimeout and JSONDecodeError with backoff. Logs report `DATABASE_URL missing` / `LOCAL_CSV_NO_DATABASE_URL`; do not claim a durable journal.
+- PR #83 remains open/draft. The RSI overflow guard is CI-verified on the PR branch but not merged or live.
+
+## Correction — 2026-10-27: avoid duplicate RSI overflow work
+
+- A later open-PR audit found that existing PR #78, `fix/rsi-wilder-input-overflow-20261027`, already validates Wilder RSI periods and rejects non-finite close differences/intermediates.
+- To avoid carrying a second implementation of the same guard, the additional overflow-delta change and test introduced in commits `8ee3266bb07483ebd735c4e7a4916eb5390c4ae5` and `2ba4a45b47e0db895227f74ebe41a8307458db32` were reverted from PR #83 by commits `58e17b8120040fe9d8caed35b71bc6db60988cdc` and `73755ba55581500c90e77c5af8dfdbf34b043fe0`.
+- Earlier CI passes apply to the superseded code/test revision, not to this revert commit. PR #83's period-validation change also overlaps PR #78 and should not be treated as an independent feature; no merge recommendation is made here.
+- The unique Gagarin improvement from this run is tracked separately in PR #84: conflicting duplicate candle timestamps now fail closed.
+

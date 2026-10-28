@@ -180,10 +180,15 @@ RSI_WILDER_PERIOD = 14
 
 
 def _rsi_wilder(closes, period=RSI_WILDER_PERIOD):
-    """Return Wilder RSI from closes; None if there are too few valid values."""
+    """Return Wilder RSI; reject ambiguous periods and invalid numeric inputs."""
     try:
-        period = int(period)
-    except (TypeError, ValueError):
+        if isinstance(period, bool):
+            return None
+        numeric_period = float(period)
+        if not math.isfinite(numeric_period) or not numeric_period.is_integer():
+            return None
+        period = int(numeric_period)
+    except (TypeError, ValueError, OverflowError):
         return None
     if period < 1:
         return None
