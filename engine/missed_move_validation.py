@@ -12,21 +12,43 @@ def evaluate_missed_moves(candles, horizon=4, start=40, threshold_pct=0.5):
     for each instrument and candle timeframe. This is research, not a trade signal.
     """
     rows = list(candles or [])
-    horizon = max(1, int(horizon))
-    start = max(35, int(start))
-    threshold_pct = float(threshold_pct)
     result = {
         "status": "INSUFFICIENT_DATA", "forecasts": 0, "important_events": 0,
         "anticipated_events": 0, "missed_events": 0, "missed_rate_pct": None,
         "up_events": 0, "down_events": 0, "unanticipated_up": 0,
         "unanticipated_down": 0, "missed_no_signal": 0, "missed_wrong_direction": 0,
-        "threshold_pct": threshold_pct, "horizon_bars": horizon,
+        "threshold_pct": None, "horizon_bars": None,
     }
-    if not math.isfinite(threshold_pct):
+
+    # Do not silently truncate fractional horizons/starts or let bools act as
+    # integers. Invalid audit parameters can change the evaluation window.
+    if any(isinstance(value, bool) for value in (horizon, start, threshold_pct)):
         result["status"] = "INVALID_PARAMETERS"
         return result
-    threshold_pct = max(0.0, threshold_pct)
+    try:
+        horizon_value = float(horizon)
+        start_value = float(start)
+        threshold_value = float(threshold_pct)
+    except (TypeError, ValueError, OverflowError):
+        result["status"] = "INVALID_PARAMETERS"
+        return result
+    if (
+        not all(math.isfinite(value) for value in (horizon_value, start_value, threshold_value))
+        or not horizon_value.is_integer()
+        or horizon_value < 1
+        or not start_value.is_integer()
+        or start_value < 0
+        or threshold_value < 0
+    ):
+        result["status"] = "INVALID_PARAMETERS"
+        return result
+
+    horizon = int(horizon_value)
+    # The ensemble needs at least 35 prior bars; preserve the existing floor.
+    start = max(35, int(start_value))
+    threshold_pct = threshold_value
     result["threshold_pct"] = threshold_pct
+    result["horizon_bars"] = horizon
     if len(rows) <= start + horizon:
         return result
 
