@@ -542,7 +542,7 @@ def classify_event(title: str) -> dict[str, Any]:
     # Macro catalysts can affect the three selected metals, but a metal-specific
     # headline maps only to the named metal unless macro context is also present.
     metal_terms = {
-        "Oro": {"gold", "oro", "bullion", "xau"},
+        "Oro": {"gold", "oro", "xau"},
         "Argento": {"silver", "argento", "xag"},
         "Rame": {"copper", "rame"},
     }
@@ -553,7 +553,7 @@ def classify_event(title: str) -> dict[str, Any]:
             asset for asset, terms in metal_terms.items()
             if any(term in text for term in terms)
         ]
-        assets.extend(specific or (["Oro", "Argento"] if "precious metal" in text else []))
+        assets.extend(specific or (["Oro", "Argento"] if ("precious metal" in text or "bullion" in text) else []))
 
     if has_agri:
         for asset, terms in {
