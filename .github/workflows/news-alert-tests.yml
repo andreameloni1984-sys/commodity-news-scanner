@@ -23,4 +23,4 @@ jobs:
       - name: Compile Python modules
         run: python -m py_compile telegram/news_monitor.py telegram/bot.py telegram/render_runner.py research/intraday_windows.py
       - name: Test news monitor, Telegram menu and intraday statistics
-        run: python -m pytest -q tests/test_news_monitor.py tests/test_telegram_minimal_menu.py tests/test_intraday_windows.py tests/test_pattern_exit.py tests/test_aggressive_opportunity_alert.py
+        run: python -m pytest -q tests/test_news_monitor.py tests/test_scorecard_simultaneous_barriers.py tests/test_telegram_minimal_menu.py tests/test_intraday_windows.py tests/test_pattern_exit.py tests/test_aggressive_opportunity_alert.py
