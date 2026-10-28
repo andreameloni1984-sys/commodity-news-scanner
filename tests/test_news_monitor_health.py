@@ -29,3 +29,18 @@ def test_news_monitor_health_turns_stale_after_missing_poll_heartbeats(monkeypat
     assert healthy["status"] == "OK"
     assert stale["status"] == "STALE"
     assert stale["age_seconds"] == 181
+
+
+
+def test_news_monitor_health_detects_thread_never_started(monkeypatch):
+    process_started = datetime(2026, 10, 28, 10, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(monitor, "POLL_SECONDS", 60)
+    monkeypatch.setattr(monitor, "_MONITOR_PROCESS_STARTED_AT", process_started)
+    monkeypatch.setattr(monitor, "_MONITOR_STARTED_AT", None)
+    monkeypatch.setattr(monitor, "_MONITOR_LAST_SUCCESS_AT", None)
+
+    starting = monitor.news_monitor_health(now=process_started + timedelta(seconds=30))
+    stale = monitor.news_monitor_health(now=process_started + timedelta(seconds=181))
+
+    assert starting["status"] == "STARTING"
+    assert stale["status"] == "STALE"
