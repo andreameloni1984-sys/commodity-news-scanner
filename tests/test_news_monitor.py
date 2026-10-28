@@ -161,7 +161,7 @@ def test_copper_and_silver_are_supported_in_selected_universe():
     copper = classify_event("Copper supply disruption raises industrial metal prices")
     silver = classify_event("Silver bullion demand rises")
     assert "Rame" in copper["assets"]
-    assert "Argento" in silver["assets"]
+    assert silver["assets"] == ["Argento"]
     assert "Platino" not in copper["assets"]
     assert "Palladio" not in copper["assets"]
 
