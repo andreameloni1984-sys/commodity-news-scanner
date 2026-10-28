@@ -1,6 +1,7 @@
 from commodities.universe import enabled_commodities, validate_universe
 from engine.data import AGRI_SYMBOLS, AGRI_TERMS, PROVIDER_ORDER, YAHOO_SYMBOLS
 from soyuz_gagarin.config import GagarinConfig
+from engine.market_status import AGRICULTURE, METALS
 
 
 EXPECTED = [
@@ -41,3 +42,8 @@ def test_copper_and_grain_fallback_symbols_are_explicit():
     assert YAHOO_SYMBOLS["WHEAT/USD"] == "ZW=F"
     assert YAHOO_SYMBOLS["CORN/USD"] == "ZC=F"
     assert YAHOO_SYMBOLS["SOYBEAN/USD"] == "ZS=F"
+
+
+def test_market_status_groups_match_selected_metals_and_agriculture():
+    assert METALS == {"Oro", "Argento", "Rame"}
+    assert AGRICULTURE == {"Grano", "Mais", "Soia"}
