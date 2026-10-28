@@ -122,28 +122,57 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
             and ((direction == "LONG" and stop < alert_price < tp1)
                  or (direction == "SHORT" and tp1 < alert_price < stop))
         )
+        ambiguous_barrier = False
         if levels_valid:
-            for _, observed_price in reaction_observations:
-                if (direction == "LONG" and observed_price <= stop) or (direction == "SHORT" and observed_price >= stop):
+            # Evaluate observations by timestamp, not storage order. If sparse
+            # polling records both barriers at the same timestamp, the data
+            # cannot establish which barrier was reached first; do not invent
+            # a win/loss from the arbitrary order of rows.
+            ordered_reactions = sorted(reaction_observations, key=lambda item: item[0])
+            index = 0
+            while index < len(ordered_reactions):
+                timestamp = ordered_reactions[index][0]
+                same_time_prices = []
+                while index < len(ordered_reactions) and ordered_reactions[index][0] == timestamp:
+                    same_time_prices.append(ordered_reactions[index][1])
+                    index += 1
+                stop_hit = any(
+                    (direction == "LONG" and price <= stop)
+                    or (direction == "SHORT" and price >= stop)
+                    for price in same_time_prices
+                )
+                tp1_hit = any(
+                    (direction == "LONG" and price >= tp1)
+                    or (direction == "SHORT" and price <= tp1)
+                    for price in same_time_prices
+                )
+                if stop_hit and tp1_hit:
+                    outcome = "AMBIGUOUS_BARRIER_SAME_TIMESTAMP"
+                    ambiguous_barrier = True
+                    break
+                if stop_hit:
                     outcome = "SL_OBSERVED"
                     break
-                if (direction == "LONG" and observed_price >= tp1) or (direction == "SHORT" and observed_price <= tp1):
+                if tp1_hit:
                     outcome = "TP1_OBSERVED"
                     break
         scored.append({"asset": alert.get("asset"), "direction": direction, "sent_at": sent_at.isoformat(),
                        "observed_at": observed_at.isoformat(), "signed_return_pct": round(signed_pct, 6),
-                       "correct": signed_pct > 0, "outcome": outcome})
+                       "correct": signed_pct > 0, "outcome": outcome,
+                       "ambiguous_barrier": ambiguous_barrier})
     correct = sum(x["correct"] for x in scored)
     tp1_observed = sum(x["outcome"] == "TP1_OBSERVED" for x in scored)
     sl_observed = sum(x["outcome"] == "SL_OBSERVED" for x in scored)
     open_count = sum(x["outcome"] == "OPEN_AT_LAST_CHECK" for x in scored)
+    ambiguous_count = sum(x["ambiguous_barrier"] for x in scored)
     return {"window_days": 7, "alerts": len(alerts), "scored": len(scored), "pending": pending,
             "unscored_expired": unscored_expired,
             "coverage_pct": round(len(scored)/len(alerts)*100, 2) if alerts else None,
             "correct": correct, "incorrect": len(scored)-correct,
             "accuracy_pct": round(correct/len(scored)*100, 2) if scored else None,
             "mean_directional_return_pct": round(sum(x["signed_return_pct"] for x in scored)/len(scored), 4) if scored else None,
-            "tp1_observed": tp1_observed, "sl_observed": sl_observed, "open_at_last_check": open_count}
+            "tp1_observed": tp1_observed, "sl_observed": sl_observed, "open_at_last_check": open_count,
+            "ambiguous_barrier_observations": ambiguous_count}
 
 
 def _maybe_send_daily_scorecard(state: dict[str, Any], send_telegram: Callable[[str], bool], now: datetime) -> bool:
