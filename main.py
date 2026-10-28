@@ -490,7 +490,12 @@ def run():
         for state in results:
             state_symbol = str(getattr(state, "symbol", "") or "").strip().upper()
             state_name = str(getattr(state, "commodity", "") or "").strip().casefold()
-            if state_symbol in allowed_symbols or state_name in allowed_names:
+            is_allowed = (
+                state_symbol in allowed_symbols
+                if state_symbol
+                else state_name in allowed_names
+            )
+            if is_allowed:
                 filtered_results.append(state)
             else:
                 rejected_results.append(state)
