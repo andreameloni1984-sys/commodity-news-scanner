@@ -18,7 +18,7 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 from telegram.bot import _api, _command_response, _reply, telegram_diagnostic, _run_analysis, get_last_results, telegram_menu, send_telegram
-from telegram.news_monitor import news_monitor_loop
+from telegram.news_monitor import news_monitor_loop, news_monitor_health
 from config import TELEGRAM_CHAT_ID
 from soyuz_gagarin.adapter import evaluate_states
 from soyuz_gagarin.mt5_bridge import build_demo_payloads
@@ -343,7 +343,12 @@ class HealthHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/health":
-            self._send_text(200, "OK")
+            report = news_monitor_health()
+            healthy = report["status"] in {"OK", "STARTING"}
+            self._send_text(
+                200 if healthy else 503,
+                json.dumps({"service": "gagarin-news-monitor", "health": report}),
+            )
         elif path == "/":
             self._send_text(200, "🚀 SOYUZ GAGARIN TELEGRAM ONLINE\nWebhook: ACTIVE\n")
         else:
