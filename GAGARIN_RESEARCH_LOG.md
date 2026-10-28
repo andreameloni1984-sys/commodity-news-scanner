@@ -54,3 +54,6 @@
 - **Regression test:** one valid scored alert plus two sent alerts with missing price/invalid direction must report 3 total, 1 scored, 2 unscored-invalid, and 33.33% coverage.
 - **Evidence limit:** this corrects measurement integrity only; it does not establish a predictive edge. Live outcome rows and production database access were not available for this run.
 - **Safety:** PAPER/DEMO only; no signal filters changed, no Telegram test message, no order, no merge or deployment.
+
+
+- **CI follow-up (same correction):** the first NEWS test run correctly exposed an outdated assertion that expected NaN/Infinity alert rows to disappear from the denominator. Updated that test to require all three timestamped alerts to count, with two invalid-baseline rows explicitly unscored. This is a test expectation update for the same coverage-denominator fix, not a separate behavior change.
