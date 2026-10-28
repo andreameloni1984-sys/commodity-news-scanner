@@ -45,6 +45,49 @@ def test_non_finite_future_excursions_are_skipped():
     assert result["missed_rate_pct"] is None
 
 
+def test_duplicate_timestamps_fail_closed_without_forecasts():
+    rows = flat_candles()
+    rows[51]["timestamp"] = rows[50]["timestamp"]
+    result = evaluate_missed_moves(rows, horizon=4, start=40)
+    assert result["status"] == "INVALID_TIMESTAMPS"
+    assert result["forecasts"] == 0
+
+
+def test_out_of_order_timestamps_fail_closed_without_sorting():
+    rows = flat_candles()
+    rows[50]["timestamp"] = rows[49]["timestamp"] - 1
+    result = evaluate_missed_moves(rows, horizon=4, start=40)
+    assert result["status"] == "INVALID_TIMESTAMPS"
+    assert result["forecasts"] == 0
+
+
+def test_missing_or_timezone_naive_timestamps_fail_closed():
+    missing = flat_candles()
+    missing[0].pop("timestamp")
+    result = evaluate_missed_moves(missing, horizon=4, start=40)
+    assert result["status"] == "INVALID_TIMESTAMPS"
+    assert result["forecasts"] == 0
+
+    naive = flat_candles()
+    naive[0]["timestamp"] = "2026-10-28T00:00:00"
+    result = evaluate_missed_moves(naive, horizon=4, start=40)
+    assert result["status"] == "INVALID_TIMESTAMPS"
+    assert result["forecasts"] == 0
+
+
+def test_timezone_aware_iso_timestamps_are_accepted():
+    from datetime import datetime, timedelta, timezone
+
+    rows = flat_candles()
+    start = datetime(2026, 10, 28, tzinfo=timezone.utc)
+    for index, row in enumerate(rows):
+        row["timestamp"] = (
+            start + timedelta(minutes=5 * index)
+        ).isoformat().replace("+00:00", "Z")
+    result = evaluate_missed_moves(rows, horizon=4, start=40, threshold_pct=0.5)
+    assert result["status"] == "CALCULATED"
+
+
 def test_non_finite_threshold_is_rejected():
     result = evaluate_missed_moves(flat_candles(), threshold_pct=float("inf"))
     assert result["status"] == "INVALID_PARAMETERS"
