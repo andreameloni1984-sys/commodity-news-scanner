@@ -1,52 +1,15 @@
 # ============================================================
-# SOYUZ GAGARIN v1.4
-# COMMODITY UNIVERSE
-# ============================================================
-#
-# Universo operativo principale.
-#
-# IMPORTANTE:
-# I simboli qui sotto sono IDENTIFICATORI LOGICI.
-# Non assumiamo che siano tutti disponibili sul piano
-# Twelve Data corrente.
-#
-# La disponibilità reale viene verificata dal DATA ENGINE.
-#
+# GAGARIN — OPERATIONAL COMMODITY UNIVERSE
+# Symbols are logical identifiers; provider availability must be
+# verified by the data engine before a live/PAPER signal is emitted.
 # ============================================================
 
 from dataclasses import dataclass
 
 
-# ============================================================
-# COMMODITY
-# ============================================================
-
-
 @dataclass(frozen=True)
 class Commodity:
-    """
-    Definizione canonica di una commodity.
-
-    name:
-        Nome utilizzato nei report Telegram.
-
-    symbol:
-        Identificatore primario richiesto al data adapter.
-
-    category:
-        Categoria della commodity.
-
-    unit:
-        Valuta/unità di riferimento.
-
-    priority:
-        Priorità interna dell'universo.
-        Non è un punteggio di trading.
-
-    enabled:
-        Se False, la commodity non viene analizzata.
-    """
-
+    """Canonical definition of an instrument in the Gagarin universe."""
     name: str
     symbol: str
     category: str
@@ -55,350 +18,69 @@ class Commodity:
     enabled: bool = True
 
 
-# ============================================================
-# MAIN UNIVERSE
-# ============================================================
-#
-# Manteniamo il paniere che abbiamo deciso per SOYUZ:
-#
-# METALLI
-#   Oro
-#   Argento
-#   Platino
-#   Palladio
-#
-# ENERGY
-#   WTI
-#   Brent
-#
-# AGRICOLTURA / FOOD
-#   Riso
-#   Zucchero
-#   Cacao
-#   Caffè
-#
-# ============================================================
-
-
+# Active instruments are deliberately limited to the agreed core.
+# Grain futures are not enabled yet: provider-specific symbols have not
+# been verified in the current adapter, so enabling guessed symbols could
+# create false data availability or mismatched prices.
 COMMODITIES = [
-
-    # --------------------------------------------------------
-    # METALS
-    # --------------------------------------------------------
-
-    Commodity(
-        name="Oro",
-        symbol="XAU/USD",
-        category="Metal",
-        unit="USD",
-        priority=1,
-    ),
-
-    Commodity(
-        name="Argento",
-        symbol="XAG/USD",
-        category="Metal",
-        unit="USD",
-        priority=2,
-    ),
-
-    Commodity(
-        name="Platino",
-        symbol="XPT/USD",
-        category="Metal",
-        unit="USD",
-        priority=3,
-    ),
-
-    Commodity(
-        name="Palladio",
-        symbol="XPD/USD",
-        category="Metal",
-        unit="USD",
-        priority=4,
-    ),
-
-    # --------------------------------------------------------
-    # ENERGY
-    # --------------------------------------------------------
-
-    Commodity(
-        name="Petrolio WTI",
-        symbol="WTI/USD",
-        category="Energy",
-        unit="USD",
-        priority=5,
-    ),
-
-    Commodity(
-        name="Petrolio Brent",
-        symbol="BRENT/USD",
-        category="Energy",
-        unit="USD",
-        priority=6,
-    ),
-
-    # --------------------------------------------------------
-    # AGRICULTURE / FOOD
-    # --------------------------------------------------------
-
-    Commodity(
-        name="Riso",
-        symbol="RICE/USD",
-        category="Agriculture",
-        unit="USD",
-        priority=7,
-    ),
-
-    Commodity(
-        name="Zucchero",
-        symbol="SUGAR/USD",
-        category="Agriculture",
-        unit="USD",
-        priority=8,
-    ),
-
-    Commodity(
-        name="Cacao",
-        symbol="COCOA/USD",
-        category="Agriculture",
-        unit="USD",
-        priority=9,
-    ),
-
-    Commodity(
-        name="Caffè",
-        symbol="COFFEE/USD",
-        category="Agriculture",
-        unit="USD",
-        priority=10,
-    ),
-
-    # --------------------------------------------------------
-    # EXTRA COMMODITIES — amplia il paniere a 13 materie prime
-    # --------------------------------------------------------
-    Commodity(name="Rame", symbol="COPPER/USD", category="Metal", unit="USD", priority=11),
-    Commodity(name="Benzina", symbol="GASOLINE/USD", category="Energy", unit="USD", priority=12),
-    Commodity(name="Gas naturale", symbol="NATGAS/USD", category="Energy", unit="USD", priority=13),
-
-    # --------------------------------------------------------
-    # FOREX — universo complessivo 21 strumenti
-    # --------------------------------------------------------
-    Commodity(name="EUR/USD", symbol="EUR/USD", category="Forex", unit="USD", priority=14),
-    Commodity(name="GBP/USD", symbol="GBP/USD", category="Forex", unit="USD", priority=15),
-    Commodity(name="USD/JPY", symbol="USD/JPY", category="Forex", unit="JPY", priority=16),
-    Commodity(name="USD/CHF", symbol="USD/CHF", category="Forex", unit="CHF", priority=17),
-    Commodity(name="AUD/USD", symbol="AUD/USD", category="Forex", unit="USD", priority=18),
-    Commodity(name="USD/CAD", symbol="USD/CAD", category="Forex", unit="CAD", priority=19),
-    Commodity(name="NZD/USD", symbol="NZD/USD", category="Forex", unit="USD", priority=20),
-    Commodity(name="EUR/JPY", symbol="EUR/JPY", category="Forex", unit="JPY", priority=21),
+    Commodity("Oro", "XAU/USD", "Metal", priority=1),
+    Commodity("Argento", "XAG/USD", "Metal", priority=2),
+    Commodity("Rame", "COPPER/USD", "Metal", priority=3),
+    Commodity("Petrolio WTI", "WTI/USD", "Energy", priority=4),
+    Commodity("Petrolio Brent", "BRENT/USD", "Energy", priority=5),
 ]
 
 
-# ============================================================
-# HELPERS
-# ============================================================
-
-
 def enabled_commodities() -> list[Commodity]:
-    """
-    Restituisce solamente le commodity abilitate.
-    """
-
-    return [
-        commodity
-        for commodity in COMMODITIES
-        if commodity.enabled
-    ]
+    """Return only instruments enabled for analysis."""
+    return [commodity for commodity in COMMODITIES if commodity.enabled]
 
 
-def get_commodity_by_name(
-    name: str,
-) -> Commodity | None:
-    """
-    Cerca una commodity per nome.
-    """
-
-    normalized = (
-        name.strip().lower()
-        if name
-        else ""
-    )
-
-    for commodity in COMMODITIES:
-
-        if (
-            commodity.name.lower()
-            == normalized
-        ):
-            return commodity
-
-    return None
+def get_commodity_by_name(name: str) -> Commodity | None:
+    normalized = name.strip().lower() if name else ""
+    return next((c for c in COMMODITIES if c.name.lower() == normalized), None)
 
 
-def get_commodity_by_symbol(
-    symbol: str,
-) -> Commodity | None:
-    """
-    Cerca una commodity per simbolo.
-    """
-
-    normalized = (
-        symbol.strip().upper()
-        if symbol
-        else ""
-    )
-
-    for commodity in COMMODITIES:
-
-        if (
-            commodity.symbol.upper()
-            == normalized
-        ):
-            return commodity
-
-    return None
+def get_commodity_by_symbol(symbol: str) -> Commodity | None:
+    normalized = symbol.strip().upper() if symbol else ""
+    return next((c for c in COMMODITIES if c.symbol.upper() == normalized), None)
 
 
 def get_categories() -> list[str]:
-    """
-    Restituisce le categorie presenti
-    nell'universo senza duplicati.
-    """
-
-    categories = []
-
-    for commodity in COMMODITIES:
-
-        if commodity.category not in categories:
-            categories.append(
-                commodity.category
-            )
-
-    return categories
+    return list(dict.fromkeys(c.category for c in COMMODITIES))
 
 
 def get_symbols() -> list[str]:
-    """
-    Restituisce tutti i simboli dell'universo.
-    """
-
-    return [
-        commodity.symbol
-        for commodity in enabled_commodities()
-    ]
+    return [commodity.symbol for commodity in enabled_commodities()]
 
 
 def universe_size() -> int:
-    """
-    Numero di commodity abilitate.
-    """
-
-    return len(
-        enabled_commodities()
-    )
-
-
-# ============================================================
-# VALIDATION
-# ============================================================
+    return len(enabled_commodities())
 
 
 def validate_universe() -> list[str]:
-    """
-    Controlla la consistenza dell'universo.
-
-    NON verifica la disponibilità presso
-    Twelve Data.
-
-    Restituisce una lista di errori.
-    Lista vuota = configurazione interna coerente.
-    """
-
+    """Validate internal consistency; does not verify provider availability."""
     errors = []
-
     names = set()
     symbols = set()
-
     for commodity in COMMODITIES:
-
-        # ----------------------------------------------------
-        # NAME
-        # ----------------------------------------------------
-
         if not commodity.name.strip():
-
-            errors.append(
-                "EMPTY_COMMODITY_NAME"
-            )
-
-        # ----------------------------------------------------
-        # SYMBOL
-        # ----------------------------------------------------
-
+            errors.append("EMPTY_COMMODITY_NAME")
         if not commodity.symbol.strip():
-
-            errors.append(
-                f"EMPTY_SYMBOL:{commodity.name}"
-            )
-
-        # ----------------------------------------------------
-        # DUPLICATE NAME
-        # ----------------------------------------------------
-
-        name_key = (
-            commodity.name.strip().lower()
-        )
-
+            errors.append(f"EMPTY_SYMBOL:{commodity.name}")
+        name_key = commodity.name.strip().lower()
         if name_key in names:
-
-            errors.append(
-                f"DUPLICATE_NAME:{commodity.name}"
-            )
-
+            errors.append(f"DUPLICATE_NAME:{commodity.name}")
         names.add(name_key)
-
-        # ----------------------------------------------------
-        # DUPLICATE SYMBOL
-        # ----------------------------------------------------
-
-        symbol_key = (
-            commodity.symbol.strip().upper()
-        )
-
+        symbol_key = commodity.symbol.strip().upper()
         if symbol_key in symbols:
-
-            errors.append(
-                f"DUPLICATE_SYMBOL:{commodity.symbol}"
-            )
-
+            errors.append(f"DUPLICATE_SYMBOL:{commodity.symbol}")
         symbols.add(symbol_key)
-
-        # ----------------------------------------------------
-        # CATEGORY
-        # ----------------------------------------------------
-
         if not commodity.category.strip():
-
-            errors.append(
-                f"EMPTY_CATEGORY:{commodity.name}"
-            )
-
+            errors.append(f"EMPTY_CATEGORY:{commodity.name}")
     return errors
 
 
-# ============================================================
-# MODULE VALIDATION
-# ============================================================
-
-
 _UNIVERSE_ERRORS = validate_universe()
-
 if _UNIVERSE_ERRORS:
-
-    raise ValueError(
-        "Invalid SOYUZ commodity universe: "
-        + ", ".join(
-            _UNIVERSE_ERRORS
-        )
-    )
+    raise ValueError("Invalid Gagarin commodity universe: " + ", ".join(_UNIVERSE_ERRORS))
