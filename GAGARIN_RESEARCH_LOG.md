@@ -45,3 +45,196 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+## 2026-10-27 05:44 UTC — Exclude future observations from news scorecard
+
+- **Finding:** `build_alert_scorecard()` accepted any reaction timestamp inside the four-hour post-alert window, including rows whose `observed_at` was later than the scorecard's `now`/evaluation time. A historical evaluation could therefore use information not yet available at the decision point.
+- **Change:** ignore reaction observations later than `now`; alerts with no eligible observation remain pending until the evaluation horizon expires.
+- **Files:** `telegram/news_monitor.py`; `tests/test_news_monitor.py`.
+- **Operational path:** journal rows → `build_alert_scorecard(rows, now)` → post-alert reaction filtering → outcome/coverage counters.
+- **Regression test:** an alert at 04:00 with a reaction timestamp at 04:20, evaluated at 04:10, remains unscored/pending and is not counted as expired.
+- **CI:** all five workflows passed on branch commit `c7249afc80abd215f5cd8ef8ae976498ca50d1d5` (code/tests plus initial research-log entry): [main tests](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40451611095), [NEWS alert](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40451611183), [Public Event Brain](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40451611229), [Execution Layer](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40451611150), and [PAPER](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40451611218). Subsequent documentation-only commits were not associated with workflow runs.
+- **Deployment:** branch only; no deploy triggered. Render read-only check: last live `gagarin-cloud` commit `86068d701c860670a9d9e0e4e65af98860a57cfa` (2026-10-21); latest attempt `57916b6d792cd7e65776f483d71ad0a50df1ab01` (2026-10-26) failed with `pipeline_minutes_exhausted`. Telegram v2's latest attempted commit also failed for the same quota condition. This PR is not live.
+- **Empirical validation:** no historical replay or out-of-sample performance test performed. This fixes temporal eligibility, not predictive accuracy.
+- **Safety:** scorecard-only change; no entry authorization or order execution changed. PAPER/DEMO ONLY.
+
+## 2026-10-27 — Fail closed on ambiguous scorecard timestamps
+
+- **Finding:** the shared `_parse_datetime()` assumed UTC for naive values. That is unsafe for historical scorecards: both alert time and observed reaction time must represent unambiguous instants, and the evaluation clock (`now`) must also be timezone-aware.
+- **Change:** add an opt-in `require_timezone` parser mode and use it for scorecard `sent_at` and `observed_at`. A naive/invalid decision clock returns an explicitly invalid, empty scorecard (`decision_time_valid=False`) rather than scoring with an invented UTC interpretation. Existing non-scorecard callers retain their prior parsing behavior.
+- **Files/path:** `telegram/news_monitor.py::_parse_datetime`; journal rows → `build_alert_scorecard(rows, now)` → strict timestamp eligibility → outcomes.
+- **Regression:** `tests/test_news_monitor.py::test_scorecard_rejects_naive_timestamps_and_decision_clock` verifies naive alert/observation timestamps are excluded, valid alert remains pending, and naive `now` is rejected.
+- **Commits:** code `56c8ef2b41b6bf4d8dad677e1d878cd749740a3d`; test `44f162c19827054714c93ce37bfd7f89c17fa88f`.
+- **CI:** pending after these commits; no new result claimed yet.
+- **Deployment:** PR #79 branch only; no merge/deploy. Render build-pipeline minutes remain exhausted.
+- **Empirical limits:** no historical replay, cost/slippage model, or out-of-sample profitability evaluation. This is temporal data-integrity work only.
+- **Safety:** PAPER/DEMO ONLY; no broker, orders, secret-value inspection, or Telegram test messages.
+
+## 2026-10-27 — Research provenance: session 9 and early-October records
+
+- **Library source:** `Registro Studio IBKR - aggiornato 2026-10-20 sessione 9.md`, lines 473–483 and 520–525. The options presentation was consulted as slides only, not watched as a video; its visuals are illustrative and explicitly not a backtest. Options/positioning may be tested only as one feature against a baseline, when reliable data exist; preserve `event_time`, `available_at`, `decision_time`, and require `available_at <= decision_time`.
+- **Recovered early-October context (2026-10-03/06):** Sputnik's actual recorded research emphasized evidence quality, transaction/document normalization, deduplication, recency, disclosure lag, concentration and event correlation. The historical 0–100 score was a ranking concept, not 100 separate lessons.
+- **Catalog status:** no authentic numbered 100-rule list was found in the searched Library or prior-conversation retrieval. Do not repeat unverified component weights as if they were present in the source document.
+- **Current code path:** `telegram/news_monitor.py::_parse_datetime(require_timezone=True)` → `build_alert_scorecard()` now rejects naive alert/observation times and invalid naive decision clocks. CI on the code/test commit passed all five workflows; no empirical profitability claim.
+- **Safety/deployment:** PR #79 only, not live; Render build quota remains exhausted; PAPER/DEMO ONLY.
+
+## 2026-10-27 — Reject boolean values in scorecard prices and risk levels
+
+- **Finding:** Python converts `True` to `1.0`. The scorecard accepted boolean alert/reaction prices and boolean stop/TP1 levels, potentially turning a type error into a false price move or risk outcome.
+- **Change:** explicitly reject boolean alert prices, observed prices and stop/TP1 values in `build_alert_scorecard`; preserve the existing finite/positive checks and point-in-time observation cutoff.
+- **Files/path:** `telegram/news_monitor.py::build_alert_scorecard`; `tests/test_news_monitor.py`.
+- **Regression:** covers boolean alert price, boolean reaction price and boolean TP1; valid numeric observation remains scorable, invalid reaction remains pending, and boolean TP1 cannot trigger SL/TP outcome classification.
+- **Commits:** code `7ecd582c8383473ea6acdf583d6163d0304d6566`; test `bf44f0a4a8adb4b151a7d7844453553c6a6f521e`.
+- **CI:** PASS on code/test commit `bf44f0a4a8adb4b151a7d7844453553c6a6f521e`: NEWS alert `40468967173`; Execution Layer `40468967152`; general tests `40468967131`; PAPER `40468967155`; Public Event Brain `40468967142`. The following commit updates this log only.
+- **Deployment/empirical limits:** branch/PR #79 only; no merge/deploy, live replay or out-of-sample profitability test. Render build capacity remains constrained.
+- **Safety:** PAPER/DEMO ONLY; no broker/orders or Telegram test messages.
+
+## 2026-10-27 08:33 UTC (09:33 CET) — Exclude future-dated alerts from point-in-time scorecards
+
+- **Finding:** the scorecard rejected future price observations but still admitted an alert row with `sent_at > now` into its denominator and marked it pending. A historical evaluation could therefore count an alert that had not yet been sent at the decision time.
+- **Change:** `telegram/news_monitor.py::build_alert_scorecard()` now requires `cutoff <= sent_at <= now` before admitting an alert. Future alerts are excluded from alert, pending, coverage and outcome counts.
+- **Files:** `telegram/news_monitor.py`; `tests/test_news_monitor.py`.
+- **Regression:** `test_scorecard_excludes_alerts_sent_after_decision_time` uses an alert five minutes after the evaluation clock and verifies zero eligible alerts/outcomes.
+- **Commits:** code `49b2a76aa3d6f82f191e15ca2a2bd1c2fb2736d4`; tests `fbf5cc4fe18c7c6a418d6c7d07156dfc62644a28`.
+- **CI:** all five workflows PASS on the code/test head: [general tests](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40474540731), [NEWS alert](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40474540785), [Public Event Brain](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40474540826), [Execution Layer](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40474540782), [PAPER](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40474540755).
+- **Deployment:** PR #79 only, not merged. Render workspace was not selected in this run; no deploy was triggered and live commit was not re-verified. `DATABASE_URL` was not inspected; journal durability is not asserted.
+- **Empirical limit:** temporal eligibility fix only; no replay, cost/slippage model or out-of-sample profitability validation.
+- **Safety:** PAPER/DEMO ONLY; no broker, orders, secrets or Telegram test messages.
+
+
+## 2026-10-27 08:53 UTC — Require event and instrument identity in scorecard rows
+
+- **Finding:** `build_alert_scorecard()` compared event IDs and assets directly. If both an alert and reaction omitted an identity field, Python's `None == None` allowed an unrelated price move to match and score.
+- **Change:** `telegram/news_monitor.py` now excludes alert rows without a non-empty `event_id` and `asset`; reactions can match only an alert with explicit identity.
+- **Regression:** `tests/test_news_monitor.py::test_scorecard_requires_event_and_asset_identity_to_match_reactions` covers missing event IDs and missing instrument identities, with large price moves that must not enter the scorecard.
+- **CI:** new code/test commit triggers the five Gagarin PR workflows; final status is to be recorded after GitHub Actions completes.
+- **Deployment:** PR #79 branch only; no merge/deploy. Render build-pipeline minutes remain exhausted; journal durability is not asserted without a verified `DATABASE_URL`.
+- **Empirical limit:** scorecard matching integrity only; no replay, cost/slippage model, or out-of-sample profitability validation.
+- **Safety:** PAPER/DEMO ONLY; no broker, orders, secrets, or Telegram test messages.
+
+
+## 2026-10-27 09:07 UTC — Add explicit net-of-cost scorecard diagnostics
+
+- **Finding:** the scorecard reports directional returns but does not distinguish gross movement from the result after spread, fees, and slippage. The IBKR research notes explicitly require execution costs to be measured rather than ignored.
+- **Change:** `build_alert_scorecard()` now reports net-return diagnostics only when the alert record contains all three explicit round-trip inputs: `round_trip_spread_cost_bps`, `round_trip_fees_cost_bps`, and `round_trip_slippage_bps`. Inputs must be finite, non-negative, and non-boolean. Missing or invalid costs yield no net estimate; the code never silently assumes zero cost.
+- **Operational path:** PAPER alert row → later eligible price observation → gross directional return → explicit round-trip cost adjustment → net coverage/mean/profitable counts. These diagnostics do not change alert direction or authorize entries.
+- **Regression:** `tests/test_news_monitor.py` checks a +0.10% gross move less 6 bps explicit costs (= +0.04% net) and verifies boolean cost data is not treated as zero.
+- **CI:** all five code/test workflows passed on head `f54989a4029996eb7be91d2c33ca40b6920d7625` (NEWS alert 40478737821; PAPER 40478737898; general tests 40478737944; Public Event Brain 40478738008; Execution Layer 40478738009). The later research-log-only head `ea19c6ca94e6d6b5436771de3193c448aaaf5932` also passed all five workflows (40478771995, 40478771988, 40478771925, 40478771917, 40478773300).
+- **Deployment:** PR #79 branch only; no merge/deploy. Render workspace was not selected; current live commit not re-verified.
+- **Empirical limit:** this adds a reporting path only. It does not create costs when provider/broker data are absent and is not a walk-forward or profitability study.
+- **Safety:** PAPER/DEMO ONLY; no broker, orders, secrets, or Telegram test messages.
+
+
+## Verification — 2026-10-27 09:07 UTC (explicit net-of-cost scorecard diagnostics)
+
+- **Scorecard code commit:** `4e1edf85d061d30c3404f58c286502386e7fabee`
+- **Stable invalid-clock output schema commit:** `838695013594dbcb4e5f9c8e92855ec0c97e5708`
+- **Regression tests commit:** `2b84f3207745e90bb78435eb9cff6dbbff746160`
+- **Invalid-clock schema test commit:** `f54989a4029996eb7be91d2c33ca40b6920d7625`
+- **CI:** all five workflows passed on code/test head `f54989a4029996eb7be91d2c33ca40b6920d7625`: NEWS alert [40478737821](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40478737821), PAPER [40478737898](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40478737898), general tests [40478737944](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40478737944), Public Event Brain [40478738008](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40478738008), Execution Layer [40478738009](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40478738009). All five also passed on the subsequent research-log-only head `ea19c6ca94e6d6b5436771de3193c448aaaf5932` (runs 40478771995, 40478771988, 40478771925, 40478771917, 40478773300).
+- **Deployment:** PR #79 branch only; no merge/deploy. Render workspace not selected; live commit not verified. `DATABASE_URL` not checked; journal durability not asserted.
+- **Empirical limit:** net returns are reported only when explicit round-trip spread, fees and slippage are all present and valid; missing/invalid cost data yields no net estimate, never zero-cost assumption. No historical replay or walk-forward validation.
+
+
+## 2026-10-27 — Require reaction availability time in scorecard (point-in-time)
+
+- **Finding:** the scorecard checked a reaction's market observation timestamp against the evaluation clock, but did not separately record when that observation became available to the system. A delayed quote could have an old `observed_at` while being ingested only after the historical decision cutoff.
+- **Change:** `build_alert_scorecard()` now requires timezone-aware `available_at` for reaction rows, rejects `available_at > decision_time` and impossible `observed_at > available_at`, and does not fall back to journal `recorded_at`. New `NEWS_REACTION` journal rows record `available_at` alongside `observed_at`.
+- **Operational path:** quote observation → journal (`observed_at`, `available_at`) → scorecard decision clock → eligible reaction → outcome.
+- **Regression:** `tests/test_news_monitor.py` now supplies explicit availability timestamps in existing fixtures and tests late availability, missing availability, and impossible timestamp ordering.
+- **CI:** pending for the updated code/test commits; record workflow results after GitHub Actions completes.
+- **Deployment:** PR #79 branch only; no merge/deploy. Render build-pipeline quota remains exhausted; live commit not verified.
+- **Persistence limit:** older journal rows without `available_at` will be excluded from scorecard outcomes; this is intentional rather than inferring availability from persistence time. Journal durability is not claimed without confirming `DATABASE_URL`.
+- **Empirical limit:** point-in-time data-integrity change only; no historical replay or walk-forward profitability test.
+- **Safety:** PAPER/DEMO ONLY; no secrets, broker, orders, or Telegram test messages.
+
+
+## Final CI verification — reaction available_at guard (2026-10-27 09:50 UTC)
+
+- **Code commit:** `9a6d65164da316061dcafae23075b19ae10992da`; **regression tests:** `e4dc96b709421caf0b86ed76dc645479ce5c5df5`; **research log:** `eb2a2cf5f588a4146c24aa6b711d710d47783f4a`.
+- The first code-only NEWS alert run failed because the fixtures had not yet been updated with the new required availability field. After adding explicit availability timestamps and regression cases, all five workflows passed on final PR head `eb2a2cf5f588a4146c24aa6b711d710d47783f4a`: NEWS alert [40483851895](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40483851895), PAPER [40483851899](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40483851899), Public Event Brain [40483851947](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40483851947), general tests [40483851975](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40483851975), and Execution Layer [40483852046](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40483852046).
+- **Deployment/persistence:** PR #79 only; no merge/deploy. Render workspace unavailable in this runtime; no current live-commit claim. Older journal rows without `available_at` are intentionally unscored; durable persistence is not asserted without verified `DATABASE_URL`.
+- **Empirical limit:** point-in-time eligibility only; no historical replay or walk-forward performance result.
+
+
+## 2026-10-27 — Exclude pre-delivery/equal-time reactions from outcomes
+
+- **Finding:** the polling pass can journal a `NEWS_REACTION` before the Telegram send is recorded, with the same cycle timestamp as `sent_at`. If the price crossed SL in that row, the scorecard could count a pre-delivery move as a post-alert stop.
+- **Change:** a reaction is eligible for post-alert outcomes only when its timezone-aware `available_at` is strictly later than `sent_at`, in addition to `observed_at <= available_at <= decision_time`.
+- **Regression:** `test_scorecard_does_not_use_pre_delivery_reaction_for_stop_outcome` ensures an equal-time stop touch is ignored while a later valid observation remains scoreable.
+- **CI:** all five workflows PASS on final code/test/log head `c481726e6945a6c13bebe1018bc8a7ded9a2ec6c`: NEWS alert [40484377283](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40484377283), Public Event Brain [40484377162](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40484377162), PAPER [40484377235](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40484377235), general tests [40484377314](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40484377314), Execution Layer [40484377234](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40484377234).
+- **Deployment:** PR #79 only, no merge/deploy; Render live commit unavailable in this runtime.
+- **Empirical limit:** prevents an ordering ambiguity in the scorecard; no historical replay or walk-forward profitability validation.
+
+
+## 2026-10-27 — Timestamp the actual price-analysis availability and Telegram delivery
+
+- **Finding:** the polling clock was captured before source fetch and price analysis, yet reused as `available_at` and `sent_at`. In live operation this can understate when the quote/alert actually became available and blur the ordering of a pre-delivery reaction versus Telegram delivery.
+- **Change:** `poll_news_once()` now rejects a naive injected clock. For live operation it stamps `analysis_available_at` after `run_analysis()` returns; it stamps `sent_at` and the four-hour expiry after Telegram delivery succeeds. `NEWS_ALERT_SENT` records `event_time` (publisher timestamp), `available_at` (first-seen time), `decision_time` (price-analysis completion), and `sent_at` (delivery completion). Reaction rows mark `observation_time_basis=MONITOR_SNAPSHOT` because a provider-native bar timestamp is not currently available in this path.
+- **Regression:** the monitor test checks the four timestamps and adds a naive-clock fail-closed test; the scorecard tests separately exclude reactions whose availability is at/before delivery.
+- **CI:** all five workflows PASS on final code/test/log head `2071ed46642b639bb2dc0d6286b3ae21e32d3c07`: NEWS alert [40484626245](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40484626245), Public Event Brain [40484626220](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40484626220), PAPER [40484626530](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40484626530), general tests [40484626334](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40484626334), Execution Layer [40484626156](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40484626156).
+- **Deployment/persistence:** PR #79 only, no merge/deploy. Render workspace not available; journal durability is not asserted without a verified `DATABASE_URL`.
+- **Empirical limit:** timestamp/order integrity only; no historical replay or walk-forward profitability test.
+
+
+## 2026-10-27 — Require explicit timezone on news publication timestamps
+
+- **Finding:** \`_parse_datetime()\` supports a permissive default that assigns UTC to naive timestamps. The RSS parser, GDELT parser, and poll intake used that default, allowing ambiguous publication wall-times to pass point-in-time freshness checks.
+- **Change:** \`telegram/news_monitor.py\` now calls \`_parse_datetime(..., require_timezone=True)\` at RSS ingestion, GDELT ingestion, and \`poll_news_once()\`. Explicit-offset timestamps are still normalized to UTC; naive or malformed publication times are skipped.
+- **Regression:** \`tests/test_news_monitor.py\` adds RSS, GDELT, and polling tests for timezone-less publication timestamps.
+- **CI:** all five workflows PASS on code/test commit `e318c146509d4a9cfcd35b4675fede6d637bfb7b`: Execution Layer `40491701197`, PAPER `40491701154`, general tests `40491701259`, NEWS alert `40491701234`, Public Event Brain `40491701224`. The later research-log-only commit `f00d5f9da64bca3bca54d19bed7f745809a26329` contains no executable changes.
+- **Deployment/persistence:** PR #79 branch only; no merge/deploy. Render workspace is not selected in this runtime; no live commit or journal durability claim.
+- **Empirical limit:** strict timestamp hygiene only. Non-compliant feeds may yield fewer alerts until their timestamps are fixed; no live-feed replay or walk-forward performance validation.
+- **Safety:** PAPER/DEMO ONLY; no broker, orders, secrets, or Telegram test messages.
+
+
+### 2026-10-27 — Reject overflow in derived scorecard returns
+- **Finding:** individually finite positive prices can still overflow when converted into a percentage return (for example, 1e308 divided by 1e-308). Such a value could contaminate accuracy and mean-return metrics.
+- **Files:** `telegram/news_monitor.py`; `tests/test_news_monitor.py`.
+- **Change:** validate the derived percentage move before adding a price observation to the scorecard; overflow, zero-division and non-finite derived returns are excluded.
+- **Regression:** `test_scorecard_rejects_finite_prices_whose_derived_return_overflows`; expects the alert to remain pending rather than producing an infinite score.
+- **Commits:** code `3aaf33d11adf2de8fb3b6e79cb0cc398bb788ae8`; tests `4a907517c52a7b0888a73ec4fb93f699eb011c2b`.
+- **CI:** all five PR workflows PASS on test commit `4a907517c52a7b0888a73ec4fb93f699eb011c2b`: NEWS alert, Public Event Brain, PAPER, Execution Layer and general tests.
+- **Deployment/persistence:** PR #79 branch only; no merge/deploy. Render workspace was not selected; live commit and current `DATABASE_URL` cannot be verified, so journal durability is not claimed.
+- **Empirical limit:** numeric scorecard integrity only. No historical replay, cost-calibrated backtest or walk-forward performance claim.
+- **Safety:** PAPER/DEMO ONLY; no broker, orders, secrets or Telegram test messages.
+
+
+## 2026-10-27 13:00 UTC — Deduplicate exact duplicate alert journal rows
+- **Finding:** `build_alert_scorecard()` counted every valid `NEWS_ALERT_SENT` row independently. An exact duplicate journal row could inflate the denominator, scored count and apparent directional accuracy.
+- **Change:** `telegram/news_monitor.py` now suppresses exact duplicate alert identities within the seven-day evaluation window using event ID, asset, direction, sent timestamp, price and SL/TP values. Separate sends at different times remain distinct. The report exposes `duplicate_alerts_dropped`; invalid decision-clock reports return zero for that diagnostic.
+- **Regression:** `tests/test_news_monitor.py::test_scorecard_deduplicates_exact_duplicate_alert_rows` verifies that two identical alert rows plus one valid later reaction yield one alert, one scored outcome and one dropped duplicate.
+- **Operational path:** event journal → identity/time/price validation → exact-row deduplication → point-in-time reaction matching → outcome scorecard.
+- **CI:** all five workflows passed on code/test commit `caa6b34196459b3d9a73e4eacb2cc084b9bceb9d`: NEWS alert [40508914577](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40508914577), Public Event Brain [40508914730](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40508914730), PAPER [40508914590](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40508914590), Execution Layer [40508914412](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40508914412), general tests [40508914388](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40508914388). The later research-log-only commit `75b75f6d884e889d744e46fa2b135f3bed573245` records these results; it contains no executable changes.
+- **Deployment/persistence:** PR #79 branch only; no merge/deploy. Render workspace and live `DATABASE_URL` remain unverified; journal durability is not claimed.
+- **Empirical limits:** deduplication improves scorecard accounting only. It does not validate predictive edge or profitability; no historical replay/walk-forward test is claimed.
+- **Safety:** PAPER/DEMO ONLY; no broker, orders, secrets or Telegram test messages.
+
+
+## 2026-10-27 13:10 UTC — Keep WATCH/WAIT rows out of aggressive paper portfolios
+- **Finding:** the scheduled PAPER Monitor run `40502048512` returned `signals: []` and an XAU/USD row with `action=PAPER_WATCH`, `reason=TRIGGER_NOT_CONFIRMED`, while the response's aggressive portfolio contained a newly opened LONG at the same timestamp. Inspection of `cloud_api.py` showed the aggressive loops overwrote every candidate action with `PAPER_SIGNAL` before calling `PaperPortfolio.open_signal()`, bypassing the Risk Governor action.
+- **Change:** added `_is_authorized_paper_candidate()` and applied it to both commodity and Forex aggressive loops. A candidate must already have `PAPER_ENTRY` or `PAPER_SIGNAL` from the normal decision path before the aggressive portfolio can size/open it; `PAPER_WATCH` and `WAIT` are not promoted.
+- **Regression:** new `tests/test_cloud_api_candidate_gate.py` covers WATCH, WAIT, missing action, and the two authorized actions.
+- **Operational path:** market analysis → Risk Governor action → authorized candidate gate → paper portfolio geometry/risk checks → simulated position.
+- **CI:** all five workflows passed on code/test commit `caa6b34196459b3d9a73e4eacb2cc084b9bceb9d`: NEWS alert [40508914577](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40508914577), Public Event Brain [40508914730](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40508914730), PAPER [40508914590](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40508914590), Execution Layer [40508914412](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40508914412), general tests [40508914388](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40508914388). The later research-log-only commit `75b75f6d884e889d744e46fa2b135f3bed573245` records these results; it contains no executable changes.
+- **Deployment/persistence:** PR #79 branch only; no merge/deploy. Render workspace is not selected; live commit and `DATABASE_URL` remain unverified, so durable-journal status is not claimed.
+- **Empirical limit:** this prevents unauthorized simulated entries in the identified path; it does not establish trading edge. No replay/walk-forward performance test.
+- **Safety:** PAPER/DEMO ONLY; no broker, real orders, secrets or Telegram test messages.
+
+
+## R&D update — 2026-10-27: preserve distinct target geometry in scorecard identity
+- **Finding:** scorecard duplicate identity included entry price, stop and TP1, but omitted TP2/TP3. Two alerts for the same event/time with different later target levels could be collapsed as a duplicate despite having different exit plans.
+- **Change:** `telegram/news_monitor.py::build_alert_scorecard` now includes TP2 and TP3 in the exact-alert deduplication key.
+- **Regression:** `tests/test_news_monitor.py::test_scorecard_keeps_alerts_with_distinct_tp2_tp3_geometry` asserts two otherwise-identical alerts with different TP2/TP3 remain two records and are both evaluated; exact duplicates continue to be suppressed.
+- **Commits:** code `db4513323015cd778874c9e99a2cbff256813600`; test `f6640d9114d8ae0e41bcdf6275a800e29a959a21`.
+- **CI:** five PR-triggered workflows passed on the test commit: PAPER [40514122735](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40514122735), Public Event Brain [40514122667](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40514122667), Execution Layer [40514122805](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40514122805), NEWS alert [40514122769](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40514122769), general tests [40514122737](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40514122737).
+- **Operational path:** journal alert → exact identity (event/asset/direction/time/entry/SL/TP1/TP2/TP3) → deduplication → point-in-time reaction join → outcome scorecard.
+- **Empirical limit:** scorecard accounting only; no live replay or walk-forward/out-of-sample predictive validation. PR branch only; no merge/deploy. Render live commit and database persistence remain unverified.
+- **Safety:** PAPER/DEMO ONLY; no broker, real orders, secrets, or Telegram test messages.
+
+
+## Historical-source recovery status — 2026-10-27
+- Retrieved and inspected the Library file `Registro Studio IBKR - aggiornato 2026-10-20 sessione 9.md` (535 lines). Its documented priorities include point-in-time `event_time`/`available_at`/`decision_time`, and testing any options/positioning feature against a baseline rather than treating it as directional proof. The options webinar's presentation was consulted; the video was not recorded as watched.
+- Library search did **not** recover an authentic numbered 100-rule catalog. Searches for the exact phrases `catalogo dei 100 punti`, `100 regole`, `ORB_RETEST_TIMING_GATE`, and the named Feedback Engine record did not locate a source document that could substantiate a complete catalog. Do not invent or reconstruct missing rules from memory.
+- Search did surface historical code snapshots such as `commodity_bot_v3.9.py` and `commodity_bot_v4.0.py` containing descriptive MAE/MFE and adaptive SL/TP logic. These are code snapshots, not proof of a complete research catalog, current production behavior, or empirical profitability.
+- This recovery is a source audit only. Any lesson still requires an operational code path, regression test, CI result, deployment confirmation, and out-of-sample evidence before it can be called implemented/validated.

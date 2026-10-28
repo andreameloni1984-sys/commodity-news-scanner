@@ -62,21 +62,98 @@ def _journal(record: dict[str, Any]) -> None:
     except OSError as exc:
         print(f"NEWS journal save failed | {type(exc).__name__}: {exc}", flush=True)
 
+def _explicit_round_trip_cost_pct(alert: dict[str, Any]) -> float | None:
+    """Return explicit round-trip trading costs in percent, or None if incomplete.
+
+    Cost fields are supplied in basis points of notional; no cost is assumed
+    when spread, fees, or slippage data are missing or invalid.
+    """
+    fields = (
+        "round_trip_spread_cost_bps",
+        "round_trip_fees_cost_bps",
+        "round_trip_slippage_bps",
+    )
+    costs = []
+    for field in fields:
+        raw = alert.get(field)
+        if raw is None or isinstance(raw, bool):
+            return None
+        try:
+            value = float(raw)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if not math.isfinite(value) or value < 0:
+            return None
+        costs.append(value)
+    total_bps = sum(costs)
+    # Individually finite values can still overflow when aggregated (e.g. 1e308 + 1e308).
+    # Such an aggregate is not a usable cost estimate and must not enter net-return scoring.
+    if not math.isfinite(total_bps):
+        return None
+    cost_pct = total_bps / 100.0
+    return cost_pct if math.isfinite(cost_pct) else None
+
+
 def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = None) -> dict[str, Any]:
     """Score alert direction using a later live price observation, not a keyword label."""
-    now = now or _utc_now()
+    now = _utc_now() if now is None else now
+    if not isinstance(now, datetime) or now.tzinfo is None or now.utcoffset() is None:
+        # A scorecard without an explicit decision-time offset is not safe to
+        # evaluate; return an empty, explicitly invalid report instead of
+        # silently treating a local wall clock as UTC.
+        return {"window_days": 7, "alerts": 0, "scored": 0, "pending": 0,
+                "unscored_expired": 0, "coverage_pct": None, "correct": 0,
+                "incorrect": 0, "accuracy_pct": None,
+                "mean_directional_return_pct": None,
+                "net_scored": 0, "net_profitable": 0,
+                "net_cost_coverage_pct": None, "mean_net_return_pct": None,
+                "tp1_observed": 0, "sl_observed": 0, "open_at_last_check": 0,
+                "duplicate_alerts_dropped": 0, "ambiguous_reaction_timestamps_dropped": 0, "decision_time_valid": False}
     cutoff = now - timedelta(days=7)
     alerts = []
+    seen_alerts = set()
+    duplicate_alerts_dropped = 0
+    ambiguous_reaction_timestamps_dropped = 0
     for row in rows:
         if row.get("kind") != "NEWS_ALERT_SENT":
             continue
-        sent_at = _parse_datetime(row.get("sent_at") or row.get("recorded_at"))
+        # Without a stable event ID and instrument identity, a reaction row with
+        # the same missing fields could match via None == None and score an unrelated move.
+        if not str(row.get("event_id") or "").strip() or not str(row.get("asset") or "").strip():
+            continue
+        # recorded_at is journal persistence time, not proof of when Telegram sent the alert.
+        sent_at = _parse_datetime(row.get("sent_at"), require_timezone=True)
+        raw_alert_price = row.get("price")
+        # bool is a subclass of int in Python; True must not become a price of 1.0.
+        if isinstance(raw_alert_price, bool):
+            continue
         try:
-            price = float(row.get("price"))
-        except (TypeError, ValueError):
+            price = float(raw_alert_price)
+        except (TypeError, ValueError, OverflowError):
             continue
         direction = str(row.get("direction") or "").upper()
-        if sent_at and sent_at >= cutoff and math.isfinite(price) and price > 0 and direction in {"LONG", "SHORT"}:
+        # Reactions are joined by event and instrument. Never allow missing
+        # identities to match each other through Python's None == None.
+        event_id = row.get("event_id")
+        asset = row.get("asset")
+        if not isinstance(event_id, str) or not event_id.strip():
+            continue
+        if not isinstance(asset, str) or not asset.strip():
+            continue
+        # Future-dated alert rows must not enter the denominator or be
+        # counted as pending in a historical scorecard.
+        if sent_at and cutoff <= sent_at <= now and math.isfinite(price) and price > 0 and direction in {"LONG", "SHORT"}:
+            # Exact duplicate journal rows must not inflate alert counts or accuracy.
+            # Distinct sends at different times remain separate observations.
+            alert_key = (
+                event_id, asset, direction, sent_at.isoformat(), price,
+                str(row.get("stop")), str(row.get("tp1")),
+                str(row.get("tp2")), str(row.get("tp3")),
+            )
+            if alert_key in seen_alerts:
+                duplicate_alerts_dropped += 1
+                continue
+            seen_alerts.add(alert_key)
             alerts.append((row, sent_at, price, direction))
     scored, pending, unscored_expired = [], 0, 0
     for alert, sent_at, alert_price, direction in alerts:
@@ -84,15 +161,48 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         for row in rows:
             if row.get("kind") != "NEWS_REACTION" or row.get("event_id") != alert.get("event_id") or row.get("asset") != alert.get("asset"):
                 continue
-            observed_at = _parse_datetime(row.get("observed_at") or row.get("recorded_at"))
-            if not observed_at or not (sent_at <= observed_at <= sent_at + timedelta(hours=4)):
+            # recorded_at is ingestion time; only an explicit market observation time is scoreable.
+            observed_at = _parse_datetime(row.get("observed_at"), require_timezone=True)
+            available_at = _parse_datetime(row.get("available_at"), require_timezone=True)
+            # The market timestamp and the time this system could use the quote
+            # are distinct. A price observed in the past but ingested after the
+            # evaluation cutoff is still look-ahead for this scorecard.
+            if (not observed_at or not available_at
+                    or observed_at > available_at or available_at <= sent_at or available_at > now
+                    or not (sent_at <= observed_at <= sent_at + timedelta(hours=4))):
+                continue
+            raw_observed_price = row.get("current_price")
+            if isinstance(raw_observed_price, bool):
                 continue
             try:
-                price = float(row.get("current_price"))
-            except (TypeError, ValueError):
+                price = float(raw_observed_price)
+            except (TypeError, ValueError, OverflowError):
                 continue
             if math.isfinite(price) and price > 0:
-                reaction_observations.append((observed_at, price))
+                # Finite positive prices can still overflow when converted to a
+                # percentage move (e.g. 1e308 / 1e-308). Do not let an invalid
+                # derived return contaminate accuracy or mean-return metrics.
+                try:
+                    candidate_return_pct = (price / alert_price - 1) * 100
+                except (OverflowError, ZeroDivisionError):
+                    continue
+                if math.isfinite(candidate_return_pct):
+                    reaction_observations.append((observed_at, price))
+        # A timestamp can arrive more than once in the journal. Collapse exact
+        # duplicates, but exclude a timestamp entirely if different prices claim
+        # to represent the same observation instant; row order is not market truth.
+        prices_by_time: dict[datetime, set[float]] = {}
+        for observed_time, observed_price in reaction_observations:
+            prices_by_time.setdefault(observed_time, set()).add(observed_price)
+        ambiguous_times = {observed_time for observed_time, prices in prices_by_time.items() if len(prices) > 1}
+        ambiguous_reaction_timestamps_dropped += len(ambiguous_times)
+        reaction_observations = [
+            (observed_time, next(iter(prices)))
+            for observed_time, prices in prices_by_time.items()
+            if len(prices) == 1
+        ]
+        reaction_observations.sort(key=lambda item: item[0])
+
         # Directional accuracy uses a minimum 15-minute horizon to avoid
         # treating immediate noise as a forecast result. TP/SL, however,
         # must include every post-delivery observation, including the first 15m.
@@ -109,11 +219,15 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
         observed_at, current_price = observations[-1]
         raw_pct = (current_price / alert_price - 1) * 100
         signed_pct = raw_pct if direction == "LONG" else -raw_pct
-        try:
-            stop = float(alert.get("stop"))
-            tp1 = float(alert.get("tp1"))
-        except (TypeError, ValueError):
+        raw_stop, raw_tp1 = alert.get("stop"), alert.get("tp1")
+        if isinstance(raw_stop, bool) or isinstance(raw_tp1, bool):
             stop, tp1 = None, None
+        else:
+            try:
+                stop = float(raw_stop)
+                tp1 = float(raw_tp1)
+            except (TypeError, ValueError, OverflowError):
+                stop, tp1 = None, None
         outcome = "OPEN_AT_LAST_CHECK"
         levels_valid = (
             stop is not None and tp1 is not None
@@ -130,20 +244,32 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
                 if (direction == "LONG" and observed_price >= tp1) or (direction == "SHORT" and observed_price <= tp1):
                     outcome = "TP1_OBSERVED"
                     break
+        cost_pct = _explicit_round_trip_cost_pct(alert)
+        net_return_pct = round(signed_pct - cost_pct, 6) if cost_pct is not None else None
         scored.append({"asset": alert.get("asset"), "direction": direction, "sent_at": sent_at.isoformat(),
                        "observed_at": observed_at.isoformat(), "signed_return_pct": round(signed_pct, 6),
+                       "net_return_pct": net_return_pct,
                        "correct": signed_pct > 0, "outcome": outcome})
     correct = sum(x["correct"] for x in scored)
     tp1_observed = sum(x["outcome"] == "TP1_OBSERVED" for x in scored)
     sl_observed = sum(x["outcome"] == "SL_OBSERVED" for x in scored)
     open_count = sum(x["outcome"] == "OPEN_AT_LAST_CHECK" for x in scored)
+    net_scored = [x for x in scored if x["net_return_pct"] is not None]
+    net_profitable = sum(x["net_return_pct"] > 0 for x in net_scored)
     return {"window_days": 7, "alerts": len(alerts), "scored": len(scored), "pending": pending,
             "unscored_expired": unscored_expired,
             "coverage_pct": round(len(scored)/len(alerts)*100, 2) if alerts else None,
             "correct": correct, "incorrect": len(scored)-correct,
             "accuracy_pct": round(correct/len(scored)*100, 2) if scored else None,
             "mean_directional_return_pct": round(sum(x["signed_return_pct"] for x in scored)/len(scored), 4) if scored else None,
-            "tp1_observed": tp1_observed, "sl_observed": sl_observed, "open_at_last_check": open_count}
+            "net_scored": len(net_scored),
+            "net_profitable": net_profitable,
+            "net_cost_coverage_pct": round(len(net_scored)/len(scored)*100, 2) if scored else None,
+            "mean_net_return_pct": round(sum(x["net_return_pct"] for x in net_scored)/len(net_scored), 4) if net_scored else None,
+            "tp1_observed": tp1_observed, "sl_observed": sl_observed, "open_at_last_check": open_count,
+            "duplicate_alerts_dropped": duplicate_alerts_dropped,
+            "ambiguous_reaction_timestamps_dropped": ambiguous_reaction_timestamps_dropped,
+            "decision_time_valid": True}
 
 
 def _maybe_send_daily_scorecard(state: dict[str, Any], send_telegram: Callable[[str], bool], now: datetime) -> bool:
@@ -285,7 +411,7 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _parse_datetime(value: Any) -> datetime | None:
+def _parse_datetime(value: Any, require_timezone: bool = False) -> datetime | None:
     if not value:
         return None
     text = str(value).strip()
@@ -293,14 +419,18 @@ def _parse_datetime(value: Any) -> datetime | None:
         if re.fullmatch(r"\d{8}T\d{6}Z", text):
             return datetime.strptime(text, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
         dt = email.utils.parsedate_to_datetime(text)
-        if dt.tzinfo is None:
+        if dt.tzinfo is None or dt.utcoffset() is None:
+            if require_timezone:
+                return None
             dt = dt.replace(tzinfo=timezone.utc)
         return dt.astimezone(timezone.utc)
     except (TypeError, ValueError, OverflowError):
         pass
     try:
         dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
-        if dt.tzinfo is None:
+        if dt.tzinfo is None or dt.utcoffset() is None:
+            if require_timezone:
+                return None
             dt = dt.replace(tzinfo=timezone.utc)
         return dt.astimezone(timezone.utc)
     except (TypeError, ValueError, OverflowError):
@@ -448,7 +578,7 @@ def _get_rss_items(source: str, url: str) -> list[dict[str, Any]]:
         title = fields.get("title", "")
         link = fields.get("link", "")
         published = fields.get("pubdate") or fields.get("published") or fields.get("updated") or fields.get("date")
-        parsed = _parse_datetime(published)
+        parsed = _parse_datetime(published, require_timezone=True)
         if title and link and parsed:
             items.append({"source": source, "title": title, "url": link, "published_at": parsed.isoformat()})
     return items
@@ -483,7 +613,7 @@ def _get_gdelt_items() -> list[dict[str, Any]]:
             continue
         title = str(row.get("title") or "").strip()
         url = str(row.get("url") or "").strip()
-        published = _parse_datetime(row.get("seendate") or row.get("datetime"))
+        published = _parse_datetime(row.get("seendate") or row.get("datetime"), require_timezone=True)
         if title and url and published:
             items.append({
                 "source": str(row.get("domain") or "GDELT"),
@@ -815,7 +945,12 @@ def poll_news_once(
     now: datetime | None = None,
 ) -> dict[str, int]:
     """One polling pass; immediate analysis on new news, then 5-minute rechecks."""
-    now = (now or _utc_now()).astimezone(timezone.utc)
+    clock_is_injected = now is not None
+    if now is None:
+        now = _utc_now()
+    elif now.tzinfo is None or now.utcoffset() is None:
+        raise ValueError("poll_news_once requires a timezone-aware clock")
+    now = now.astimezone(timezone.utc)
     state = _load_state()
     seen = set(state.get("seen", []))
     clusters = set(state.get("clusters", []))
@@ -827,7 +962,7 @@ def poll_news_once(
     bootstrap_cutoff = now - timedelta(minutes=3)
 
     for item in fetched:
-        published = _parse_datetime(item.get("published_at"))
+        published = _parse_datetime(item.get("published_at"), require_timezone=True)
         if published is None or published < fresh_cutoff or published > now + timedelta(minutes=2):
             continue
         fp = _fingerprint(item)
@@ -890,6 +1025,9 @@ def poll_news_once(
         try:
             raw_results = run_analysis()
             states = list(raw_results or [])
+            # In live operation, stamp availability after analysis has returned
+            # the price snapshot. An injected clock remains deterministic for tests.
+            analysis_available_at = now if clock_is_injected else _utc_now()
             state["last_analysis_at"] = now.timestamp()
             still_pending = []
             for event in pending:
@@ -899,7 +1037,7 @@ def poll_news_once(
                     baseline = _capture_baseline(event, states)
                     if baseline:
                         event["baseline_prices"] = baseline
-                        event["baseline_at"] = now.isoformat()
+                        event["baseline_at"] = analysis_available_at.isoformat()
                         _journal({
                             "kind": "NEWS_BASELINE",
                             "event_id": event.get("event_id"),
@@ -936,7 +1074,9 @@ def poll_news_once(
                             "asset": asset,
                             "impact": classified.get("impact", {}).get(asset, "MISTA"),
                             "baseline_at": event.get("baseline_at"),
-                            "observed_at": now.isoformat(),
+                            "observed_at": analysis_available_at.isoformat(),
+                            "available_at": analysis_available_at.isoformat(),
+                            "observation_time_basis": "MONITOR_SNAPSHOT",
                             "baseline_price": baseline_price,
                             "current_price": current_price,
                             "move_pct": round(move_pct, 6),
@@ -980,14 +1120,18 @@ def poll_news_once(
                         sent += 1
                         delivered = True
                         event["alert_sent"] = True
-                        event["alert_sent_at"] = now.isoformat()
-                        # Measure the full four-hour reaction window from delivery,
-                        # not from the original headline detection.
-                        event["expires_at"] = (now + timedelta(seconds=PENDING_TTL_SECONDS)).isoformat()
+                        delivery_time = now if clock_is_injected else _utc_now()
+                        event["alert_sent_at"] = delivery_time.isoformat()
+                        # Measure the full four-hour reaction window from actual
+                        # successful delivery, not from poll start or headline detection.
+                        event["expires_at"] = (delivery_time + timedelta(seconds=PENDING_TTL_SECONDS)).isoformat()
                         _journal({
                             "kind": "NEWS_ALERT_SENT",
                             "event_id": event.get("event_id"),
                             "title": event.get("title"),
+                            "event_time": event.get("published_at"),
+                            "available_at": event.get("first_seen_at"),
+                            "decision_time": analysis_available_at.isoformat(),
                             "asset": setup.get("asset"),
                             "impact": setup.get("impact"),
                             "direction": setup.get("direction"),
@@ -997,7 +1141,7 @@ def poll_news_once(
                             "entry": setup.get("entry"),
                             "stop": setup.get("stop"),
                             "tp1": setup.get("tp1"),
-                            "sent_at": now.isoformat(),
+                            "sent_at": delivery_time.isoformat(),
                         })
                         break
                 # Keep sent alerts under observation for four hours, without resending them.

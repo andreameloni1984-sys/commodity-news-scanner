@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 from telegram.news_monitor import classify_event, _confirmed_setups  # selected commodity universe is authoritative
@@ -65,6 +66,8 @@ def test_new_news_triggers_immediate_analysis_then_waits_for_price_confirmation(
     from datetime import datetime, timedelta, timezone
 
     monkeypatch.setattr(monitor, "STATE_PATH", tmp_path / "news_state.json")
+    journal_rows = []
+    monkeypatch.setattr(monitor, "_journal", lambda row: journal_rows.append(dict(row)))
     now = datetime(2026, 10, 18, 14, 0, tzinfo=timezone.utc)
     item = {
         "source": "Test RSS",
@@ -122,6 +125,11 @@ def test_new_news_triggers_immediate_analysis_then_waits_for_price_confirmation(
     sent_event = next(event for event in saved["pending"] if event.get("alert_sent"))
     assert sent_event["alert_sent_at"] == (now + timedelta(minutes=5)).isoformat()
     assert sent_event["expires_at"] == (now + timedelta(minutes=5, hours=4)).isoformat()
+    sent_record = next(row for row in journal_rows if row.get("kind") == "NEWS_ALERT_SENT")
+    assert sent_record["event_time"] == item["published_at"]
+    assert sent_record["available_at"] == now.isoformat()
+    assert sent_record["decision_time"] == (now + timedelta(minutes=5)).isoformat()
+    assert sent_record["sent_at"] == (now + timedelta(minutes=5)).isoformat()
 
 
 
@@ -201,6 +209,30 @@ def test_sputnik_tariff_pause_does_not_match_escalation_pattern():
     assert [item["id"] for item in matches] == ["tariff_pause_2025_04"]
 
 
+def test_scorecard_requires_explicit_sent_and_observed_times_not_recorded_at():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 27, 8, 0, tzinfo=timezone.utc)
+    rows = [
+        # A journal timestamp cannot substitute for the actual alert delivery time.
+        {"kind": "NEWS_ALERT_SENT", "event_id": "missing-sent", "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "recorded_at": sent.isoformat()},
+        # Nor can a journal timestamp substitute for when the market price was observed.
+        {"kind": "NEWS_ALERT_SENT", "event_id": "missing-observation", "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "missing-observation", "asset": "WTI",
+         "current_price": 90.0, "recorded_at": (sent + timedelta(minutes=20)).isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
+
+    assert report["alerts"] == 1
+    assert report["scored"] == 0
+    assert report["pending"] == 1
+    assert report["unscored_expired"] == 0
+
+
 def test_alert_scorecard_scores_only_prices_observed_after_alert():
     from datetime import datetime, timedelta, timezone
     from telegram.news_monitor import build_alert_scorecard
@@ -210,13 +242,13 @@ def test_alert_scorecard_scores_only_prices_observed_after_alert():
         {"kind": "NEWS_ALERT_SENT", "event_id": "evt-1", "asset": "WTI", "direction": "LONG",
          "price": 80.0, "sent_at": sent.isoformat()},
         {"kind": "NEWS_REACTION", "event_id": "evt-1", "asset": "WTI",
-         "current_price": 80.2, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+         "current_price": 80.2, "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
         {"kind": "NEWS_ALERT_SENT", "event_id": "evt-2", "asset": "Oro", "direction": "SHORT",
          "price": 4000.0, "sent_at": sent.isoformat()},
         {"kind": "NEWS_REACTION", "event_id": "evt-2", "asset": "Oro",
-         "current_price": 4010.0, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+         "current_price": 4010.0, "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
         {"kind": "NEWS_REACTION", "event_id": "evt-2", "asset": "Oro",
-         "current_price": 3990.0, "observed_at": (sent + timedelta(minutes=5)).isoformat()},
+         "current_price": 3990.0, "observed_at": (sent + timedelta(minutes=5)).isoformat(), "available_at": (sent + timedelta(minutes=5)).isoformat()},
     ]
     report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
     assert report["alerts"] == 2
@@ -241,6 +273,27 @@ def test_alert_scorecard_marks_alert_pending_without_later_observation():
     assert report["pending"] == 1
 
 
+def test_alert_scorecard_excludes_observation_after_evaluation_time():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 27, 4, 0, tzinfo=timezone.utc)
+    decision_time = sent + timedelta(minutes=10)
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "future-observation", "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "future-observation", "asset": "WTI",
+         "current_price": 81.0, "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=decision_time)
+
+    assert report["alerts"] == 1
+    assert report["scored"] == 0
+    assert report["pending"] == 1
+    assert report["unscored_expired"] == 0
+
+
 def test_alert_scorecard_tracks_observed_tp1_and_stop_loss():
     from datetime import datetime, timedelta, timezone
     from telegram.news_monitor import build_alert_scorecard
@@ -250,11 +303,11 @@ def test_alert_scorecard_tracks_observed_tp1_and_stop_loss():
         {"kind": "NEWS_ALERT_SENT", "event_id": "tp", "asset": "WTI", "direction": "LONG",
          "price": 80.0, "stop": 79.0, "tp1": 81.0, "sent_at": sent.isoformat()},
         {"kind": "NEWS_REACTION", "event_id": "tp", "asset": "WTI",
-         "current_price": 81.1, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+         "current_price": 81.1, "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
         {"kind": "NEWS_ALERT_SENT", "event_id": "sl", "asset": "Oro", "direction": "SHORT",
          "price": 4000.0, "stop": 4050.0, "tp1": 3900.0, "sent_at": sent.isoformat()},
         {"kind": "NEWS_REACTION", "event_id": "sl", "asset": "Oro",
-         "current_price": 4060.0, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+         "current_price": 4060.0, "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
     ]
     report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
     assert report["tp1_observed"] == 1
@@ -279,9 +332,9 @@ def test_alert_scorecard_does_not_miss_stop_hit_in_first_15_minutes():
         {"kind": "NEWS_ALERT_SENT", "event_id": "early-sl", "asset": "WTI", "direction": "LONG",
          "price": 80.0, "stop": 79.0, "tp1": 81.0, "sent_at": sent.isoformat()},
         {"kind": "NEWS_REACTION", "event_id": "early-sl", "asset": "WTI",
-         "current_price": 78.9, "observed_at": (sent + timedelta(minutes=5)).isoformat()},
+         "current_price": 78.9, "observed_at": (sent + timedelta(minutes=5)).isoformat(), "available_at": (sent + timedelta(minutes=5)).isoformat()},
         {"kind": "NEWS_REACTION", "event_id": "early-sl", "asset": "WTI",
-         "current_price": 80.1, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+         "current_price": 80.1, "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
     ]
     report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
     assert report["scored"] == 1
@@ -494,9 +547,9 @@ def test_alert_scorecard_rejects_non_finite_prices_and_invalid_levels():
         {"kind": "NEWS_ALERT_SENT", "event_id": "bad-levels", "asset": "WTI", "direction": "LONG",
          "price": 80.0, "stop": float("nan"), "tp1": 82.0, "sent_at": sent.isoformat()},
         {"kind": "NEWS_REACTION", "event_id": "bad-levels", "asset": "WTI",
-         "current_price": float("inf"), "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+         "current_price": float("inf"), "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
         {"kind": "NEWS_REACTION", "event_id": "bad-levels", "asset": "WTI",
-         "current_price": 80.2, "observed_at": (sent + timedelta(minutes=25)).isoformat()},
+         "current_price": 80.2, "observed_at": (sent + timedelta(minutes=25)).isoformat(), "available_at": (sent + timedelta(minutes=25)).isoformat()},
     ]
     report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
     assert report["alerts"] == 1
@@ -505,3 +558,432 @@ def test_alert_scorecard_rejects_non_finite_prices_and_invalid_levels():
     assert report["tp1_observed"] == 0
     assert report["sl_observed"] == 0
     assert report["open_at_last_check"] == 1
+
+
+def test_scorecard_rejects_naive_timestamps_and_decision_clock():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 27, 4, 0, tzinfo=timezone.utc)
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "naive-sent", "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "sent_at": "2026-10-27T04:00:00"},
+        {"kind": "NEWS_ALERT_SENT", "event_id": "naive-observation", "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "naive-observation", "asset": "WTI",
+         "current_price": 81.0, "observed_at": "2026-10-27T04:20:00", "available_at": "2026-10-27T04:20:00"},
+    ]
+
+    report = build_alert_scorecard(rows, now=sent + timedelta(minutes=30))
+    assert report["alerts"] == 1
+    assert report["scored"] == 0
+    assert report["pending"] == 1
+    assert report["decision_time_valid"] is True
+
+    invalid_clock = build_alert_scorecard(rows, now=datetime(2026, 10, 27, 4, 30))
+    assert invalid_clock["scored"] == 0
+    assert invalid_clock["decision_time_valid"] is False
+    assert invalid_clock["net_scored"] == 0
+    assert invalid_clock["net_cost_coverage_pct"] is None
+    assert invalid_clock["mean_net_return_pct"] is None
+
+
+def test_alert_scorecard_rejects_boolean_alert_reaction_and_risk_prices():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 27, 7, 0, tzinfo=timezone.utc)
+    rows = [
+        # A boolean alert price must not be converted to numeric 1.0.
+        {"kind": "NEWS_ALERT_SENT", "event_id": "bool-alert", "asset": "WTI",
+         "direction": "LONG", "price": True, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "bool-alert", "asset": "WTI",
+         "current_price": 80.2, "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
+        # A boolean reaction price must not become a false crash to 1.0.
+        {"kind": "NEWS_ALERT_SENT", "event_id": "bool-reaction", "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "stop": 78.0, "tp1": 82.0,
+         "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "bool-reaction", "asset": "WTI",
+         "current_price": True, "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
+        # Boolean risk levels must not be treated as real numeric stop/target.
+        {"kind": "NEWS_ALERT_SENT", "event_id": "bool-levels", "asset": "Brent",
+         "direction": "SHORT", "price": 80.0, "stop": 90.0, "tp1": True,
+         "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "bool-levels", "asset": "Brent",
+         "current_price": 79.0, "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=sent + timedelta(minutes=30))
+
+    assert report["alerts"] == 2
+    assert report["scored"] == 1
+    assert report["pending"] == 1
+    assert report["tp1_observed"] == 0
+    assert report["sl_observed"] == 0
+
+def test_scorecard_excludes_alerts_sent_after_decision_time():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    now = datetime(2026, 10, 27, 9, 30, tzinfo=timezone.utc)
+    sent = now + timedelta(minutes=5)
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "future-alert", "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "future-alert", "asset": "WTI",
+         "current_price": 82.0, "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=now)
+
+    assert report["decision_time_valid"] is True
+    assert report["alerts"] == 0
+    assert report["scored"] == 0
+    assert report["pending"] == 0
+    assert report["unscored_expired"] == 0
+
+def test_scorecard_requires_event_and_asset_identity_to_match_reactions():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 27, 8, 0, tzinfo=timezone.utc)
+    rows = [
+        # Missing event_id must not match a reaction whose event_id is also absent.
+        {"kind": "NEWS_ALERT_SENT", "asset": "WTI", "direction": "LONG",
+         "price": 80.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "asset": "WTI", "current_price": 82.0,
+         "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
+        # Missing asset must not match another reaction whose asset is also absent.
+        {"kind": "NEWS_ALERT_SENT", "event_id": "missing-asset", "direction": "LONG",
+         "price": 80.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "missing-asset", "current_price": 82.0,
+         "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=sent + timedelta(minutes=30))
+
+    assert report["decision_time_valid"] is True
+    assert report["alerts"] == 0
+    assert report["scored"] == 0
+    assert report["pending"] == 0
+    assert report["coverage_pct"] is None
+
+def test_scorecard_reports_net_return_only_with_explicit_round_trip_costs():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 27, 8, 0, tzinfo=timezone.utc)
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "costed", "asset": "WTI", "direction": "LONG",
+         "price": 100.0, "sent_at": sent.isoformat(),
+         "round_trip_spread_cost_bps": 2.0, "round_trip_fees_cost_bps": 1.0,
+         "round_trip_slippage_bps": 3.0},
+        {"kind": "NEWS_REACTION", "event_id": "costed", "asset": "WTI",
+         "current_price": 100.10, "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
+        {"kind": "NEWS_ALERT_SENT", "event_id": "missing-costs", "asset": "Brent", "direction": "LONG",
+         "price": 100.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "missing-costs", "asset": "Brent",
+         "current_price": 100.10, "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
+
+    assert report["scored"] == 2
+    assert report["net_scored"] == 1
+    assert report["net_profitable"] == 1
+    assert report["net_cost_coverage_pct"] == 50.0
+    assert report["mean_net_return_pct"] == 0.04
+
+
+def test_scorecard_does_not_assume_invalid_costs_are_zero():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 27, 8, 0, tzinfo=timezone.utc)
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "bad-costs", "asset": "WTI", "direction": "LONG",
+         "price": 100.0, "sent_at": sent.isoformat(),
+         "round_trip_spread_cost_bps": True, "round_trip_fees_cost_bps": 0.0,
+         "round_trip_slippage_bps": 0.0},
+        {"kind": "NEWS_REACTION", "event_id": "bad-costs", "asset": "WTI",
+         "current_price": 100.10, "observed_at": (sent + timedelta(minutes=20)).isoformat(), "available_at": (sent + timedelta(minutes=20)).isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
+
+    assert report["scored"] == 1
+    assert report["net_scored"] == 0
+    assert report["mean_net_return_pct"] is None
+    assert report["net_cost_coverage_pct"] == 0.0
+
+
+
+def test_scorecard_requires_observation_availability_before_decision_time():
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime.fromisoformat("2026-10-27T04:00:00+00:00")
+    now = datetime.fromisoformat("2026-10-27T04:30:00+00:00")
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "late-available", "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "late-available", "asset": "WTI",
+         "current_price": 82.0, "observed_at": (sent + timedelta(minutes=20)).isoformat(),
+         "available_at": (sent + timedelta(minutes=40)).isoformat()},
+        {"kind": "NEWS_ALERT_SENT", "event_id": "missing-available", "asset": "Brent",
+         "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "missing-available", "asset": "Brent",
+         "current_price": 82.0, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+        {"kind": "NEWS_ALERT_SENT", "event_id": "impossible-order", "asset": "Gold",
+         "direction": "LONG", "price": 4000.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "impossible-order", "asset": "Gold",
+         "current_price": 4010.0, "observed_at": (sent + timedelta(minutes=20)).isoformat(),
+         "available_at": (sent + timedelta(minutes=10)).isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=now)
+    assert report["alerts"] == 3
+    assert report["scored"] == 0
+    assert report["pending"] == 3
+    assert report["coverage_pct"] == 0.0
+
+
+def test_scorecard_does_not_use_pre_delivery_reaction_for_stop_outcome():
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime.fromisoformat("2026-10-27T04:00:00+00:00")
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "post-delivery", "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "stop": 79.0, "tp1": 82.0,
+         "sent_at": sent.isoformat()},
+        # The monitor can log a reaction in the same polling pass before the
+        # Telegram send completes. Equal availability/sent timestamps are
+        # ambiguous and must not be counted as a post-delivery stop.
+        {"kind": "NEWS_REACTION", "event_id": "post-delivery", "asset": "WTI",
+         "current_price": 78.9, "observed_at": sent.isoformat(),
+         "available_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "post-delivery", "asset": "WTI",
+         "current_price": 80.1, "observed_at": (sent + timedelta(minutes=20)).isoformat(),
+         "available_at": (sent + timedelta(minutes=20)).isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=sent + timedelta(minutes=30))
+    assert report["scored"] == 1
+    assert report["sl_observed"] == 0
+    assert report["open_at_last_check"] == 1
+    assert report["correct"] == 1
+
+
+def test_poll_news_once_rejects_naive_decision_clock():
+    import telegram.news_monitor as monitor
+
+    try:
+        monitor.poll_news_once(lambda message: True, lambda: [], fetcher=lambda: [],
+                               now=datetime(2026, 10, 27, 4, 0))
+    except ValueError as exc:
+        assert "timezone-aware" in str(exc)
+    else:
+        raise AssertionError("naive polling clock must fail closed")
+
+
+
+def test_rss_ingestion_rejects_naive_pubdate(monkeypatch):
+    import telegram.news_monitor as monitor
+
+    xml = b"""<rss><channel><item><title>OPEC announces production cut</title><link>https://example.test/opec-cut</link><pubDate>Tue, 27 Oct 2026 11:00:00</pubDate></item></channel></rss>"""
+
+    class Response:
+        content = xml
+
+        def raise_for_status(self):
+            return None
+
+    monkeypatch.setattr(monitor.requests, "get", lambda *args, **kwargs: Response())
+    assert monitor._get_rss_items("Test RSS", "https://example.test/feed") == []
+
+
+def test_gdelt_ingestion_rejects_naive_publication_datetime(monkeypatch):
+    import telegram.news_monitor as monitor
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"articles": [{
+                "title": "OPEC announces production cut",
+                "url": "https://example.test/opec-cut",
+                "datetime": "2026-10-27T11:00:00",
+                "domain": "example.test",
+            }]}
+
+    monkeypatch.setattr(monitor.requests, "get", lambda *args, **kwargs: Response())
+    assert monitor._get_gdelt_items() == []
+
+
+def test_poll_news_once_rejects_naive_published_at(tmp_path, monkeypatch):
+    from datetime import datetime, timezone
+    import telegram.news_monitor as monitor
+
+    monkeypatch.setattr(monitor, "STATE_PATH", tmp_path / "news_state.json")
+    now = datetime(2026, 10, 27, 11, 0, tzinfo=timezone.utc)
+    item = {
+        "source": "Test RSS",
+        "title": "OPEC announces production cut",
+        "url": "https://example.test/opec-cut",
+        "published_at": "2026-10-27T10:59:00",
+    }
+    analyzed, messages = [], []
+
+    report = monitor.poll_news_once(
+        lambda message: messages.append(message) or True,
+        lambda: analyzed.append(True),
+        fetcher=lambda: [item],
+        now=now,
+    )
+
+    assert report["analysis"] == 0
+    assert report["alerts"] == 0
+    assert analyzed == []
+    assert messages == []
+
+
+
+def test_scorecard_rejects_alerts_without_event_or_asset_identity():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 27, 8, 0, tzinfo=timezone.utc)
+    observed = sent + timedelta(minutes=20)
+    available = observed + timedelta(seconds=1)
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": None, "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": None, "asset": "WTI",
+         "current_price": 90.0, "observed_at": observed.isoformat(),
+         "available_at": available.isoformat()},
+        {"kind": "NEWS_ALERT_SENT", "event_id": "evt-missing-asset", "asset": None,
+         "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "evt-missing-asset", "asset": None,
+         "current_price": 90.0, "observed_at": observed.isoformat(),
+         "available_at": available.isoformat()},
+    ]
+
+    result = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
+    assert result["alerts"] == 0
+    assert result["scored"] == 0
+    assert result["pending"] == 0
+    assert result["correct"] == 0
+
+def test_scorecard_drops_conflicting_prices_at_same_observation_time():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 27, 8, 0, tzinfo=timezone.utc)
+    observed = sent + timedelta(minutes=20)
+    available = observed + timedelta(seconds=1)
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "ambiguous-snapshot", "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat(),
+         "stop": 79.0, "tp1": 82.0},
+        {"kind": "NEWS_REACTION", "event_id": "ambiguous-snapshot", "asset": "WTI",
+         "current_price": 83.0, "observed_at": observed.isoformat(),
+         "available_at": available.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "ambiguous-snapshot", "asset": "WTI",
+         "current_price": 78.0, "observed_at": observed.isoformat(),
+         "available_at": available.isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=sent + timedelta(minutes=30))
+
+    assert report["alerts"] == 1
+    assert report["scored"] == 0
+    assert report["pending"] == 1
+    assert report["tp1_observed"] == 0
+    assert report["sl_observed"] == 0
+    assert report["ambiguous_reaction_timestamps_dropped"] == 1
+
+
+def test_scorecard_keeps_alerts_with_distinct_tp2_tp3_geometry():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 27, 8, 0, tzinfo=timezone.utc)
+    observed = sent + timedelta(minutes=30)
+    base_alert = {
+        "kind": "NEWS_ALERT_SENT", "event_id": "evt-distinct-targets", "asset": "WTI",
+        "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat(),
+        "stop": 79.0, "tp1": 82.0, "tp2": 83.0, "tp3": 84.0,
+    }
+    second_alert = dict(base_alert, tp2=84.0, tp3=86.0)
+    reaction = {
+        "kind": "NEWS_REACTION", "event_id": "evt-distinct-targets", "asset": "WTI",
+        "current_price": 81.0, "observed_at": observed.isoformat(),
+        "available_at": (observed + timedelta(seconds=1)).isoformat(),
+    }
+
+    report = build_alert_scorecard(
+        [base_alert, second_alert, reaction], now=sent + timedelta(minutes=40)
+    )
+
+    assert report["alerts"] == 2
+    assert report["duplicate_alerts_dropped"] == 0
+    assert report["scored"] == 2
+
+
+def test_scorecard_deduplicates_exact_duplicate_alert_rows():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 27, 8, 0, tzinfo=timezone.utc)
+    observed = sent + timedelta(minutes=20)
+    alert = {
+        "kind": "NEWS_ALERT_SENT", "event_id": "evt-duplicate", "asset": "WTI",
+        "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat(),
+        "stop": 79.0, "tp1": 82.0,
+    }
+    reaction = {
+        "kind": "NEWS_REACTION", "event_id": "evt-duplicate", "asset": "WTI",
+        "current_price": 81.0, "observed_at": observed.isoformat(),
+        "available_at": (observed + timedelta(seconds=1)).isoformat(),
+    }
+
+    report = build_alert_scorecard([alert, dict(alert), reaction], now=sent + timedelta(minutes=30))
+
+    assert report["alerts"] == 1
+    assert report["scored"] == 1
+    assert report["correct"] == 1
+    assert report["duplicate_alerts_dropped"] == 1
+
+
+
+def test_round_trip_cost_rejects_overflowing_aggregate():
+    from telegram.news_monitor import _explicit_round_trip_cost_pct
+
+    alert = {
+        "round_trip_spread_cost_bps": 1e308,
+        "round_trip_fees_cost_bps": 1e308,
+        "round_trip_slippage_bps": 1e308,
+    }
+    assert _explicit_round_trip_cost_pct(alert) is None
+
+
+def test_scorecard_rejects_finite_prices_whose_derived_return_overflows():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 27, 4, 0, tzinfo=timezone.utc)
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "overflow-return", "asset": "WTI",
+         "direction": "LONG", "price": 1e-308, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "overflow-return", "asset": "WTI",
+         "current_price": 1e308,
+         "observed_at": (sent + timedelta(minutes=20)).isoformat(),
+         "available_at": (sent + timedelta(minutes=20)).isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=sent + timedelta(minutes=30))
+
+    assert report["alerts"] == 1
+    assert report["scored"] == 0
+    assert report["pending"] == 1
+    assert report["mean_directional_return_pct"] is None
