@@ -63,6 +63,23 @@ def test_target_outcome_and_r_metrics_are_recorded(tmp_path):
     assert summary["win_rate_pct"] == 100.0
 
 
+def test_single_bar_crossing_all_targets_scores_first_target_conservatively(tmp_path):
+    path = tmp_path / "feedback.csv"
+    append_signal(state([{"timestamp": 1000, "high": 101, "low": 99}]), path=path)
+    s1 = state([
+        {"timestamp": 1000, "high": 101, "low": 99},
+        # This bar spans TP1, TP2 and TP3; OHLC cannot justify booking TP3.
+        {"timestamp": 2000, "high": 106, "low": 99.5},
+    ])
+
+    assert update_open_outcomes([s1], path=path) == 1
+    row = load_feedback(path)[0]
+    assert row["outcome"] == "TP1"
+    assert float(row["r_multiple"]) == 1.5
+    # MFE remains a separate excursion metric.
+    assert float(row["mfe_r"]) == 3.0
+
+
 def test_same_bar_stop_and_target_is_scored_as_stop(tmp_path):
     path = tmp_path / "feedback.csv"
     append_signal(state([{"timestamp": 1000, "high": 101, "low": 99}]), path=path)
