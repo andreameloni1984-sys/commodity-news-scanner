@@ -41,6 +41,45 @@ FIELDS = [
 ]
 
 
+def _journal_path_for_current_schema(path: Path) -> Path:
+    """Avoid appending rows under a header from an incompatible journal schema.
+
+    Preserve the legacy file as-is and route the current schema to a sibling
+    versioned file. Never rewrite or silently reinterpret historical rows.
+    """
+    if not path.exists():
+        return path
+
+    try:
+        with path.open("r", newline="", encoding="utf-8") as handle:
+            existing_header = next(csv.reader(handle), None)
+    except OSError as exc:
+        raise RuntimeError(f"Cannot inspect paper journal header: {path}") from exc
+
+    if existing_header == FIELDS:
+        return path
+
+    versioned_path = path.with_name(f"{path.stem}_v2{path.suffix}")
+    if versioned_path.exists():
+        try:
+            with versioned_path.open("r", newline="", encoding="utf-8") as handle:
+                versioned_header = next(csv.reader(handle), None)
+        except OSError as exc:
+            raise RuntimeError(f"Cannot inspect versioned paper journal header: {versioned_path}") from exc
+        if versioned_header != FIELDS:
+            raise RuntimeError(
+                f"Paper journal schema mismatch in both {path} and {versioned_path}; "
+                "refusing to append rows with ambiguous columns."
+            )
+    else:
+        print(
+            f"PAPER journal schema mismatch in {path}; preserving legacy file and "
+            f"writing current schema to {versioned_path}.",
+            flush=True,
+        )
+    return versioned_path
+
+
 def record_entries(results):
     """
     Registra gli ENTRY prodotti dalla singola analisi Gagarin.
@@ -66,13 +105,14 @@ def record_entries(results):
     if not entries:
         return 0
 
-    file_exists = JOURNAL_FILE.exists()
+    journal_path = _journal_path_for_current_schema(JOURNAL_FILE)
+    file_exists = journal_path.exists()
 
     timestamp = datetime.now(
         timezone.utc
     ).isoformat()
 
-    with JOURNAL_FILE.open(
+    with journal_path.open(
         "a",
         newline="",
         encoding="utf-8",
