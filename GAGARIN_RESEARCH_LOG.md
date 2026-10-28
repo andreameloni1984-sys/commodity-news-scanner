@@ -45,3 +45,22 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+
+## 2026-10-28 — Prevent paper-entry journal column corruption
+
+- **Observed evidence:** the tracked `paper_trade_log.csv` uses the legacy 13-column header (`action/allocation/status/pnl/note)); current `paper_trade_journal.py` writes an incompatible 18-column schema (`probability/quality/confidence/tp3/RR/data status`). Before this fix, the writer appended current-schema values to an existing file without checking its header, so downstream CSV readers could assign values to the wrong columns.
+- **Implemented on branch `fix/gagarin-paper-journal-schema-guard-20261028`:** inspect the existing header before writing. If it matches, append normally. If it is the legacy schema, preserve it unchanged and write the current schema to `paper_trade_log_v2.csv`. If both files have incompatible headers, fail closed rather than corrupting either file.
+- **Regression tests:** verify legacy history remains byte-for-byte unchanged, new rows use the current v2 header, and an incompatible v2 file raises a clear error.
+- **Outcome-data limitation:** the tracked paper log contains one WTI LONG entry from 2026-10-08 marked OPEN with no P&L/outcome; the prediction log's newest record is 2026-09-15 and records are still PENDING. These files cannot establish win rate or predictive edge.
+- **Validation status:** changes committed to a draft PR; CI must finish before considering the fix verified. No local execution or production deployment is claimed.
+- **Safety:** PAPER/DEMO only; no broker orders or Telegram test messages.
+
+
+## 2026-10-28 — Live Render log audit: alerts and durable persistence
+
+- **NEWS monitor observation:** nine consecutive Gagarin NEWS poll records between 2026-10-28T05:41:13Z and 2026-10-28T05:49:01Z each reported `new_relevant=0 | pending=0 | analysis=NO | alerts=0` (150–162 items fetched). This is a one-hour-ish observation window, not a claim about every Gagarin alert channel or the entire history.
+- **Persistence finding:** `gagarin-cloud` emitted `GAGARIN PERSISTENCE DISABLED | DATABASE_URL missing` on eight observed startups between 2026-10-27T06:09:41Z and 2026-10-28T02:57:18Z. Render lists a database named `gagarin-paper-db` as available, but its IP allowlist is empty and the read-only query was blocked; no table contents were inspected.
+- **Consequence:** live durable event-journal coverage cannot be established from the app logs, and the paper outcomes cannot be scored reliably from this run. The CSV schema guard remains useful but does not fix the missing database connection.
+- **Next dependency:** securely configure the service's `DATABASE_URL` for the existing database and make read access available through an approved connection path; then verify journal writes and query the outcome records. No environment variables, IP allowlists, database contents, or production settings were changed in this run.
+- **Safety:** log/database inspection was read-only; no merge, deployment, Telegram test message, or order.
