@@ -745,14 +745,39 @@ def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str
 
 def _format_news_alert(event: dict[str, Any], setup: dict[str, Any]) -> str:
     published = event.get("published_at") or "timestamp non disponibile"
+    title = str(event.get("title", "") or "")
+    intelligence = classify_public_intelligence(title)
+    brief = intelligence.get("market_impact") or {}
+    scenario_lines = []
+    for scenario in (brief.get("scenarios") or [])[:2]:
+        instruments = ", ".join(scenario.get("instruments") or []) or "strumenti da verificare"
+        base = str(scenario.get("base_case", "") or "")[:260]
+        alternative = str(scenario.get("alternative", "") or "")[:220]
+        confirm = ", ".join(scenario.get("confirm_with") or [])[:180]
+        invalidation = ", ".join(scenario.get("invalidate_if") or [])[:180]
+        scenario_lines.append(
+            f"• {scenario.get('theme', 'SCENARIO')} [{instruments}]\n"
+            f"  Caso base: {base}\n"
+            f"  Alternativa: {alternative}\n"
+            f"  Conferme: {confirm}\n"
+            f"  Invalidazione: {invalidation}"
+        )
+    market_brief = (
+        "\n\n🧭 SCENARI DI MERCATO (ipotesi condizionali)\n"
+        + "\n".join(scenario_lines)
+        + "\nLivelli numerici: solo da quotazioni aggiornate; nessun ordine autorizzato."
+        if scenario_lines else
+        "\n\n🧭 Impatto macro non classificato: notizia da verificare, nessuna direzione dedotta."
+    )
     return (
         "🛰 GAGARIN — NEWS → IMPATTO → SETUP → CONFERMA\n"
         "🧪 PAPER/DEMO — NESSUN ORDINE\n\n"
-        f"NEWS: {event.get('title', '')}\n"
+        f"NEWS: {title}\n"
         f"Fonte: {event.get('source', 'N/D')}\n"
         f"Pubblicazione UTC: {published}\n"
         f"Rilevata UTC: {event.get('first_seen_at', 'N/D')}\n"
-        f"Link: {event.get('url', '')}\n\n"
+        f"Link: {event.get('url', '')}"
+        + market_brief + "\n\n"
         f"Strumento: {setup['asset']}\n"
         f"Impatto ipotizzato: {setup['impact']}\n"
         f"Reazione dal rilevamento: {float(setup.get('move_pct', 0.0)):+.3f}%\n"
