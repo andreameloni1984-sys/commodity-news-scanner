@@ -45,3 +45,13 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+## 2026-10-28 — Narrow Gagarin to a focused 8-instrument commodity universe
+
+- **Selection:** metals are limited to Gold (XAU/USD), Silver (XAG/USD) and Copper (COPPER/USD). Other active instruments are WTI, Brent, Wheat, Corn and Soybeans. Platinum, Palladium, Gasoline, Natural Gas, Rice, Sugar, Cocoa, Coffee and FX pairs are removed from the active universe.
+- **Evidence:** the recovered IBKR session-9 record prioritizes instrument/data availability, point-in-time validation, liquidity/costs and explicit futures expiry/rollover. The 2026-09-25 historical note recorded stale Yahoo-backed Coffee/Cocoa/Rice/Sugar feeds; this is a reason to avoid making them core instruments until fresh data is demonstrated, not proof that they are always unavailable. Prior project preference also emphasized metals, cereals and oil.
+- **Operational path:** `commodities/universe.py` → `enabled_commodities()` → `main.py` / Telegram analysis → `engine/data.py` provider chain → news classifier and embedded intelligence → `soyuz_gagarin/config.py::allowed_assets` risk/governor allowlist.
+- **Provider routing:** add explicit Yahoo futures fallbacks for Copper (`HG=F`), Wheat (`ZW=F`), Corn (`ZC=F`) and Soybeans (`ZS=F`); Twelve Data agriculture catalog fallback is constrained by crop terms. Stooq aliases are added for the three grain futures as a mapping only; no live availability is claimed.
+- **Regression coverage:** tests assert exact active universe, provider mapping and governor allowlist, Telegram aliases, crop-specific news classification and rejection of de-selected Coffee/Platinum-only headlines.
+- **Validation status:** code/tests are on this feature branch; no merge/deploy. CI must run on the branch before integration. No live provider availability, freshness, profitability, or out-of-sample performance is claimed.
+- **Safety:** PAPER/DEMO ONLY; no broker connection, order placement or Telegram test message. Render build-pipeline minutes remain exhausted; no Render build/deploy was triggered.
