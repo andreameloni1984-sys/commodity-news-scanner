@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
+from soyuz_gagarin.commodity_trade_plan import build_commodity_bracket
+
 
 def _num(value: Any, default: float = 0.0) -> float:
     try:
@@ -121,6 +123,33 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
         score -= conflicts * 5
         score = max(0.0, min(100.0, score))
 
+        # Build clearly marked *indicative* levels for the aggressive desk
+        # only when the source has no bracket at all. These levels are not an
+        # entry authorization; the governor still decides whether a paper
+        # entry is allowed. Never overwrite a partial or producer-supplied plan.
+        entry = getattr(state, "entry", None)
+        stop = getattr(state, "stop", None)
+        tp1 = getattr(state, "tp1", None)
+        tp2 = getattr(state, "tp2", None)
+        tp3 = getattr(state, "tp3", None)
+        rr3 = getattr(state, "rr3", None)
+        bracket_generated = False
+        bracket_basis = None
+        if all(value is None for value in (entry, stop, tp1, tp2, tp3)) and price > 0 and atr > 0:
+            bracket = build_commodity_bracket(
+                side=direction,
+                entry=price,
+                atr=atr,
+                highs=getattr(state, "highs", None),
+                lows=getattr(state, "lows", None),
+            )
+            if bracket.get("ok"):
+                entry, stop = bracket["entry"], bracket["stop"]
+                tp1, tp2, tp3 = bracket["tp1"], bracket["tp2"], bracket["tp3"]
+                rr3 = bracket["rr3"]
+                bracket_generated = True
+                bracket_basis = bracket["basis"]
+
         ranked.append({
             "commodity": name,
             "symbol": str(getattr(state, "symbol", "") or ""),
@@ -128,12 +157,14 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
             "score": round(score, 1),
             "expected_move_pct": round(expected_move, 3),
             "price": price,
-            "entry": getattr(state, "entry", None),
-            "stop": getattr(state, "stop", None),
-            "tp1": getattr(state, "tp1", None),
-            "tp2": getattr(state, "tp2", None),
-            "tp3": getattr(state, "tp3", None),
-            "rr3": getattr(state, "rr3", None),
+            "entry": entry,
+            "stop": stop,
+            "tp1": tp1,
+            "tp2": tp2,
+            "tp3": tp3,
+            "rr3": rr3,
+            "bracket_generated": bracket_generated,
+            "bracket_basis": bracket_basis,
             "probability_score": round(probability, 1),
             "quality": round(quality, 1),
             "confidence": round(confidence, 1),
