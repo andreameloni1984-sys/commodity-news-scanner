@@ -45,3 +45,12 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+
+## 2026-10-28 — Make degraded NEWS-source coverage visible beside zero-alert polls
+
+- **Live evidence:** Render logs from 2026-10-27 through 2026-10-28 show repeated GDELT HTTP 429 and read-timeout failures while poll summaries continued to report `new_relevant=0` and `alerts=0`. Source failures were logged separately, so a single poll summary did not state that source coverage was degraded.
+- **Implemented on branch `fix/gagarin-log-news-source-health-20261028-r3`:** append `source_health`, failed-source names, and active cooldown source names to the NEWS poll summary; return a numeric source-failure count for programmatic checks. This does not change filtering, event classification, alert eligibility, or trading decisions.
+- **Regression test:** a simulated poll with GDELT in failure/cooldown state reports degraded coverage even when no alert is generated.
+- **Evidence limits:** zero alerts in these logs is not proof of zero market opportunities, nor proof that all sources were healthy. No signal accuracy or profitability claim is made. Live Render/Postgres feedback persistence is still blocked by missing `DATABASE_URL` and the database's empty IP allowlist.
+- **Validation:** PR/CI pending. No merge, deployment, production configuration change, Telegram test message, or broker order.
