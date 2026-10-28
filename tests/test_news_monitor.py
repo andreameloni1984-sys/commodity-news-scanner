@@ -339,6 +339,26 @@ def test_news_monitor_prefers_durable_state_and_event_journal(tmp_path, monkeypa
 
 
 
+def test_news_monitor_warns_once_when_journal_uses_local_fallback(tmp_path, monkeypatch, capsys):
+    import json
+    import state_store
+    import telegram.news_monitor as monitor
+
+    local_journal = tmp_path / "local_journal.jsonl"
+    monkeypatch.setattr(monitor, "JOURNAL_PATH", local_journal)
+    monkeypatch.setattr(monitor, "_JOURNAL_FALLBACK_WARNED", False)
+    monkeypatch.setattr(state_store, "append_event_journal", lambda record: False)
+
+    monitor._journal({"kind": "FALLBACK_TEST_1"})
+    monitor._journal({"kind": "FALLBACK_TEST_2"})
+
+    output = capsys.readouterr().out
+    assert output.count("NEWS journal using local JSONL fallback") == 1
+    assert "durability depends on local storage persistence configuration" in output
+    rows = [json.loads(line) for line in local_journal.read_text(encoding="utf-8").splitlines()]
+    assert [row["kind"] for row in rows] == ["FALLBACK_TEST_1", "FALLBACK_TEST_2"]
+
+
 def test_forbidden_news_source_is_cooled_down_for_six_hours(monkeypatch):
     from types import SimpleNamespace
     import telegram.news_monitor as monitor
