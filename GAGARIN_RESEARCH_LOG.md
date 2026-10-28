@@ -57,3 +57,11 @@
 - **Files:** `engine/regime.py`, new `tests/test_regime_volatility_diagnostics.py`.
 - **CI:** PR-triggered workflow status to be recorded after the new head runs; no local repository test run was available in this cycle.
 - **Deployment / limits:** branch only; no merge/deploy, no Render workspace selected, no live Telegram log inspection, no secrets read, no broker connection or order. PAPER/DEMO ONLY.
+
+
+## 2026-10-28 — Update legacy volatility diagnostic expectation after CI
+
+- **Finding:** the first PR CI run correctly exposed an existing integration test that expected non-finite recent ranges to be skipped. That expectation conflicts with the new fail-closed diagnostic contract.
+- **Implemented:** updated `tests/test_pipeline.py::test_volatility_diagnostics_fail_closed_on_non_finite_recent_ranges` to require `UNKNOWN / INVALID_RECENT_RANGE` and the number of valid samples preceding the first malformed recent pair.
+- **CI:** initial `SOYUZ GAGARIN Tests` run 40635134910 failed only on the stale expectation (366 passed, 1 failed). Re-run status is pending after this correction.
+- **Limit:** the initial failure was not hidden; final validation depends on the new workflow run. No deployment or production claim.
