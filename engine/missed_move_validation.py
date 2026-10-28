@@ -1,7 +1,58 @@
 """PAPER-only missed-move diagnostics using future OHLC excursions."""
 from __future__ import annotations
 import math
+from datetime import datetime, timezone
 from engine.forecast_ensemble import forecast_ensemble
+
+
+def _timestamp_key(value):
+    """Return a comparable timestamp key, rejecting missing/ambiguous time values."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        number = float(value)
+        return ("numeric", number) if math.isfinite(number) else None
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            number = float(text)
+        except ValueError:
+            number = None
+        if number is not None:
+            return ("numeric", number) if math.isfinite(number) else None
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    else:
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None
+    return ("datetime", parsed.astimezone(timezone.utc).timestamp())
+
+
+def _timestamps_are_strictly_increasing(rows):
+    """Require every row to have a unique, ordered timestamp in one consistent format."""
+    previous = None
+    kind = None
+    for row in rows:
+        if not isinstance(row, dict) or "timestamp" not in row:
+            return False
+        key = _timestamp_key(row["timestamp"])
+        if key is None:
+            return False
+        current_kind, current_value = key
+        if kind is not None and current_kind != kind:
+            return False
+        if previous is not None and current_value <= previous:
+            return False
+        kind = current_kind
+        previous = current_value
+    return True
 
 
 def evaluate_missed_moves(candles, horizon=4, start=40, threshold_pct=0.5):
@@ -27,6 +78,11 @@ def evaluate_missed_moves(candles, horizon=4, start=40, threshold_pct=0.5):
         return result
     threshold_pct = max(0.0, threshold_pct)
     result["threshold_pct"] = threshold_pct
+    # This audit slices rows into past/future windows; sorting silently would hide
+    # source-order defects and can introduce look-ahead. Fail closed instead.
+    if rows and not _timestamps_are_strictly_increasing(rows):
+        result["status"] = "INVALID_TIMESTAMPS"
+        return result
     if len(rows) <= start + horizon:
         return result
 
