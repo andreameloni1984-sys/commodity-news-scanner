@@ -64,7 +64,12 @@ def save_state(key: str, value: Any) -> bool:
 
 
 def _ensure_event_journal_schema(cur) -> None:
-    global _EVENT_JOURNAL_SCHEMA_READY
+    """Create the journal schema inside the caller's transaction.
+
+    The process-wide ready flag is set only after the outer connection context
+    commits successfully; DDL is rolled back with a failed transaction and
+    must be retried on the next call.
+    """
     if _EVENT_JOURNAL_SCHEMA_READY:
         return
     cur.execute("""
@@ -78,14 +83,15 @@ def _ensure_event_journal_schema(cur) -> None:
         CREATE INDEX IF NOT EXISTS idx_gagarin_event_journal_recorded_at
         ON gagarin_event_journal(recorded_at)
     """)
-    _EVENT_JOURNAL_SCHEMA_READY = True
 
 
 def append_event_journal(record: dict[str, Any]) -> bool:
     """Append one audit event to durable PostgreSQL storage when configured."""
+    global _EVENT_JOURNAL_SCHEMA_READY
     conn = _connect()
     if conn is None:
         return False
+    schema_was_ready = _EVENT_JOURNAL_SCHEMA_READY
     try:
         encoded = json.dumps(record, ensure_ascii=False, allow_nan=False, default=str)
         with conn:
@@ -95,8 +101,11 @@ def append_event_journal(record: dict[str, Any]) -> bool:
                     "INSERT INTO gagarin_event_journal(record, recorded_at) VALUES (%s::jsonb, NOW())",
                     (encoded,),
                 )
+        _EVENT_JOURNAL_SCHEMA_READY = True
         return True
     except Exception as exc:
+        if not schema_was_ready:
+            _EVENT_JOURNAL_SCHEMA_READY = False
         print(f"EVENT journal database save failed | {type(exc).__name__}: {exc}", flush=True)
         return False
     finally:
@@ -105,9 +114,11 @@ def append_event_journal(record: dict[str, Any]) -> bool:
 
 def load_event_journal(limit: int = 20000) -> list[dict[str, Any]] | None:
     """Read the newest audit events; None means PostgreSQL is not usable."""
+    global _EVENT_JOURNAL_SCHEMA_READY
     conn = _connect()
     if conn is None:
         return None
+    schema_was_ready = _EVENT_JOURNAL_SCHEMA_READY
     try:
         with conn:
             with conn.cursor() as cur:
@@ -117,10 +128,13 @@ def load_event_journal(limit: int = 20000) -> list[dict[str, Any]] | None:
                     (max(1, min(int(limit), 100000)),),
                 )
                 rows = cur.fetchall()
+        _EVENT_JOURNAL_SCHEMA_READY = True
         records = [row[0] for row in rows if isinstance(row[0], dict)]
         records.reverse()
         return records
     except Exception as exc:
+        if not schema_was_ready:
+            _EVENT_JOURNAL_SCHEMA_READY = False
         print(f"EVENT journal database read failed | {type(exc).__name__}: {exc}", flush=True)
         return None
     finally:
