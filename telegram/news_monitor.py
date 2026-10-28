@@ -307,6 +307,30 @@ def _parse_datetime(value: Any) -> datetime | None:
         return None
 
 
+
+def _parse_aware_datetime(value: Any) -> datetime | None:
+    """Parse an explicit timezone-aware timestamp; never guess UTC for naive input."""
+    if not value:
+        return None
+    text = str(value).strip()
+    try:
+        if re.fullmatch(r"\d{8}T\d{6}Z", text):
+            return datetime.strptime(text, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+        parsed = email.utils.parsedate_to_datetime(text)
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            return None
+        return parsed.astimezone(timezone.utc)
+    except (TypeError, ValueError, OverflowError):
+        pass
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            return None
+        return parsed.astimezone(timezone.utc)
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
 def _catalyst_delivery_timing(published_at: Any, now: datetime) -> dict[str, Any]:
     """Revalidate source age at delivery; never treat unknown time as actionable."""
     published = _parse_datetime(published_at)
@@ -651,6 +675,40 @@ def _finite_positive(value: Any) -> float | None:
     return number if math.isfinite(number) and number > 0 else None
 
 
+def _baseline_point_in_time_valid(event: dict[str, Any], now: datetime) -> tuple[bool, str]:
+    """Fail closed unless event, availability, decision and price baseline are ordered."""
+    first_seen = _parse_aware_datetime(event.get("first_seen_at"))
+    event_time = _parse_aware_datetime(event.get("event_time") or event.get("published_at"))
+    available_at = _parse_aware_datetime(event.get("available_at") or event.get("first_seen_at"))
+    decision_time = _parse_aware_datetime(event.get("decision_time"))
+    baseline_at = _parse_aware_datetime(event.get("baseline_at"))
+    if any(value is None for value in (first_seen, event_time, available_at, decision_time, baseline_at)):
+        return False, "POINT_IN_TIME_TIMESTAMP_MISSING_OR_INVALID"
+    if now.tzinfo is None or now.utcoffset() is None:
+        return False, "DECISION_TIMEZONE_MISSING"
+    now_utc = now.astimezone(timezone.utc)
+    if decision_time > now_utc:
+        return False, "DECISION_TIME_FROM_FUTURE"
+    if available_at > decision_time:
+        return False, "AVAILABILITY_AFTER_DECISION"
+    if first_seen > decision_time:
+        return False, "DETECTION_AFTER_DECISION"
+    # Allow at most two minutes of publisher clock skew; larger event-time
+    # inversions are not available information and must not authorize an alert.
+    if (event_time - available_at).total_seconds() > 120:
+        return False, "EVENT_AFTER_AVAILABILITY"
+    if baseline_at < first_seen or baseline_at < available_at:
+        return False, "BASELINE_PRECEDES_DETECTION"
+    if baseline_at > decision_time or baseline_at > now_utc:
+        return False, "BASELINE_AFTER_DECISION"
+    prices = event.get("baseline_prices")
+    if not isinstance(prices, dict) or not prices:
+        return False, "BASELINE_PRICE_MISSING"
+    if any(_finite_positive(value) is None for value in prices.values()):
+        return False, "BASELINE_PRICE_INVALID"
+    return True, "BASELINE_POINT_IN_TIME_VALID"
+
+
 def _valid_signal_levels(
     direction: str, price: Any, entry: Any, stop: Any, tp1: Any, tp2: Any = None
 ) -> bool:
@@ -847,6 +905,8 @@ def poll_news_once(
             continue
         event = dict(item)
         event["event_id"] = fp
+        event["event_time"] = published.astimezone(timezone.utc).isoformat()
+        event["available_at"] = now.isoformat()
         event["impact"] = classified["impact"]
         event["assets"] = classified["assets"]
         event["first_seen_at"] = now.isoformat()
@@ -858,6 +918,8 @@ def poll_news_once(
             "source": event.get("source"),
             "url": event.get("url"),
             "published_at": event.get("published_at"),
+            "event_time": event.get("event_time"),
+            "available_at": event.get("available_at"),
             "first_seen_at": event.get("first_seen_at"),
             "assets": event.get("assets"),
             "impact": event.get("impact"),
@@ -893,6 +955,8 @@ def poll_news_once(
             state["last_analysis_at"] = now.timestamp()
             still_pending = []
             for event in pending:
+                # This is the actual decision timestamp for this analysis pass.
+                event["decision_time"] = now.isoformat()
                 # Capture a baseline at the first analysis after detection.
                 # Later checks require a measurable move aligned with the news bias.
                 if not event.get("baseline_prices"):
@@ -904,6 +968,9 @@ def poll_news_once(
                             "kind": "NEWS_BASELINE",
                             "event_id": event.get("event_id"),
                             "title": event.get("title"),
+                            "event_time": event.get("event_time") or event.get("published_at"),
+                            "available_at": event.get("available_at") or event.get("first_seen_at"),
+                            "decision_time": event.get("decision_time"),
                             "baseline_at": event.get("baseline_at"),
                             "baseline_prices": baseline,
                         })
@@ -916,6 +983,22 @@ def poll_news_once(
                         })
                     still_pending.append(event)
                     continue
+                if not event.get("alert_sent"):
+                    baseline_ok, baseline_reason = _baseline_point_in_time_valid(event, now)
+                    if not baseline_ok:
+                        _journal({
+                            "kind": "NEWS_ALERT_SUPPRESSED",
+                            "event_id": event.get("event_id"),
+                            "title": event.get("title"),
+                            "source": event.get("source"),
+                            "url": event.get("url"),
+                            "published_at": event.get("published_at"),
+                            "event_time": event.get("event_time") or event.get("published_at"),
+                            "available_at": event.get("available_at") or event.get("first_seen_at"),
+                            "decision_time": event.get("decision_time"),
+                            "reason": baseline_reason,
+                        })
+                        continue
                 matches = _confirmed_setups(event, states)
                 classified = classify_event(event.get("title", ""))
                 for asset in classified.get("assets", []):
@@ -988,6 +1071,9 @@ def poll_news_once(
                             "kind": "NEWS_ALERT_SENT",
                             "event_id": event.get("event_id"),
                             "title": event.get("title"),
+                            "event_time": event.get("event_time") or event.get("published_at"),
+                            "available_at": event.get("available_at") or event.get("first_seen_at"),
+                            "decision_time": event.get("decision_time"),
                             "asset": setup.get("asset"),
                             "impact": setup.get("impact"),
                             "direction": setup.get("direction"),
