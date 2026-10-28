@@ -9,18 +9,13 @@ from telegram.bot import _resolve_commodity
     [
         ("oro", "Oro"),
         ("argento", "Argento"),
-        ("platino", "Platino"),
-        ("palladio", "Palladio"),
+        ("rame", "Rame"),
+        ("copper", "Rame"),
         ("wti", "Petrolio WTI"),
         ("brent", "Petrolio Brent"),
-        ("riso", "Riso"),
-        ("zucchero", "Zucchero"),
-        ("cacao", "Cacao"),
-        ("caffe", "Caffè"),
-        ("caffè", "Caffè"),
     ],
 )
-def test_all_enabled_commodities_are_resolvable(alias, expected):
+def test_selected_enabled_commodities_are_resolvable(alias, expected):
     commodity = _resolve_commodity(alias)
     assert commodity is not None
     assert commodity.name == expected
@@ -32,8 +27,9 @@ def test_all_enabled_canonical_names_are_resolvable():
         assert _resolve_commodity(commodity.symbol) is commodity
 
 
-def test_unknown_commodity_is_not_resolved():
-    assert _resolve_commodity("grano") is None
+@pytest.mark.parametrize("alias", ["platino", "palladio", "riso", "zucchero", "cacao", "caffe", "grano"])
+def test_non_selected_or_unknown_commodity_is_not_resolved(alias):
+    assert _resolve_commodity(alias) is None
 
 
 def test_setup_formatter_distinguishes_pending_setup_from_no_setup():
@@ -41,7 +37,7 @@ def test_setup_formatter_distinguishes_pending_setup_from_no_setup():
     from telegram.bot import _format_setup
 
     pending = SimpleNamespace(
-        commodity="Zucchero",
+        commodity="Petrolio WTI",
         setup_direction="LONG",
         setup_quality=45.0,
         trigger_confirmed=False,
@@ -51,7 +47,7 @@ def test_setup_formatter_distinguishes_pending_setup_from_no_setup():
     )
 
     text = _format_setup([pending])
-    assert "Zucchero" in text
+    assert "Petrolio WTI" in text
     assert "IN ATTESA" in text
     assert "Nessun setup LONG/SHORT rilevato" not in text
 
