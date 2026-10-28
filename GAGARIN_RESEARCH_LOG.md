@@ -62,3 +62,8 @@
 - An isolated Python harness reproduced the timestamp-key validator and passed ordered numeric/aware-ISO cases plus duplicate, out-of-order, missing, timezone-naive and mixed-format rejection cases. This does not replace running the repository's complete pytest suite.
 - GitHub combined status and PR-triggered workflow queries returned no checks/runs for this research branch head; CI is therefore **not claimed**.
 - Render/Telegram runtime was not checked: no Render or Telegram connector is available in this run. No merge/deploy or outbound Telegram message.
+
+
+### Follow-up — direct evaluator harness (2026-10-28)
+- Ran an isolated harness around the updated evaluate_missed_moves control flow with a deterministic forecast stub. Valid numeric and timezone-aware ISO timestamp series were accepted; duplicate, decreasing, missing and timezone-naive timestamps returned INVALID_TIMESTAMPS with zero forecasts before the forecast function was called.
+- Harness PASS is limited to this function's timestamp gate and synthetic inputs; full repository pytest and CI are still unverified for this branch.
