@@ -49,8 +49,9 @@
 
 ## 2026-10-28 — Trim Gagarin's active commodity universe
 
-- User asked to remove unnecessary commodities. Active commodity set is now limited to Gold, Silver, Copper, WTI, Brent, and Rice; Forex instruments are retained as a separate group and are not counted as commodities.
-- Removed Platinum, Palladium, Sugar, Cocoa, Coffee, Gasoline, and Natural Gas from the active universe.
-- Added regression tests asserting the six active commodities, exclusion of removed commodity symbols, and preservation of the eight Forex instruments.
-- Important data caveat: the current data engine's explicit provider routing does not yet contain a `COPPER/USD` mapping, and Wheat/Corn/Soybean are not currently mapped in the inspected provider table. Copper is retained per user preference but may still report DATA_ERROR until its data route is implemented. Rice is the only retained cereal with an explicit existing Yahoo/Twelve Data route.
-- Change is on branch `chore/gagarin-trim-commodity-universe-20261028`; CI must pass before merge. No merge/deploy, no Telegram test message, PAPER/DEMO only.
+- User asked to remove unnecessary commodities. Active commodity set is now Gold, Silver, Copper, WTI, Brent, Wheat, Corn, and Soybean. The eight Forex instruments are retained as a separate group.
+- Removed Platinum, Palladium, Rice, Sugar, Cocoa, Coffee, Gasoline, and Natural Gas from the active universe.
+- Added explicit Yahoo fallback mappings for Copper (`HG=F`), Wheat (`ZW=F`), Corn (`ZC=F`), and Soybean (`ZS=F`), and registered Wheat/Corn/Soybean in the agriculture symbol/term maps and provider order.
+- Added regression tests for the eight retained commodities, removed symbols, preserved Forex group, and explicit provider routing.
+- This verifies configured routing only; live availability and data freshness still require the scheduled run to confirm. CI must pass before merge.
+- Change is on branch `chore/gagarin-trim-commodity-universe-20261028`. No merge/deploy, no Telegram test message, PAPER/DEMO only.
