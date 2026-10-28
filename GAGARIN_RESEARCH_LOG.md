@@ -54,7 +54,7 @@
 - **Files / operational path:** `engine/missed_move_validation.py` (OHLC input → geometry gate → causal forecast → future excursion count); `tests/test_missed_move_validation.py`.
 - **Regression:** replace the old partial-skip expectation for a NaN bar with fail-closed coverage and add open/close-outside-range cases. Each must return `INVALID_OHLC` with zero forecasts.
 - **Commits:** code `cd7fc94ed40294ae853062a536c4209d573b1622`; regression test `936f448e3a7a46589a38100f26f6abfa68f89f47`.
-- **CI:** pending verification on the draft PR; no full-suite PASS is claimed in this log entry.
+- **CI:** PR #89 code/test head `1cf5ac08ce777c01a3e9e8156ad37366ce86ffe6` passed SOYUZ GAGARIN Tests (`40629786553`), PAPER (`40629786536`), NEWS alert (`40629786549`), Public Event Brain (`40629786558`), and Execution Layer (`40629786607`). The following research-log-only commit does not alter executable files; CI on the updated PR head is checked separately.
 - **Deployment / limits:** research branch only; no merge or Render deploy. Build-pipeline minutes remain exhausted. No database credentials were read, no Telegram test was sent, and no broker/order path was touched.
 - **Empirical validation:** no market replay, walk-forward, out-of-sample scorecard or profitability claim. This protects the integrity of the audit input; it does not improve a forecast by itself.
 
