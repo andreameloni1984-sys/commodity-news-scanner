@@ -526,11 +526,12 @@ def fetch_news_items() -> list[dict[str, Any]]:
 
 def _contains_market_term(text: str, term: str) -> bool:
     """Match a whole market term/phrase; never match a fragment inside another word."""
-    normalized_text = re.sub(r"[-\\u2010-\\u2015\\u2212]+", " ", str(text or "").casefold())
-    normalized_term = re.sub(r"[-\\u2010-\\u2015\\u2212]+", " ", str(term or "").casefold()).strip()
+    dash_pattern = r"[-‐‑‒–—―−]+"
+    normalized_text = re.sub(dash_pattern, " ", str(text or "").casefold())
+    normalized_term = re.sub(dash_pattern, " ", str(term or "").casefold()).strip()
     if not normalized_term:
         return False
-    return re.search(rf"(?<!\\w){re.escape(normalized_term)}(?!\\w)", normalized_text) is not None
+    return re.search(rf"(?<!\w){re.escape(normalized_term)}(?!\w)", normalized_text) is not None
 
 
 def classify_event(title: str) -> dict[str, Any]:
