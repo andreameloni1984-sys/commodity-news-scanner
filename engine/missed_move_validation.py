@@ -4,6 +4,30 @@ import math
 from engine.forecast_ensemble import forecast_ensemble
 
 
+def _strict_integer_parameter(value, minimum):
+    """Parse an integer parameter without truncating or accepting booleans."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        parsed = value
+    elif isinstance(value, float):
+        if not math.isfinite(value) or not value.is_integer():
+            return None
+        parsed = int(value)
+    elif isinstance(value, str):
+        text = value.strip()
+        digits = text[1:] if text[:1] in {"+", "-"} else text
+        if not digits or not digits.isdigit():
+            return None
+        try:
+            parsed = int(text)
+        except (ValueError, OverflowError):
+            return None
+    else:
+        return None
+    return parsed if parsed >= minimum else None
+
+
 def evaluate_missed_moves(candles, horizon=4, start=40, threshold_pct=0.5):
     """Count large future up/down excursions not forecast in the same direction.
 
@@ -12,21 +36,34 @@ def evaluate_missed_moves(candles, horizon=4, start=40, threshold_pct=0.5):
     for each instrument and candle timeframe. This is research, not a trade signal.
     """
     rows = list(candles or [])
-    horizon = max(1, int(horizon))
-    start = max(35, int(start))
-    threshold_pct = float(threshold_pct)
+    horizon_value = _strict_integer_parameter(horizon, minimum=1)
+    start_value = _strict_integer_parameter(start, minimum=0)
+    if isinstance(threshold_pct, bool):
+        threshold_value = None
+    else:
+        try:
+            threshold_value = float(threshold_pct)
+        except (TypeError, ValueError, OverflowError):
+            threshold_value = None
+        if threshold_value is not None and not math.isfinite(threshold_value):
+            threshold_value = None
+
     result = {
         "status": "INSUFFICIENT_DATA", "forecasts": 0, "important_events": 0,
         "anticipated_events": 0, "missed_events": 0, "missed_rate_pct": None,
         "up_events": 0, "down_events": 0, "unanticipated_up": 0,
         "unanticipated_down": 0, "missed_no_signal": 0, "missed_wrong_direction": 0,
-        "threshold_pct": threshold_pct, "horizon_bars": horizon,
+        "threshold_pct": threshold_value, "horizon_bars": horizon_value,
     }
-    if not math.isfinite(threshold_pct):
+    if (horizon_value is None or start_value is None or threshold_value is None
+            or threshold_value < 0):
         result["status"] = "INVALID_PARAMETERS"
         return result
-    threshold_pct = max(0.0, threshold_pct)
+    horizon = horizon_value
+    start = max(35, start_value)
+    threshold_pct = threshold_value
     result["threshold_pct"] = threshold_pct
+    result["horizon_bars"] = horizon
     if len(rows) <= start + horizon:
         return result
 
