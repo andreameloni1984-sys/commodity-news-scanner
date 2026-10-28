@@ -505,3 +505,28 @@ def test_alert_scorecard_rejects_non_finite_prices_and_invalid_levels():
     assert report["tp1_observed"] == 0
     assert report["sl_observed"] == 0
     assert report["open_at_last_check"] == 1
+
+
+
+def test_news_poll_summary_marks_degraded_source_coverage(tmp_path, monkeypatch, capsys):
+    import time
+    from datetime import datetime, timezone
+    import telegram.news_monitor as monitor
+
+    monkeypatch.setattr(monitor, "STATE_PATH", tmp_path / "news_state.json")
+    monkeypatch.setattr(monitor, "_SOURCE_FAILURES", {"GDELT": 2})
+    monkeypatch.setattr(monitor, "_SOURCE_RETRY_AT", {"GDELT": time.monotonic() + 60})
+
+    result = monitor.poll_news_once(
+        lambda message: True,
+        lambda: [],
+        fetcher=lambda: [],
+        now=datetime(2026, 10, 28, 12, 0, tzinfo=timezone.utc),
+    )
+
+    output = capsys.readouterr().out
+    assert result["alerts"] == 0
+    assert result["source_failures"] == 1
+    assert "source_health=DEGRADED" in output
+    assert "source_failures=GDELT" in output
+    assert "source_cooldown=GDELT" in output
