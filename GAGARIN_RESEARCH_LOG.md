@@ -45,3 +45,13 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+
+## 2026-10-28 — Expose a stale NEWS-monitor heartbeat
+
+- **Live evidence:** Render logs for `soyuz-gagarin-telegram-v2` contain NEWS polls through `2026-10-28T08:06:06Z`, then no later NEWS-poll record through the checked end time `11:40Z`. This is an observability gap, not proof that a trade opportunity was missed. The separate Cloud API also logged `DATABASE_URL missing`; its configured PostgreSQL instance is available but its empty IP allowlist prevents this hosted read-only query.
+- **Implemented on branch `fix/gagarin-news-monitor-stale-health-20261028`:** track monitor start and last successful poll; expose status from `/health`; return HTTP 503 when the loop has never started or has not completed a poll within `max(180 seconds, 3 × poll interval)`. The endpoint reports timestamps and age without exposing credentials or changing signal decisions.
+- **Regression tests:** startup grace, fresh heartbeat, and stale heartbeat boundary.
+- **Operational limitation:** Render service configuration currently has no `healthCheckPath`; this PR does not change production service settings. The endpoint will be observable by callers after merge/deploy, and Render's own health-check integration would require a separate explicitly approved configuration change.
+- **Signal outcomes:** no verified sent alert with a complete entry/SL/TP and subsequent-price sequence was available in the checked logs; directional accuracy remains N/D.
+- **Safety:** PAPER/DEMO only; no filters changed, no Telegram test message, no broker order, no merge or deploy.
