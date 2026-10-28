@@ -45,3 +45,21 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+## 2026-10-28 — Cache Gagarin journal schema only after transaction commit
+
+- **Finding:** state_store.py::_ensure_event_journal_schema() set the process-wide _EVENT_JOURNAL_SCHEMA_READY flag immediately after issuing DDL, before the surrounding transaction committed. If a later insert/select or commit failed, PostgreSQL could roll back the table/index while the process incorrectly believed the schema existed; later writes could fail without retrying DDL.
+- **Implemented on branch:** fix/gagarin-journal-schema-commit-state-20261028. The helper now issues DDL but does not mutate the cache; append_event_journal() and load_event_journal() mark the schema ready only after their connection context exits successfully. If the first transaction fails, the cache remains false so a later call retries schema creation.
+- **Regression tests:** tests/test_state_store_schema_commit.py simulates transaction-commit failures for both append and load, then verifies that a successful retry reissues CREATE TABLE/INDEX and completes the operation.
+- **Operational path:** news/scorecard audit → telegram/news_monitor.py::_journal → state_store.append_event_journal / load_event_journal → PostgreSQL when configured, otherwise the existing JSONL fallback.
+- **Persistence limit:** DATABASE_URL value was not read and runtime configuration was not accessible. If it is absent/unusable, the code returns to the file fallback; this run does not claim the journal is durably stored in PostgreSQL.
+- **CI:** branch push will be checked in GitHub Actions; no pass is claimed until the exact head completes.
+- **Deployment/empirical limits:** no Render access in available connectors; no deploy or Telegram test. This is a transaction/cache correctness fix, not evidence of signal profitability or durable production storage. PAPER/DEMO ONLY.
+
+## 2026-10-28 verification — event-journal schema transaction cache
+
+- **Code/test commit:** f9cd121f3b6ed15189026199f0661eb191364069.
+- **Regression/CI:** PASS on that head — SOYUZ GAGARIN Tests [run 40628504239](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40628504239), Gagarin Public Event Brain [run 40628504269](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40628504269), Gagarin Execution Layer [run 40628504390](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40628504390), SOYUZ GAGARIN PAPER [run 40628504365](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40628504365), and Gagarin NEWS alert [run 40628504411](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40628504411).
+- **Base/diff:** current main 99ad72b69cddbed0f80ef9f671c5b70deb9df024; branch ahead 1, behind 0; state_store.py, tests/test_state_store_schema_commit.py and this log changed. Draft PR #87 reports mergeable; latest metadata state was unstable while checks were running.
+- **Persistence/deploy:** DATABASE_URL value was not read and runtime environment is not accessible. PostgreSQL durability is conditional, not confirmed. No Render deploy or Telegram test.
+- **Empirical/safety:** fake-connection transaction-failure tests only; no live database durability test, no market performance claim, PAPER/DEMO ONLY.
