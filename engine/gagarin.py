@@ -328,12 +328,10 @@ def apply_sputnik_intelligence(state):
                     or (asset == 'Brent' and ('brent' in name or 'brent' in symbol or symbol == 'UKOIL'))
                     or (asset == 'Oro' and ('oro' in name or 'gold' in name or 'XAU' in symbol))
                     or (asset == 'Argento' and ('argento' in name or 'silver' in name or 'XAG' in symbol))
-                    or (asset == 'Platino' and ('platino' in name or 'platinum' in name or 'XPT' in symbol))
-                    or (asset == 'Palladio' and ('palladio' in name or 'palladium' in name or 'XPD' in symbol))
-                    or (asset == 'Caffè' and ('caff' in name or 'coffee' in name))
-                    or (asset == 'Cacao' and ('cacao' in name or 'cocoa' in name))
-                    or (asset == 'Riso' and ('riso' in name or 'rice' in name))
-                    or (asset == 'Zucchero' and ('zucchero' in name or 'sugar' in name))
+                    or (asset == 'Rame' and ('rame' in name or 'copper' in name or 'COPPER' in symbol or symbol == 'HG=F'))
+                    or (asset == 'Grano' and ('grano' in name or 'wheat' in name or 'WHEAT' in symbol or symbol == 'ZW=F'))
+                    or (asset == 'Mais' and ('mais' in name or 'corn' in name or 'CORN' in symbol or symbol == 'ZC=F'))
+                    or (asset == 'Soia' and ('soia' in name or 'soybean' in name or 'SOYBEAN' in symbol or symbol == 'ZS=F'))
                 )
                 if asset_match:
                     break
