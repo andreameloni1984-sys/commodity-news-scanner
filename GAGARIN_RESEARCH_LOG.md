@@ -56,3 +56,9 @@
 - **Commits:** code bd7f295cc1552b280ce53b5b355b4804469071ee; tests 36d438f3ff5f993381bb90c1e33a994af6481920.
 - **CI/deploy:** no GitHub Actions run or combined status is visible yet for this research branch. No Render workspace was selected in this run, so runtime/deploy state was not checked. No merge or deploy.
 - **Empirical limit:** tests cover synthetic timestamp sequences only. No new walk-forward, holdout or profitability result. PAPER/DEMO ONLY.
+
+
+### Follow-up verification — 2026-10-28
+- An isolated Python harness reproduced the timestamp-key validator and passed ordered numeric/aware-ISO cases plus duplicate, out-of-order, missing, timezone-naive and mixed-format rejection cases. This does not replace running the repository's complete pytest suite.
+- GitHub combined status and PR-triggered workflow queries returned no checks/runs for this research branch head; CI is therefore **not claimed**.
+- Render/Telegram runtime was not checked: no Render or Telegram connector is available in this run. No merge/deploy or outbound Telegram message.
