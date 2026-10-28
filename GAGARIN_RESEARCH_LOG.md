@@ -56,3 +56,10 @@
 - **Commits:** code `87c12559fb6b00ef062c2565de1e42d3c35899f5`; test `087b91b66cc81bdd0df1179f1effceb8b939d13c`.
 - **CI:** pending GitHub Actions validation; any positive-control failure must be corrected before calling this verified.
 - **Deployment/limits:** new research branch from `main`; no merge/deploy. Synthetic classifier tests only; no live-feed replay, event study, or out-of-sample performance claim. No durable-journal claim while runtime `DATABASE_URL` is unverified. PAPER/DEMO ONLY.
+
+
+## 2026-10-28 — Verify whole-term matcher escaping before CI
+
+- **Review correction:** a source inspection found that the first generated helper had over-escaped the regular-expression backslashes. Corrected the helper to use literal Unicode dash characters and a real `\w` word-boundary class before opening the PR. The initial branch commit is superseded by this correction and must not be treated as verified.
+- **Corrective code commit:** `d1bc48ac8da6d3513f13edb4008d2d28a50e8bca`; regression test remains `087b91b66cc81bdd0df1179f1effceb8b939d13c`.
+- **Next verification:** open the draft PR to trigger CI and require all existing positive controls plus the fragment-negative regression to pass. No merge/deploy.
