@@ -23,6 +23,19 @@ def _direction(value: Any) -> str:
     return value if value in {"LONG", "SHORT"} else "NONE"
 
 
+def _missing_level(value: Any) -> bool:
+    """Treat common provider placeholders as missing, not as real plan values."""
+    if value is None:
+        return True
+    if isinstance(value, str) and value.strip().upper() in {"", "N/D", "ND", "N.A.", "NA", "NONE", "NULL", "--", "-"}:
+        return True
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return False
+    return not __import__("math").isfinite(number) or number <= 0
+
+
 def rank_predictions(states: Iterable[Any]) -> list[dict]:
     """Rank all analysable assets by directional evidence and potential move."""
     if isinstance(states, dict):
@@ -133,9 +146,17 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
         tp2 = getattr(state, "tp2", None)
         tp3 = getattr(state, "tp3", None)
         rr3 = getattr(state, "rr3", None)
+        # Some provider paths serialize absent levels as strings such as N/D.
+        # Normalize placeholders so the indicative bracket fallback can run.
+        entry, stop, tp1, tp2, tp3 = (
+            None if _missing_level(value) else value
+            for value in (entry, stop, tp1, tp2, tp3)
+        )
+        if _missing_level(rr3):
+            rr3 = None
         bracket_generated = False
         bracket_basis = None
-        if all(value is None for value in (entry, stop, tp1, tp2, tp3)) and price > 0 and atr > 0:
+        if all(_missing_level(value) for value in (entry, stop, tp1, tp2, tp3)) and price > 0 and atr > 0:
             bracket = build_commodity_bracket(
                 side=direction,
                 entry=price,
