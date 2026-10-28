@@ -92,7 +92,7 @@ COMMODITIES = [
     Commodity(name="AUD/USD", symbol="AUD/USD", category="Forex", unit="USD", priority=13),
     Commodity(name="USD/CAD", symbol="USD/CAD", category="Forex", unit="CAD", priority=14),
     Commodity(name="NZD/USD", symbol="NZD/USD", category="Forex", unit="USD", priority=15),
-    Commodity(name="EUR/JPY", symbol="EUR/JPY", category="Forex", unit="JPY", priority=14),
+    Commodity(name="EUR/JPY", symbol="EUR/JPY", category="Forex", unit="JPY", priority=16),
 ]
 
 # ============================================================
