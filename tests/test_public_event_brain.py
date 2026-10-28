@@ -80,3 +80,31 @@ def test_generic_data_centre_headline_does_not_create_direction():
     assert "DATA_CENTERS" in result["domains"]
     assert result["trade_direction"] is None
     assert result["order_authorized"] is False
+
+
+def test_market_impact_brief_maps_supply_risk_to_conditional_oil_scenario():
+    from engine.public_event_brain import build_market_impact_brief
+    brief = build_market_impact_brief("Oil facility disruption raises crude supply concerns")
+    assert brief["status"] == "CONDITIONAL_HYPOTHESIS"
+    oil = next(row for row in brief["scenarios"] if row["theme"] == "ENERGY_SUPPLY_RISK")
+    assert {"WTI", "BRENT"} <= set(oil["instruments"])
+    assert oil["alternative"] and oil["confirm_with"] and oil["invalidate_if"]
+    assert brief["entry"] is None and brief["stop_loss"] is None and brief["take_profit"] is None
+    assert brief["order_authorized"] is False
+
+
+def test_market_impact_brief_maps_tighter_rates_to_cross_asset_scenario():
+    from engine.public_event_brain import build_market_impact_brief
+    brief = build_market_impact_brief("Federal Reserve signals higher for longer and Treasury yields rise")
+    rates = next(row for row in brief["scenarios"] if row["theme"] == "TIGHTER_RATES")
+    assert {"USD", "GOLD"} <= set(rates["instruments"])
+    assert rates["confirm_with"] and rates["invalidate_if"]
+    assert brief["order_authorized"] is False
+
+
+def test_market_impact_brief_does_not_invent_direction_for_unclassified_text():
+    from engine.public_event_brain import build_market_impact_brief
+    brief = build_market_impact_brief("Local museum opens a new exhibition")
+    assert brief["status"] == "WATCH_ONLY"
+    assert brief["scenarios"] == []
+    assert brief["entry"] is None and brief["order_authorized"] is False
