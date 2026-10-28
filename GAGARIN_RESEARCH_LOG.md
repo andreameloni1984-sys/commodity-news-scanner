@@ -55,3 +55,12 @@
 - **Outcome-data limitation:** the tracked paper log contains one WTI LONG entry from 2026-10-08 marked OPEN with no P&L/outcome; the prediction log's newest record is 2026-09-15 and records are still PENDING. These files cannot establish win rate or predictive edge.
 - **Validation status:** changes committed to a draft PR; CI must finish before considering the fix verified. No local execution or production deployment is claimed.
 - **Safety:** PAPER/DEMO only; no broker orders or Telegram test messages.
+
+
+## 2026-10-28 — Live Render log audit: alerts and durable persistence
+
+- **NEWS monitor observation:** nine consecutive Gagarin NEWS poll records between 2026-10-28T05:41:13Z and 2026-10-28T05:49:01Z each reported `new_relevant=0 | pending=0 | analysis=NO | alerts=0` (150–162 items fetched). This is a one-hour-ish observation window, not a claim about every Gagarin alert channel or the entire history.
+- **Persistence finding:** `gagarin-cloud` emitted `GAGARIN PERSISTENCE DISABLED | DATABASE_URL missing` on eight observed startups between 2026-10-27T06:09:41Z and 2026-10-28T02:57:18Z. Render lists a database named `gagarin-paper-db` as available, but its IP allowlist is empty and the read-only query was blocked; no table contents were inspected.
+- **Consequence:** live durable event-journal coverage cannot be established from the app logs, and the paper outcomes cannot be scored reliably from this run. The CSV schema guard remains useful but does not fix the missing database connection.
+- **Next dependency:** securely configure the service's `DATABASE_URL` for the existing database and make read access available through an approved connection path; then verify journal writes and query the outcome records. No environment variables, IP allowlists, database contents, or production settings were changed in this run.
+- **Safety:** log/database inspection was read-only; no merge, deployment, Telegram test message, or order.
