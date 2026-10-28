@@ -1,7 +1,17 @@
 import csv
+from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 import paper_trade_journal
+
+
+@pytest.fixture(autouse=True)
+def _reset_global_journal_path():
+    yield
+    # Other legacy tests assign this module global directly; never leak a
+    # temporary path into later tests.
+    paper_trade_journal.JOURNAL_FILE = Path("paper_trade_log.csv")
 
 
 def _signal():
@@ -27,7 +37,7 @@ def _signal():
     )
 
 
-def test_legacy_header_is_preserved_and_current_schema_uses_v2_file(tmp_path, monkeypatch, capsys):
+def test_legacy_header_is_preserved_and_current_schema_uses_v2_file(tmp_path, capsys):
     legacy_path = tmp_path / "paper_trade_log.csv"
     legacy_content = (
         "timestamp_utc,commodity,symbol,direction,action,entry,stop,tp1,tp2,"
@@ -36,7 +46,7 @@ def test_legacy_header_is_preserved_and_current_schema_uses_v2_file(tmp_path, mo
         "103.11,106.55,14.00,OPEN,,legacy record\n"
     )
     legacy_path.write_text(legacy_content, encoding="utf-8")
-    monkeypatch.setattr(paper_trade_journal, "JOURNAL_FILE", legacy_path)
+    paper_trade_journal.JOURNAL_FILE = legacy_path
 
     assert paper_trade_journal.record_entries([_signal()]) == 1
 
@@ -56,16 +66,12 @@ def test_legacy_header_is_preserved_and_current_schema_uses_v2_file(tmp_path, mo
     assert rows[0]["entry"] == "100.0"
 
 
-def test_mismatched_v2_header_fails_closed(tmp_path, monkeypatch):
+def test_mismatched_v2_header_fails_closed(tmp_path):
     legacy_path = tmp_path / "paper_trade_log.csv"
     legacy_path.write_text("old,header\n", encoding="utf-8")
     versioned_path = tmp_path / "paper_trade_log_v2.csv"
     versioned_path.write_text("wrong,versioned,header\n", encoding="utf-8")
-    monkeypatch.setattr(paper_trade_journal, "JOURNAL_FILE", legacy_path)
+    paper_trade_journal.JOURNAL_FILE = legacy_path
 
-    try:
+    with pytest.raises(RuntimeError, match="schema mismatch"):
         paper_trade_journal.record_entries([_signal()])
-    except RuntimeError as exc:
-        assert "schema mismatch" in str(exc).lower()
-    else:
-        raise AssertionError("Expected incompatible journal schemas to fail closed")
