@@ -524,13 +524,23 @@ def fetch_news_items() -> list[dict[str, Any]]:
     return items
 
 
+def _contains_market_term(text: str, term: str) -> bool:
+    """Match a whole market term/phrase; never match a fragment inside another word."""
+    dash_pattern = r"[-‐‑‒–—―−]+"
+    normalized_text = re.sub(dash_pattern, " ", str(text or "").casefold())
+    normalized_term = re.sub(dash_pattern, " ", str(term or "").casefold()).strip()
+    if not normalized_term:
+        return False
+    return re.search(rf"(?<!\w){re.escape(normalized_term)}(?!\w)", normalized_text) is not None
+
+
 def classify_event(title: str) -> dict[str, Any]:
     """Heuristic event mapping. It is interpretation, never a fact or trade by itself."""
     text = " ".join((title or "").lower().split())
-    has_oil = any(term in text for term in OIL_TERMS)
-    has_metals = any(term in text for term in METAL_TERMS) or any(term in text for term in {"gold", "oro", "xau"})
-    has_macro = any(term in text for term in MACRO_TERMS)
-    has_agri = any(term in text for term in AGRI_TERMS)
+    has_oil = any(_contains_market_term(text, term) for term in OIL_TERMS)
+    has_metals = any(_contains_market_term(text, term) for term in METAL_TERMS) or any(_contains_market_term(text, term) for term in {"gold", "oro", "xau"})
+    has_macro = any(_contains_market_term(text, term) for term in MACRO_TERMS)
+    has_agri = any(_contains_market_term(text, term) for term in AGRI_TERMS)
 
     assets: list[str] = []
     if has_oil:
@@ -544,7 +554,7 @@ def classify_event(title: str) -> dict[str, Any]:
             "Riso": {"rice", "riso"},
             "Zucchero": {"sugar", "zucchero"},
         }.items():
-            if any(term in text for term in terms):
+            if any(_contains_market_term(text, term) for term in terms):
                 assets.append(asset)
     assets = list(dict.fromkeys(assets))
 
@@ -560,8 +570,8 @@ def classify_event(title: str) -> dict[str, Any]:
             up_terms, down_terms = AGRI_BULLISH_TERMS, AGRI_BEARISH_TERMS
         else:
             up_terms, down_terms = METAL_BULLISH_TERMS, METAL_BEARISH_TERMS
-        up_hits = sorted(term for term in up_terms if term in text)
-        down_hits = sorted(term for term in down_terms if term in text)
+        up_hits = sorted(term for term in up_terms if _contains_market_term(text, term))
+        down_hits = sorted(term for term in down_terms if _contains_market_term(text, term))
         matched_terms[asset] = {"bullish": up_hits, "bearish": down_hits}
         if up_hits and down_hits:
             impact[asset] = "MISTA"

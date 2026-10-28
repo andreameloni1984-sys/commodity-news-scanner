@@ -3,6 +3,16 @@ from types import SimpleNamespace
 from telegram.news_monitor import classify_event, _confirmed_setups  # selected commodity universe is authoritative
 
 
+def test_keyword_fragments_do_not_create_asset_or_direction():
+    spoiled = classify_event("The deal was spoiled by a routine delay.")
+    assert spoiled["relevant"] is False
+    assert spoiled["assets"] == []
+
+    forward = classify_event("The forward outlook was unchanged after a routine update.")
+    assert forward["relevant"] is False
+    assert forward["assets"] == []
+
+
 def test_oil_inventory_draw_is_provisional_bullish_for_crude():
     result = classify_event("EIA reports crude oil inventories fell sharply")
     assert result["relevant"] is True
