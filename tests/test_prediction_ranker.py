@@ -23,6 +23,22 @@ def state(name, **overrides):
 
 
 class PredictionRankerTests(unittest.TestCase):
+    def test_n_d_placeholders_trigger_indicative_bracket_fallback(self):
+        candidate = state(
+            "Gold", symbol="XAU/USD", price=2000.0, atr=10.0,
+            setup_direction="SHORT", structure_direction="SHORT",
+            mtf_direction="SHORT", pre_move_direction="SHORT",
+            entry="N/D", stop="N/D", tp1="N/D", tp2="N/D", tp3="N/D", rr3="N/D",
+        )
+        ranked = rank_predictions([candidate])
+        self.assertEqual(len(ranked), 1)
+        self.assertTrue(ranked[0]["bracket_generated"])
+        self.assertIsNotNone(ranked[0]["entry"])
+        self.assertIsNotNone(ranked[0]["stop"])
+        self.assertIsNotNone(ranked[0]["tp1"])
+        self.assertIsNotNone(ranked[0]["tp2"])
+        self.assertIsNotNone(ranked[0]["tp3"])
+
     def test_ranks_stronger_confluence_first(self):
         strong = state("WTI")
         weak = state("GOLD", regime="RANGE", structure="UNKNOWN",
