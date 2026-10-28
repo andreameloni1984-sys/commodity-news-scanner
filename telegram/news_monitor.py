@@ -43,10 +43,12 @@ _SOURCE_LAST_SUCCESS: dict[str, float] = {}
 _SOURCE_LOCK = threading.Lock()
 STATE_PATH = Path(os.getenv("GAGARIN_NEWS_STATE_PATH", "data/news_monitor_state.json"))
 JOURNAL_PATH = Path(os.getenv("GAGARIN_NEWS_JOURNAL_PATH", "data/news_event_journal.jsonl"))
+_JOURNAL_FALLBACK_WARNED = False
 
 
 def _journal(record: dict[str, Any]) -> None:
     """Append an audit record to PostgreSQL when configured, with file fallback."""
+    global _JOURNAL_FALLBACK_WARNED
     row = dict(record)
     row.setdefault("recorded_at", _utc_now().isoformat())
     try:
@@ -55,6 +57,17 @@ def _journal(record: dict[str, Any]) -> None:
             return
     except Exception as exc:
         print(f"NEWS journal database unavailable | {type(exc).__name__}: {exc}", flush=True)
+
+    # A false database result can mean DATABASE_URL is absent or the database
+    # backend is unavailable. Make the local fallback visible once per process:
+    # a JSONL file is not necessarily durable across ephemeral deployments.
+    if not _JOURNAL_FALLBACK_WARNED:
+        print(
+            "NEWS journal using local JSONL fallback; durability depends on local storage persistence configuration",
+            flush=True,
+        )
+        _JOURNAL_FALLBACK_WARNED = True
+
     try:
         JOURNAL_PATH.parent.mkdir(parents=True, exist_ok=True)
         with JOURNAL_PATH.open("a", encoding="utf-8") as handle:
