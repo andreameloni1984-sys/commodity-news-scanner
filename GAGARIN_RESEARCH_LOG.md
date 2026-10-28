@@ -64,3 +64,11 @@
 - Generated levels are explicitly labelled indicative and do not authorize an entry. The governor's data freshness, trigger, geometry, risk and PAPER-only checks remain in force.
 - Added tests for SHORT bracket geometry, preserving partial plans, and active-universe filtering.
 - CI must pass before merge. Render deployments were previously blocked by exhausted pipeline minutes, so production/Telegram behavior remains unverified until a successful deployment.
+
+
+## 2026-10-28 — Normalize missing-level placeholders in aggressive ranking
+
+- Finding: the fallback bracket builder only ran when entry/SL/TP values were Python `None`. If an upstream provider serialized missing levels as `N/D`, empty strings, or non-finite/non-positive placeholders, Telegram could still display N/D for every level even with a valid current price and ATR.
+- Implemented: normalize common missing-level placeholders before deciding whether a full indicative bracket can be generated; preserve actual supplied levels and keep the existing governor/PAPER-only gates unchanged.
+- Regression test added: a SHORT Gold candidate with `N/D` placeholders and valid price/ATR must receive indicative entry, SL and TP1-TP3.
+- Verification status: GitHub Actions returned no workflow runs for commit `dcb5904b34653b60c2cd462493689fa9800cae77` at the time checked. Tests are added but not yet confirmed passing; production Telegram output is not confirmed updated.
