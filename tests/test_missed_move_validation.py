@@ -49,3 +49,22 @@ def test_non_finite_threshold_is_rejected():
     result = evaluate_missed_moves(flat_candles(), threshold_pct=float("inf"))
     assert result["status"] == "INVALID_PARAMETERS"
     assert result["forecasts"] == 0
+
+
+
+def test_invalid_audit_parameters_fail_closed_without_coercion():
+    invalid_cases = [
+        {"horizon": 4.5},
+        {"horizon": True},
+        {"horizon": float("inf")},
+        {"horizon": 0},
+        {"start": float("nan")},
+        {"start": -1},
+        {"threshold_pct": -0.1},
+        {"threshold_pct": True},
+        {"threshold_pct": "not-a-number"},
+    ]
+    for kwargs in invalid_cases:
+        result = evaluate_missed_moves(flat_candles(), **kwargs)
+        assert result["status"] == "INVALID_PARAMETERS", kwargs
+        assert result["forecasts"] == 0, kwargs
