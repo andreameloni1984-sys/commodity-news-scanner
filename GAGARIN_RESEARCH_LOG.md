@@ -55,3 +55,6 @@
 - Regression coverage added for an oil supply disruption, a tighter-rates scenario, and unclassified text. Tests are committed; CI status must be checked before calling this verified.
 - Limits: this is a scenario-mapping improvement, not a live news verification, price feed, forecast guarantee, or profitability claim. It is not yet merged or deployed.
 - Safety: PAPER/DEMO only; no Telegram test message, broker order, merge, or deployment.
+
+
+- Follow-up integration in the same PR: `telegram/news_monitor.py` now renders up to two conditional scenarios in the existing event-triggered Gagarin alert, including base case, alternative, confirmation criteria and invalidation. Added a regression test for the rendered alert. This changes message content only; it does not send a test message or alter entry filters.
