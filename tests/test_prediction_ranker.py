@@ -2,6 +2,7 @@ import unittest
 from types import SimpleNamespace
 
 from engine.prediction_ranker import rank_predictions, format_best_prediction
+from soyuz_gagarin.aggressive_desk import format_aggressive_desk
 
 
 def state(name, **overrides):
@@ -73,6 +74,13 @@ class PredictionRankerTests(unittest.TestCase):
         self.assertFalse(result["bracket_generated"])
         self.assertIsNone(result["entry"])
         self.assertEqual(result["stop"], 103.0)
+
+    def test_aggressive_desk_uses_only_configured_universe(self):
+        silver = state("Argento", symbol="XAG/USD")
+        excluded = state("Palladio", symbol="XPD/USD")
+        message = format_aggressive_desk([excluded, silver])
+        self.assertIn("Argento", message)
+        self.assertNotIn("Palladio", message)
 
 
 if __name__ == "__main__":
