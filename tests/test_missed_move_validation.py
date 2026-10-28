@@ -35,14 +35,21 @@ def test_insufficient_history_is_explicit():
     assert result["forecasts"] == 0
 
 
-def test_non_finite_future_excursions_are_skipped():
+def test_non_finite_ohlc_fails_closed_before_forecasting():
     rows = flat_candles()
     rows[50]["high"] = float("nan")
     result = evaluate_missed_moves(rows, horizon=4, start=40, threshold_pct=0.5)
-    baseline = evaluate_missed_moves(flat_candles(), horizon=4, start=40, threshold_pct=0.5)
-    assert result["status"] == "CALCULATED"
-    assert result["forecasts"] < baseline["forecasts"]
-    assert result["missed_rate_pct"] is None
+    assert result["status"] == "INVALID_OHLC"
+    assert result["forecasts"] == 0
+
+
+def test_open_or_close_outside_bar_range_fails_closed():
+    for field, value in (("open", 99.0), ("close", 101.0)):
+        rows = flat_candles()
+        rows[50][field] = value
+        result = evaluate_missed_moves(rows, horizon=4, start=40, threshold_pct=0.5)
+        assert result["status"] == "INVALID_OHLC", (field, value)
+        assert result["forecasts"] == 0
 
 
 def test_non_finite_threshold_is_rejected():
