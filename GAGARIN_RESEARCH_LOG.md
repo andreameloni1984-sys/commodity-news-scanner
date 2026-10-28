@@ -55,3 +55,15 @@
 - Regression test: a candle spanning all three targets must score TP1 at 1.5R while MFE records 3.0R.
 - Deployment limit: Render's latest Gagarin deploy attempt failed at 2026-10-28 13:37:43Z with pipeline_minutes_exhausted. No deployment was triggered by this change.
 - Safety: PAPER/DEMO only; no entry filters changed, no Telegram test message, no broker order, no merge or deployment.
+
+
+## 2026-10-28 — Latest scheduled signal audit (13:50 UTC)
+
+- Source: GitHub Actions scheduled run `40699984004` on the repository's main branch; this is a real recorded run, not a live Render database query.
+- Universe snapshot: 21 instruments checked; 14 marked LIVE, 4 STALE (Rice, Cocoa, Coffee, Sugar), and 3 DATA_ERROR (Copper, Gasoline, Natural Gas).
+- Operational result: `Recorded entries: 0`; feedback summary `signals=0 open=0 closed=0 win_rate=N/D avg_R=N/D total_R=0.0`. No closed outcomes or realized performance can be inferred from this run.
+- Highest-ranked directional candidates were GBP/USD LONG (probability 68, quality 57.5, confidence 45) and EUR/JPY LONG (probability 68, quality 60.5, confidence 45); both remained WAIT due to unconfirmed trigger, direction mismatch and/or confidence/confluence gates. This is evidence of blocked candidates, not evidence that the filters are too strict or that either direction would have won.
+- Data-quality caveat: 7/21 instruments were not marked LIVE (4 stale, 3 data errors). Copper had no provider data in this run, so it cannot support any directional conclusion.
+- Related feedback fix on this branch: when one OHLC candle spans multiple take-profit levels, realized outcome is conservatively scored at TP1 while MFE remains a separate excursion metric. This avoids claiming the furthest target was executed without intrabar path data.
+- CI status before this log-only update: six branch workflows completed successfully on code commit `2012f007eb2f9ac314d945fc8170af6e8b30ee7c`. The new log commit will trigger another CI run; do not treat the updated branch as fully re-verified until those checks complete.
+- Safety: PAPER/DEMO only; no entry filters changed, no order execution, no Telegram test messages, no merge or deployment.
