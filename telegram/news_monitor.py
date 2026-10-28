@@ -63,21 +63,32 @@ def _journal(record: dict[str, Any]) -> None:
         print(f"NEWS journal save failed | {type(exc).__name__}: {exc}", flush=True)
 
 def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = None) -> dict[str, Any]:
-    """Score alert direction using a later live price observation, not a keyword label."""
+    """Score alerts without hiding records whose entry metadata is invalid."""
     now = now or _utc_now()
     cutoff = now - timedelta(days=7)
-    alerts = []
+    alert_records: list[tuple[dict[str, Any], datetime]] = []
     for row in rows:
         if row.get("kind") != "NEWS_ALERT_SENT":
             continue
         sent_at = _parse_datetime(row.get("sent_at") or row.get("recorded_at"))
+        # A timestamp is required to decide whether an alert belongs to this window.
+        if sent_at and cutoff <= sent_at <= now:
+            alert_records.append((row, sent_at))
+
+    alerts: list[tuple[dict[str, Any], datetime, float, str]] = []
+    unscored_invalid = 0
+    for row, sent_at in alert_records:
         try:
             price = float(row.get("price"))
         except (TypeError, ValueError):
+            unscored_invalid += 1
             continue
         direction = str(row.get("direction") or "").upper()
-        if sent_at and sent_at >= cutoff and math.isfinite(price) and price > 0 and direction in {"LONG", "SHORT"}:
-            alerts.append((row, sent_at, price, direction))
+        if not math.isfinite(price) or price <= 0 or direction not in {"LONG", "SHORT"}:
+            unscored_invalid += 1
+            continue
+        alerts.append((row, sent_at, price, direction))
+
     scored, pending, unscored_expired = [], 0, 0
     for alert, sent_at, alert_price, direction in alerts:
         reaction_observations = []
@@ -93,9 +104,11 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
                 continue
             if math.isfinite(price) and price > 0:
                 reaction_observations.append((observed_at, price))
+
         # Directional accuracy uses a minimum 15-minute horizon to avoid
         # treating immediate noise as a forecast result. TP/SL, however,
         # must include every post-delivery observation, including the first 15m.
+        reaction_observations.sort(key=lambda item: item[0])
         observations = [item for item in reaction_observations if item[0] >= sent_at + timedelta(minutes=15)]
         if not observations:
             if now <= sent_at + timedelta(hours=4):
@@ -104,8 +117,7 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
                 # Closed evaluation window with missing prices is unscored, not pending or a loss.
                 unscored_expired += 1
             continue
-        reaction_observations.sort(key=lambda item: item[0])
-        observations.sort(key=lambda item: item[0])
+
         observed_at, current_price = observations[-1]
         raw_pct = (current_price / alert_price - 1) * 100
         signed_pct = raw_pct if direction == "LONG" else -raw_pct
@@ -137,14 +149,14 @@ def build_alert_scorecard(rows: list[dict[str, Any]], now: datetime | None = Non
     tp1_observed = sum(x["outcome"] == "TP1_OBSERVED" for x in scored)
     sl_observed = sum(x["outcome"] == "SL_OBSERVED" for x in scored)
     open_count = sum(x["outcome"] == "OPEN_AT_LAST_CHECK" for x in scored)
-    return {"window_days": 7, "alerts": len(alerts), "scored": len(scored), "pending": pending,
-            "unscored_expired": unscored_expired,
-            "coverage_pct": round(len(scored)/len(alerts)*100, 2) if alerts else None,
+    total_alerts = len(alert_records)
+    return {"window_days": 7, "alerts": total_alerts, "scored": len(scored), "pending": pending,
+            "unscored_expired": unscored_expired, "unscored_invalid": unscored_invalid,
+            "coverage_pct": round(len(scored)/total_alerts*100, 2) if total_alerts else None,
             "correct": correct, "incorrect": len(scored)-correct,
             "accuracy_pct": round(correct/len(scored)*100, 2) if scored else None,
             "mean_directional_return_pct": round(sum(x["signed_return_pct"] for x in scored)/len(scored), 4) if scored else None,
             "tp1_observed": tp1_observed, "sl_observed": sl_observed, "open_at_last_check": open_count}
-
 
 def _maybe_send_daily_scorecard(state: dict[str, Any], send_telegram: Callable[[str], bool], now: datetime) -> bool:
     from zoneinfo import ZoneInfo
@@ -176,7 +188,7 @@ def _maybe_send_daily_scorecard(state: dict[str, Any], send_telegram: Callable[[
     report = build_alert_scorecard(rows, now)
     if report["scored"]:
         message = ("📊 GAGARIN — VERIFICA ALERT (ultimi 7 giorni)\n"
-                   f"Valutati: {report['scored']}/{report['alerts']} | copertura: {report['coverage_pct']:.1f}% | in attesa: {report['pending']} | senza dati a finestra chiusa: {report['unscored_expired']}\n"
+                   f"Valutati: {report['scored']}/{report['alerts']} | copertura: {report['coverage_pct']:.1f}% | in attesa: {report['pending']} | senza dati a finestra chiusa: {report['unscored_expired']} | alert con metadati non validi: {report['unscored_invalid']}\n"
                    f"Direzione corretta: {report['correct']} | errata: {report['incorrect']}\n"
                    f"Accuratezza direzionale: {report['accuracy_pct']:.1f}%\n"
                    f"Rendimento direzionale medio: {report['mean_directional_return_pct']:+.3f}%\n"
@@ -184,7 +196,7 @@ def _maybe_send_daily_scorecard(state: dict[str, Any], send_telegram: Callable[[
                    "TP/SL sono attraversamenti osservati ai controlli periodici, non tick intrabar. Feed Gagarin; esclusi spread/slippage.")
     else:
         message = ("📊 GAGARIN — VERIFICA ALERT (ultimi 7 giorni)\n"
-                   f"Alert inviati: {report['alerts']} | in attesa: {report['pending']} | senza dati a finestra chiusa: {report['unscored_expired']}\n"
+                   f"Alert inviati: {report['alerts']} | in attesa: {report['pending']} | senza dati a finestra chiusa: {report['unscored_expired']} | alert con metadati non validi: {report['unscored_invalid']}\n"
                    "Campione valutabile insufficiente: servono prezzi osservati almeno 15 minuti dopo l'alert.")
     try:
         sent = bool(send_telegram(message))

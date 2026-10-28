@@ -499,9 +499,40 @@ def test_alert_scorecard_rejects_non_finite_prices_and_invalid_levels():
          "current_price": 80.2, "observed_at": (sent + timedelta(minutes=25)).isoformat()},
     ]
     report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
-    assert report["alerts"] == 1
+    # All three timestamped alerts belong in the coverage denominator.
+    # NaN and infinity baselines are unscorable; invalid SL/TP does not erase a
+    # directionally scorable alert, but cannot count as a TP/SL outcome.
+    assert report["alerts"] == 3
     assert report["scored"] == 1
+    assert report["unscored_invalid"] == 2
+    assert report["coverage_pct"] == 33.33
     assert report["correct"] == 1
     assert report["tp1_observed"] == 0
     assert report["sl_observed"] == 0
     assert report["open_at_last_check"] == 1
+
+
+
+def test_alert_scorecard_counts_invalid_alert_metadata_in_coverage_denominator():
+    from datetime import datetime, timedelta, timezone
+    from telegram.news_monitor import build_alert_scorecard
+
+    sent = datetime(2026, 10, 28, 8, 0, tzinfo=timezone.utc)
+    rows = [
+        {"kind": "NEWS_ALERT_SENT", "event_id": "valid", "asset": "WTI",
+         "direction": "LONG", "price": 80.0, "sent_at": sent.isoformat()},
+        {"kind": "NEWS_REACTION", "event_id": "valid", "asset": "WTI",
+         "current_price": 80.4, "observed_at": (sent + timedelta(minutes=20)).isoformat()},
+        # These were sent alerts, but cannot be scored because their baseline metadata is invalid.
+        {"kind": "NEWS_ALERT_SENT", "event_id": "missing-price", "asset": "Brent",
+         "direction": "LONG", "sent_at": sent.isoformat()},
+        {"kind": "NEWS_ALERT_SENT", "event_id": "invalid-direction", "asset": "Oro",
+         "direction": "WAIT", "price": 4000.0, "sent_at": sent.isoformat()},
+    ]
+
+    report = build_alert_scorecard(rows, now=sent + timedelta(hours=1))
+
+    assert report["alerts"] == 3
+    assert report["scored"] == 1
+    assert report["unscored_invalid"] == 2
+    assert report["coverage_pct"] == 33.33

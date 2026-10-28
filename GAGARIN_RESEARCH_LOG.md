@@ -45,3 +45,15 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+
+## 2026-10-28 — Count unscorable sent alerts in coverage
+
+- **Observed defect:** `build_alert_scorecard` silently discarded `NEWS_ALERT_SENT` rows with missing/non-positive/non-finite prices or invalid directions before calculating the coverage denominator. That could inflate apparent outcome coverage because sent alerts with unusable baseline metadata disappeared from the denominator.
+- **Implemented on branch `fix/gagarin-scorecard-count-unscorable-alerts-20261028`:** count all timestamped sent-alert records inside the seven-day window in `alerts`; keep malformed baseline records out of directional scoring but count them as `unscored_invalid`. Expose that count in both scorecard message variants. Unknown timestamps remain outside the seven-day denominator because their time window cannot be established from evidence.
+- **Regression test:** one valid scored alert plus two sent alerts with missing price/invalid direction must report 3 total, 1 scored, 2 unscored-invalid, and 33.33% coverage.
+- **Evidence limit:** this corrects measurement integrity only; it does not establish a predictive edge. Live outcome rows and production database access were not available for this run.
+- **Safety:** PAPER/DEMO only; no signal filters changed, no Telegram test message, no order, no merge or deployment.
+
+
+- **CI follow-up (same correction):** the first NEWS test run correctly exposed an outdated assertion that expected NaN/Infinity alert rows to disappear from the denominator. Updated that test to require all three timestamped alerts to count, with two invalid-baseline rows explicitly unscored. This is a test expectation update for the same coverage-denominator fix, not a separate behavior change.
