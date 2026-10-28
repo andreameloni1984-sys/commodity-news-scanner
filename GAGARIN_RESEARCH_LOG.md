@@ -45,3 +45,12 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+
+## 2026-10-28 — Make outcome coverage explicit in Gagarin feedback
+
+- **Live evidence:** Render feedback logs on 28 Oct show `backend=LOCAL_CSV_NO_DATABASE_URL`, with runs reporting 1–2 open records and 0 closed outcomes; other restarts report 0 records. Win rate correctly remains `N/D`, but the summary did not explicitly state what fraction of recorded signals had a scored outcome.
+- **Implemented on branch `fix/gagarin-feedback-coverage-status-20261028`:** expose `outcome_coverage_pct`, `unscored`, and an evaluation status (`NO_SIGNALS`, `NOT_EVALUABLE`, or `DESCRIPTIVE_ONLY`) in the feedback summary. The rendered log now reports `outcome_coverage=closed/total` so an all-open sample cannot be mistaken for evaluated performance.
+- **Regression tests:** open-only records report 0% coverage and NOT_EVALUABLE; an empty file reports N/D coverage and NO_SIGNALS.
+- **Empirical limit:** no win rate or predictive edge can be inferred from these open-only samples. The PostgreSQL instance is listed as available but its IP allowlist is empty; the read-only query was blocked. No network configuration was changed.
+- **Safety:** reporting-only change. No entry filters or trade behavior changed; no merge, deployment, Telegram test message, or broker order. PAPER/DEMO only.

@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from engine.feedback import _candles, _timestamp, append_signal, load_feedback, record_forecasts, summarize, update_open_outcomes
+from engine.feedback import _candles, _timestamp, append_signal, format_summary, load_feedback, record_forecasts, summarize, update_open_outcomes
 
 
 def state(candles):
@@ -192,3 +192,31 @@ def test_candles_are_sorted_deduplicated_and_invalid_ranges_rejected():
         (1000.0, 101.0, 99.0),
         (3000.0, 104.0, 102.0),
     ]
+
+
+def test_open_only_summary_exposes_zero_outcome_coverage(tmp_path):
+    path = tmp_path / "feedback.csv"
+    append_signal(state([{"timestamp": 1000, "high": 101, "low": 99}]), path=path)
+
+    summary = summarize(path=path)
+
+    assert summary["total"] == 1
+    assert summary["open"] == 1
+    assert summary["closed"] == 0
+    assert summary["unscored"] == 0
+    assert summary["outcome_coverage_pct"] == 0.0
+    assert summary["evaluation_status"] == "NOT_EVALUABLE"
+    rendered = format_summary(summary)
+    assert "outcome_coverage=0/1 (0.0%)" in rendered
+    assert "evaluation=NOT_EVALUABLE" in rendered
+    assert "win_rate=N/D" in rendered
+
+
+def test_empty_summary_is_explicitly_not_evaluable(tmp_path):
+    summary = summarize(path=tmp_path / "missing.csv")
+
+    assert summary["total"] == 0
+    assert summary["closed"] == 0
+    assert summary["outcome_coverage_pct"] is None
+    assert summary["evaluation_status"] == "NO_SIGNALS"
+    assert "outcome_coverage=N/D" in format_summary(summary)
