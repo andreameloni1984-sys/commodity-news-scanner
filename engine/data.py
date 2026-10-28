@@ -176,11 +176,15 @@ BIQUOTE_SYMBOLS = {
 YAHOO_SYMBOLS = {
     "XAU/USD": "GC=F",
     "XAG/USD": "SI=F",
+    "COPPER/USD": "HG=F",
     "XPT/USD": "PL=F",
     "XPD/USD": "PA=F",
     "WTI/USD": "CL=F",
     "BRENT/USD": "BZ=F",
 
+    "WHEAT/USD": "ZW=F",
+    "CORN/USD": "ZC=F",
+    "SOYBEAN/USD": "ZS=F",
     "RICE/USD": "ZR=F",
     "SUGAR/USD": "SB=F",
     "COCOA/USD": "CC=F",
@@ -201,6 +205,9 @@ YAHOO_SYMBOLS = {
 # ============================================================
 
 AGRI_SYMBOLS = {
+    "WHEAT/USD",
+    "CORN/USD",
+    "SOYBEAN/USD",
     "RICE/USD",
     "SUGAR/USD",
     "COCOA/USD",
@@ -209,6 +216,19 @@ AGRI_SYMBOLS = {
 
 
 AGRI_TERMS = {
+    "WHEAT/USD": (
+        "wheat",
+        "grain",
+    ),
+    "CORN/USD": (
+        "corn",
+        "maize",
+    ),
+    "SOYBEAN/USD": (
+        "soybean",
+        "soybeans",
+        "soya",
+    ),
     "RICE/USD": (
         "rice",
         "rough rice",
@@ -241,6 +261,26 @@ PROVIDER_ORDER = {
         "BIQUOTE",
         "TWELVE_DATA",
         "YAHOO",
+    ),
+
+    "COPPER/USD": (
+        "TWELVE_DATA",
+        "YAHOO",
+    ),
+
+    "WHEAT/USD": (
+        "YAHOO",
+        "TWELVE_DATA",
+    ),
+
+    "CORN/USD": (
+        "YAHOO",
+        "TWELVE_DATA",
+    ),
+
+    "SOYBEAN/USD": (
+        "YAHOO",
+        "TWELVE_DATA",
     ),
 
     "XPT/USD": (
