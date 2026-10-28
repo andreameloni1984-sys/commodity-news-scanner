@@ -6,6 +6,7 @@ Scores are transparent heuristic selection scores, NOT calibrated probabilities.
 from __future__ import annotations
 
 from typing import Any, Iterable
+from math import isfinite
 
 from soyuz_gagarin.commodity_trade_plan import build_commodity_bracket
 
@@ -33,7 +34,7 @@ def _missing_level(value: Any) -> bool:
         number = float(value)
     except (TypeError, ValueError, OverflowError):
         return False
-    return not __import__("math").isfinite(number) or number <= 0
+    return not isfinite(number) or number <= 0
 
 
 def rank_predictions(states: Iterable[Any]) -> list[dict]:
