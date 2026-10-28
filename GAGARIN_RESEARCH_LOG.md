@@ -45,3 +45,15 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+
+## 2026-10-28 — Fail closed on malformed recent volatility ranges
+
+- **Finding:** `_volatility_diagnostics()` silently skipped invalid high/low pairs and zipped mismatched arrays. A malformed recent bar could therefore be replaced by an older range, making the expansion/contraction diagnostic describe a different window than the latest market state.
+- **Implemented:** require high/low arrays to remain aligned; validate every pair in the recent lookback; return `UNKNOWN` with a reason on malformed recent ranges rather than bridging the gap. Median calculation now uses the conventional midpoint for even-sized samples.
+- **Operational path:** canonical `SoyuzState.highs/lows/atr` → recent range validation → median range ratio → volatility diagnostic metadata. This remains diagnostic-only and does not authorize an entry.
+- **Regression tests:** valid aligned ranges; NaN in the newest high; mismatched high/low lengths; invalid ATR.
+- **Lesson crosswalk:** the session-9 IBKR register prioritizes regime/ATR diagnostics and data-quality states; the 26 Sep `data_v4.1_patch.txt` is a historical freshness proposal, not proof of deployment. No look-ahead or profitability claim is made.
+- **Files:** `engine/regime.py`, new `tests/test_regime_volatility_diagnostics.py`.
+- **CI:** PR-triggered workflow status to be recorded after the new head runs; no local repository test run was available in this cycle.
+- **Deployment / limits:** branch only; no merge/deploy, no Render workspace selected, no live Telegram log inspection, no secrets read, no broker connection or order. PAPER/DEMO ONLY.
