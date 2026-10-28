@@ -203,7 +203,7 @@ RSS_FEEDS = (
     ("SPUTNIK / WHITE HOUSE", "https://www.whitehouse.gov/news/feed/"),
 )
 GDELT_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
-GDELT_QUERY = '(oil OR crude OR WTI OR Brent OR gold OR silver OR OPEC OR sanctions OR Trump OR "Federal Reserve" OR Iran OR Hormuz OR energy OR inflation)'
+GDELT_QUERY = '(oil OR crude OR WTI OR Brent OR gold OR silver OR copper OR wheat OR corn OR soybean OR OPEC OR sanctions OR Trump OR "Federal Reserve" OR Iran OR Hormuz OR energy OR inflation)'
 
 OIL_TERMS = {
     "oil", "crude", "wti", "brent", "opec", "petroleum", "diesel",
@@ -211,11 +211,14 @@ OIL_TERMS = {
     "oil inventories", "oil stocks", "energy supply", "hormuz",
     "iran", "russia", "sanctions", "eia", "barrel", "barrels",
 }
-METAL_TERMS = {"gold", "bullion", "precious metal", "precious metals", "xau", "silver", "argento", "platinum", "platino", "xpt", "palladium", "palladio", "xag", "xpd"}
+METAL_TERMS = {
+    "gold", "oro", "bullion", "precious metal", "precious metals", "xau",
+    "silver", "argento", "xag", "copper", "rame",
+}
 AGRI_TERMS = {
-    "coffee", "arabica", "robusta", "caffè", "caffe", "cocoa", "cacao",
-    "rice", "riso", "sugar", "zucchero", "raw sugar", "white sugar",
-    "coffee futures", "cocoa futures", "rice futures", "sugar futures",
+    "wheat", "grain", "grano", "corn", "maize", "mais",
+    "soybean", "soybeans", "soya", "soia",
+    "wheat futures", "corn futures", "soybean futures",
 }
 MACRO_TERMS = {
     "federal reserve", "fed", "interest rate", "interest rates", "rate cut",
@@ -528,35 +531,50 @@ def classify_event(title: str) -> dict[str, Any]:
     """Heuristic event mapping. It is interpretation, never a fact or trade by itself."""
     text = " ".join((title or "").lower().split())
     has_oil = any(term in text for term in OIL_TERMS)
-    has_metals = any(term in text for term in METAL_TERMS) or any(term in text for term in {"gold", "oro", "xau"})
     has_macro = any(term in text for term in MACRO_TERMS)
+    has_metals = any(term in text for term in METAL_TERMS)
     has_agri = any(term in text for term in AGRI_TERMS)
 
     assets: list[str] = []
     if has_oil:
         assets.extend(["WTI", "Brent"])
-    if has_metals or has_macro:
-        assets.extend(["Oro", "Argento", "Platino", "Palladio"])
+
+    # Macro catalysts can affect the three selected metals, but a metal-specific
+    # headline maps only to the named metal unless macro context is also present.
+    metal_terms = {
+        "Oro": {"gold", "oro", "xau"},
+        "Argento": {"silver", "argento", "xag"},
+        "Rame": {"copper", "rame"},
+    }
+    if has_macro:
+        assets.extend(["Oro", "Argento", "Rame"])
+    elif has_metals:
+        specific = [
+            asset for asset, terms in metal_terms.items()
+            if any(term in text for term in terms)
+        ]
+        assets.extend(specific or (["Oro", "Argento"] if ("precious metal" in text or "bullion" in text) else []))
+
     if has_agri:
         for asset, terms in {
-            "Caffè": {"coffee", "arabica", "robusta", "caffè", "caffe"},
-            "Cacao": {"cocoa", "cacao"},
-            "Riso": {"rice", "riso"},
-            "Zucchero": {"sugar", "zucchero"},
+            "Grano": {"wheat", "grain", "grano"},
+            "Mais": {"corn", "maize", "mais"},
+            "Soia": {"soybean", "soybeans", "soya", "soia"},
         }.items():
             if any(term in text for term in terms):
                 assets.append(asset)
     assets = list(dict.fromkeys(assets))
 
     if not assets:
-        return {"relevant": False, "assets": [], "impact": {}, "reason": "no commodity exposure keywords"}
+        return {"relevant": False, "assets": [], "impact": {}, "reason": "no selected commodity exposure keywords"}
 
     impact: dict[str, str] = {}
     matched_terms: dict[str, dict[str, list[str]]] = {}
+    agriculture_assets = {"Grano", "Mais", "Soia"}
     for asset in assets:
         if asset in {"WTI", "Brent"}:
             up_terms, down_terms = OIL_BULLISH_TERMS, OIL_BEARISH_TERMS
-        elif asset in {"Caffè", "Cacao", "Riso", "Zucchero"}:
+        elif asset in agriculture_assets:
             up_terms, down_terms = AGRI_BULLISH_TERMS, AGRI_BEARISH_TERMS
         else:
             up_terms, down_terms = METAL_BULLISH_TERMS, METAL_BEARISH_TERMS
@@ -598,7 +616,6 @@ def classify_event(title: str) -> dict[str, Any]:
         "reason": "keyword heuristic; not a calibrated probability; historical analogues are descriptive; watch candidates require live price confirmation",
     }
 
-
 def _asset_matches(asset: str, state: Any) -> bool:
     name = str(getattr(state, "commodity", "") or "").lower()
     symbol = str(getattr(state, "symbol", "") or "").upper()
@@ -610,20 +627,15 @@ def _asset_matches(asset: str, state: Any) -> bool:
         return "oro" in name or "gold" in name or "XAU" in symbol
     if asset == "Argento":
         return "argento" in name or "silver" in name or "XAG" in symbol
-    if asset == "Platino":
-        return "platino" in name or "platinum" in name or "XPT" in symbol
-    if asset == "Palladio":
-        return "palladio" in name or "palladium" in name or "XPD" in symbol
-    if asset == "Caffè":
-        return "caff" in name or "coffee" in name
-    if asset == "Cacao":
-        return "cacao" in name or "cocoa" in name
-    if asset == "Riso":
-        return "riso" in name or "rice" in name
-    if asset == "Zucchero":
-        return "zucchero" in name or "sugar" in name
+    if asset == "Rame":
+        return "rame" in name or "copper" in name or "COPPER" in symbol or symbol == "HG=F"
+    if asset == "Grano":
+        return "grano" in name or "wheat" in name or "WHEAT" in symbol or symbol == "ZW=F"
+    if asset == "Mais":
+        return "mais" in name or "corn" in name or "CORN" in symbol or symbol == "ZC=F"
+    if asset == "Soia":
+        return "soia" in name or "soybean" in name or "SOYBEAN" in symbol or symbol == "ZS=F"
     return False
-
 
 def _capture_baseline(event: dict[str, Any], states: list[Any]) -> dict[str, float]:
     """Capture live prices at first analysis after the news; no retrospective attribution."""

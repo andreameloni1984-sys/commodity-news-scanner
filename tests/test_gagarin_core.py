@@ -71,7 +71,7 @@ def test_unknown_asset_is_blocked():
 
 def test_legacy_wait_is_not_an_automatic_gagarin_veto():
     state = SimpleNamespace(
-        symbol="XPT/USD",
+        symbol="XAU/USD",
         price=100.0,
         atr=2.0,
         setup_direction="LONG",

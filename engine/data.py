@@ -21,70 +21,36 @@ PRINCIPI
    nell'universo commodity.
 10. Il DATA ENGINE non prende decisioni di trading.
 
-PROVIDER ROUTING
-----------------
+PROVIDER ROUTING — ACTIVE CORE UNIVERSE
+---------------------------------------
 
 GOLD
-    Twelve Data
-        ↓
-    Biquote
-        ↓
-    Yahoo Futures GC=F
+    Twelve Data → Biquote → Yahoo Futures GC=F
 
 SILVER
-    Biquote
-        ↓
-    Twelve Data
-        ↓
-    Yahoo Futures SI=F
+    Biquote → Twelve Data → Yahoo Futures SI=F
 
-PLATINUM
-    Biquote
-        ↓
-    Twelve Data
-        ↓
-    Yahoo Futures PL=F
-
-PALLADIUM
-    Biquote
-        ↓
-    Twelve Data
-        ↓
-    Yahoo Futures PA=F
+COPPER
+    Twelve Data → Yahoo Futures HG=F
 
 WTI
-    Biquote
-        ↓
-    Twelve Data
-        ↓
-    Yahoo Futures CL=F
+    Biquote → Twelve Data → Yahoo Futures CL=F
 
 BRENT
-    Biquote
-        ↓
-    Twelve Data
-        ↓
-    Yahoo Futures BZ=F
+    Biquote → Twelve Data → Yahoo Futures BZ=F
 
-RICE
-    Yahoo Futures ZR=F
-        ↓
-    Twelve Data commodity catalog
+WHEAT
+    Yahoo Futures ZW=F → filtered Twelve Data commodity catalog
 
-SUGAR
-    Yahoo Futures SB=F
-        ↓
-    Twelve Data commodity catalog
+CORN
+    Yahoo Futures ZC=F → filtered Twelve Data commodity catalog
 
-COCOA
-    Yahoo Futures CC=F
-        ↓
-    Twelve Data commodity catalog
+SOYBEANS
+    Yahoo Futures ZS=F → filtered Twelve Data commodity catalog
 
-COFFEE
-    Yahoo Futures KC=F
-        ↓
-    Twelve Data commodity catalog
+These are explicit routing candidates, not a guarantee of live availability.
+Every provider response still passes OHLC, timestamp, history and freshness
+validation before the instrument can be treated as LIVE.
 
 
 DATA FLOW
@@ -176,11 +142,15 @@ BIQUOTE_SYMBOLS = {
 YAHOO_SYMBOLS = {
     "XAU/USD": "GC=F",
     "XAG/USD": "SI=F",
+    "COPPER/USD": "HG=F",
     "XPT/USD": "PL=F",
     "XPD/USD": "PA=F",
     "WTI/USD": "CL=F",
     "BRENT/USD": "BZ=F",
 
+    "WHEAT/USD": "ZW=F",
+    "CORN/USD": "ZC=F",
+    "SOYBEAN/USD": "ZS=F",
     "RICE/USD": "ZR=F",
     "SUGAR/USD": "SB=F",
     "COCOA/USD": "CC=F",
@@ -201,6 +171,9 @@ YAHOO_SYMBOLS = {
 # ============================================================
 
 AGRI_SYMBOLS = {
+    "WHEAT/USD",
+    "CORN/USD",
+    "SOYBEAN/USD",
     "RICE/USD",
     "SUGAR/USD",
     "COCOA/USD",
@@ -209,6 +182,19 @@ AGRI_SYMBOLS = {
 
 
 AGRI_TERMS = {
+    "WHEAT/USD": (
+        "wheat",
+        "grain",
+    ),
+    "CORN/USD": (
+        "corn",
+        "maize",
+    ),
+    "SOYBEAN/USD": (
+        "soybean",
+        "soybeans",
+        "soya",
+    ),
     "RICE/USD": (
         "rice",
         "rough rice",
@@ -241,6 +227,26 @@ PROVIDER_ORDER = {
         "BIQUOTE",
         "TWELVE_DATA",
         "YAHOO",
+    ),
+
+    "COPPER/USD": (
+        "TWELVE_DATA",
+        "YAHOO",
+    ),
+
+    "WHEAT/USD": (
+        "YAHOO",
+        "TWELVE_DATA",
+    ),
+
+    "CORN/USD": (
+        "YAHOO",
+        "TWELVE_DATA",
+    ),
+
+    "SOYBEAN/USD": (
+        "YAHOO",
+        "TWELVE_DATA",
     ),
 
     "XPT/USD": (
@@ -703,14 +709,13 @@ def _load_twelve_commodity_catalog():
 
     We do NOT perform unrestricted symbol matching.
 
-    This prevents:
-        COFFEE
-        SUGAR
-        COCOA
-        RICE
+    Active crop fallback uses explicit terms for:
+        WHEAT, CORN, SOYBEANS
 
-    from accidentally resolving to equities,
-    ETFs, ADRs or warrants.
+    Legacy mappings for de-selected crops remain in the module for
+    compatibility, but those symbols are not part of the active universe.
+    Unrestricted matching is prohibited so a crop cannot resolve to an
+    equity, ETF, ADR or warrant.
     """
 
     global _TWELVE_COMMODITY_CATALOG

@@ -27,15 +27,13 @@ ENERGY = {
 METALS = {
     "Oro",
     "Argento",
-    "Platino",
-    "Palladio",
+    "Rame",
 }
 
 AGRICULTURE = {
-    "Riso",
-    "Zucchero",
-    "Cacao",
-    "Caffè",
+    "Grano",
+    "Mais",
+    "Soia",
 }
 
 

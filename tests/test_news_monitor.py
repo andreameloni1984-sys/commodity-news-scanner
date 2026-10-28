@@ -147,26 +147,33 @@ def test_mixed_oil_catalysts_stay_neutral_and_explain_why():
     assert 0 <= result["confidence_score"] <= 100
 
 
-def test_selected_agricultural_commodities_are_classified_by_crop_catalyst():
-    coffee = classify_event("Brazil drought threatens Arabica coffee harvest")
-    cocoa = classify_event("Cocoa crop disease reduces production forecast")
-    rice = classify_event("Rice export ban disrupts supply")
-    sugar = classify_event("Sugar production rises after bumper harvest")
-    assert coffee["impact"]["Caffè"] == "RIALZISTA"
-    assert cocoa["impact"]["Cacao"] == "RIALZISTA"
-    assert rice["impact"]["Riso"] == "RIALZISTA"
-    assert sugar["impact"]["Zucchero"] == "RIBASSISTA"
+def test_selected_grains_are_classified_by_crop_catalyst():
+    wheat = classify_event("Drought damages wheat crop and threatens harvest")
+    corn = classify_event("Corn crop disease threatens production")
+    soybean = classify_event("Soybean harvest improves after bumper harvest")
+    assert wheat["impact"]["Grano"] == "RIALZISTA"
+    assert corn["impact"]["Mais"] == "RIALZISTA"
+    assert soybean["impact"]["Soia"] == "RIBASSISTA"
+    assert not {"Caffè", "Cacao", "Riso", "Zucchero"} & set(wheat["assets"])
 
 
-def test_platinum_and_silver_are_supported_in_selected_universe():
-    result = classify_event("Platinum rises as the Federal Reserve signals rate cuts")
-    assert "Platino" in result["assets"]
-    assert "Argento" in result["assets"]
+def test_copper_and_silver_are_supported_in_selected_universe():
+    copper = classify_event("Copper supply disruption raises industrial metal prices")
+    silver = classify_event("Silver bullion demand rises")
+    assert "Rame" in copper["assets"]
+    assert silver["assets"] == ["Argento"]
+    assert "Platino" not in copper["assets"]
+    assert "Palladio" not in copper["assets"]
 
 
 def test_agricultural_mixed_catalysts_remain_mixed():
-    result = classify_event("Coffee harvest improves but drought threatens supply")
-    assert result["impact"]["Caffè"] == "MISTA"
+    result = classify_event("Wheat harvest improves but drought threatens supply")
+    assert result["impact"]["Grano"] == "MISTA"
+
+
+def test_inactive_commodities_do_not_create_selected_universe_assets():
+    assert classify_event("Coffee prices rise after a routine harvest update")["relevant"] is False
+    assert classify_event("Platinum futures rise in a quiet session")["relevant"] is False
 
 
 def test_sputnik_historical_action_reaction_is_attached_to_gagarin_news():
@@ -262,13 +269,14 @@ def test_alert_scorecard_tracks_observed_tp1_and_stop_loss():
     assert report["open_at_last_check"] == 0
 
 
-def test_asset_matches_support_silver_and_palladium_symbols():
+def test_asset_matches_support_silver_and_copper_symbols():
     from telegram.news_monitor import _asset_matches
 
-    assert _asset_matches("Argento", SimpleNamespace(commodity="Silver", symbol="XAGUSD"))
+    assert _asset_matches("Argento", SimpleNamespace(commodity="Silver", symbol="XAG/USD"))
     assert _asset_matches("Argento", SimpleNamespace(commodity="Argento spot", symbol=""))
-    assert _asset_matches("Palladio", SimpleNamespace(commodity="Palladium", symbol="XPDUSD"))
-    assert _asset_matches("Palladio", SimpleNamespace(commodity="Palladio spot", symbol=""))
+    assert _asset_matches("Rame", SimpleNamespace(commodity="Copper", symbol="COPPER/USD"))
+    assert _asset_matches("Rame", SimpleNamespace(commodity="Rame spot", symbol=""))
+
 
 def test_alert_scorecard_does_not_miss_stop_hit_in_first_15_minutes():
     from datetime import datetime, timedelta, timezone

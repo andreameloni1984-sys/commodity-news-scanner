@@ -474,6 +474,41 @@ def run():
             commodities
         )
 
+        # Defense in depth: never allow a legacy/parallel engine to leak
+        # instruments outside the canonical enabled universe into ranking,
+        # journal, feedback, execution, or Telegram output.
+        allowed_symbols = {
+            str(getattr(item, "symbol", "") or "").strip().upper()
+            for item in commodities
+        }
+        allowed_names = {
+            str(getattr(item, "name", "") or "").strip().casefold()
+            for item in commodities
+        }
+        filtered_results = []
+        rejected_results = []
+        for state in results:
+            state_symbol = str(getattr(state, "symbol", "") or "").strip().upper()
+            state_name = str(getattr(state, "commodity", "") or "").strip().casefold()
+            is_allowed = (
+                state_symbol in allowed_symbols
+                if state_symbol
+                else state_name in allowed_names
+            )
+            if is_allowed:
+                filtered_results.append(state)
+            else:
+                rejected_results.append(state)
+        if rejected_results:
+            print(
+                "UNIVERSE GUARD: excluded out-of-universe states: "
+                + ", ".join(
+                    str(getattr(state, "commodity", None) or getattr(state, "symbol", "UNKNOWN"))
+                    for state in rejected_results
+                )
+            )
+        results = filtered_results
+
     except Exception as exc:
 
         print()

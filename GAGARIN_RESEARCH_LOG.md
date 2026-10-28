@@ -45,3 +45,39 @@
 - **CI:** NEWS alert, public-event-brain, PAPER, general tests, and execution-layer workflows passed on the branch. The `Workers Builds: telegram-github-bridge` check was still in progress at the last check, so merge is held until it resolves.
 - **Deployment / limits:** no Render deployment triggered; build-pipeline minutes are exhausted. This affects the scorecard's integrity, not the trading decision path. No durable-journal claim is made while `DATABASE_URL` is absent.
 - **Safety:** scorecard hygiene only; PAPER/DEMO, no broker or order execution.
+
+## 2026-10-28 — Narrow Gagarin to a focused 8-instrument commodity universe
+
+- **Selection:** metals are limited to Gold (XAU/USD), Silver (XAG/USD) and Copper (COPPER/USD). Other active instruments are WTI, Brent, Wheat, Corn and Soybeans. Platinum, Palladium, Gasoline, Natural Gas, Rice, Sugar, Cocoa, Coffee and FX pairs are removed from the active universe.
+- **Evidence:** the recovered IBKR session-9 record prioritizes instrument/data availability, point-in-time validation, liquidity/costs and explicit futures expiry/rollover. The 2026-09-25 historical note recorded stale Yahoo-backed Coffee/Cocoa/Rice/Sugar feeds; this is a reason to avoid making them core instruments until fresh data is demonstrated, not proof that they are always unavailable. Prior project preference also emphasized metals, cereals and oil.
+- **Operational path:** `commodities/universe.py` → `enabled_commodities()` → `main.py` / Telegram analysis → `engine/data.py` provider chain → news classifier and embedded intelligence → `soyuz_gagarin/config.py::allowed_assets` risk/governor allowlist.
+- **Provider routing:** add explicit Yahoo futures fallbacks for Copper (`HG=F`), Wheat (`ZW=F`), Corn (`ZC=F`) and Soybeans (`ZS=F`); Twelve Data agriculture catalog fallback is constrained by crop terms. Stooq aliases are added for the three grain futures as a mapping only; no live availability is claimed.
+- **Regression coverage:** tests assert exact active universe, provider mapping and governor allowlist, Telegram aliases, crop-specific news classification and rejection of de-selected Coffee/Platinum-only headlines.
+- **Validation status:** code/tests are on this feature branch; no merge/deploy. CI must run on the branch before integration. No live provider availability, freshness, profitability, or out-of-sample performance is claimed.
+- **Safety:** PAPER/DEMO ONLY; no broker connection, order placement or Telegram test message. Render build-pipeline minutes remain exhausted; no Render build/deploy was triggered.
+
+- **Follow-up verification:** selected-universe regression file `tests/test_gagarin_selected_universe.py` also checks that `soyuz_gagarin/config.py::allowed_assets`, `engine/market_status.py` groups and explicit provider maps agree with the eight canonical symbols. The news tests check that silver-bullion headlines do not spuriously classify gold, and that removed Coffee/Platinum-only headlines do not activate a selected asset.
+- **Branch snapshot:** `feat/gagarin-core-universe-20261028`; latest code/test/documentation changes remain branch-only. GitHub compare against `main` reports 0 commits behind. The combined status endpoint returned no check statuses for the branch head or current `main`, and the workflow-run query returned no PR-triggered runs for this branch. Therefore **CI is not claimed as passed** and the full test suite has not been run in this environment.
+- **No deploy:** the branch is not merged; Render live code remains unchanged. No Render workspace selection or Telegram runtime logs were available in this run. No live quote/provider availability or data freshness is asserted.
+
+## 2026-10-28 — Prevent legacy Gagarin states leaking extra instruments
+
+- **Finding:** the eight-instrument universe existed only on the feature branch. The repository's default `main` still contained the older 21-instrument universe, including Platinum, Palladium, Rice, Sugar, Cocoa, Coffee, Gasoline, Natural Gas and Forex. This explains why the running deployment can still show extras: branch-only changes are not live.
+- **Implemented on feature branch:** added a final universe guard in `main.py` immediately after `analyze_universe()`. States with an explicit symbol must match an enabled canonical symbol exactly; only states with no symbol may fall back to an exact enabled commodity name. Excluded states are logged and cannot reach ranking, Governor, journal, feedback, execution, or the main Telegram board.
+- **Validation:** source-level inspection only. The full test suite/CI has not run; no live Telegram message was sent.
+- **Critical limitation:** this does not change the running service until the corrected branch is integrated and deployed. Do not claim the extras are gone from live Telegram yet. Render build-pipeline minutes remain exhausted, so no merge or deployment was attempted.
+- **Safety:** PAPER/DEMO only; no broker or real orders.
+
+## 2026-10-28 follow-up — align legacy test fixtures with the selected universe
+
+- **Finding from CI:** the first PR-triggered runs for PR #88 exposed failures in legacy test fixtures that used XPT/USD (Platinum) while expecting PAPER_ENTRY. Platinum is intentionally excluded from the selected eight-symbol universe, so the Governor correctly returned PAPER_WATCH/blocked; loosening the production allowlist would reintroduce the unwanted instrument.
+- **Fix:** updated only the generic legacy fixtures in tests/test_gagarin_core.py and tests/test_mt5_bridge.py to use XAU/USD, which remains in the approved universe. Production allowlist/guard stays strict.
+- **CI before fix:** Commodity trade-plan run 40628771278 failed one assertion; SOYUZ GAGARIN PAPER run 40628771297 failed three assertions; full integration run 40628771588 failed four assertions. Failures trace to the same out-of-universe test fixture assumption, not to journal schema code.
+- **Status:** regression-fixture correction committed on feat/gagarin-core-universe-20261028; new CI pending. No pass claimed until the corrected head completes.
+- **Safety/deploy:** no merge/deploy, no broker or real order; Render build minutes remain exhausted.
+
+## 2026-10-28 final CI verification — selected eight-instrument universe
+
+- **Tested code/test head:** 0fae32cbd34ba9789e02ca02515c7aec234f4994. CI first exposed legacy test fixtures expecting Platinum to be admitted; the fixtures were corrected to use XAU/USD while the production allowlist stayed strict.
+- **CI PASS on the corrected head:** Gagarin Telegram menu [run 40628957730](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40628957730), Public Event Brain [run 40628957736](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40628957736), Commodity trade-plan [run 40628957719](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40628957719), NEWS alert [run 40628957716](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40628957716), Execution Layer [run 40628957705](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40628957705), PAPER [run 40628957823](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40628957823), and full Gagarin pytest suite [run 40628957707](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/40628957707).
+- **Current state:** PR #88 is draft; no merge or deploy. This CI pass is not live-provider validation and does not prove market performance. The default main branch still uses the old universe until the PR is integrated and a deploy is performed.
