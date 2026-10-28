@@ -709,14 +709,13 @@ def _load_twelve_commodity_catalog():
 
     We do NOT perform unrestricted symbol matching.
 
-    This prevents:
-        COFFEE
-        SUGAR
-        COCOA
-        RICE
+    Active crop fallback uses explicit terms for:
+        WHEAT, CORN, SOYBEANS
 
-    from accidentally resolving to equities,
-    ETFs, ADRs or warrants.
+    Legacy mappings for de-selected crops remain in the module for
+    compatibility, but those symbols are not part of the active universe.
+    Unrestricted matching is prohibited so a crop cannot resolve to an
+    equity, ETF, ADR or warrant.
     """
 
     global _TWELVE_COMMODITY_CATALOG
