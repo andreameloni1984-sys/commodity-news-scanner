@@ -33,7 +33,7 @@ from config import (
 )
 
 from engine.gagarin import analyze_universe
-from engine.forex_session import filter_forex_for_session
+from engine.session_filter import filter_by_session
 
 from paper_trade_journal import (
     record_entries,
@@ -442,24 +442,24 @@ def run():
     # UNIVERSE
     # --------------------------------------------------------
 
-    commodities = filter_forex_for_session(enabled_commodities(), on_demand=False)
+    commodities = filter_by_session(enabled_commodities(), on_demand=False)
 
     print(
-        "FOREX SESSION: automatic 08:00-11:00 and 14:00-18:00 Europe/Rome; "
-        "manual runs bypass the time gate."
+        "SESSION FILTER: orari esatti per i 10 strumenti (Europe/Rome). "
+        "Run manuali/on-demand bypassano il filtro."
     )
 
     if not commodities:
 
         print(
-            "❌ Nessuna commodity abilitata."
+            "❌ Nessuna commodity nella finestra oraria corrente."
         )
 
         return 1
 
     print(
         f"Universe: "
-        f"{len(commodities)} commodity abilitate"
+        f"{len(commodities)} commodity abilitate (filtrate per orario)"
     )
 
     print()
