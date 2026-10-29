@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   alert:
-    name: AGGRESSIVE ENTRY ALERT
+    name: AGGRESSIVE ENTRY + REVERSAL ALERT
     runs-on: ubuntu-latest
     env:
       TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
@@ -40,17 +40,17 @@ jobs:
           python - <<'PY'
           from commodities.universe import enabled_commodities
           from engine.gagarin import analyze_universe
-          from engine.forex_session import filter_forex_for_session
+          from engine.session_filter import filter_by_session
           from telegram.aggressive_alert import format_aggressive_alert, run_aggressive_alert
 
-          instruments = filter_forex_for_session(enabled_commodities(), on_demand=False)
-          print(f"FOREX SESSION GATE: {len(instruments)} instruments selected; manual dispatch bypasses gate.")
+          instruments = filter_by_session(enabled_commodities(), on_demand=False)
+          print(f"SESSION FILTER: {len(instruments)} instruments in window; manual dispatch bypasses gate.")
           states = analyze_universe(instruments)
           message = format_aggressive_alert(states)
           if not message:
-              print("AGGRESSIVE ALERT: no qualifying live opportunity; nothing to send.")
+              print("AGGRESSIVE ALERT: no qualifying live opportunity or reversal; nothing to send.")
           elif not run_aggressive_alert(states):
               raise SystemExit("AGGRESSIVE ALERT FAILED: opportunity found but Telegram delivery failed; check bot token, chat ID, and Telegram API response.")
           else:
-              print("AGGRESSIVE ALERT: Telegram delivery accepted.")
+              print("AGGRESSIVE ALERT: Telegram delivery accepted (entry and/or reversal).")
           PY
