@@ -68,15 +68,15 @@ TWELVE_DATA_API_KEY = os.getenv(
 # fresh-data, valid setup/trigger, SL/TP, R/R or paper-only safety gates.
 
 MIN_PROBABILITY = float(
-    os.getenv("MIN_ENTRY_PROBABILITY", "55")
+    os.getenv("MIN_ENTRY_PROBABILITY", "40")
 )
 
 MIN_QUALITY = float(
-    os.getenv("MIN_ENTRY_QUALITY", "45")
+    os.getenv("MIN_ENTRY_QUALITY", "30")
 )
 
 MIN_CONFIDENCE = float(
-    os.getenv("MIN_ENTRY_CONFIDENCE", "50")
+    os.getenv("MIN_ENTRY_CONFIDENCE", "35")
 )
 
 MIN_RR = float(
