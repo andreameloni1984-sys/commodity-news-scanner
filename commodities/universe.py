@@ -1,9 +1,9 @@
 # ============================================================
 # SOYUZ GAGARIN v1.4
-# COMMODITY UNIVERSE
+# COMMODITY UNIVERSE (trimmed to 10 core)
 # ============================================================
 #
-# Universo operativo principale.
+# Universo operativo principale, ridotto a 10-12 strumenti di interesse.
 #
 # IMPORTANTE:
 # I simboli qui sotto sono IDENTIFICATORI LOGICI.
@@ -56,43 +56,40 @@ class Commodity:
 
 
 # ============================================================
-# MAIN UNIVERSE
+# MAIN UNIVERSE (10 core)
 # ============================================================
 #
-# Manteniamo il paniere che abbiamo deciso per SOYUZ:
+# Focus su strumenti rilevanti per le regole attive (energia shock + weekly)
+# e paniere SOYUZ deciso:
 #
 # METALLI: Oro, Argento, Rame
 # ENERGY: WTI, Brent
-# AGRICOLTURA: Riso (cereale già mappato nel data engine)
-# Forex resta separato dal paniere commodities.
+# AGRICOLTURA: Grano, Mais, Soia
+# Forex core: EUR/USD, GBP/USD (restano separati ma prioritari per day)
+#
+# Forex minori rimossi per ridurre rumore.
 #
 # ============================================================
 
 
 COMMODITIES = [
-    # CORE METALS — user-selected
+    # CORE METALS
     Commodity(name="Oro", symbol="XAU/USD", category="Metal", unit="USD", priority=1),
     Commodity(name="Argento", symbol="XAG/USD", category="Metal", unit="USD", priority=2),
     Commodity(name="Rame", symbol="COPPER/USD", category="Metal", unit="USD", priority=3),
 
-    # CORE ENERGY
+    # CORE ENERGY (supporta ENERGY_SHOCK_AND_WEEKLY_SAME_SIDE)
     Commodity(name="Petrolio WTI", symbol="WTI/USD", category="Energy", unit="USD", priority=4),
     Commodity(name="Petrolio Brent", symbol="BRENT/USD", category="Energy", unit="USD", priority=5),
 
-    # CORE CEREALS — explicit Yahoo futures routes are added in engine/data.py
+    # CORE CEREALS
     Commodity(name="Grano", symbol="WHEAT/USD", category="Agriculture", unit="USD", priority=6),
     Commodity(name="Mais", symbol="CORN/USD", category="Agriculture", unit="USD", priority=7),
     Commodity(name="Soia", symbol="SOYBEAN/USD", category="Agriculture", unit="USD", priority=8),
 
-    # FOREX remains a separate instrument group; it is not part of the commodity trim.
+    # CORE FOREX (day overlap prioritari)
     Commodity(name="EUR/USD", symbol="EUR/USD", category="Forex", unit="USD", priority=9),
     Commodity(name="GBP/USD", symbol="GBP/USD", category="Forex", unit="USD", priority=10),
-    Commodity(name="USD/JPY", symbol="USD/JPY", category="Forex", unit="JPY", priority=11),
-    Commodity(name="USD/CHF", symbol="USD/CHF", category="Forex", unit="CHF", priority=12),
-    Commodity(name="AUD/USD", symbol="AUD/USD", category="Forex", unit="USD", priority=13),
-    Commodity(name="USD/CAD", symbol="USD/CAD", category="Forex", unit="CAD", priority=14),
-    Commodity(name="NZD/USD", symbol="NZD/USD", category="Forex", unit="USD", priority=15),
-    Commodity(name="EUR/JPY", symbol="EUR/JPY", category="Forex", unit="JPY", priority=16),
 ]
 
 # ============================================================
