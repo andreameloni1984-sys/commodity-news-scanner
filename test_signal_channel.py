@@ -55,7 +55,7 @@ def test_wait_when_no_entry():
 
 def test_signal_has_risk_levels():
     out = format_signal(state())
-    assert "Entry" in out
+    assert "ENTRY:" in out
     assert "SL" in out
     assert "TP1" in out
     assert "TP3" in out
