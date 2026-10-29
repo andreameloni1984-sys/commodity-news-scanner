@@ -3,6 +3,9 @@
 Signal-only presentation layer. It never places orders and never invents
 market data. Scores are explicitly confluence scores, not calibrated
 probabilities.
+
+Formato aggiornato in stile canali segnalatori professionali
+(entry/SL/TP multipli, rischio, motivo, timestamp).
 """
 
 from __future__ import annotations
@@ -55,37 +58,49 @@ def _is_signal(state) -> bool:
     )
 
 
+def _rule_label(state) -> str:
+    metadata = getattr(state, "metadata", {}) or {}
+    rule = metadata.get("rule") or metadata.get("paper_rule", {}).get("reason") if isinstance(metadata.get("paper_rule"), dict) else None
+    if rule:
+        return str(rule)
+    return "GAGARIN CONFLUENCE"
+
+
 def format_signal(state) -> str:
     direction = _direction(state)
     icon = "🟢" if direction == "LONG" else "🔴"
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    metadata = getattr(state, "metadata", {}) or {}
+    risk_pct = metadata.get("risk_pct") or 0.01
 
     lines = [
         f"{icon} SOYUZ SIGNAL — {str(state.commodity).upper()}",
         "━━━━━━━━━━━━━━━━━━━━",
-        "🧪 PAPER ONLY • NO AUTO-ORDER",
+        "🧪 PAPER ONLY • NESSUN ORDINE AUTOMATICO",
+        f"🕒 {now}",
         "",
-        f"📌 {direction}",
-        f"💰 Entry: {_fmt(state.entry)}",
+        f"📌 DIREZIONE: {direction}",
+        f"💰 ENTRY: {_fmt(state.entry)}",
         f"🛑 SL: {_fmt(state.stop)}",
         f"🎯 TP1: {_fmt(state.tp1)}",
         f"🎯 TP2: {_fmt(state.tp2)}",
         f"🎯 TP3: {_fmt(state.tp3)}",
         "",
-        f"📐 RR: TP1 {_fmt(getattr(state, 'rr1', None), 2)} | "
-        f"TP2 {_fmt(getattr(state, 'rr2', None), 2)} | "
-        f"TP3 {_fmt(getattr(state, 'rr3', None), 2)}",
-        f"📊 Confluence: {_fmt(getattr(state, 'probability', None), 1)} / 100",
-        f"⭐ Quality: {_fmt(getattr(state, 'quality', None), 1)} / 100",
-        f"🛡 Confidence: {_fmt(getattr(state, 'confidence', None), 1)} / 100",
+        f"📐 RR: TP1 {_fmt(getattr(state, 'rr1', None), 2)} | TP2 {_fmt(getattr(state, 'rr2', None), 2)} | TP3 {_fmt(getattr(state, 'rr3', None), 2)}",
+        f"📊 Confluence: {_fmt(getattr(state, 'probability', None), 1)}/100",
+        f"⭐ Quality: {_fmt(getattr(state, 'quality', None), 1)}/100",
+        f"🛡 Confidence: {_fmt(getattr(state, 'confidence', None), 1)}/100",
         f"📏 ATR: {_fmt(getattr(state, 'atr', None), 5)}",
+        f"⚠️ RISK: {float(risk_pct)*100:.1f}% max",
         "",
         f"🌐 Regime: {getattr(state, 'regime', 'UNKNOWN')}",
         f"🏗 Structure: {getattr(state, 'structure', 'UNKNOWN')}",
         f"🎯 Setup: {getattr(state, 'setup', 'NONE')}",
         f"⚡ Trigger: {getattr(state, 'trigger', 'NONE')}",
+        f"📜 Regola: {_rule_label(state)}",
         f"⏱ {_age_label(state)}",
         "",
-        "⚠️ Segnale informativo: rischio e contesto vanno verificati prima di qualsiasi decisione.",
+        "⚠️ Segnale informativo PAPER. Verifica contesto e rischio prima di qualsiasi decisione. Nessun ordine inviato.",
     ]
     return "\n".join(lines)
 
@@ -106,11 +121,13 @@ def format_wait(state) -> str:
 def format_signal_board(results: Iterable[object]) -> str:
     results = list(results or [])
     signals = [s for s in results if _is_signal(s)]
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     lines = [
         "🚀 SOYUZ GAGARIN — SIGNAL BOARD",
         "━━━━━━━━━━━━━━━━━━━━",
         "🧪 PAPER ONLY • NESSUN ORDINE AUTOMATICO",
+        f"🕒 {now}",
         "",
     ]
 
@@ -127,17 +144,15 @@ def format_signal_board(results: Iterable[object]) -> str:
         direction = _direction(state)
         icon = "🟢" if direction == "LONG" else "🔴"
         lines.append(
-            f"{i}. {icon} {state.commodity} {direction} | "
-            f"Entry {_fmt(state.entry)} | "
-            f"SL {_fmt(state.stop)} | "
-            f"TP1 {_fmt(state.tp1)} | "
-            f"RR {_fmt(getattr(state, 'rr1', None), 2)}"
+            f"{i}. {icon} {state.commodity} {direction}\n"
+            f"   Entry {_fmt(state.entry)} | SL {_fmt(state.stop)} | TP1 {_fmt(state.tp1)}\n"
+            f"   RR {_fmt(getattr(state, 'rr1', None), 2)} | {_rule_label(state)}"
         )
 
     lines += [
         "",
         "Nota: Confluence/Quality/Confidence sono score del motore,",
-        "non probabilità statisticamente calibrate.",
+        "non probabilità statisticamente calibrate. PAPER ONLY.",
     ]
     return "\n".join(lines)
 
