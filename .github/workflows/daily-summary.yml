@@ -1,0 +1,66 @@
+name: Gagarin Daily Summary
+
+on:
+  schedule:
+    # Ogni giorno alle 06:15 UTC
+    - cron: "15 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  summary:
+    name: Send daily opportunity summary
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Send summary
+        run: |
+          python - <<'PY'
+          import os, json, urllib.request
+          from telegram.signals import format_watch_board
+          from engine.feedback import summarize, format_summary
+
+          token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+          chat = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+          if not token or not chat:
+              print("Missing Telegram secrets")
+              raise SystemExit(0)
+
+          # Feedback summary
+          try:
+              fb = summarize()
+              fb_text = format_summary(fb)
+          except Exception as e:
+              fb_text = f"Feedback non disponibile: {e}"
+
+          text = (
+              "🚀 **GAGARIN — RIEPILOGO GIORNALIERO**\n"
+              "━━━━━━━━━━━━━━━━━━━━\n\n"
+              f"{fb_text}\n\n"
+              "Usa i pulsanti del bot per i dettagli in tempo reale."
+          )
+
+          payload = json.dumps({"chat_id": chat, "text": text[:4000]}).encode()
+          req = urllib.request.Request(
+              f"https://api.telegram.org/bot{token}/sendMessage",
+              data=payload,
+              headers={"Content-Type": "application/json"},
+          )
+          try:
+              with urllib.request.urlopen(req, timeout=20) as r:
+                  print("Summary sent")
+          except Exception as e:
+              print(f"Send failed: {e}")
+          PY
