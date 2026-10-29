@@ -66,12 +66,24 @@ def _rule_label(state) -> str:
     return "GAGARIN CONFLUENCE"
 
 
+def _opportunity_score(state) -> float:
+    """Simple ranking score for prioritization."""
+    try:
+        p = float(getattr(state, "probability", 0) or 0)
+        q = float(getattr(state, "quality", 0) or 0)
+        c = float(getattr(state, "confidence", 0) or 0)
+        return (p * 0.4) + (q * 0.35) + (c * 0.25)
+    except Exception:
+        return 0.0
+
+
 def format_signal(state) -> str:
     direction = _direction(state)
     icon = "🟢" if direction == "LONG" else "🔴"
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     metadata = getattr(state, "metadata", {}) or {}
     risk_pct = metadata.get("risk_pct") or 0.01
+    score = _opportunity_score(state)
 
     lines = [
         f"{icon} **OPPORTUNITÀ** — {str(state.commodity).upper()} {direction}",
@@ -87,7 +99,7 @@ def format_signal(state) -> str:
         f"🎯 TP3: {_fmt(state.tp3)}",
         "",
         f"📐 RR: TP1 {_fmt(getattr(state, 'rr1', None), 2)} | TP2 {_fmt(getattr(state, 'rr2', None), 2)} | TP3 {_fmt(getattr(state, 'rr3', None), 2)}",
-        f"📊 Confluence: {_fmt(getattr(state, 'probability', None), 1)}/100",
+        f"📊 Score: {score:.1f}/100",
         f"⭐ Quality: {_fmt(getattr(state, 'quality', None), 1)}/100",
         f"🛡 Confidence: {_fmt(getattr(state, 'confidence', None), 1)}/100",
         f"📏 ATR: {_fmt(getattr(state, 'atr', None), 5)}",
@@ -121,10 +133,12 @@ def format_wait(state) -> str:
 def format_signal_board(results: Iterable[object]) -> str:
     results = list(results or [])
     signals = [s for s in results if _is_signal(s)]
+    # Prioritize strongest opportunities
+    signals.sort(key=_opportunity_score, reverse=True)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     lines = [
-        "🚀 **SOYUZ GAGARIN — OPPORTUNITÀ**",
+        "🚀 **SOYUZ GAGARIN — TOP OPPORTUNITÀ**",
         "━━━━━━━━━━━━━━━━━━━━",
         "🧪 PAPER ONLY • NESSUN ORDINE AUTOMATICO",
         f"🕒 {now}",
@@ -140,19 +154,21 @@ def format_signal_board(results: Iterable[object]) -> str:
         ]
         return "\n".join(lines)
 
-    for i, state in enumerate(signals[:5], 1):
+    # Show only the top 3 strongest
+    for i, state in enumerate(signals[:3], 1):
         direction = _direction(state)
         icon = "🟢" if direction == "LONG" else "🔴"
+        score = _opportunity_score(state)
         lines.append(
-            f"{i}. {icon} **{state.commodity} {direction}**\n"
+            f"{i}. {icon} **{state.commodity} {direction}** (score {score:.0f})\n"
             f"   Entry {_fmt(state.entry)} | SL {_fmt(state.stop)} | TP1 {_fmt(state.tp1)}\n"
             f"   RR {_fmt(getattr(state, 'rr1', None), 2)} | {_rule_label(state)}"
         )
 
     lines += [
         "",
-        "Nota: Confluence/Quality/Confidence sono score del motore,",
-        "non probabilità statisticamente calibrate. PAPER ONLY.",
+        "Solo le opportunità più forti. Score = combinazione di confluence, quality e confidence.",
+        "PAPER ONLY — verifica sempre prima di decidere.",
     ]
     return "\n".join(lines)
 
