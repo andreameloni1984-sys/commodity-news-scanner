@@ -74,7 +74,7 @@ def format_signal(state) -> str:
     risk_pct = metadata.get("risk_pct") or 0.01
 
     lines = [
-        f"{icon} SOYUZ SIGNAL — {str(state.commodity).upper()}",
+        f"{icon} **OPPORTUNITÀ** — {str(state.commodity).upper()} {direction}",
         "━━━━━━━━━━━━━━━━━━━━",
         "🧪 PAPER ONLY • NESSUN ORDINE AUTOMATICO",
         f"🕒 {now}",
@@ -97,7 +97,7 @@ def format_signal(state) -> str:
         f"🏗 Structure: {getattr(state, 'structure', 'UNKNOWN')}",
         f"🎯 Setup: {getattr(state, 'setup', 'NONE')}",
         f"⚡ Trigger: {getattr(state, 'trigger', 'NONE')}",
-        f"📜 Regola: {_rule_label(state)}",
+        f"📜 Motivo: {_rule_label(state)}",
         f"⏱ {_age_label(state)}",
         "",
         "⚠️ Segnale informativo PAPER. Verifica contesto e rischio prima di qualsiasi decisione. Nessun ordine inviato.",
@@ -124,7 +124,7 @@ def format_signal_board(results: Iterable[object]) -> str:
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     lines = [
-        "🚀 SOYUZ GAGARIN — SIGNAL BOARD",
+        "🚀 **SOYUZ GAGARIN — OPPORTUNITÀ**",
         "━━━━━━━━━━━━━━━━━━━━",
         "🧪 PAPER ONLY • NESSUN ORDINE AUTOMATICO",
         f"🕒 {now}",
@@ -133,7 +133,7 @@ def format_signal_board(results: Iterable[object]) -> str:
 
     if not signals:
         lines += [
-            "🟡 NESSUN SEGNALE OPERATIVO",
+            "🟡 NESSUNA OPPORTUNITÀ OPERATIVA",
             "",
             "Gagarin mantiene WAIT finché i dati e la confluence",
             "non sono sufficienti. Nessun segnale viene inventato.",
@@ -144,7 +144,7 @@ def format_signal_board(results: Iterable[object]) -> str:
         direction = _direction(state)
         icon = "🟢" if direction == "LONG" else "🔴"
         lines.append(
-            f"{i}. {icon} {state.commodity} {direction}\n"
+            f"{i}. {icon} **{state.commodity} {direction}**\n"
             f"   Entry {_fmt(state.entry)} | SL {_fmt(state.stop)} | TP1 {_fmt(state.tp1)}\n"
             f"   RR {_fmt(getattr(state, 'rr1', None), 2)} | {_rule_label(state)}"
         )
