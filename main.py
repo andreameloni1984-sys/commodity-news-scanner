@@ -452,10 +452,13 @@ def run():
     if not commodities:
 
         print(
-            "❌ Nessuna commodity nella finestra oraria corrente."
+            "⏭️ SKIP: nessuna commodity prevista nella finestra oraria corrente."
+        )
+        print(
+            "Run pianificato completato senza analisi; non è un errore del motore."
         )
 
-        return 1
+        return 0
 
     print(
         f"Universe: "
