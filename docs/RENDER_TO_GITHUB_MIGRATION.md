@@ -1,55 +1,27 @@
-# Migrazione da Render a GitHub
+# Migrazione da Render a GitHub — COMPLETATA (indipendenza)
 
-Documento di stato per spostare i bot (principalmente SOYUZ GAGARIN) fuori da Render e mantenerli solo su GitHub.
+I bot sono ora **indipendenti da Render**. Il monitoraggio e gli alert girano su GitHub Actions. I comandi Telegram interattivi usano polling (con latenza).
 
-## Cosa gira già su GitHub Actions
+## Percorsi attivi (solo GitHub)
 
-- **`.github/workflows/gagarin-monitor.yml`**  
-  Esegue `python main.py` ogni 15 minuti (`cron: "*/15 * * * *"`).  
-  Fa analisi, paper journal, feedback e invia alert Telegram quando c'è un segnale.  
-  Usa gli secrets: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TWELVE_DATA_API_KEY`, `T212_*`, ecc.
+- **Monitoraggio Gagarin**: `.github/workflows/gagarin-monitor.yml` (ogni 15 min) → `python main.py`
+- **Polling Telegram Gagarin**: `.github/workflows/telegram-polling.yml` + `telegram/polling_runner.py`
 
-- Altri workflow di test e diagnostica già presenti.
+## Cosa non è più usato
 
-## Cosa dipende ancora da Render
+- Servizi Render (`soyuz-gagarin-telegram-v2.onrender.com`, `gagarin-cloud.onrender.com`)
+- `telegram/render_runner.py` (webhook persistente) — mantenuto solo come riferimento storico
+- Endpoint `/mt5/paper` e keep-alive su Render
 
-- `telegram/render_runner.py`  
-  Server HTTP persistente che:  
-  - registra il webhook Telegram (`RENDER_EXTERNAL_URL`)  
-  - riceve comandi in tempo reale  
-  - esegue i loop continui (position monitor, news monitor, invest scan)  
-  - espone `/mt5/paper` e `/health`
+## Limitazioni note
 
-- URL tipici: `soyuz-gagarin-telegram-v2.onrender.com`, `gagarin-cloud.onrender.com`
+- I comandi Telegram interattivi hanno latenza (fino a 5 minuti con il cron attuale).
+- Non esistono più endpoint HTTP permanenti.
 
-- Servizi analoghi in altri repository (`autotrasporti-meloni-`, `trump-trucker`).
+## Prossimi passi (opzionali)
 
-## Limitazioni di GitHub Actions per i bot interattivi
-
-- Non è possibile tenere un server HTTP sempre acceso.
-- I job hanno timeout e consumano minuti del piano.
-- Il webhook Telegram richiede un endpoint pubblico permanente → non adatto a Actions pure.
-
-## Strategia di migrazione consigliata
-
-1. **Monitoraggio e alert** (già fatto)  
-   Continuare a usare `gagarin-monitor.yml` come percorso principale.
-
-2. **Comandi Telegram interattivi**  
-   Passare a modalità **polling** (getUpdates) lanciata da Actions o manualmente.  
-   Vedi `telegram/polling_runner.py` e il workflow associato.
-
-3. **Deprecare il runner Render**  
-   Tenere `render_runner.py` solo come riferimento finché non si verifica che il polling copre i casi d'uso.
-
-4. **Endpoint speciali** (es. `/mt5/paper`)  
-   Valutare alternative (webhook esterno minimale, Cloudflare Workers, o disabilitare se non critico).
-
-## Prossimi passi
-
-- [ ] Verificare che `gagarin-monitor.yml` funzioni correttamente con i secrets attuali.
-- [ ] Testare il polling runner.
-- [ ] Decidere se disattivare i servizi Render una volta stabile.
-- [ ] Aggiornare eventuali riferimenti hardcoded agli URL onrender.com.
+- Spegnere i servizi su Render se ancora attivi.
+- Rimuovere o archiviare `telegram/render_runner.py` se non serve più.
+- Aumentare la frequenza del polling se si desidera minore latenza (attenzione ai minuti Actions).
 
 Ultimo aggiornamento: 2026-10-29
