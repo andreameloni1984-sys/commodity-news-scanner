@@ -117,6 +117,63 @@ def format_signal(state) -> str:
     return "\n".join(lines)
 
 
+def format_watch(state) -> str:
+    """Pre-alert for setups close to threshold but not fully confirmed."""
+    direction = _direction(state)
+    score = _opportunity_score(state)
+    blockers = list(getattr(state, "blockers", []) or [])
+    reason = ", ".join(str(x) for x in blockers[:3]) or "Vicino alla soglia"
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    return (
+        f"🟡 **WATCH** — {str(state.commodity).upper()} {direction}\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"🕒 {now}\n"
+        f"📊 Score: {score:.0f}/100\n"
+        f"Direzione: {direction}\n"
+        f"Motivo: {reason}\n"
+        f"Regime: {getattr(state, 'regime', 'UNKNOWN')} | Trigger: {getattr(state, 'trigger', 'NONE')}\n"
+        f"⏱ {_age_label(state)}\n\n"
+        f"⚠️ Setup interessante ma non ancora confermato. Monitorare."
+    )
+
+
+def format_watch_board(results: Iterable[object], min_score: float = 45.0) -> str:
+    """Board of near-threshold setups."""
+    results = list(results or [])
+    candidates = [
+        s for s in results
+        if not _is_signal(s)
+        and _direction(s) in {"LONG", "SHORT"}
+        and _opportunity_score(s) >= min_score
+    ]
+    candidates.sort(key=_opportunity_score, reverse=True)
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    lines = [
+        "🟡 **SOYUZ GAGARIN — WATCH**",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"🕒 {now}",
+        "Setup vicini alla soglia (non ancora segnali operativi)",
+        "",
+    ]
+
+    if not candidates:
+        lines.append("Nessun setup vicino alla soglia.")
+        return "\n".join(lines)
+
+    for i, state in enumerate(candidates[:3], 1):
+        score = _opportunity_score(state)
+        direction = _direction(state)
+        lines.append(
+            f"{i}. {state.commodity} {direction} — score {score:.0f}\n"
+            f"   {_rule_label(state)}"
+        )
+
+    lines += ["", "⚠️ Solo monitoraggio. Non è un segnale di entrata."]
+    return "\n".join(lines)
+
+
 def format_wait(state) -> str:
     blockers = list(getattr(state, "blockers", []) or [])
     reason = ", ".join(str(x) for x in blockers[:5]) or "GATE_NOT_CONFIRMED"
@@ -133,7 +190,6 @@ def format_wait(state) -> str:
 def format_signal_board(results: Iterable[object]) -> str:
     results = list(results or [])
     signals = [s for s in results if _is_signal(s)]
-    # Prioritize strongest opportunities
     signals.sort(key=_opportunity_score, reverse=True)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
@@ -154,7 +210,6 @@ def format_signal_board(results: Iterable[object]) -> str:
         ]
         return "\n".join(lines)
 
-    # Show only the top 3 strongest
     for i, state in enumerate(signals[:3], 1):
         direction = _direction(state)
         icon = "🟢" if direction == "LONG" else "🔴"
