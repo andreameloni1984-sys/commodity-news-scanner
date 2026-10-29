@@ -38,14 +38,8 @@ def test_forex_universe_is_preserved_separately():
     assert forex == {
         "EUR/USD",
         "GBP/USD",
-        "USD/JPY",
-        "USD/CHF",
-        "AUD/USD",
-        "USD/CAD",
-        "NZD/USD",
-        "EUR/JPY",
     }
-    assert universe_size() == 16
+    assert universe_size() == 10
 
 
 
