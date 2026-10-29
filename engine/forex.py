@@ -3,14 +3,15 @@
 PAPER ONLY. This module does not execute orders and does not claim calibrated
 probabilities. It converts OHLC evidence into transparent FX pressure scores
 that can later be joined to commodity states.
+
+Allineato all'universo trimmed: solo EUR/USD e GBP/USD.
 """
 
 from __future__ import annotations
 from statistics import mean
 
 FOREX_PAIRS = (
-    "EUR/USD", "GBP/USD", "USD/JPY", "USD/CHF",
-    "AUD/USD", "USD/CAD", "NZD/USD", "EUR/JPY",
+    "EUR/USD", "GBP/USD",
 )
 
 
