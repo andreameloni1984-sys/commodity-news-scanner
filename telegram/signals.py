@@ -203,7 +203,7 @@ def format_signal_board(results: Iterable[object]) -> str:
 
     if not signals:
         lines += [
-            "🟡 NESSUNA OPPORTUNITÀ OPERATIVA",
+            "🟡 NESSUN SEGNALE OPERATIVO — NESSUNA OPPORTUNITÀ OPERATIVA",
             "",
             "Gagarin mantiene WAIT finché i dati e la confluence",
             "non sono sufficienti. Nessun segnale viene inventato.",
