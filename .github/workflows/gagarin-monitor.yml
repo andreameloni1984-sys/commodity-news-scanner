@@ -26,9 +26,10 @@ jobs:
       T212_API_KEY: ${{ secrets.T212_API_KEY }}
       T212_API_SECRET: ${{ secrets.T212_API_SECRET }}
       PAPER_TRADING_ONLY: "1"
-      MIN_ENTRY_PROBABILITY: "68"
-      MIN_ENTRY_QUALITY: "60"
-      MIN_ENTRY_CONFIDENCE: "65"
+      # AGGRESSIVE forecast profile: wider candidate funnel; core safety gates stay on.
+      MIN_ENTRY_PROBABILITY: "55"
+      MIN_ENTRY_QUALITY: "45"
+      MIN_ENTRY_CONFIDENCE: "50"
       MIN_ENTRY_RR: "2.5"
       MAX_ENTRY_STOP_ATR: "2.5"
       SL_STRUCTURE_BUFFER_ATR: "0.15"
@@ -70,6 +71,7 @@ jobs:
           test -n "$TELEGRAM_BOT_TOKEN" || { echo "::error::TELEGRAM_BOT_TOKEN secret missing"; exit 1; }
           test -n "$TELEGRAM_CHAT_ID" || { echo "::error::TELEGRAM_CHAT_ID secret missing"; exit 1; }
           echo "PAPER_TRADING_ONLY=$PAPER_TRADING_ONLY"
+          echo "AGGRESSIVE_THRESHOLDS=$MIN_ENTRY_PROBABILITY/$MIN_ENTRY_QUALITY/$MIN_ENTRY_CONFIDENCE RR=$MIN_ENTRY_RR"
 
       - name: Compile Python
         run: python -m compileall -q .
