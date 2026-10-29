@@ -47,7 +47,7 @@ from engine.feedback import (
 )
 
 from telegram.bot import send_telegram
-from telegram.signals import format_signal_board
+from telegram.signals import format_signal_board, format_watch_board
 from soyuz_gagarin.adapter import evaluate_states
 from execution.router import execute_state
 
@@ -496,8 +496,6 @@ def run():
     # CANONICAL GAGARIN GOVERNOR
     # --------------------------------------------------------
 
-    # Evaluate once and stamp the canonical decision into metadata so
-    # Telegram, Paper Journal and Feedback consume the same decision.
     decisions = evaluate_states(results)
     decisions_by_symbol = {
         decision.symbol: decision
@@ -521,7 +519,6 @@ def run():
     # --------------------------------------------------------
     # EXECUTION LAYER
     # --------------------------------------------------------
-    # Independent from Telegram; disabled by default.
     print("EXECUTION LAYER")
     print("-" * 72)
     execution_results = []
@@ -573,11 +570,6 @@ def run():
     # TELEGRAM
     # --------------------------------------------------------
 
-    # Telegram signal output is formatted by telegram.signals.format_signal_board.
-    # Avoid importing a removed legacy formatter from telegram.bot.
-
-    # The Telegram channel is fed by the same canonical decisions
-    # stamped above; legacy final_decision is not a second governor.
     approved_symbols = {
         decision.symbol
         for decision in decisions
@@ -595,10 +587,6 @@ def run():
             and str(getattr(state, "setup_direction", "")).upper() in {"LONG", "SHORT"}
         )
     ]
-    energy_states = [
-        state for state in results
-        if (getattr(state, "metadata", {}) or {}).get("energy", {}).get("in_complex")
-    ]
 
     if TELEGRAM_ENABLED:
 
@@ -606,11 +594,6 @@ def run():
 
         try:
 
-            if energy_states:
-                # This scheduled runner executes every 15 minutes. Avoid repeating
-                # the same energy-shock message on every run; the Render event and
-                # forecast monitors own event-triggered Telegram notifications.
-                print("ENERGY SHOCK observed; Telegram notification delegated to event monitor")
             if signal_results:
                 send_telegram(
                     format_signal_board(signal_results)
@@ -618,8 +601,14 @@ def run():
                 print(
                     f"📡 SIGNAL CHANNEL: {len(signal_results)} signal(s) published"
                 )
-            # No routine Telegram heartbeat when no signal is available.
-            # Only actionable opportunities and meaningful position-state changes notify.
+            else:
+                # Send WATCH pre-alert for near-threshold setups
+                watch_msg = format_watch_board(results, min_score=40.0)
+                if "Nessun setup vicino" not in watch_msg:
+                    send_telegram(watch_msg)
+                    print("🟡 WATCH pre-alert sent")
+                else:
+                    print("No signals and no watch candidates")
 
         except Exception as exc:
 
@@ -663,4 +652,4 @@ if __name__ == "__main__":
 
     raise SystemExit(
         run()
-    ) 
+    )
