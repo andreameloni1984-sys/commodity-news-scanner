@@ -1,0 +1,52 @@
+name: Telegram Polling (GitHub Actions)
+
+on:
+  schedule:
+    # Ogni 5 minuti durante l'orario di mercato (regolabile)
+    - cron: "*/5 7-21 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: telegram-polling
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    name: Process pending Telegram updates
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      TELEGRAM_ENABLED: "1"
+      TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+      PAPER_TRADING_ONLY: "1"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            pip install requests
+          fi
+
+      - name: Validate Telegram token
+        run: |
+          test -n "$TELEGRAM_BOT_TOKEN" || { echo "::error::TELEGRAM_BOT_TOKEN missing"; exit 1; }
+          echo "Token present"
+
+      - name: Run polling runner
+        run: python telegram/polling_runner.py
