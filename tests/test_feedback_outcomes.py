@@ -1,5 +1,7 @@
 from types import SimpleNamespace
+import csv
 
+from engine import feedback
 from engine.feedback import _candles, _timestamp, append_signal, load_feedback, record_forecasts, summarize, update_open_outcomes
 
 
@@ -253,3 +255,65 @@ def test_main_marks_feedback_errors_as_failed_monitor_runs():
     assert "feedback_ok = _print_feedback(" in run_source
     assert "if not feedback_ok:" in run_source
     assert "return 1" in run_source
+
+def test_database_recovery_merges_csv_fallback_without_losing_newer_outcomes(monkeypatch, tmp_path):
+    path = tmp_path / "gagarin_feedback.csv"
+    durable_only = {field: "" for field in feedback.FIELDS}
+    durable_only.update(
+        signal_id="db-only",
+        action="PAPER_WATCH",
+        outcome="OPEN",
+        last_checked_timestamp="2026-10-30T10:20:00+00:00",
+    )
+    shared_durable = {field: "" for field in feedback.FIELDS}
+    shared_durable.update(
+        signal_id="shared",
+        action="PAPER_WATCH",
+        outcome="OPEN",
+        last_checked_timestamp="2026-10-30T10:00:00+00:00",
+    )
+    shared_local = dict(shared_durable)
+    shared_local.update(
+        action="PAPER_ENTRY",
+        outcome="TP1",
+        last_checked_timestamp="2026-10-30T10:15:00+00:00",
+    )
+    stale_local = dict(durable_only)
+    stale_local["last_checked_timestamp"] = "2026-10-30T10:10:00+00:00"
+    local_only = {field: "" for field in feedback.FIELDS}
+    local_only.update(
+        signal_id="csv-only",
+        action="PAPER_WATCH",
+        outcome="OPEN",
+    )
+
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=feedback.FIELDS)
+        writer.writeheader()
+        writer.writerows([shared_local, stale_local, local_only])
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test.invalid/gagarin")
+    monkeypatch.setattr(feedback, "FEEDBACK_FILE", path)
+    monkeypatch.setattr(
+        feedback,
+        "_load_durable_rows",
+        lambda: [durable_only, shared_durable],
+    )
+    saved = []
+
+    def save_rows(rows):
+        saved.append([dict(row) for row in rows])
+        return True
+
+    monkeypatch.setattr(feedback, "_save_durable_rows", save_rows)
+
+    rows = feedback.load_feedback(path)
+    by_id = {row["signal_id"]: row for row in rows}
+
+    assert set(by_id) == {"db-only", "shared", "csv-only"}
+    assert by_id["shared"]["outcome"] == "TP1"
+    assert by_id["shared"]["action"] == "PAPER_ENTRY"
+    assert by_id["db-only"]["last_checked_timestamp"] == "2026-10-30T10:20:00+00:00"
+    assert len(saved) == 1
+    assert {row["signal_id"] for row in saved[0]} == {"db-only", "shared", "csv-only"}
+
