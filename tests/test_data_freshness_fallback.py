@@ -82,3 +82,32 @@ def test_all_stale_providers_keep_freshest_sample_as_non_live_context(monkeypatc
     assert state.metadata["freshness_status"] == "STALE"
     assert state.metadata["freshness_fallback_reason"] == "ALL_PROVIDER_CANDLES_STALE"
     assert 700 <= state.data_age_seconds <= 740
+
+
+def test_closed_market_marks_stale_fallback_as_market_closed(monkeypatch):
+    provider_rows = {
+        "TWELVE_DATA": (_candles(1200), None, "XAU/USD"),
+        "BIQUOTE": (_candles(720), None, "XAUUSD"),
+    }
+    _configure_provider_chain(monkeypatch, provider_rows)
+    monkeypatch.setattr(
+        data,
+        "classify_data_status",
+        lambda commodity, live, data_ok, timestamp=None: "MARKET_CLOSED",
+    )
+    calls = []
+
+    def provider_call(state, symbol, provider):
+        calls.append(provider)
+        return provider_rows[provider]
+
+    monkeypatch.setattr(data, "_try_provider", provider_call)
+    state = data.load_data(
+        SoyuzState(commodity="Oro", symbol="XAU/USD"),
+        SimpleNamespace(name="Oro", symbol="XAU/USD"),
+    )
+
+    assert calls == ["TWELVE_DATA"]
+    assert state.live is False
+    assert state.metadata["data_status"] == "MARKET_CLOSED"
+    assert state.metadata["freshness_fallback_reason"] == "MARKET_CLOSED"
