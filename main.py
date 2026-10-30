@@ -526,6 +526,16 @@ def run():
         )
 
     # --------------------------------------------------------
+    # EXPLAINABLE ANALYST LAYER
+    # --------------------------------------------------------
+    from engine.analyst_reasoning import build_reasoning
+    for state in results:
+        decision = decisions_by_symbol.get(
+            str(getattr(state, "symbol", "")).upper()
+        )
+        state.metadata["analyst_reasoning"] = build_reasoning(state, decision)
+
+    # --------------------------------------------------------
     # EXECUTION LAYER
     # --------------------------------------------------------
     print("EXECUTION LAYER")
