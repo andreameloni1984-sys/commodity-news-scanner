@@ -299,3 +299,22 @@ if _UNIVERSE_ERRORS:
             _UNIVERSE_ERRORS
         )
     )
+
+
+
+def operational_commodities() -> list[Commodity]:
+    """Return the eight tradable commodity instruments; Forex remains auxiliary."""
+    return [
+        commodity
+        for commodity in enabled_commodities()
+        if commodity.category.strip().lower() != "forex"
+    ]
+
+
+def auxiliary_commodities() -> list[Commodity]:
+    """Return enabled context instruments that must not generate standalone signals."""
+    return [
+        commodity
+        for commodity in enabled_commodities()
+        if commodity.category.strip().lower() == "forex"
+    ]
