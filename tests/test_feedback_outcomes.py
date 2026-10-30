@@ -222,3 +222,34 @@ def test_main_feedback_pipeline_records_live_forecasts():
         < call_lines["summarize_feedback"]
     )
     assert "New additional live forecasts (WATCH/other)" in main_path.read_text(encoding="utf-8")
+
+
+def test_main_marks_feedback_errors_as_failed_monitor_runs():
+    import ast
+    from pathlib import Path
+
+    main_path = Path(__file__).resolve().parents[1] / "main.py"
+    source = main_path.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    feedback_function = next(
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_print_feedback"
+    )
+    feedback_returns = {
+        node.value.value
+        for node in ast.walk(feedback_function)
+        if isinstance(node, ast.Return)
+        and isinstance(node.value, ast.Constant)
+        and isinstance(node.value.value, bool)
+    }
+    assert feedback_returns == {True, False}
+
+    run_function = next(
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "run"
+    )
+    run_source = ast.get_source_segment(source, run_function)
+    assert "feedback_ok = _print_feedback(" in run_source
+    assert "if not feedback_ok:" in run_source
+    assert "return 1" in run_source
