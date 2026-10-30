@@ -23,7 +23,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from commodities.universe import (
-    enabled_commodities,
+    operational_commodities,
     validate_universe,
 )
 
@@ -459,19 +459,12 @@ def run():
     # UNIVERSE
     # --------------------------------------------------------
 
-    ALLOWED = {
-        "XAU/USD", "XAG/USD", "COPPER/USD",
-        "WTI/USD", "BRENT/USD",
-        "WHEAT/USD", "CORN/USD", "SOYBEAN/USD",
-        "EUR/USD", "GBP/USD",
-    }
-    commodities = [
-        c for c in filter_by_session(enabled_commodities(), on_demand=False)
-        if str(getattr(c, "symbol", "")).upper() in ALLOWED
-    ]
+    commodities = filter_by_session(
+        operational_commodities(), on_demand=False
+    )
 
     print(
-        "SESSION FILTER: orari esatti per i 10 strumenti (Europe/Rome). "
+        "SESSION FILTER: orari esatti per le 8 commodities (Europe/Rome); Forex solo ausiliario. "
         "Run manuali/on-demand bypassano il filtro."
     )
 
@@ -488,7 +481,7 @@ def run():
 
     print(
         f"Universe: "
-        f"{len(commodities)} commodity abilitate (filtrate per orario)"
+        f"{len(commodities)} commodities operative abilitate (filtrate per orario)"
     )
 
     print()
