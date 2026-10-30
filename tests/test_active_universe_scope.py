@@ -120,3 +120,37 @@ def test_main_keeps_forex_in_analysis_but_scopes_governor_and_alerts_to_commodit
     assert "decisions = evaluate_states(operational_results)" in run_source
     assert "for state in operational_results:" in run_source
     assert "format_watch_board(operational_results" in run_source
+
+
+
+def test_telegram_classifica_ignores_stale_cached_results(monkeypatch):
+    from types import SimpleNamespace
+    import telegram.bot as bot
+
+    stale = [SimpleNamespace(
+        symbol=f"OLD/{i}", commodity=f"Legacy {i}", setup_direction="",
+        probability=40.0, quality=0.0, confidence=0.0,
+        final_decision="WAIT",
+    ) for i in range(21)]
+    fresh = [SimpleNamespace(
+        symbol=symbol, commodity=name, setup_direction="",
+        probability=40.0, quality=0.0, confidence=0.0,
+        final_decision="WAIT",
+    ) for symbol, name in [
+        ("XAU/USD", "Oro"), ("XAG/USD", "Argento"),
+        ("COPPER/USD", "Rame"), ("WTI/USD", "Petrolio WTI"),
+        ("BRENT/USD", "Petrolio Brent"), ("WHEAT/USD", "Grano"),
+        ("CORN/USD", "Mais"), ("SOYBEAN/USD", "Soia"),
+        ("EUR/USD", "EUR/USD"), ("GBP/USD", "GBP/USD"),
+    ]]
+    monkeypatch.setattr(bot, "get_last_results", lambda: stale)
+    calls = []
+    monkeypatch.setattr(bot, "_run_analysis", lambda **kwargs: calls.append(kwargs) or fresh)
+
+    report = bot._command_response("/classifica")
+    assert calls == [{"on_demand": True}]
+    assert report.count("\n")  # a formatted report was returned
+    assert "Legacy" not in report
+    assert "21." not in report
+    assert "10. GBP/USD" in report
+    assert "8. Soia" in report
