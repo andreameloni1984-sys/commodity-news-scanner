@@ -128,21 +128,27 @@ jobs:
       - name: Run SOYUZ GAGARIN
         run: python main.py
 
-      - name: Persist Gagarin feedback across GitHub runners
+      - name: Persist Gagarin paper journal and feedback across GitHub runners
         if: always()
         run: |
-          if [ ! -f gagarin_feedback.csv ]; then
-            echo "No local feedback CSV produced; PostgreSQL may be active or no directional forecast was recorded."
+          files=()
+          for file in gagarin_feedback.csv paper_trade_log.csv; do
+            if [ -f "$file" ]; then
+              files+=("$file")
+            fi
+          done
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No local journal/feedback CSV produced; PostgreSQL may be active or this run recorded no entries."
             exit 0
           fi
           git config user.name "Gagarin Paper Bot"
           git config user.email "gagarin-paper-bot@users.noreply.github.com"
-          git add -- gagarin_feedback.csv
+          git add -- "${files[@]}"
           if git diff --cached --quiet; then
-            echo "Gagarin feedback journal unchanged."
+            echo "Gagarin paper journal and feedback unchanged."
             exit 0
           fi
-          git commit -m "chore: persist Gagarin feedback journal"
+          git commit -m "chore: persist Gagarin paper journal and feedback"
           git fetch origin main
           git rebase origin/main
           git push origin HEAD:main
