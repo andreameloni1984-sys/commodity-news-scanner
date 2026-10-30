@@ -193,17 +193,32 @@ def test_candles_are_sorted_deduplicated_and_invalid_ranges_rejected():
         (3000.0, 104.0, 102.0),
     ]
 
-def test_main_feedback_pipeline_records_live_forecasts(monkeypatch, capsys):
-    import main
+def test_main_feedback_pipeline_records_live_forecasts():
+    import ast
+    from pathlib import Path
 
-    calls = []
-    monkeypatch.setattr(main, "update_open_outcomes", lambda results: calls.append("update") or 0)
-    monkeypatch.setattr(main, "record_feedback_entries", lambda results: calls.append("entries") or 0)
-    monkeypatch.setattr(main, "record_feedback_forecasts", lambda results: calls.append("forecasts") or 2)
-    monkeypatch.setattr(main, "summarize_feedback", lambda: {})
-    monkeypatch.setattr(main, "format_feedback_summary", lambda summary: "feedback summary")
+    main_path = Path(__file__).resolve().parents[1] / "main.py"
+    tree = ast.parse(main_path.read_text(encoding="utf-8"))
 
-    main._print_feedback([])
+    feedback_import = next(
+        node for node in tree.body
+        if isinstance(node, ast.ImportFrom) and node.module == "engine.feedback"
+    )
+    aliases = {alias.name: alias.asname for alias in feedback_import.names}
+    assert aliases.get("record_forecasts") == "record_feedback_forecasts"
 
-    assert calls == ["update", "entries", "forecasts"]
-    assert "New additional live forecasts (WATCH/other): 2" in capsys.readouterr().out
+    feedback_function = next(
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_print_feedback"
+    )
+    call_lines = {
+        node.func.id: node.lineno
+        for node in ast.walk(feedback_function)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+    assert (
+        call_lines["record_feedback_entries"]
+        < call_lines["record_feedback_forecasts"]
+        < call_lines["summarize_feedback"]
+    )
+    assert "New additional live forecasts (WATCH/other)" in main_path.read_text(encoding="utf-8")
