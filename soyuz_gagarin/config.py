@@ -66,10 +66,10 @@ class GagarinConfig:
     sl_structure_buffer_atr: float = field(default=0.15)
     falsification_min_trades: int = field(default=30)
     allowed_assets: Tuple[str, ...] = (
-        # Universo trimmed a 10 core: metalli, energia, agri + 2 forex.
+        # Otto asset operativi. EUR/USD e GBP/USD restano nel data universe
+        # come contesto macro/FX, ma non possono ricevere segnali autonomi.
         "XAU/USD", "XAG/USD", "COPPER/USD", "WTI/USD", "BRENT/USD",
         "WHEAT/USD", "CORN/USD", "SOYBEAN/USD",
-        "EUR/USD", "GBP/USD",
     )
     blocked_if_stale_seconds: int = field(default=900)
     modules: Tuple[str, ...] = field(default=(
