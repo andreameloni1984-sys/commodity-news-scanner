@@ -110,6 +110,9 @@ def format_signal(state) -> str:
         f"🎯 Setup: {getattr(state, 'setup', 'NONE')}",
         f"⚡ Trigger: {getattr(state, 'trigger', 'NONE')}",
         f"📜 Motivo: {_rule_label(state)}",
+        f"🧠 Analisi: {((getattr(state, 'metadata', {}) or {}).get('analyst_reasoning') or {}).get('conclusion', 'Analisi strutturata non disponibile.')[:300]}",
+        f"🔎 Conferme: {', '.join(((getattr(state, 'metadata', {}) or {}).get('analyst_reasoning') or {}).get('evidence', [])[:4]) or 'N/D'}",
+        f"⚠️ Contrasti: {', '.join(((getattr(state, 'metadata', {}) or {}).get('analyst_reasoning') or {}).get('conflicts', [])[:3]) or 'Nessun conflitto rilevato'}",
         f"⏱ {_age_label(state)}",
         "",
         "⚠️ Segnale informativo PAPER. Verifica contesto e rischio prima di qualsiasi decisione. Nessun ordine inviato.",
@@ -132,6 +135,8 @@ def format_watch(state) -> str:
         f"📊 Score: {score:.0f}/100\n"
         f"Direzione: {direction}\n"
         f"Motivo: {reason}\n"
+        f"🧠 Analisi: {((getattr(state, 'metadata', {}) or {}).get('analyst_reasoning') or {}).get('conclusion', 'In attesa di evidenze.')[:240]}\n"
+        f"⚠️ Contrasti: {', '.join(((getattr(state, 'metadata', {}) or {}).get('analyst_reasoning') or {}).get('conflicts', [])[:2]) or 'N/D'}\n"
         f"Regime: {getattr(state, 'regime', 'UNKNOWN')} | Trigger: {getattr(state, 'trigger', 'NONE')}\n"
         f"⏱ {_age_label(state)}\n\n"
         f"⚠️ Setup interessante ma non ancora confermato. Monitorare."
