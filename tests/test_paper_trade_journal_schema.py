@@ -161,3 +161,27 @@ def test_legacy_row_with_extra_columns_is_not_rewritten(
         journal.record_entries([])
 
     assert path.read_text(encoding="utf-8") == malformed
+
+
+def test_manual_and_scheduled_workflows_persist_both_journals():
+    from pathlib import Path
+    import re
+
+    root = Path(__file__).resolve().parents[1]
+    expected_step = "Persist Gagarin paper journal and feedback across GitHub runners"
+
+    for workflow_name in ("soyuz.yml", "gagarin-monitor.yml"):
+        source = (root / ".github" / "workflows" / workflow_name).read_text(
+            encoding="utf-8"
+        )
+        match = re.search(
+            rf"      - name: {re.escape(expected_step)}\\n(?P<block>.*?)(?=\\n      - name:|\\Z)",
+            source,
+            flags=re.DOTALL,
+        )
+        assert match is not None, workflow_name
+        block = match.group("block")
+        assert "if: always()" in block, workflow_name
+        assert "for file in gagarin_feedback.csv paper_trade_log.csv" in block, workflow_name
+        assert 'git add -- "${files[@]}"' in block, workflow_name
+        assert "git push origin HEAD:main" in block, workflow_name
