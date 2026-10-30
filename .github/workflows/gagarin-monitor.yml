@@ -6,10 +6,10 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: gagarin-paper-monitor
+  group: gagarin-feedback-state
   cancel-in-progress: false
 
 jobs:
@@ -19,6 +19,7 @@ jobs:
     timeout-minutes: 10
     env:
       TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       TELEGRAM_ENABLED: "1"
@@ -78,3 +79,22 @@ jobs:
 
       - name: Run Gagarin analysis, paper journal, feedback and Telegram alerts
         run: python main.py
+
+      - name: Persist Gagarin feedback across GitHub runners
+        if: always()
+        run: |
+          if [ ! -f gagarin_feedback.csv ]; then
+            echo "No local feedback CSV produced; PostgreSQL may be active or no directional forecast was recorded."
+            exit 0
+          fi
+          git config user.name "Gagarin Paper Bot"
+          git config user.email "gagarin-paper-bot@users.noreply.github.com"
+          git add -- gagarin_feedback.csv
+          if git diff --cached --quiet; then
+            echo "Gagarin feedback journal unchanged."
+            exit 0
+          fi
+          git commit -m "chore: persist Gagarin feedback journal"
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
