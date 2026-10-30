@@ -127,7 +127,7 @@ def build_reasoning(state: object, decision: object | None = None) -> dict[str, 
     for event in news_events[:8]:
         impacts = event.get("impact", {}) or {}
         for asset, impact in impacts.items():
-            if relevant_assets and asset not in relevant_assets:
+            if not relevant_assets or asset not in relevant_assets:
                 continue
             if impact not in {"RIALZISTA", "RIBASSISTA"}:
                 continue
