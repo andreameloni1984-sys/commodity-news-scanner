@@ -41,6 +41,7 @@ from paper_trade_journal import (
 
 from engine.feedback import (
     record_entries as record_feedback_entries,
+    record_forecasts as record_feedback_forecasts,
     summarize as summarize_feedback,
     format_summary as format_feedback_summary,
     update_open_outcomes,
@@ -379,6 +380,13 @@ def _print_feedback(results):
             results
         )
 
+        # Track valid live directional WATCH setups as forecasts too.
+        # Approved entries are already recorded above and are deduplicated by
+        # signal_id inside record_forecasts().
+        recorded_forecasts = record_feedback_forecasts(
+            results
+        )
+
         summary = summarize_feedback()
 
         print(
@@ -388,6 +396,11 @@ def _print_feedback(results):
         print(
             f"New feedback signals: "
             f"{recorded}"
+        )
+
+        print(
+            f"New additional live forecasts (WATCH/other): "
+            f"{recorded_forecasts}"
         )
 
         print(
