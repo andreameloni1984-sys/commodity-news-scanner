@@ -66,3 +66,57 @@ def test_operational_universe_is_eight_commodities_and_forex_is_auxiliary():
     }
     assert {item.symbol for item in auxiliary} == {"EUR/USD", "GBP/USD"}
     assert all(item.category.lower() != "forex" for item in operational)
+
+
+def test_canonical_governor_allows_only_eight_operational_commodities():
+    from soyuz_gagarin.config import GagarinConfig
+
+    allowed = set(GagarinConfig().allowed_assets)
+    assert allowed == {
+        "XAU/USD", "XAG/USD", "COPPER/USD", "WTI/USD",
+        "BRENT/USD", "WHEAT/USD", "CORN/USD", "SOYBEAN/USD",
+    }
+    assert not ({"EUR/USD", "GBP/USD"} & allowed)
+
+
+def test_telegram_marks_forex_as_context_and_excludes_it_from_pick(monkeypatch):
+    from types import SimpleNamespace
+    import telegram.bot as bot
+
+    gold = SimpleNamespace(
+        symbol="XAU/USD", commodity="Oro", setup_direction="LONG",
+        probability=70.0, quality=65.0, confidence=68.0,
+        final_decision="ENTRY", setup_quality=70.0,
+        trigger_confirmed=True, setup="TREND", trigger="BREAKOUT",
+    )
+    eurusd = SimpleNamespace(
+        symbol="EUR/USD", commodity="EUR/USD", setup_direction="LONG",
+        probability=90.0, quality=90.0, confidence=90.0,
+        final_decision="ENTRY", setup_quality=90.0,
+        trigger_confirmed=True, setup="TREND", trigger="BREAKOUT",
+    )
+
+    board = bot._format_classifica([gold, eurusd])
+    assert "CONTESTO FX — NON OPERATIVO" in board
+    assert "1 ENTRATA/E AUTORIZZATA/E" in board
+
+    received = []
+    monkeypatch.setattr(bot, "predict_today", lambda rows: received.extend(rows) or None)
+    bot._format_buy([gold, eurusd])
+    assert received == [gold]
+
+
+def test_main_keeps_forex_in_analysis_but_scopes_governor_and_alerts_to_commodities():
+    import ast
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parents[1] / "main.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    run_function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "run")
+    run_source = ast.get_source_segment(source, run_function)
+    assert "filter_by_session(" in run_source
+    assert "enabled_commodities()" in run_source
+    assert "results = analyze_universe(" in run_source
+    assert "decisions = evaluate_states(operational_results)" in run_source
+    assert "for state in operational_results:" in run_source
+    assert "format_watch_board(operational_results" in run_source
