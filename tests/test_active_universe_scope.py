@@ -154,3 +154,30 @@ def test_telegram_classifica_ignores_stale_cached_results(monkeypatch):
     assert "21." not in report
     assert "10. GBP/USD" in report
     assert "8. Soia" in report
+
+
+def test_morning_pick_never_passes_auxiliary_forex_to_governor(monkeypatch):
+    from types import SimpleNamespace
+    import telegram.bot as bot
+
+    gold = SimpleNamespace(
+        symbol="XAU/USD", commodity="Oro", setup_direction="LONG",
+        entry=2700.0, stop=2680.0, tp3=2760.0,
+    )
+    eurusd = SimpleNamespace(
+        symbol="EUR/USD", commodity="EUR/USD", setup_direction="LONG",
+        entry=1.08, stop=1.07, tp3=1.10,
+    )
+    received = []
+    monkeypatch.setattr(
+        bot, "evaluate_states",
+        lambda rows: received.extend(rows) or [
+            SimpleNamespace(action="PAPER_SIGNAL", symbol="XAU/USD")
+        ],
+    )
+
+    report = bot._format_morning_pick([gold, eurusd])
+
+    assert received == [gold]
+    assert "COMMODITY: Oro" in report
+    assert "EUR/USD" not in report
