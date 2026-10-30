@@ -59,9 +59,24 @@ def _api(method: str, payload: Optional[dict] = None) -> tuple[bool, dict]:
             data = response.json()
         except ValueError:
             data = {"description": response.text[:500]}
-        return response.status_code == 200 and bool(data.get("ok")), data
+        if not isinstance(data, dict):
+            data = {"description": "INVALID_TELEGRAM_RESPONSE"}
+        return response.status_code == 200 and data.get("ok") is True, data
     except requests.RequestException as exc:
         return False, {"description": f"NETWORK_ERROR: {exc}"}
+
+def _confirmed_message_id(data: object) -> Optional[int]:
+    """Return message_id only after an explicit Telegram sendMessage success."""
+    if not isinstance(data, dict) or data.get("ok") is not True:
+        return None
+    result = data.get("result")
+    if not isinstance(result, dict):
+        return None
+    message_id = result.get("message_id")
+    if type(message_id) is not int or message_id <= 0:
+        return None
+    return message_id
+
 
 def telegram_diagnostic() -> bool:
     """Verifica il bot Telegram. Richiesta da render_runner."""
@@ -98,8 +113,11 @@ def send_telegram(message: str) -> bool:
             "text": chunk,
             "disable_web_page_preview": True,
         })
-        if not ok:
+        message_id = _confirmed_message_id(data) if ok else None
+        if message_id is None:
+            print("Telegram SEND NOT CONFIRMED | missing/invalid message_id", flush=True)
             return False
+        print(f"Telegram SEND CONFIRMED | message_id={message_id}", flush=True)
     return True
 
 def _reply(chat_id, text: str, reply_markup: Optional[dict] = None) -> bool:
@@ -110,8 +128,13 @@ def _reply(chat_id, text: str, reply_markup: Optional[dict] = None) -> bool:
     }
     if reply_markup:
         payload["reply_markup"] = reply_markup
-    ok, _ = _api("sendMessage", payload)
-    return ok
+    ok, data = _api("sendMessage", payload)
+    message_id = _confirmed_message_id(data) if ok else None
+    if message_id is None:
+        print("Telegram REPLY NOT CONFIRMED | missing/invalid message_id", flush=True)
+        return False
+    print(f"Telegram REPLY CONFIRMED | message_id={message_id}", flush=True)
+    return True
 
 def _run_analysis(commodity=None, *, on_demand=True):
     commodities = filter_forex_for_session(enabled_commodities(), on_demand=on_demand)
