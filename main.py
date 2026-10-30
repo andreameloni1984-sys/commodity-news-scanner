@@ -117,6 +117,74 @@ def _validate():
 # DATA SUMMARY
 # ============================================================
 
+def _provider_error_label(error):
+
+    value = str(error or "").upper()
+
+    if not value:
+        return "NO_DATA"
+
+    if "429" in value or "RATE LIMIT" in value or "TOO MANY REQUEST" in value:
+        return "RATE_LIMIT"
+
+    if "401" in value or "403" in value or "INVALID API KEY" in value or "API KEY" in value:
+        return "AUTH"
+
+    if "TIMEOUT" in value or "TIMED OUT" in value:
+        return "TIMEOUT"
+
+    if "SYMBOL_NOT_FOUND" in value or "NOT_MAPPED" in value or "NOT FOUND" in value:
+        return "SYMBOL_UNAVAILABLE"
+
+    if "INSUFFICIENT_CANDLES" in value:
+        return "INSUFFICIENT_CANDLES"
+
+    if "STALE_DATA" in value:
+        return "STALE"
+
+    if any(token in value for token in ("NO_DATA", "NO_CANDLES", "NO_BARS", "EMPTY")):
+        return "EMPTY_RESPONSE"
+
+    if "HTTP" in value:
+        return "HTTP_ERROR"
+
+    return "PROVIDER_ERROR"
+
+
+def _format_provider_attempts(attempts):
+
+    if not isinstance(attempts, (list, tuple)):
+        return ""
+
+    details = []
+
+    for attempt in attempts:
+        if not isinstance(attempt, dict):
+            continue
+
+        provider = str(attempt.get("provider") or "UNKNOWN").strip().upper()
+        freshness = str(attempt.get("freshness_status") or "").strip().upper()
+        accepted = attempt.get("accepted_for_live") is True
+        success = bool(attempt.get("success"))
+
+        if freshness == "STALE":
+            label = f"{provider}:STALE"
+        elif accepted:
+            label = f"{provider}:LIVE"
+        elif not success:
+            label = f"{provider}:{_provider_error_label(attempt.get('error'))}"
+        else:
+            label = f"{provider}:DATA"
+
+        age = attempt.get("age_seconds")
+        if isinstance(age, (int, float)) and not isinstance(age, bool):
+            label += f"@{age:.0f}s"
+
+        details.append(label)
+
+    return " | ".join(details)
+
+
 def _print_data_summary(results):
 
     print("📡 DATA / ENGINE")
@@ -134,7 +202,11 @@ def _print_data_summary(results):
 
             age = "N/A"
 
-        status = state.metadata.get(
+        metadata = getattr(state, "metadata", {}) or {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+
+        status = metadata.get(
             "data_status",
             "UNKNOWN",
         )
@@ -151,6 +223,16 @@ def _print_data_summary(results):
             f"age={age:<10} "
             f"provider={provider}"
         )
+
+        provider_checks = _format_provider_attempts(
+            metadata.get("provider_attempts")
+        )
+        if provider_checks:
+            print(f"    └─ PROVIDER CHECKS: {provider_checks}")
+
+        fallback_reason = metadata.get("freshness_fallback_reason")
+        if fallback_reason:
+            print(f"    └─ FALLBACK REASON: {str(fallback_reason)[:80]}")
 
     print()
 
