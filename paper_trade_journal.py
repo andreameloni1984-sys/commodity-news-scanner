@@ -1,17 +1,16 @@
 """
-SOYUZ GAGARIN — PAPER TRADE JOURNAL v1.0
+SOYUZ GAGARIN — PAPER TRADE JOURNAL v1.1
 
-Registra esclusivamente gli ENTRY prodotti
-dalla stessa analisi Gagarin.
-
-Nessuna seconda analisi.
-Nessun ordine reale.
-PAPER ONLY.
+Registra esclusivamente gli ENTRY prodotti dalla stessa analisi Gagarin.
+Migra in modo atomico gli schemi storici noti, preservando i campi legacy.
+Nessuna seconda analisi. Nessun ordine reale. PAPER ONLY.
 """
 
 from __future__ import annotations
 
 import csv
+import os
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -19,7 +18,7 @@ from pathlib import Path
 JOURNAL_FILE = Path("paper_trade_log.csv")
 
 
-FIELDS = [
+_BASE_FIELDS = [
     "timestamp_utc",
     "commodity",
     "symbol",
@@ -40,54 +39,175 @@ FIELDS = [
     "data_status",
 ]
 
+# Keep the information that existed in the original 13-column journal.
+# These fields are intentionally archival and are not used as live positions.
+LEGACY_FIELDS = [
+    "legacy_action",
+    "legacy_allocation",
+    "legacy_status",
+    "legacy_pnl",
+    "legacy_note",
+]
+
+FIELDS = _BASE_FIELDS + LEGACY_FIELDS
+
+# Schema used by the previous journal writer (before legacy columns were added).
+_PREVIOUS_FIELDS = list(_BASE_FIELDS)
+
+# Schema found in the tracked historical paper_trade_log.csv.
+_HISTORICAL_FIELDS = [
+    "timestamp_utc",
+    "commodity",
+    "symbol",
+    "direction",
+    "action",
+    "entry",
+    "stop",
+    "tp1",
+    "tp2",
+    "allocation",
+    "status",
+    "pnl",
+    "note",
+]
+
+_HISTORICAL_MAPPING = {
+    "timestamp_utc": "timestamp_utc",
+    "commodity": "commodity",
+    "symbol": "symbol",
+    "direction": "direction",
+    "entry": "entry",
+    "stop": "stop",
+    "tp1": "tp1",
+    "tp2": "tp2",
+    "action": "legacy_action",
+    "allocation": "legacy_allocation",
+    "status": "legacy_status",
+    "pnl": "legacy_pnl",
+    "note": "legacy_note",
+}
+
+
+def _write_rows_atomically(path: Path, rows: list[dict]) -> None:
+    """Replace the journal atomically so an interrupted migration cannot truncate it."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            newline="",
+            encoding="utf-8",
+            dir=str(path.parent),
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as file:
+            temporary_path = Path(file.name)
+            writer = csv.DictWriter(file, fieldnames=FIELDS)
+            writer.writeheader()
+            writer.writerows(rows)
+            file.flush()
+            os.fsync(file.fileno())
+
+        if path.exists():
+            os.chmod(temporary_path, path.stat().st_mode & 0o777)
+
+        os.replace(temporary_path, path)
+        temporary_path = None
+    finally:
+        if temporary_path is not None:
+            try:
+                temporary_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
+def _ensure_journal_schema(path: Path) -> None:
+    """
+    Ensure the journal uses FIELDS.
+
+    Known historical schemas are migrated without discarding their original
+    action/allocation/status/P&L/note values. Unknown schemas fail closed and
+    are left untouched.
+    """
+    if not path.exists():
+        return
+
+    if path.stat().st_size == 0:
+        _write_rows_atomically(path, [])
+        return
+
+    with path.open("r", newline="", encoding="utf-8") as file:
+        reader = csv.DictReader(file)
+        header = reader.fieldnames
+
+        if header == FIELDS:
+            return
+
+        if header not in (_HISTORICAL_FIELDS, _PREVIOUS_FIELDS):
+            raise ValueError(
+                "Unsupported paper journal schema; refusing to append or "
+                f"rewrite {path}: {header!r}"
+            )
+
+        migrated_rows = []
+        for line_number, old_row in enumerate(reader, start=2):
+            if None in old_row:
+                raise ValueError(
+                    f"Malformed paper journal row {line_number}: extra CSV columns"
+                )
+
+            row = {field: "" for field in FIELDS}
+
+            if header == _HISTORICAL_FIELDS:
+                for old_field, new_field in _HISTORICAL_MAPPING.items():
+                    row[new_field] = old_row.get(old_field) or ""
+                row["data_status"] = "LEGACY_IMPORT"
+            else:
+                for field in _PREVIOUS_FIELDS:
+                    row[field] = old_row.get(field) or ""
+
+            migrated_rows.append(row)
+
+    _write_rows_atomically(path, migrated_rows)
+
 
 def record_entries(results):
     """
     Registra gli ENTRY prodotti dalla singola analisi Gagarin.
 
-    Importante:
     - non esegue una nuova analisi;
     - non modifica la decisione;
     - non invia ordini;
-    - registra solo final_decision == ENTRY.
+    - registra solo PAPER_ENTRY/PAPER_SIGNAL o final_decision == ENTRY.
     """
+    # Migrate even on scans with no new entries, so the tracked historical
+    # journal is repaired and persisted on the next GitHub Actions run.
+    _ensure_journal_schema(JOURNAL_FILE)
 
     entries = []
     for state in results:
         metadata = getattr(state, "metadata", {}) or {}
         canonical = (
             isinstance(metadata, dict)
-            and str(metadata.get("gagarin_action", "")).upper() in {"PAPER_ENTRY", "PAPER_SIGNAL"}
+            and str(metadata.get("gagarin_action", "")).upper()
+            in {"PAPER_ENTRY", "PAPER_SIGNAL"}
         )
         legacy = str(getattr(state, "final_decision", "")).upper() == "ENTRY"
         if canonical or legacy:
-            entries.append(state)
+            entries.append((state, metadata if isinstance(metadata, dict) else {}))
 
     if not entries:
         return 0
 
-    file_exists = JOURNAL_FILE.exists()
+    timestamp = datetime.now(timezone.utc).isoformat()
 
-    timestamp = datetime.now(
-        timezone.utc
-    ).isoformat()
-
-    with JOURNAL_FILE.open(
-        "a",
-        newline="",
-        encoding="utf-8",
-    ) as file:
-
-        writer = csv.DictWriter(
-            file,
-            fieldnames=FIELDS,
-        )
-
-        if not file_exists:
+    with JOURNAL_FILE.open("a", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=FIELDS)
+        if file.tell() == 0:
             writer.writeheader()
 
-        for state in entries:
-
+        for state, metadata in entries:
             writer.writerow(
                 {
                     "timestamp_utc": timestamp,
@@ -107,10 +227,12 @@ def record_entries(results):
                     "rr3": state.rr3,
                     "stop_atr": state.stop_atr,
                     "data_source": state.data_source,
-                    "data_status": state.metadata.get(
-                        "data_status",
-                        "UNKNOWN",
-                    ),
+                    "data_status": metadata.get("data_status", "UNKNOWN"),
+                    "legacy_action": "",
+                    "legacy_allocation": "",
+                    "legacy_status": "",
+                    "legacy_pnl": "",
+                    "legacy_note": "",
                 }
             )
 
