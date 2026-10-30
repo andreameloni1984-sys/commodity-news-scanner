@@ -2255,6 +2255,7 @@ def load_data(
     )
 
     attempts = []
+    best_stale = None
 
     # --------------------------------------------------------
     # PROVIDER CHAIN
@@ -2342,12 +2343,89 @@ def load_data(
 
                 continue
 
+            # A provider returning structurally valid candles is not enough:
+            # its latest bar must also be fresh. Try the next provider when
+            # this feed is stale, while retaining the freshest stale sample
+            # as a non-live fallback if no provider can supply live data.
+            fresh_live, age_seconds, freshness_status = _freshness(
+                float(validated[-1]["timestamp"])
+            )
+            attempts[-1]["freshness_status"] = freshness_status
+            attempts[-1]["age_seconds"] = round(age_seconds, 1)
+            attempts[-1]["accepted_for_live"] = fresh_live
+
+            if not fresh_live:
+                attempts[-1]["error"] = (
+                    error or f"STALE_DATA:{age_seconds:.1f}s"
+                )
+                if (
+                    best_stale is None
+                    or age_seconds < best_stale["age_seconds"]
+                ):
+                    best_stale = {
+                        "candles": validated,
+                        "provider": provider,
+                        "error": error,
+                        "provider_symbol": provider_symbol,
+                        "age_seconds": age_seconds,
+                    }
+
+                # If the market calendar says closed, another provider
+                # cannot turn this instrument into a tradable live market.
+                if classify_data_status(
+                    state.commodity,
+                    live=False,
+                    data_ok=True,
+                ) == "MARKET_CLOSED":
+                    break
+                continue
+
+            state.metadata[
+                "resolved_symbol"
+            ] = provider_symbol
+            state.metadata[
+                "provider_attempts"
+            ] = attempts
+            state.metadata[
+                "fallback_used"
+            ] = len(attempts) > 1
+            state.metadata[
+                "provider_chain"
+            ] = list(providers)
+            state.metadata[
+                "freshness_fallback_used"
+            ] = any(
+                item.get("freshness_status") == "STALE"
+                for item in attempts[:-1]
+            )
+
             return _finalize(
                 state,
                 validated,
                 provider,
                 error,
             )
+
+    # --------------------------------------------------------
+    # KEEP THE FRESHEST STALE DATA FOR CONTEXT ONLY
+    # --------------------------------------------------------
+
+    if best_stale is not None:
+        state.metadata["resolved_symbol"] = best_stale["provider_symbol"]
+        state.metadata["provider_attempts"] = attempts
+        state.metadata["fallback_used"] = len(attempts) > 1
+        state.metadata["provider_chain"] = list(providers)
+        state.metadata["freshness_fallback_used"] = True
+        state.metadata["freshness_fallback_reason"] = "ALL_PROVIDER_CANDLES_STALE"
+        state.metadata["best_stale_age_seconds"] = round(
+            best_stale["age_seconds"], 1
+        )
+        return _finalize(
+            state,
+            best_stale["candles"],
+            best_stale["provider"],
+            best_stale["error"],
+        )
 
     # --------------------------------------------------------
     # ALL PROVIDERS FAILED
