@@ -336,10 +336,8 @@ def _save_durable_rows(rows):
         return False
 
 
-def _write_rows(rows, path):
+def _write_csv_rows(rows, path):
     path = Path(path)
-    if _durable_store_enabled(path) and _save_durable_rows(rows):
-        return
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as file:
         writer = csv.DictWriter(file, fieldnames=FIELDS, extrasaction="ignore")
@@ -347,12 +345,72 @@ def _write_rows(rows, path):
         writer.writerows(rows)
 
 
+def _row_freshness(row):
+    checked = _timestamp(row.get("last_checked_timestamp"))
+    outcome = str(row.get("outcome", "OPEN") or "OPEN").upper()
+    action = str(row.get("action", "") or "").upper()
+    return (
+        checked if checked is not None else float("-inf"),
+        0 if outcome == "OPEN" else 1,
+        1 if action in {"PAPER_ENTRY", "PAPER_SIGNAL"} else 0,
+    )
+
+
+def _merge_feedback_rows(durable_rows, local_rows):
+    """Merge the runner-local fallback into durable state without losing newer outcomes."""
+    merged = []
+    positions = {}
+    for row in durable_rows:
+        if not isinstance(row, dict):
+            continue
+        item = dict(row)
+        signal_id = str(item.get("signal_id", "") or "").strip()
+        if signal_id:
+            positions[signal_id] = len(merged)
+        merged.append(item)
+
+    for row in local_rows:
+        if not isinstance(row, dict):
+            continue
+        item = dict(row)
+        signal_id = str(item.get("signal_id", "") or "").strip()
+        if not signal_id:
+            merged.append(item)
+            continue
+        index = positions.get(signal_id)
+        if index is None:
+            positions[signal_id] = len(merged)
+            merged.append(item)
+        elif _row_freshness(item) > _row_freshness(merged[index]):
+            # The local CSV may contain outcomes recorded during a temporary
+            # database outage. Prefer it only when its forward check is newer,
+            # or when it carries a more advanced result/action at the same time.
+            merged[index] = item
+    return merged
+
+
+def _write_rows(rows, path):
+    path = Path(path)
+    if _durable_store_enabled(path) and _save_durable_rows(rows):
+        return
+    _write_csv_rows(rows, path)
+
+
 def load_feedback(path=FEEDBACK_FILE):
     path = Path(path)
     if _durable_store_enabled(path):
-        rows = _load_durable_rows()
-        if rows is not None:
-            return rows
+        durable_rows = _load_durable_rows()
+        if durable_rows is not None:
+            local_rows = []
+            if path.exists():
+                with path.open("r", newline="", encoding="utf-8") as file:
+                    local_rows = list(csv.DictReader(file))
+            merged = _merge_feedback_rows(durable_rows, local_rows)
+            if merged != durable_rows and not _save_durable_rows(merged):
+                # Keep the merged snapshot available for the workflow's
+                # repository-backed fallback if PostgreSQL is temporarily down.
+                _write_csv_rows(merged, path)
+            return merged
     if not path.exists():
         return []
     with path.open("r", newline="", encoding="utf-8") as file:
