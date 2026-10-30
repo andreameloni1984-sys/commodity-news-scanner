@@ -23,6 +23,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from commodities.universe import (
+    enabled_commodities,
     operational_commodities,
     validate_universe,
 )
@@ -51,6 +52,16 @@ from telegram.bot import send_telegram
 from telegram.signals import format_signal_board, format_watch_board
 from soyuz_gagarin.adapter import evaluate_states
 from execution.router import execute_state
+
+
+OPERATIONAL_SYMBOLS = frozenset(
+    item.symbol.strip().upper()
+    for item in operational_commodities()
+)
+
+
+def _is_operational_state(state) -> bool:
+    return str(getattr(state, "symbol", "") or "").strip().upper() in OPERATIONAL_SYMBOLS
 
 
 # ============================================================
@@ -175,6 +186,13 @@ def _print_ranking(results):
             else "—"
         )
 
+        action_label = (
+            "CONTESTO FX — NON OPERATIVO"
+            if not _is_operational_state(state)
+            else str((getattr(state, "metadata", {}) or {}).get(
+                "gagarin_action", state.final_decision
+            ))
+        )
         print(
             f"{index:>2}. "
             f"{state.commodity:<18} "
@@ -182,7 +200,7 @@ def _print_ranking(results):
             f"Prob {state.probability:>5.1f} "
             f"Q {state.quality:>5.1f} "
             f"C {state.confidence:>5.1f} "
-            f"{state.final_decision}"
+            f"{action_label}"
         )
 
         if (
@@ -367,24 +385,31 @@ def _print_paper_journal(results):
 # FEEDBACK ENGINE
 # ============================================================
 
-def _print_feedback(results):
+def _print_feedback(results, operational_results=None):
 
     print("🧪 SOYUZ FEEDBACK")
     print("-" * 72)
 
     try:
 
+        operational_results = (
+            list(operational_results)
+            if operational_results is not None
+            else list(results)
+        )
         updated = update_open_outcomes(results)
 
+        # Existing outcomes may still be updated for every tracked symbol,
+        # but new forecasts and entries are restricted to the eight commodities.
         recorded = record_feedback_entries(
-            results
+            operational_results
         )
 
         # Track valid live directional WATCH setups as forecasts too.
         # Approved entries are already recorded above and are deduplicated by
         # signal_id inside record_forecasts().
         recorded_forecasts = record_feedback_forecasts(
-            results
+            operational_results
         )
 
         summary = summarize_feedback()
@@ -459,19 +484,27 @@ def run():
     # UNIVERSE
     # --------------------------------------------------------
 
-    commodities = filter_by_session(
-        operational_commodities(), on_demand=False
+    instruments = filter_by_session(
+        enabled_commodities(), on_demand=False
     )
+    operational_instruments = [
+        item for item in instruments
+        if str(getattr(item, "symbol", "")).strip().upper() in OPERATIONAL_SYMBOLS
+    ]
+    auxiliary_instruments = [
+        item for item in instruments
+        if str(getattr(item, "symbol", "")).strip().upper() not in OPERATIONAL_SYMBOLS
+    ]
 
     print(
-        "SESSION FILTER: orari esatti per le 8 commodities (Europe/Rome); Forex solo ausiliario. "
-        "Run manuali/on-demand bypassano il filtro."
+        "SESSION FILTER: 8 commodities operative; EUR/USD e GBP/USD restano ausiliari "
+        "e vengono analizzati nelle rispettive finestre (Europe/Rome)."
     )
 
-    if not commodities:
+    if not instruments:
 
         print(
-            "⏭️ SKIP: nessuna commodity prevista nella finestra oraria corrente."
+            "⏭️ SKIP: nessuno strumento previsto nella finestra oraria corrente."
         )
         print(
             "Run pianificato completato senza analisi; non è un errore del motore."
@@ -480,8 +513,9 @@ def run():
         return 0
 
     print(
-        f"Universe: "
-        f"{len(commodities)} commodities operative abilitate (filtrate per orario)"
+        f"Universe: {len(instruments)} strumenti analizzati "
+        f"({len(operational_instruments)} commodities operative, "
+        f"{len(auxiliary_instruments)} Forex ausiliari in finestra)"
     )
 
     print()
@@ -493,7 +527,7 @@ def run():
     try:
 
         results = analyze_universe(
-            commodities
+            instruments
         )
 
     except Exception as exc:
@@ -515,25 +549,31 @@ def run():
     # CANONICAL GAGARIN GOVERNOR
     # --------------------------------------------------------
 
-    decisions = evaluate_states(results)
+    operational_results = [
+        state for state in results if _is_operational_state(state)
+    ]
+    decisions = evaluate_states(operational_results)
     decisions_by_symbol = {
         decision.symbol: decision
         for decision in decisions
     }
     for state in results:
-        decision = decisions_by_symbol.get(
-            str(getattr(state, "symbol", "")).upper()
-        )
+        symbol = str(getattr(state, "symbol", "")).strip().upper()
+        decision = decisions_by_symbol.get(symbol)
         metadata = getattr(state, "metadata", None)
         if not isinstance(metadata, dict):
             metadata = {}
             state.metadata = metadata
-        metadata["gagarin_action"] = (
-            decision.action if decision is not None else "WAIT"
-        )
-        metadata["gagarin_reason"] = (
-            decision.reason if decision is not None else "NO_DECISION"
-        )
+        if not _is_operational_state(state):
+            metadata["gagarin_action"] = "AUXILIARY_ONLY"
+            metadata["gagarin_reason"] = "FOREX_CONTEXT_ONLY"
+        else:
+            metadata["gagarin_action"] = (
+                decision.action if decision is not None else "WAIT"
+            )
+            metadata["gagarin_reason"] = (
+                decision.reason if decision is not None else "NO_DECISION"
+            )
 
     # --------------------------------------------------------
     # EXPLAINABLE ANALYST LAYER
@@ -551,7 +591,7 @@ def run():
     print("EXECUTION LAYER")
     print("-" * 72)
     execution_results = []
-    for state in results:
+    for state in operational_results:
         try:
             result = execute_state(state)
             execution_results.append(result)
@@ -576,7 +616,7 @@ def run():
     )
 
     _print_operational(
-        results
+        operational_results
     )
 
     # --------------------------------------------------------
@@ -584,7 +624,7 @@ def run():
     # --------------------------------------------------------
 
     _print_paper_journal(
-        results
+        operational_results
     )
 
     # --------------------------------------------------------
@@ -592,7 +632,7 @@ def run():
     # --------------------------------------------------------
 
     feedback_ok = _print_feedback(
-        results
+        results, operational_results
     )
 
     # --------------------------------------------------------
@@ -607,7 +647,7 @@ def run():
 
     signal_results = [
         state
-        for state in results
+        for state in operational_results
         if (
             (
                 str(getattr(state, "symbol", "")).upper() in approved_symbols
@@ -635,7 +675,7 @@ def run():
                 )
             else:
                 # Send WATCH pre-alert for near-threshold setups
-                watch_msg = format_watch_board(results, min_score=40.0)
+                watch_msg = format_watch_board(operational_results, min_score=40.0)
                 if "Nessun setup vicino" not in watch_msg:
                     delivered = send_telegram(watch_msg)
                     if not delivered:
