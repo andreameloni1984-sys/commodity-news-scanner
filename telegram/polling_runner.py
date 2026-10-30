@@ -31,7 +31,7 @@ def get_updates(offset: int | None = None, timeout: int = 0) -> list[dict]:
         description = data.get("description") if isinstance(data, dict) else None
         if error_code == 409:
             message = (
-                "getUpdates blocked: Telegram webhook is active (409); "
+                "getUpdates blocked by Telegram API error_code=409: webhook is active; "
                 "polling cannot run while webhook mode is enabled."
             )
         else:
