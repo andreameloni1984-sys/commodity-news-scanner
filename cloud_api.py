@@ -102,7 +102,7 @@ def _run_gagarin(*, on_demand: bool = False):
         metadata["gagarin_reason"] = decision.reason if decision else "NO_DECISION"
 
     rows = [_state_json(s) for s in results]
-    operational = [r for r in rows if r["action"] in {"PAPER_ENTRY", "PAPER_SIGNAL"}]
+    operational = [r for r in rows if r["action"] in {"PAPER_ENTRY", "PAPER_SIGNAL"} and str(r.get("symbol") or "").upper() not in {"EUR/USD", "GBP/USD"}]
     # Operational signals first, then strong market opportunities, then normal WAITs.
     rows.sort(key=lambda x: (x["action"] not in {"PAPER_ENTRY", "PAPER_SIGNAL"}, x.get("opportunity_alert") not in {"STRONG_MOVE", "OPPORTUNITY"}, -(x.get("opportunity_score") or 0), -(x["probability"] or 0)))
 
@@ -130,7 +130,7 @@ def _run_gagarin(*, on_demand: bool = False):
     AGGRESSIVE_PORTFOLIO.mark_to_market(prices)
     aggressive_closed_symbols = {str(item.get("symbol") or "").upper() for item in aggressive_closed}
     candidates = sorted(
-        rows,
+        [row for row in rows if str(row.get("symbol") or "").upper() not in {"EUR/USD", "GBP/USD"}],
         key=lambda x: (
             -(float(x.get("opportunity_score") or 0)),
             -(float(x.get("probability") or 0)),
@@ -159,13 +159,8 @@ def _run_gagarin(*, on_demand: bool = False):
     FOREX_AGGRESSIVE_PORTFOLIO.mark_to_market(forex_prices)
     forex_closed_symbols = {str(item.get("symbol") or "").upper() for item in forex_closed}
     forex_candidates = sorted(forex_rows, key=lambda x: (-(float(x.get("opportunity_score") or 0)), -(float(x.get("probability") or 0)), -(float(x.get("quality") or 0))))
-    for candidate in forex_candidates:
-        symbol = str(candidate.get("symbol") or "").upper()
-        if not symbol or symbol in forex_closed_symbols or float(candidate.get("probability") or 0) < 45:
-            continue
-        paper_candidate = dict(candidate)
-        paper_candidate["action"] = "PAPER_SIGNAL"
-        FOREX_AGGRESSIVE_PORTFOLIO.open_signal(paper_candidate, allocation_pct=0.25, risk_pct=0.015, max_allocation_pct=0.35)
+    # Forex is retained as auxiliary context and existing positions are managed,
+    # but no new autonomous Forex paper entries are opened.
     FOREX_AGGRESSIVE_PORTFOLIO.mark_to_market(forex_prices)
 
     # Day trading registry: update open positions with any prices present.
