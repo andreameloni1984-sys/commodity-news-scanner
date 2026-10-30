@@ -2416,7 +2416,23 @@ def load_data(
         state.metadata["fallback_used"] = len(attempts) > 1
         state.metadata["provider_chain"] = list(providers)
         state.metadata["freshness_fallback_used"] = True
-        state.metadata["freshness_fallback_reason"] = "ALL_PROVIDER_CANDLES_STALE"
+        if classify_data_status(
+            state.commodity,
+            live=False,
+            data_ok=True,
+        ) == "MARKET_CLOSED":
+            fallback_reason = "MARKET_CLOSED"
+        elif (
+            len(attempts) == len(providers)
+            and all(
+                item.get("freshness_status") == "STALE"
+                for item in attempts
+            )
+        ):
+            fallback_reason = "ALL_PROVIDER_CANDLES_STALE"
+        else:
+            fallback_reason = "NO_FRESH_PROVIDER_AVAILABLE"
+        state.metadata["freshness_fallback_reason"] = fallback_reason
         state.metadata["best_stale_age_seconds"] = round(
             best_stale["age_seconds"], 1
         )
