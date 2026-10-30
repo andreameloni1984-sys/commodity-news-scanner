@@ -245,7 +245,12 @@ def _format_buy(results):
 def _format_morning_pick(results):
     if not results:
         return "GAGARIN — COSA COMPRO?\nNessun risultato disponibile."
-    decisions = evaluate_states(results)
+    # Forex remains available as auxiliary context, but it must never enter
+    # the manual operational pick or the canonical entry governor.
+    operational_results = [
+        state for state in results if not _is_auxiliary_forex(state)
+    ]
+    decisions = evaluate_states(operational_results)
     best = None
     for decision in decisions:
         if decision.action == "PAPER_SIGNAL":
@@ -255,7 +260,7 @@ def _format_morning_pick(results):
     if best is None:
         lines.append("Nessun segnale PAPER disponibile.")
         return "\n".join(lines)
-    state = next((s for s in results if str(getattr(s, "symbol", "")).upper() == best.symbol), None)
+    state = next((s for s in operational_results if str(getattr(s, "symbol", "")).upper() == best.symbol), None)
     if state is None:
         lines.append("Nessun segnale PAPER disponibile.")
         return "\n".join(lines)
