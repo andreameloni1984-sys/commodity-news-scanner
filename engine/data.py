@@ -161,8 +161,6 @@ YAHOO_URLS = (
 BIQUOTE_SYMBOLS = {
     "XAU/USD": "XAUUSD",
     "XAG/USD": "XAGUSD",
-    "XPT/USD": "XPTUSD",
-    "XPD/USD": "XPDUSD",
     "WTI/USD": "USOIL",
     "BRENT/USD": "UKOIL",
 }
@@ -177,26 +175,13 @@ YAHOO_SYMBOLS = {
     "XAU/USD": "GC=F",
     "XAG/USD": "SI=F",
     "COPPER/USD": "HG=F",
-    "XPT/USD": "PL=F",
-    "XPD/USD": "PA=F",
     "WTI/USD": "CL=F",
     "BRENT/USD": "BZ=F",
-
     "WHEAT/USD": "ZW=F",
     "CORN/USD": "ZC=F",
     "SOYBEAN/USD": "ZS=F",
-    "RICE/USD": "ZR=F",
-    "SUGAR/USD": "SB=F",
-    "COCOA/USD": "CC=F",
-    "COFFEE/USD": "KC=F",
     "EUR/USD": "EURUSD=X",
     "GBP/USD": "GBPUSD=X",
-    "USD/JPY": "JPY=X",
-    "USD/CHF": "CHF=X",
-    "AUD/USD": "AUDUSD=X",
-    "USD/CAD": "CAD=X",
-    "NZD/USD": "NZDUSD=X",
-    "EUR/JPY": "EURJPY=X",
 }
 
 
@@ -208,10 +193,6 @@ AGRI_SYMBOLS = {
     "WHEAT/USD",
     "CORN/USD",
     "SOYBEAN/USD",
-    "RICE/USD",
-    "SUGAR/USD",
-    "COCOA/USD",
-    "COFFEE/USD",
 }
 
 
@@ -219,20 +200,7 @@ AGRI_TERMS = {
     "WHEAT/USD": ("wheat", "grain"),
     "CORN/USD": ("corn", "maize"),
     "SOYBEAN/USD": ("soybean", "soybeans", "soya"),
-    "RICE/USD": (
-        "rice",
-        "rough rice",
-    ),
-    "SUGAR/USD": (
-        "sugar",
-    ),
-    "COCOA/USD": (
-        "cocoa",
-    ),
-    "COFFEE/USD": (
-        "coffee",
-        "arabica",
-    ),
+
 }
 
 
