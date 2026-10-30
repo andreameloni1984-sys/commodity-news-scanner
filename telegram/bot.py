@@ -513,7 +513,10 @@ def _command_response(command: str) -> Optional[str]:
         return auto_buy_best_signal_budget(amount=10.0, min_score=50.0)
 
     if command_name == "/classifica":
-        results = get_last_results() or _run_analysis()
+        # Always rebuild the manual ranking from the canonical enabled universe.
+        # Cached results may have been produced by an older process/universe and
+        # must never reintroduce retired instruments into Telegram.
+        results = _run_analysis(on_demand=True)
         return _format_classifica(results)
 
     if command_name == "/analisi":
