@@ -104,10 +104,31 @@ def build_reasoning(state: object, decision: object | None = None) -> dict[str, 
     else:
         missing.append("trigger d'ingresso non confermato")
 
+    # Only count news mapped to this instrument. A generic energy headline
+    # must not become confluence for gold, wheat or FX by accident.
+    instrument_text = (symbol + " " + str(getattr(state, "commodity", ""))).lower()
+    asset_aliases = {
+        "WTI": ("wti", "oil", "petrol"),
+        "Brent": ("brent",),
+        "Oro": ("gold", "oro", "xau"),
+        "Argento": ("silver", "argento", "xag"),
+        "Rame": ("copper", "rame", "hg"),
+        "Grano": ("wheat", "grano"),
+        "Mais": ("corn", "mais"),
+        "Soia": ("soybean", "soia"),
+        "EUR/USD": ("eur/usd", "eurusd"),
+        "GBP/USD": ("gbp/usd", "gbpusd"),
+    }
+    relevant_assets = {
+        asset for asset, aliases in asset_aliases.items()
+        if any(alias in instrument_text for alias in aliases)
+    }
     news_biases = []
     for event in news_events[:8]:
         impacts = event.get("impact", {}) or {}
         for asset, impact in impacts.items():
+            if relevant_assets and asset not in relevant_assets:
+                continue
             if impact not in {"RIALZISTA", "RIBASSISTA"}:
                 continue
             direction = "LONG" if impact == "RIALZISTA" else "SHORT"
