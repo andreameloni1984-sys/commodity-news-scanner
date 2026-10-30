@@ -53,3 +53,16 @@ def test_core_metals_and_cereals_have_explicit_data_routes():
     assert {"WHEAT/USD", "CORN/USD", "SOYBEAN/USD"} <= AGRI_SYMBOLS
     for symbol in ("COPPER/USD", "WHEAT/USD", "CORN/USD", "SOYBEAN/USD"):
         assert "YAHOO" in PROVIDER_ORDER[symbol]
+
+
+def test_operational_universe_is_eight_commodities_and_forex_is_auxiliary():
+    from commodities.universe import operational_commodities, auxiliary_commodities
+
+    operational = operational_commodities()
+    auxiliary = auxiliary_commodities()
+    assert {item.symbol for item in operational} == {
+        "XAU/USD", "XAG/USD", "COPPER/USD", "WTI/USD",
+        "BRENT/USD", "WHEAT/USD", "CORN/USD", "SOYBEAN/USD",
+    }
+    assert {item.symbol for item in auxiliary} == {"EUR/USD", "GBP/USD"}
+    assert all(item.category.lower() != "forex" for item in operational)
