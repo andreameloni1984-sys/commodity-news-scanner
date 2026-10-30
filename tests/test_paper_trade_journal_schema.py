@@ -175,7 +175,7 @@ def test_manual_and_scheduled_workflows_persist_both_journals():
             encoding="utf-8"
         )
         match = re.search(
-            rf"      - name: {re.escape(expected_step)}\\n(?P<block>.*?)(?=\\n      - name:|\\Z)",
+            rf"      - name: {re.escape(expected_step)}\n(?P<block>.*?)(?=\n      - name:|\\Z)",
             source,
             flags=re.DOTALL,
         )
