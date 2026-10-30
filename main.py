@@ -442,7 +442,16 @@ def run():
     # UNIVERSE
     # --------------------------------------------------------
 
-    commodities = filter_by_session(enabled_commodities(), on_demand=False)
+    ALLOWED = {
+        "XAU/USD", "XAG/USD", "COPPER/USD",
+        "WTI/USD", "BRENT/USD",
+        "WHEAT/USD", "CORN/USD", "SOYBEAN/USD",
+        "EUR/USD", "GBP/USD",
+    }
+    commodities = [
+        c for c in filter_by_session(enabled_commodities(), on_demand=False)
+        if str(getattr(c, "symbol", "")).upper() in ALLOWED
+    ]
 
     print(
         "SESSION FILTER: orari esatti per i 10 strumenti (Europe/Rome). "
