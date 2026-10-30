@@ -27,9 +27,27 @@ def get_updates(offset: int | None = None, timeout: int = 0) -> list[dict]:
         params["offset"] = offset
     ok, data = _api("getUpdates", params)
     if not ok:
-        print(f"getUpdates FAILED: {data}", flush=True)
-        return []
-    return data.get("result") or []
+        error_code = data.get("error_code") if isinstance(data, dict) else None
+        description = data.get("description") if isinstance(data, dict) else None
+        if error_code == 409:
+            message = (
+                "getUpdates blocked: Telegram webhook is active (409); "
+                "polling cannot run while webhook mode is enabled."
+            )
+        else:
+            message = (
+                f"getUpdates failed (error_code={error_code or 'UNKNOWN'}): "
+                f"{description or 'unknown Telegram API error'}"
+            )
+        print(f"getUpdates FAILED | {message}", flush=True)
+        raise RuntimeError(message)
+
+    updates = data.get("result") if isinstance(data, dict) else None
+    if updates is None:
+        updates = []
+    if not isinstance(updates, list):
+        raise RuntimeError("getUpdates returned an invalid result payload")
+    return updates
 
 
 def process_update(update: dict) -> None:
@@ -65,7 +83,8 @@ def main() -> None:
         print("Telegram configuration invalid", flush=True)
         raise SystemExit(1)
 
-    # Process pending updates once and exit (suitable for Actions)
+    # Process pending updates once and exit (suitable for Actions).
+    # API errors must fail the run: they are not equivalent to an empty queue.
     updates = get_updates(timeout=0)
     print(f"Pending updates: {len(updates)}", flush=True)
 
@@ -76,7 +95,7 @@ def main() -> None:
         if uid is not None:
             max_offset = uid + 1 if max_offset is None else max(max_offset, uid + 1)
 
-    # Acknowledge by fetching with offset so they are not returned again
+    # Acknowledge by fetching with offset so they are not returned again.
     if max_offset is not None:
         get_updates(offset=max_offset, timeout=0)
 
