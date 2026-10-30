@@ -420,7 +420,11 @@ def _print_feedback(results):
             f"{exc}"
         )
 
+        print()
+        return False
+
     print()
+    return True
 
 
 # ============================================================
@@ -594,7 +598,7 @@ def run():
     # FEEDBACK
     # --------------------------------------------------------
 
-    _print_feedback(
+    feedback_ok = _print_feedback(
         results
     )
 
@@ -664,6 +668,13 @@ def run():
         print(
             "📨 TELEGRAM: DISABLED"
         )
+
+    # A failed feedback write/summary must not leave a green monitor run.
+    # Telegram processing above is still allowed; the workflow's always()
+    # persistence step can then save any local CSV before the job fails.
+    if not feedback_ok:
+        print("❌ FEEDBACK INCOMPLETE: monitor run marked failed; journal must be checked.")
+        return 1
 
     # --------------------------------------------------------
     # COMPLETED
