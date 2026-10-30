@@ -9,7 +9,7 @@ def test_send_telegram_uses_configured_chat(monkeypatch):
 
     def fake_api(method, payload=None):
         calls.append((method, payload))
-        return True, {"ok": True}
+        return True, {"ok": True, "result": {"message_id": 42}}
 
     monkeypatch.setattr(bot, "_api", fake_api)
 
