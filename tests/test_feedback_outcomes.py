@@ -192,3 +192,18 @@ def test_candles_are_sorted_deduplicated_and_invalid_ranges_rejected():
         (1000.0, 101.0, 99.0),
         (3000.0, 104.0, 102.0),
     ]
+
+def test_main_feedback_pipeline_records_live_forecasts(monkeypatch, capsys):
+    import main
+
+    calls = []
+    monkeypatch.setattr(main, "update_open_outcomes", lambda results: calls.append("update") or 0)
+    monkeypatch.setattr(main, "record_feedback_entries", lambda results: calls.append("entries") or 0)
+    monkeypatch.setattr(main, "record_feedback_forecasts", lambda results: calls.append("forecasts") or 2)
+    monkeypatch.setattr(main, "summarize_feedback", lambda: {})
+    monkeypatch.setattr(main, "format_feedback_summary", lambda summary: "feedback summary")
+
+    main._print_feedback([])
+
+    assert calls == ["update", "entries", "forecasts"]
+    assert "New additional live forecasts (WATCH/other): 2" in capsys.readouterr().out
