@@ -65,6 +65,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 import math
+import os
 import time
 
 import requests
@@ -99,6 +100,21 @@ YAHOO_URLS = (
     "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
     "https://query2.finance.yahoo.com/v8/finance/chart/{symbol}",
 )
+
+# Narwhal is an optional, free-plan reference feed only. It is deliberately
+# excluded from PROVIDER_ORDER and can never become an execution fallback.
+NARWHAL_FUTURES_URL = "https://api.narwhalapi.com/v1/futures/{root}/price"
+NARWHAL_FUTURES_ROOTS = {
+    "XAU/USD": "GC",
+    "XAG/USD": "SI",
+    "COPPER/USD": "HG",
+    "WTI/USD": "CL",
+    "WHEAT/USD": "ZW",
+    "CORN/USD": "ZC",
+    "SOYBEAN/USD": "ZS",
+}
+NARWHAL_REFERENCE_ROTATION_SECONDS = 900
+NARWHAL_FREE_MAX_AGE_SECONDS = 900
 
 
 # ============================================================
@@ -256,6 +272,10 @@ _TWELVE_COMMODITY_CATALOG: Optional[
 ] = None
 
 _TWELVE_SYMBOL_CACHE: Dict[str, str] = {}
+
+# One reference request per 15-minute slot, rotated across supported roots.
+# This keeps a 15-minute monitor below the published free monthly quota.
+_NARWHAL_SLOT_CACHE: Dict[int, Dict[str, Any]] = {}
 
 
 # ============================================================
@@ -1490,6 +1510,206 @@ def _fetch_yahoo(
 
 
 # ============================================================
+# NARWHAL — OPTIONAL FREE FUTURES REFERENCE
+# ============================================================
+
+def _narwhal_reference_status(status: str, symbol: str, root: Optional[str] = None):
+    return {
+        "provider": "NARWHAL",
+        "symbol": root,
+        "source_timestamp": None,
+        "currency": None,
+        "unit": None,
+        "price": None,
+        "bid": None,
+        "ask": None,
+        "age_seconds": None,
+        "market_type": "FUTURES_FRONT_MONTH_CONTINUOUS",
+        "contract_month": None,
+        "delayed": None,
+        "market_session": None,
+        "status": status,
+        "comparison_status": "CONTRACT_MONTH_NOT_EXPOSED",
+        "deviation_pct": None,
+        "source_independence_status": "UNVERIFIED_UPSTREAM_ROUTING_NOT_DISCLOSED",
+        "attribution": "Data by Narwhal API",
+        "attribution_url": "https://narwhalapi.com",
+        "use_restriction": "REFERENCE_ONLY_NOT_FOR_TRADE_EXECUTION",
+    }
+
+
+def _fetch_narwhal_reference(symbol: str) -> Dict[str, Any]:
+    """
+    Fetch one delayed free-plan futures reference on a deterministic rotation.
+
+    This source is never an execution provider. Narwhal documents a free tier
+    with 15-minute-delayed futures prices, a 5,000-successful-request monthly
+    cap and no automatic overage. Its public response does not expose the
+    exact delivery month or upstream provider identity, so this function
+    records the quote but deliberately does not calculate a price deviation
+    against Yahoo's continuous series.
+    """
+    root = NARWHAL_FUTURES_ROOTS.get(symbol)
+    if not root:
+        return _narwhal_reference_status("NOT_COVERED", symbol)
+
+    if os.getenv("NARWHAL_REFERENCE_ENABLED", "0").strip() != "1":
+        return _narwhal_reference_status("DISABLED", symbol, root)
+
+    api_key = os.getenv("NARWHAL_API_KEY", "").strip()
+    if not api_key:
+        return _narwhal_reference_status("NOT_CONFIGURED", symbol, root)
+
+    now = time.time()
+    slot = int(now // NARWHAL_REFERENCE_ROTATION_SECONDS)
+    rotation = tuple(NARWHAL_FUTURES_ROOTS)
+    scheduled_symbol = rotation[slot % len(rotation)]
+
+    if symbol != scheduled_symbol:
+        result = _narwhal_reference_status("NOT_SCHEDULED_THIS_SLOT", symbol, root)
+        result["scheduled_symbol"] = scheduled_symbol
+        return result
+
+    cached = _NARWHAL_SLOT_CACHE.get(slot)
+    if cached is not None:
+        return dict(cached)
+
+    # Reserve the slot before network I/O: a timeout or 429 must not trigger
+    # repeated calls during the same slot.
+    result = _narwhal_reference_status("REQUEST_PENDING", symbol, root)
+    _NARWHAL_SLOT_CACHE[slot] = result
+
+    try:
+        response = requests.get(
+            NARWHAL_FUTURES_URL.format(root=root),
+            headers={
+                **HEADERS,
+                "Authorization": f"Bearer {api_key}",
+            },
+            timeout=TIMEOUT_SECONDS,
+        )
+    except requests.Timeout:
+        result = _narwhal_reference_status("REQUEST_TIMEOUT", symbol, root)
+        _NARWHAL_SLOT_CACHE[slot] = result
+        return dict(result)
+    except requests.RequestException as exc:
+        result = _narwhal_reference_status("REQUEST_ERROR", symbol, root)
+        result["error"] = str(exc)[:240]
+        _NARWHAL_SLOT_CACHE[slot] = result
+        return dict(result)
+
+    if response.status_code == 429:
+        result = _narwhal_reference_status("RATE_LIMITED", symbol, root)
+        _NARWHAL_SLOT_CACHE[slot] = result
+        return dict(result)
+
+    if response.status_code != 200:
+        result = _narwhal_reference_status(
+            f"HTTP_ERROR_{response.status_code}", symbol, root
+        )
+        _NARWHAL_SLOT_CACHE[slot] = result
+        return dict(result)
+
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = None
+
+    if not isinstance(payload, dict):
+        result = _narwhal_reference_status("INVALID_JSON", symbol, root)
+        _NARWHAL_SLOT_CACHE[slot] = result
+        return dict(result)
+
+    if str(payload.get("id", "")).upper() != root:
+        result = _narwhal_reference_status("SYMBOL_MISMATCH", symbol, root)
+        _NARWHAL_SLOT_CACHE[slot] = result
+        return dict(result)
+
+    try:
+        price = float(payload.get("price"))
+    except (TypeError, ValueError, OverflowError):
+        price = float("nan")
+
+    if not math.isfinite(price) or price <= 0:
+        result = _narwhal_reference_status("INVALID_PRICE", symbol, root)
+        _NARWHAL_SLOT_CACHE[slot] = result
+        return dict(result)
+
+    timestamp = payload.get("timestamp")
+    timestamp_epoch = _parse_time(timestamp)
+    if timestamp_epoch is None:
+        result = _narwhal_reference_status("INVALID_TIMESTAMP", symbol, root)
+        _NARWHAL_SLOT_CACHE[slot] = result
+        return dict(result)
+
+    age_seconds = now - timestamp_epoch
+    if age_seconds < -FUTURE_TIMESTAMP_TOLERANCE_SECONDS:
+        result = _narwhal_reference_status("FUTURE_TIMESTAMP", symbol, root)
+        _NARWHAL_SLOT_CACHE[slot] = result
+        return dict(result)
+    age_seconds = max(0.0, age_seconds)
+
+    currency = str(payload.get("currency") or "").upper()
+    unit = str(payload.get("unit") or "").strip()
+    if currency != "USD" or not unit:
+        result = _narwhal_reference_status("INVALID_PRICE_METADATA", symbol, root)
+        result["currency"] = currency or None
+        result["unit"] = unit or None
+        _NARWHAL_SLOT_CACHE[slot] = result
+        return dict(result)
+
+    stale = payload.get("stale")
+    delayed = payload.get("delayed")
+    market_session = str(payload.get("market_session") or "unknown").lower()
+
+    if stale is True or (
+        market_session == "open"
+        and age_seconds > NARWHAL_FREE_MAX_AGE_SECONDS
+    ):
+        status = "STALE"
+    elif market_session == "closed":
+        status = "MARKET_CLOSED"
+    elif delayed is True:
+        status = "DELAYED_15M"
+    else:
+        # The free plan is documented as delayed. Missing/false delayed flag
+        # is not silently re-labelled LIVE.
+        status = "DELAY_STATUS_UNVERIFIED"
+
+    result = {
+        "provider": "NARWHAL",
+        "symbol": root,
+        "source_timestamp": str(timestamp),
+        "currency": currency,
+        "unit": unit,
+        "unit_key": payload.get("unit_key"),
+        "price_scale": payload.get("price_scale"),
+        "price": price,
+        "bid": None,
+        "ask": None,
+        "age_seconds": round(age_seconds, 1),
+        "market_type": "FUTURES_FRONT_MONTH_CONTINUOUS",
+        "contract_month": None,
+        "delayed": delayed if isinstance(delayed, bool) else None,
+        "market_session": market_session,
+        "stale": stale if isinstance(stale, bool) else None,
+        "status": status,
+        "comparison_status": "CONTRACT_MONTH_NOT_EXPOSED",
+        "deviation_pct": None,
+        "source_independence_status": "UNVERIFIED_UPSTREAM_ROUTING_NOT_DISCLOSED",
+        "attribution": "Data by Narwhal API",
+        "attribution_url": "https://narwhalapi.com",
+        "use_restriction": "REFERENCE_ONLY_NOT_FOR_TRADE_EXECUTION",
+    }
+    _NARWHAL_SLOT_CACHE[slot] = result
+    # Keep only a small bounded cache; this is an in-process rate guard, not
+    # a persistent store or a substitute for the provider's quota.
+    for old_slot in sorted(_NARWHAL_SLOT_CACHE)[:-4]:
+        _NARWHAL_SLOT_CACHE.pop(old_slot, None)
+    return dict(result)
+
+
+# ============================================================
 # TRUE RANGE
 # ============================================================
 
@@ -2060,6 +2280,19 @@ def _finalize(
     return state
 
 
+def _finalize_with_narwhal_reference(state, candles, provider, error=None):
+    """Finalize the execution quote, then attach a separate delayed reference."""
+    finalized = _finalize(state, candles, provider, error)
+    if finalized.symbol in EXECUTION_MARKET_TYPES and (
+        EXECUTION_MARKET_TYPES.get(finalized.symbol) == "FUTURES_CONTINUOUS"
+    ):
+        finalized.metadata.setdefault("reference_quotes", {})
+        finalized.metadata["reference_quotes"]["NARWHAL"] = (
+            _fetch_narwhal_reference(finalized.symbol)
+        )
+    return finalized
+
+
 # ============================================================
 # PROVIDER ATTEMPT
 # ============================================================
@@ -2360,7 +2593,7 @@ def load_data(
             state.metadata["execution_provider"] = provider
             state.metadata["execution_symbol"] = provider_symbol
             state.metadata["execution_market_type"] = expected_market_type
-            return _finalize(
+            return _finalize_with_narwhal_reference(
                 state,
                 validated,
                 provider,
@@ -2400,7 +2633,7 @@ def load_data(
         state.metadata["execution_provider"] = best_stale["provider"]
         state.metadata["execution_symbol"] = best_stale["provider_symbol"]
         state.metadata["execution_market_type"] = expected_market_type
-        return _finalize(
+        return _finalize_with_narwhal_reference(
             state,
             best_stale["candles"],
             best_stale["provider"],
