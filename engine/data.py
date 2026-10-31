@@ -1560,8 +1560,8 @@ def _fetch_narwhal_reference(symbol: str) -> Dict[str, Any]:
     if not api_key:
         return _narwhal_reference_status("NOT_CONFIGURED", symbol, root)
 
-    now = time.time()
-    slot = int(now // NARWHAL_REFERENCE_ROTATION_SECONDS)
+    request_started_at = time.time()
+    slot = int(request_started_at // NARWHAL_REFERENCE_ROTATION_SECONDS)
     rotation = tuple(NARWHAL_FUTURES_ROOTS)
     scheduled_symbol = rotation[slot % len(rotation)]
 
@@ -1620,6 +1620,12 @@ def _fetch_narwhal_reference(symbol: str) -> Dict[str, Any]:
         _NARWHAL_SLOT_CACHE[slot] = result
         return dict(result)
 
+    # Measure quote age when the response has arrived, not before network I/O.
+    observed_at_epoch = time.time()
+    observed_at = datetime.fromtimestamp(
+        observed_at_epoch, timezone.utc
+    ).isoformat()
+
     if str(payload.get("id", "")).upper() != root:
         result = _narwhal_reference_status("SYMBOL_MISMATCH", symbol, root)
         _NARWHAL_SLOT_CACHE[slot] = result
@@ -1642,7 +1648,7 @@ def _fetch_narwhal_reference(symbol: str) -> Dict[str, Any]:
         _NARWHAL_SLOT_CACHE[slot] = result
         return dict(result)
 
-    age_seconds = now - timestamp_epoch
+    age_seconds = observed_at_epoch - timestamp_epoch
     if age_seconds < -FUTURE_TIMESTAMP_TOLERANCE_SECONDS:
         result = _narwhal_reference_status("FUTURE_TIMESTAMP", symbol, root)
         _NARWHAL_SLOT_CACHE[slot] = result
@@ -1680,6 +1686,7 @@ def _fetch_narwhal_reference(symbol: str) -> Dict[str, Any]:
         "provider": "NARWHAL",
         "symbol": root,
         "source_timestamp": str(timestamp),
+        "observed_at": observed_at,
         "currency": currency,
         "unit": unit,
         "unit_key": payload.get("unit_key"),
