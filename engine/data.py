@@ -1532,6 +1532,9 @@ def _narwhal_reference_status(status: str, symbol: str, root: Optional[str] = No
         "comparison_status": "CONTRACT_MONTH_NOT_EXPOSED",
         "deviation_pct": None,
         "source_independence_status": "UNVERIFIED_UPSTREAM_ROUTING_NOT_DISCLOSED",
+        "attribution": "Data by Narwhal API",
+        "attribution_url": "https://narwhalapi.com",
+        "use_restriction": "REFERENCE_ONLY_NOT_FOR_TRADE_EXECUTION",
     }
 
 
@@ -1694,6 +1697,9 @@ def _fetch_narwhal_reference(symbol: str) -> Dict[str, Any]:
         "comparison_status": "CONTRACT_MONTH_NOT_EXPOSED",
         "deviation_pct": None,
         "source_independence_status": "UNVERIFIED_UPSTREAM_ROUTING_NOT_DISCLOSED",
+        "attribution": "Data by Narwhal API",
+        "attribution_url": "https://narwhalapi.com",
+        "use_restriction": "REFERENCE_ONLY_NOT_FOR_TRADE_EXECUTION",
     }
     _NARWHAL_SLOT_CACHE[slot] = result
     # Keep only a small bounded cache; this is an in-process rate guard, not
