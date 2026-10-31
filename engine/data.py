@@ -159,10 +159,12 @@ YAHOO_URLS = (
 # ============================================================
 
 BIQUOTE_SYMBOLS = {
-    "XAU/USD": "XAUUSD",
-    "XAG/USD": "XAGUSD",
-    "WTI/USD": "USOIL",
-    "BRENT/USD": "UKOIL",
+    "XAU/USD": "XAUUSD",       # control/reference only; not futures execution
+    "XAG/USD": "XAGUSD",       # control/reference only; not futures execution
+    "WTI/USD": "USOIL",        # CFD reference; not futures execution
+    "BRENT/USD": "UKOIL",      # CFD reference; not futures execution
+    "EUR/USD": "EURUSD",
+    "GBP/USD": "GBPUSD",
 }
 
 
@@ -208,76 +210,65 @@ AGRI_TERMS = {
 # PROVIDER ORDER
 # ============================================================
 
+# Active execution providers are deliberately keyless/free.
+# Yahoo continuous futures are the execution basis for the eight commodities.
+# BiQuote and Yahoo are same-market-type FX spot fallbacks for the two auxiliary pairs.
+# BiQuote commodity CFD/MT5 quotes are not allowed to replace futures execution prices.
+FREE_EXECUTION_PROVIDERS = frozenset({"BIQUOTE", "YAHOO"})
+
+EXECUTION_MARKET_TYPES = {
+    "XAU/USD": "FUTURES_CONTINUOUS",
+    "XAG/USD": "FUTURES_CONTINUOUS",
+    "COPPER/USD": "FUTURES_CONTINUOUS",
+    "WTI/USD": "FUTURES_CONTINUOUS",
+    "BRENT/USD": "FUTURES_CONTINUOUS",
+    "WHEAT/USD": "FUTURES_CONTINUOUS",
+    "CORN/USD": "FUTURES_CONTINUOUS",
+    "SOYBEAN/USD": "FUTURES_CONTINUOUS",
+    "EUR/USD": "FX_SPOT",
+    "GBP/USD": "FX_SPOT",
+}
+
+PROVIDER_MARKET_TYPES = {
+    "XAU/USD": {"YAHOO": "FUTURES_CONTINUOUS"},
+    "XAG/USD": {"YAHOO": "FUTURES_CONTINUOUS"},
+    "COPPER/USD": {"YAHOO": "FUTURES_CONTINUOUS"},
+    "WTI/USD": {"YAHOO": "FUTURES_CONTINUOUS"},
+    "BRENT/USD": {"YAHOO": "FUTURES_CONTINUOUS"},
+    "WHEAT/USD": {"YAHOO": "FUTURES_CONTINUOUS"},
+    "CORN/USD": {"YAHOO": "FUTURES_CONTINUOUS"},
+    "SOYBEAN/USD": {"YAHOO": "FUTURES_CONTINUOUS"},
+    "EUR/USD": {"BIQUOTE": "FX_SPOT", "YAHOO": "FX_SPOT"},
+    "GBP/USD": {"BIQUOTE": "FX_SPOT", "YAHOO": "FX_SPOT"},
+}
+
+INSTRUMENT_DATA_METADATA = {
+    "XAU/USD": {"currency": "USD", "unit": "troy_oz", "market_type": "FUTURES_CONTINUOUS"},
+    "XAG/USD": {"currency": "USD", "unit": "troy_oz", "market_type": "FUTURES_CONTINUOUS"},
+    "COPPER/USD": {"currency": "USD", "unit": "pound", "market_type": "FUTURES_CONTINUOUS"},
+    "WTI/USD": {"currency": "USD", "unit": "barrel", "market_type": "FUTURES_CONTINUOUS"},
+    "BRENT/USD": {"currency": "USD", "unit": "barrel", "market_type": "FUTURES_CONTINUOUS"},
+    "WHEAT/USD": {"currency": "USD", "unit": "bushel", "market_type": "FUTURES_CONTINUOUS"},
+    "CORN/USD": {"currency": "USD", "unit": "bushel", "market_type": "FUTURES_CONTINUOUS"},
+    "SOYBEAN/USD": {"currency": "USD", "unit": "bushel", "market_type": "FUTURES_CONTINUOUS"},
+    "EUR/USD": {"currency": "USD", "unit": "USD_per_EUR", "market_type": "FX_SPOT"},
+    "GBP/USD": {"currency": "USD", "unit": "USD_per_GBP", "market_type": "FX_SPOT"},
+}
+
 PROVIDER_ORDER = {
-    "XAU/USD": (
-        "TWELVE_DATA",
-        "BIQUOTE",
-        "YAHOO",
-    ),
-
-    "XAG/USD": (
-        "BIQUOTE",
-        "TWELVE_DATA",
-        "YAHOO",
-    ),
-
-    "COPPER/USD": ("YAHOO", "TWELVE_DATA"),
-
-    "XPT/USD": (
-        "BIQUOTE",
-        "TWELVE_DATA",
-        "YAHOO",
-    ),
-
-    "XPD/USD": (
-        "BIQUOTE",
-        "TWELVE_DATA",
-        "YAHOO",
-    ),
-
-    "WTI/USD": (
-        "BIQUOTE",
-        "TWELVE_DATA",
-        "YAHOO",
-    ),
-
-    "BRENT/USD": (
-        "BIQUOTE",
-        "TWELVE_DATA",
-        "YAHOO",
-    ),
-
-    "WHEAT/USD": ("YAHOO", "TWELVE_DATA"),
-    "CORN/USD": ("YAHOO", "TWELVE_DATA"),
-    "SOYBEAN/USD": ("YAHOO", "TWELVE_DATA"),
-
-    "RICE/USD": (
-        "YAHOO",
-        "TWELVE_DATA",
-    ),
-
-    "SUGAR/USD": (
-        "YAHOO",
-        "TWELVE_DATA",
-    ),
-
-    "COCOA/USD": (
-        "YAHOO",
-        "TWELVE_DATA",
-    ),
-
-    "COFFEE/USD": (
-        "YAHOO",
-        "TWELVE_DATA",
-    ),
-    "EUR/USD": ("TWELVE_DATA", "YAHOO"),
-    "GBP/USD": ("TWELVE_DATA", "YAHOO"),
-    "USD/JPY": ("TWELVE_DATA", "YAHOO"),
-    "USD/CHF": ("TWELVE_DATA", "YAHOO"),
-    "AUD/USD": ("TWELVE_DATA", "YAHOO"),
-    "USD/CAD": ("TWELVE_DATA", "YAHOO"),
-    "NZD/USD": ("TWELVE_DATA", "YAHOO"),
-    "EUR/JPY": ("TWELVE_DATA", "YAHOO"),
+    # Futures execution only. BiQuote metal/energy symbols are MT5 CFDs,
+    # so they are not valid fallbacks for these futures contracts.
+    "XAU/USD": ("YAHOO",),
+    "XAG/USD": ("YAHOO",),
+    "COPPER/USD": ("YAHOO",),
+    "WTI/USD": ("YAHOO",),
+    "BRENT/USD": ("YAHOO",),
+    "WHEAT/USD": ("YAHOO",),
+    "CORN/USD": ("YAHOO",),
+    "SOYBEAN/USD": ("YAHOO",),
+    # Both sources are FX spot. No paid/keyed provider is required.
+    "EUR/USD": ("BIQUOTE", "YAHOO"),
+    "GBP/USD": ("BIQUOTE", "YAHOO"),
 }
 
 
@@ -2010,12 +2001,27 @@ def _finalize(
         "data_error"
     ] = error
 
-    state.metadata[
-        "last_bar_timestamp"
-    ] = datetime.fromtimestamp(
+    last_bar_iso = datetime.fromtimestamp(
         latest,
         tz=timezone.utc,
     ).isoformat()
+    instrument_metadata = INSTRUMENT_DATA_METADATA.get(
+        state.symbol,
+        {},
+    )
+    state.metadata["last_bar_timestamp"] = last_bar_iso
+    state.metadata["quote_provider"] = provider
+    state.metadata["quote_symbol"] = state.metadata.get("resolved_symbol")
+    state.metadata["quote_timestamp"] = last_bar_iso
+    state.metadata["quote_currency"] = instrument_metadata.get("currency")
+    state.metadata["quote_unit"] = instrument_metadata.get("unit")
+    state.metadata["quote_market_type"] = instrument_metadata.get("market_type", "UNKNOWN")
+    state.metadata["quote_bid"] = None
+    state.metadata["quote_ask"] = None
+    state.metadata["quote_bid_ask_available"] = False
+    state.metadata["quote_age_seconds"] = round(age, 1)
+    state.metadata["quote_status"] = freshness_status
+    state.metadata["quote_price"] = state.price
 
     state.metadata[
         "effective_live_max_age_seconds"
@@ -2244,15 +2250,40 @@ def load_data(
 
     state.symbol = symbol
 
-    providers = (
-        PROVIDER_ORDER.get(
-            symbol,
-            (
-                "TWELVE_DATA",
-                "YAHOO",
-            ),
+    configured_providers = PROVIDER_ORDER.get(symbol, ("YAHOO",))
+    expected_market_type = EXECUTION_MARKET_TYPES.get(symbol)
+    providers = tuple(
+        provider
+        for provider in configured_providers
+        if (
+            provider in FREE_EXECUTION_PROVIDERS
+            and expected_market_type is not None
+            and PROVIDER_MARKET_TYPES.get(symbol, {}).get(provider) == expected_market_type
         )
     )
+    rejected_provider_candidates = [
+        {
+            "provider": provider,
+            "reason": (
+                "NON_FREE_PROVIDER_DISABLED"
+                if provider not in FREE_EXECUTION_PROVIDERS
+                else "MARKET_BASIS_MISMATCH_OR_UNVERIFIED"
+            ),
+        }
+        for provider in configured_providers
+        if provider not in providers
+    ]
+    state.metadata["execution_market_type"] = expected_market_type or "UNKNOWN"
+    state.metadata["configured_provider_candidates"] = list(configured_providers)
+    state.metadata["rejected_provider_candidates"] = rejected_provider_candidates
+
+    if not providers:
+        return _finalize(
+            state,
+            [],
+            "NONE",
+            "NO_FREE_PROVIDER_WITH_COMPATIBLE_MARKET_BASIS",
+        )
 
     attempts = []
     best_stale = None
@@ -2399,6 +2430,9 @@ def load_data(
                 for item in attempts[:-1]
             )
 
+            state.metadata["execution_provider"] = provider
+            state.metadata["execution_symbol"] = provider_symbol
+            state.metadata["execution_market_type"] = expected_market_type
             return _finalize(
                 state,
                 validated,
@@ -2436,6 +2470,9 @@ def load_data(
         state.metadata["best_stale_age_seconds"] = round(
             best_stale["age_seconds"], 1
         )
+        state.metadata["execution_provider"] = best_stale["provider"]
+        state.metadata["execution_symbol"] = best_stale["provider_symbol"]
+        state.metadata["execution_market_type"] = expected_market_type
         return _finalize(
             state,
             best_stale["candles"],
