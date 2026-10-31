@@ -2081,35 +2081,13 @@ def _try_provider(
     provider_symbol = None
 
     if provider == "TWELVE_DATA":
-
-        if symbol in AGRI_SYMBOLS:
-
-            candles, error = (
-                _fetch_twelve_agriculture(
-                    symbol
-                )
-            )
-
-            provider_symbol = (
-                _TWELVE_SYMBOL_CACHE.get(
-                    symbol
-                )
-            )
-
-        else:
-
-            candles, error = (
-                _fetch_twelve(
-                    symbol
-                )
-            )
-
-            provider_symbol = symbol
-
+        # Hard-disabled: commodity coverage is not included in the free
+        # Twelve Data Basic tier. Active Gagarin execution uses only the
+        # keyless providers in FREE_EXECUTION_PROVIDERS.
         return (
-            candles,
-            error,
-            provider_symbol,
+            [],
+            "PAID_OR_UNVERIFIED_PROVIDER_DISABLED_BY_FREE_ONLY_POLICY",
+            None,
         )
 
     if provider == "BIQUOTE":
