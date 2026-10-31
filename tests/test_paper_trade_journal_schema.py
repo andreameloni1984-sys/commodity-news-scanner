@@ -131,7 +131,7 @@ def test_previous_23_column_journal_migrates_and_preserves_legacy_columns(
     monkeypatch, tmp_path
 ):
     path = tmp_path / "paper_trade_log.csv"
-    previous_fields = journal.FIELDS[:-1]
+    previous_fields = journal._PREVIOUS_FIELDS_WITH_LEGACY
     previous_row = {field: "" for field in previous_fields}
     previous_row.update(
         timestamp_utc="2026-10-30T10:00:00+00:00",
@@ -162,6 +162,84 @@ def test_previous_23_column_journal_migrates_and_preserves_legacy_columns(
     assert rows[0]["legacy_status"] == "OPEN"
     assert rows[0]["legacy_note"] == "archived note"
     assert rows[0]["signal_id"] == ""
+
+
+def test_previous_24_column_journal_preserves_signal_id_when_provenance_is_added(
+    monkeypatch, tmp_path
+):
+    path = tmp_path / "paper_trade_log.csv"
+    previous_fields = journal._PREVIOUS_FIELDS_WITH_IDENTITY
+    previous_row = {field: "" for field in previous_fields}
+    previous_row.update(
+        timestamp_utc="2026-10-31T10:00:00+00:00",
+        commodity="Oro",
+        symbol="XAU/USD",
+        direction="LONG",
+        entry="2000.0",
+        signal_id="legacy-stable-signal-id",
+    )
+    with path.open("w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=previous_fields)
+        writer.writeheader()
+        writer.writerow(previous_row)
+    monkeypatch.setattr(journal, "JOURNAL_FILE", path)
+
+    assert journal.record_entries([]) == 0
+    header, rows = _read(path)
+
+    assert header == journal.FIELDS
+    assert len(rows) == 1
+    assert rows[0]["signal_id"] == "legacy-stable-signal-id"
+    assert rows[0]["quote_provider"] == ""
+    assert rows[0]["quote_timestamp"] == ""
+    assert rows[0]["execution_symbol"] == ""
+
+
+def test_quote_provenance_is_persisted_without_reconstructing_missing_bid_ask(
+    monkeypatch, tmp_path
+):
+    path = tmp_path / "paper_trade_log.csv"
+    monkeypatch.setattr(journal, "JOURNAL_FILE", path)
+    state = _entry_state()
+    state.metadata.update(
+        quote_provider="YAHOO",
+        quote_symbol="GC=F",
+        quote_timestamp="2026-10-31T10:05:00+00:00",
+        quote_currency="USD",
+        quote_unit="troy_oz",
+        quote_market_type="FUTURES_CONTINUOUS",
+        quote_bid=None,
+        quote_ask=None,
+        quote_bid_ask_available=False,
+        quote_age_seconds=42.5,
+        quote_freshness_status="LIVE",
+        quote_status="LIVE",
+        quote_price=2000.0,
+        execution_provider="YAHOO",
+        execution_symbol="GC=F",
+        execution_market_type="FUTURES_CONTINUOUS",
+    )
+
+    assert journal.record_entries([state]) == 1
+    _, rows = _read(path)
+    row = rows[0]
+
+    assert row["quote_provider"] == "YAHOO"
+    assert row["quote_symbol"] == "GC=F"
+    assert row["quote_timestamp"] == "2026-10-31T10:05:00+00:00"
+    assert row["quote_currency"] == "USD"
+    assert row["quote_unit"] == "troy_oz"
+    assert row["quote_market_type"] == "FUTURES_CONTINUOUS"
+    assert row["quote_bid"] == ""
+    assert row["quote_ask"] == ""
+    assert row["quote_bid_ask_available"] == "False"
+    assert row["quote_age_seconds"] == "42.5"
+    assert row["quote_freshness_status"] == "LIVE"
+    assert row["quote_status"] == "LIVE"
+    assert row["quote_price"] == "2000.0"
+    assert row["execution_provider"] == "YAHOO"
+    assert row["execution_symbol"] == "GC=F"
+    assert row["execution_market_type"] == "FUTURES_CONTINUOUS"
 
 
 def test_repeated_entry_on_same_candle_is_not_duplicated(monkeypatch, tmp_path):
