@@ -1,7 +1,9 @@
 """
-SOYUZ GAGARIN — PAPER TRADE JOURNAL v1.1
+SOYUZ GAGARIN — PAPER TRADE JOURNAL v1.2
 
 Registra esclusivamente gli ENTRY prodotti dalla stessa analisi Gagarin.
+Deduplica le registrazioni usando la stessa identità stabile del feedback
+(simbolo, direzione, timeframe, livelli e candela di ingresso).
 Migra in modo atomico gli schemi storici noti, preservando i campi legacy.
 Nessuna seconda analisi. Nessun ordine reale. PAPER ONLY.
 """
@@ -13,6 +15,8 @@ import os
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+
+from engine.feedback import _candles, _signal_record
 
 
 JOURNAL_FILE = Path("paper_trade_log.csv")
@@ -49,10 +53,13 @@ LEGACY_FIELDS = [
     "legacy_note",
 ]
 
-FIELDS = _BASE_FIELDS + LEGACY_FIELDS
+# Appended fields keep every previously deployed column in its original order.
+IDENTITY_FIELDS = ["signal_id"]
+FIELDS = _BASE_FIELDS + LEGACY_FIELDS + IDENTITY_FIELDS
 
 # Schema used by the previous journal writer (before legacy columns were added).
 _PREVIOUS_FIELDS = list(_BASE_FIELDS)
+_PREVIOUS_FIELDS_WITH_LEGACY = _PREVIOUS_FIELDS + LEGACY_FIELDS
 
 # Schema found in the tracked historical paper_trade_log.csv.
 _HISTORICAL_FIELDS = [
@@ -144,7 +151,12 @@ def _ensure_journal_schema(path: Path) -> None:
         if header == FIELDS:
             return
 
-        if header not in (_HISTORICAL_FIELDS, _PREVIOUS_FIELDS):
+        supported_headers = (
+            _HISTORICAL_FIELDS,
+            _PREVIOUS_FIELDS,
+            _PREVIOUS_FIELDS_WITH_LEGACY,
+        )
+        if header not in supported_headers:
             raise ValueError(
                 "Unsupported paper journal schema; refusing to append or "
                 f"rewrite {path}: {header!r}"
@@ -164,12 +176,24 @@ def _ensure_journal_schema(path: Path) -> None:
                     row[new_field] = old_row.get(old_field) or ""
                 row["data_status"] = "LEGACY_IMPORT"
             else:
-                for field in _PREVIOUS_FIELDS:
-                    row[field] = old_row.get(field) or ""
+                for field in header:
+                    if field in row:
+                        row[field] = old_row.get(field) or ""
 
             migrated_rows.append(row)
 
     _write_rows_atomically(path, migrated_rows)
+
+
+def _existing_signal_ids(path: Path) -> set[str]:
+    if not path.exists() or path.stat().st_size == 0:
+        return set()
+    with path.open("r", newline="", encoding="utf-8") as file:
+        return {
+            str(row.get("signal_id") or "").strip()
+            for row in csv.DictReader(file)
+            if str(row.get("signal_id") or "").strip()
+        }
 
 
 def record_entries(results):
@@ -179,7 +203,8 @@ def record_entries(results):
     - non esegue una nuova analisi;
     - non modifica la decisione;
     - non invia ordini;
-    - registra solo PAPER_ENTRY/PAPER_SIGNAL o final_decision == ENTRY.
+    - registra solo PAPER_ENTRY/PAPER_SIGNAL o final_decision == ENTRY;
+    - non duplica lo stesso segnale sulla stessa candela/timeframe.
     """
     # Migrate even on scans with no new entries, so the tracked historical
     # journal is repaired and persisted on the next GitHub Actions run.
@@ -200,40 +225,58 @@ def record_entries(results):
     if not entries:
         return 0
 
+    seen = _existing_signal_ids(JOURNAL_FILE)
+    new_rows = []
     timestamp = datetime.now(timezone.utc).isoformat()
+
+    for state, metadata in entries:
+        identity = _signal_record(state)
+        # A fallback timestamp generated at call time is not a stable identity.
+        # Only deduplicate when the state contains a valid market candle.
+        signal_id = identity["signal_id"] if _candles(state) else ""
+        if signal_id and signal_id in seen:
+            continue
+        if signal_id:
+            seen.add(signal_id)
+
+        new_rows.append(
+            {
+                "timestamp_utc": timestamp,
+                "commodity": state.commodity,
+                "symbol": state.symbol,
+                "direction": state.setup_direction,
+                "probability": state.probability,
+                "quality": state.quality,
+                "confidence": state.confidence,
+                "entry": state.entry,
+                "stop": state.stop,
+                "tp1": state.tp1,
+                "tp2": state.tp2,
+                "tp3": state.tp3,
+                "rr1": state.rr1,
+                "rr2": state.rr2,
+                "rr3": state.rr3,
+                "stop_atr": state.stop_atr,
+                "data_source": state.data_source,
+                "data_status": metadata.get("data_status", "UNKNOWN"),
+                "legacy_action": "",
+                "legacy_allocation": "",
+                "legacy_status": "",
+                "legacy_pnl": "",
+                "legacy_note": "",
+                "signal_id": signal_id,
+            }
+        )
+
+    if not new_rows:
+        return 0
 
     with JOURNAL_FILE.open("a", newline="", encoding="utf-8") as file:
         writer = csv.DictWriter(file, fieldnames=FIELDS)
         if file.tell() == 0:
             writer.writeheader()
+        writer.writerows(new_rows)
+        file.flush()
+        os.fsync(file.fileno())
 
-        for state, metadata in entries:
-            writer.writerow(
-                {
-                    "timestamp_utc": timestamp,
-                    "commodity": state.commodity,
-                    "symbol": state.symbol,
-                    "direction": state.setup_direction,
-                    "probability": state.probability,
-                    "quality": state.quality,
-                    "confidence": state.confidence,
-                    "entry": state.entry,
-                    "stop": state.stop,
-                    "tp1": state.tp1,
-                    "tp2": state.tp2,
-                    "tp3": state.tp3,
-                    "rr1": state.rr1,
-                    "rr2": state.rr2,
-                    "rr3": state.rr3,
-                    "stop_atr": state.stop_atr,
-                    "data_source": state.data_source,
-                    "data_status": metadata.get("data_status", "UNKNOWN"),
-                    "legacy_action": "",
-                    "legacy_allocation": "",
-                    "legacy_status": "",
-                    "legacy_pnl": "",
-                    "legacy_note": "",
-                }
-            )
-
-    return len(entries)
+    return len(new_rows)
