@@ -59,9 +59,9 @@
 ## 2026-10-31 — Fail closed on misaligned Yahoo candle arrays
 
 - **Finding:** `_parse_yahoo()` iterated timestamps and indexed the OHLC arrays independently. If Yahoo returned a shorter/misaligned array, the parser silently skipped affected rows and could retain an older close while presenting the resulting dataset as usable.
-- **Implemented:** require timestamp-aligned list lengths for open/high/low/close before parsing. A non-empty volume array must also align; an absent volume array remains optional and is recorded as zero. Misalignment now returns an explicit error and no candles, allowing the existing provider fallback/status path to handle it.
+- **Implemented:** require a list timestamp array and timestamp-aligned list lengths for open/high/low/close before parsing. A non-empty volume array must also align; an absent volume array remains optional and is recorded as zero. Invalid/misaligned arrays now return an explicit error and no candles, allowing the existing provider fallback/status path to handle it.
 - **Files:** `engine/data.py`; `tests/test_yahoo_array_alignment.py`.
-- **Regression tests:** aligned payload accepted; each of the four OHLC arrays rejected when shortened; non-empty misaligned volume rejected; absent optional volume accepted without fabricating volume.
-- **Commits:** parser `1854a338df4254c61fbcc49142a519b953e89a8a`; tests `abd4094782528e27972198ef2dff484108fc7176`.
+- **Regression tests:** aligned payload accepted; non-list timestamp rejected; each of the four OHLC arrays rejected when shortened; non-empty misaligned volume rejected; absent optional volume accepted without fabricating volume.
+- **Commits:** parser `1854a338df4254c61fbcc49142a519b953e89a8a` plus timestamp-type guard `a9b6e44753b9253ff689d833928290fe0a0699bc`; tests `abd4094782528e27972198ef2dff484108fc7176` plus timestamp regression `e144fe4ae1043532af91f5b5cb804f5553693d26`.
 - **Branch:** `fix/gagarin-yahoo-array-alignment-20261031`; CI/PR verification pending at log creation.
 - **Limits:** no live quote, Telegram delivery, Render deployment or market-performance result is inferred from these parser tests. The change does not add a provider or alter execution routing. PAPER/DEMO only; no real orders.
