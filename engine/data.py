@@ -116,6 +116,17 @@ NARWHAL_FUTURES_ROOTS = {
 NARWHAL_REFERENCE_ROTATION_SECONDS = 900
 NARWHAL_FREE_MAX_AGE_SECONDS = 900
 
+# SILV DATA is a public, no-auth spot reference for gold and silver only.
+# Cache one response per 15-minute window; never use it for futures execution.
+SILV_SPOT_URL = "https://data.silv.app/commodities.json"
+SILV_SPOT_INSTRUMENTS = {
+    "XAU/USD": ("gold", "AU"),
+    "XAG/USD": ("silver", "AG"),
+}
+SILV_SPOT_CACHE_SECONDS = 900
+SILV_SPOT_MAX_AGE_SECONDS = 1800
+SILV_SPOT_FAILURE_COOLDOWN_SECONDS = 60
+
 
 # ============================================================
 # PROVIDER SYMBOLS
@@ -276,6 +287,10 @@ _TWELVE_SYMBOL_CACHE: Dict[str, str] = {}
 # One reference request per 15-minute slot, rotated across supported roots.
 # This keeps a 15-minute monitor below the published free monthly quota.
 _NARWHAL_SLOT_CACHE: Dict[int, Dict[str, Any]] = {}
+
+# Cache the raw SILV response and original receipt time; cache hits never
+# refresh a provider timestamp or make an old quote appear newer.
+_SILV_SPOT_CACHE: Dict[str, Any] = {}
 
 
 # ============================================================
