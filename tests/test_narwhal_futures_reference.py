@@ -180,6 +180,16 @@ def test_narwhal_reference_does_not_replace_execution_price(monkeypatch):
     )
     monkeypatch.setattr(
         data,
+        "_fetch_silv_spot_reference",
+        lambda symbol, **kwargs: {
+            "provider": "SILV_DATA",
+            "price": None,
+            "status": "DISABLED",
+            "deviation_pct": None,
+        },
+    )
+    monkeypatch.setattr(
+        data,
         "classify_data_status",
         lambda commodity, live, data_ok, timestamp=None: "LIVE" if live else "STALE",
     )
