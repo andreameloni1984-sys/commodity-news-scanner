@@ -68,3 +68,12 @@ def test_parse_yahoo_allows_missing_optional_volume_array():
     assert error is None
     assert len(candles) == MIN_CANDLES_REQUIRED
     assert all(candle["volume"] == 0 for candle in candles)
+
+def test_parse_yahoo_rejects_non_list_timestamp_array():
+    payload = _payload()
+    payload["chart"]["result"][0]["timestamp"] = "not-a-timestamp-array"
+
+    candles, error = _parse_yahoo(payload)
+
+    assert candles == []
+    assert error == "YAHOO_INVALID_TIMESTAMP_ARRAY"
