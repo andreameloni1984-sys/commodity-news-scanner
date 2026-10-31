@@ -79,6 +79,27 @@ def test_narwhal_free_reference_preserves_provenance_and_never_sets_execution(mo
     assert "NARWHAL" not in data.PROVIDER_ORDER["XAU/USD"]
 
 
+def test_narwhal_age_uses_response_observation_time(monkeypatch):
+    now = 6300
+    source_timestamp = datetime.fromtimestamp(now - 60, timezone.utc).isoformat()
+    _configure(monkeypatch, now=now)
+    clock = iter([now, now + 7])
+    monkeypatch.setattr(data.time, "time", lambda: next(clock))
+    monkeypatch.setattr(
+        data.requests,
+        "get",
+        lambda *args, **kwargs: FakeResponse(_payload(source_timestamp)),
+    )
+
+    reference = data._fetch_narwhal_reference("XAU/USD")
+
+    assert reference["source_timestamp"] == source_timestamp
+    assert reference["age_seconds"] == 67.0
+    assert reference["observed_at"] == datetime.fromtimestamp(
+        now + 7, timezone.utc
+    ).isoformat()
+
+
 def test_narwhal_reference_is_disabled_without_free_key(monkeypatch):
     monkeypatch.setattr(data, "_NARWHAL_SLOT_CACHE", {})
     monkeypatch.setattr(data.time, "time", lambda: 6300)
