@@ -64,11 +64,11 @@ class TelegramPollingRunnerTests(unittest.TestCase):
 
         output = io.StringIO()
         with redirect_stdout(output):
-            with self.assertRaisesRegex(RuntimeError, "update_id=123"):
+            with self.assertRaisesRegex(RuntimeError, "update_id=123") as raised:
                 polling_runner.main()
 
         api.assert_called_once()
-        self.assertIn("update left pending for retry", str(output.getvalue()) + "update left pending for retry")
+        self.assertIn("update left pending for retry", str(raised.exception))
 
     @patch("telegram.polling_runner.telegram_diagnostic", return_value=True)
     @patch("telegram.polling_runner.process_update", side_effect=[True, False])
