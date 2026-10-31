@@ -21,70 +21,17 @@ PRINCIPI
    nell'universo commodity.
 10. Il DATA ENGINE non prende decisioni di trading.
 
-PROVIDER ROUTING
-----------------
+PROVIDER ROUTING — ACTIVE UNIVERSE
 
-GOLD
-    Twelve Data
-        ↓
-    Biquote
-        ↓
-    Yahoo Futures GC=F
+COMMODITIES (8)
+    Yahoo continuous futures only for execution.
+    BiQuote metal/energy CFD prices are not used as futures fallbacks.
+    No paid-plan commodities endpoint is in the active route.
 
-SILVER
-    Biquote
-        ↓
-    Twelve Data
-        ↓
-    Yahoo Futures SI=F
+AUXILIARY FX (2)
+    BiQuote FX spot → Yahoo FX spot fallback.
 
-PLATINUM
-    Biquote
-        ↓
-    Twelve Data
-        ↓
-    Yahoo Futures PL=F
-
-PALLADIUM
-    Biquote
-        ↓
-    Twelve Data
-        ↓
-    Yahoo Futures PA=F
-
-WTI
-    Biquote
-        ↓
-    Twelve Data
-        ↓
-    Yahoo Futures CL=F
-
-BRENT
-    Biquote
-        ↓
-    Twelve Data
-        ↓
-    Yahoo Futures BZ=F
-
-RICE
-    Yahoo Futures ZR=F
-        ↓
-    Twelve Data commodity catalog
-
-SUGAR
-    Yahoo Futures SB=F
-        ↓
-    Twelve Data commodity catalog
-
-COCOA
-    Yahoo Futures CC=F
-        ↓
-    Twelve Data commodity catalog
-
-COFFEE
-    Yahoo Futures KC=F
-        ↓
-    Twelve Data commodity catalog
+Twelve Data legacy helpers remain isolated from the active execution route.
 
 
 DATA FLOW
@@ -248,9 +195,9 @@ INSTRUMENT_DATA_METADATA = {
     "COPPER/USD": {"currency": "USD", "unit": "pound", "market_type": "FUTURES_CONTINUOUS"},
     "WTI/USD": {"currency": "USD", "unit": "barrel", "market_type": "FUTURES_CONTINUOUS"},
     "BRENT/USD": {"currency": "USD", "unit": "barrel", "market_type": "FUTURES_CONTINUOUS"},
-    "WHEAT/USD": {"currency": "USD", "unit": "bushel", "market_type": "FUTURES_CONTINUOUS"},
-    "CORN/USD": {"currency": "USD", "unit": "bushel", "market_type": "FUTURES_CONTINUOUS"},
-    "SOYBEAN/USD": {"currency": "USD", "unit": "bushel", "market_type": "FUTURES_CONTINUOUS"},
+    "WHEAT/USD": {"currency": "USD", "unit": "cent_per_bushel", "market_type": "FUTURES_CONTINUOUS"},
+    "CORN/USD": {"currency": "USD", "unit": "cent_per_bushel", "market_type": "FUTURES_CONTINUOUS"},
+    "SOYBEAN/USD": {"currency": "USD", "unit": "cent_per_bushel", "market_type": "FUTURES_CONTINUOUS"},
     "EUR/USD": {"currency": "USD", "unit": "USD_per_EUR", "market_type": "FX_SPOT"},
     "GBP/USD": {"currency": "USD", "unit": "USD_per_GBP", "market_type": "FX_SPOT"},
 }
@@ -2020,6 +1967,7 @@ def _finalize(
     state.metadata["quote_ask"] = None
     state.metadata["quote_bid_ask_available"] = False
     state.metadata["quote_age_seconds"] = round(age, 1)
+    state.metadata["quote_freshness_status"] = freshness_status
     state.metadata["quote_status"] = freshness_status
     state.metadata["quote_price"] = state.price
 
@@ -2059,6 +2007,7 @@ def _finalize(
             data_ok=True,
         )
     )
+    state.metadata["quote_status"] = data_status
 
     state.metadata[
         "data_status"
