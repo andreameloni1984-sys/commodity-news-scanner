@@ -42,6 +42,23 @@ class TelegramPollingRunnerTests(unittest.TestCase):
 
         self.assertEqual(polling_runner.get_updates(), [])
 
+    @patch("telegram.polling_runner._api")
+    def test_malformed_get_updates_payload_is_not_reported_as_empty_queue(self, api):
+        invalid_responses = [
+            (True, {"ok": True}),  # missing result
+            (True, {"ok": True, "result": None}),
+            (True, {"ok": True, "result": {}}),
+            (True, None),
+        ]
+
+        for response in invalid_responses:
+            with self.subTest(response=response):
+                api.return_value = response
+                with self.assertRaisesRegex(
+                    RuntimeError, "invalid (response|result) payload"
+                ):
+                    polling_runner.get_updates()
+
     @patch("telegram.polling_runner.telegram_diagnostic", return_value=True)
     @patch("telegram.polling_runner._command_response", return_value="Risposta comando")
     @patch("telegram.polling_runner._reply", return_value=False)
