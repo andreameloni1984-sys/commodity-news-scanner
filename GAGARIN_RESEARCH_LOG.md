@@ -66,3 +66,15 @@
 - **Commits:** code `cd48cb207b8578e9507efe4630c6ef7dc77c0b9d`; test `adbd565b0beb29adc9f55bc9a081225c4bd78313`.
 - **CI:** pending on branch `fix/gagarin-narwhal-observed-at-20261031-2246`; no test pass is claimed until Actions completes.
 - **Limits:** mocked HTTP only; no live Narwhal key or quote was inspected. Exact front-month contract month and upstream-source independence remain undisclosed, so no futures deviation is calculated. PAPER/DEMO only; no paid provider or real order.
+
+
+### CI verification follow-up — 2026-10-31
+
+- Tested code/test head: `d6f23b7dcbd39ea751b870656d40f9c99efaa91b` (the following commit changes this research log only).
+- All five PR workflows completed successfully:
+  - SOYUZ GAGARIN Tests: run `41245409936` — **446 passed** in 1.74s.
+  - Gagarin NEWS alert: run `41245409890` — SUCCESS.
+  - Gagarin Public Event Brain: run `41245409939` — SUCCESS.
+  - Gagarin Execution Layer: run `41245409919` — SUCCESS.
+  - SOYUZ GAGARIN PAPER: run `41245409924` — SUCCESS.
+- The mocked regression confirms that network elapsed time is included in the recorded reference age. It does not prove live provider availability, Telegram delivery, deployment, or trading performance.
