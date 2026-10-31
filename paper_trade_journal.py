@@ -1,10 +1,10 @@
 """
-SOYUZ GAGARIN — PAPER TRADE JOURNAL v1.2
+SOYUZ GAGARIN — PAPER TRADE JOURNAL v1.3
 
 Registra esclusivamente gli ENTRY prodotti dalla stessa analisi Gagarin.
 Deduplica le registrazioni usando la stessa identità stabile del feedback
 (simbolo, direzione, timeframe, livelli e candela di ingresso).
-Migra in modo atomico gli schemi storici noti, preservando i campi legacy.
+Migra e aggiorna il diario in modo atomico, preservando i campi legacy.
 Nessuna seconda analisi. Nessun ordine reale. PAPER ONLY.
 """
 
@@ -127,6 +127,35 @@ def _write_rows_atomically(path: Path, rows: list[dict]) -> None:
                 temporary_path.unlink(missing_ok=True)
             except OSError:
                 pass
+
+
+def _append_rows_atomically(path: Path, new_rows: list[dict]) -> None:
+    """Append complete rows by atomically replacing the whole journal.
+
+    A runner interruption during a normal CSV append can leave a truncated
+    final row. Rewriting to a same-directory temporary file and using
+    os.replace keeps the previous journal intact unless the full new file is
+    ready.
+    """
+    existing_rows = []
+    if path.exists() and path.stat().st_size:
+        with path.open("r", newline="", encoding="utf-8") as file:
+            reader = csv.DictReader(file)
+            if reader.fieldnames != FIELDS:
+                raise ValueError(
+                    "Unsupported paper journal schema during append; "
+                    f"refusing to rewrite {path}: {reader.fieldnames!r}"
+                )
+            for line_number, row in enumerate(reader, start=2):
+                if None in row or any(value is None for value in row.values()):
+                    raise ValueError(
+                        f"Malformed paper journal row {line_number}: column count mismatch"
+                    )
+                existing_rows.append(
+                    {field: row.get(field) or "" for field in FIELDS}
+                )
+
+    _write_rows_atomically(path, existing_rows + new_rows)
 
 
 def _ensure_journal_schema(path: Path) -> None:
@@ -271,12 +300,6 @@ def record_entries(results):
     if not new_rows:
         return 0
 
-    with JOURNAL_FILE.open("a", newline="", encoding="utf-8") as file:
-        writer = csv.DictWriter(file, fieldnames=FIELDS)
-        if file.tell() == 0:
-            writer.writeheader()
-        writer.writerows(new_rows)
-        file.flush()
-        os.fsync(file.fileno())
+    _append_rows_atomically(JOURNAL_FILE, new_rows)
 
     return len(new_rows)
