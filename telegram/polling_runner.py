@@ -42,9 +42,11 @@ def get_updates(offset: int | None = None, timeout: int = 0) -> list[dict]:
         print(f"getUpdates FAILED | {message}", flush=True)
         raise RuntimeError(message)
 
-    updates = data.get("result") if isinstance(data, dict) else None
-    if updates is None:
-        updates = []
+    if not isinstance(data, dict) or data.get("ok") is not True:
+        raise RuntimeError("getUpdates returned an invalid response payload")
+    if "result" not in data:
+        raise RuntimeError("getUpdates returned an invalid result payload: missing result")
+    updates = data["result"]
     if not isinstance(updates, list):
         raise RuntimeError("getUpdates returned an invalid result payload")
     return updates
