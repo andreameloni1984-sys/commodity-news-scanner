@@ -55,3 +55,16 @@
 - Added regression tests for the eight retained commodities, removed symbols, preserved Forex group, and explicit provider routing.
 - This verifies configured routing only; live availability and data freshness still require the scheduled run to confirm. CI must pass before merge.
 - Change is on branch `chore/gagarin-trim-commodity-universe-20261028`. No merge/deploy, no Telegram test message, PAPER/DEMO only.
+
+## 2026-10-31 — Fail closed on misaligned Yahoo candle arrays
+
+- **Finding:** `_parse_yahoo()` iterated timestamps and indexed the OHLC arrays independently. If Yahoo returned a shorter/misaligned array, the parser silently skipped affected rows and could retain an older close while presenting the resulting dataset as usable.
+- **Implemented:** require a list timestamp array and timestamp-aligned list lengths for open/high/low/close before parsing. A non-empty volume array must also align; an absent volume array remains optional and is recorded as zero. Invalid/misaligned arrays now return an explicit error and no candles, allowing the existing provider fallback/status path to handle it.
+- **Files:** `engine/data.py`; `tests/test_yahoo_array_alignment.py`.
+- **Regression tests:** aligned payload accepted; non-list timestamp rejected; each of the four OHLC arrays rejected when shortened; non-empty misaligned volume rejected; absent optional volume accepted without fabricating volume.
+- **Commits:** parser `1854a338df4254c61fbcc49142a519b953e89a8a` plus timestamp-type guard `a9b6e44753b9253ff689d833928290fe0a0699bc`; tests `abd4094782528e27972198ef2dff484108fc7176` plus timestamp regression `e144fe4ae1043532af91f5b5cb804f5553693d26`.
+- **Branch / PR:** `fix/gagarin-yahoo-array-alignment-20261031`; [PR #107](https://github.com/andreameloni1984-sys/commodity-news-scanner/pull/107), still open and not merged.
+- **CI results:** run `41238325339` (SOYUZ GAGARIN Tests) passed the full suite: 453 tests in 1.73s. The Gagarin PAPER smoke, NEWS alert, Public Event Brain and Execution Layer workflows also passed. The external `Workers Builds: telegram-github-bridge` check failed; no actionable diagnostic was available, so the PR is not treated as fully green.
+- **Open operational issues:** the latest scheduled Gagarin monitor run found in the recent Actions history was `41227989620` (2026-10-31 18:09:20 UTC). It completed successfully but logged `Run pianificato completato senza analisi`; no Telegram delivery confirmation was present in that run. Monitor continuity and off-session gating remain to be verified.
+- **Multi-source limits unchanged:** Yahoo remains the only active commodity-futures execution provider. Narwhal is a free-plan delayed reference only; exact contract month and upstream source independence are not exposed, so no same-contract deviation is calculated. No third independent same-basis futures feed is yet verified.
+- **Limits:** no live quote, Telegram delivery, Render deployment or market-performance result is inferred from these parser tests. The change does not add a provider or alter execution routing. PAPER/DEMO only; no real orders.

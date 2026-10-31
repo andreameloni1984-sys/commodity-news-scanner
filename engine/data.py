@@ -1335,62 +1335,40 @@ def _parse_yahoo(
         or [{}]
     )[0]
 
-    opens = (
-        quote.get("open")
-        or []
-    )
+    opens = quote.get("open") or []
+    highs = quote.get("high") or []
+    lows = quote.get("low") or []
+    closes = quote.get("close") or []
+    volumes = quote.get("volume") or []
 
-    highs = (
-        quote.get("high")
-        or []
-    )
+    # Yahoo returns parallel arrays. Never let enumerate/indexing silently
+    # drop a tail row: that can make an older close look like the latest quote.
+    if not isinstance(timestamps, list):
+        return [], "YAHOO_INVALID_TIMESTAMP_ARRAY"
+    ohlc_arrays = (opens, highs, lows, closes)
+    if not all(isinstance(values, list) for values in ohlc_arrays):
+        return [], "YAHOO_INVALID_OHLC_ARRAY"
+    if any(len(values) != len(timestamps) for values in ohlc_arrays):
+        return [], "YAHOO_MISALIGNED_OHLC_ARRAYS"
 
-    lows = (
-        quote.get("low")
-        or []
-    )
-
-    closes = (
-        quote.get("close")
-        or []
-    )
-
-    volumes = (
-        quote.get("volume")
-        or []
-    )
+    # Volume is optional in Yahoo responses, but when supplied it must align.
+    if not isinstance(volumes, list):
+        return [], "YAHOO_INVALID_VOLUME_ARRAY"
+    if volumes and len(volumes) != len(timestamps):
+        return [], "YAHOO_MISALIGNED_VOLUME_ARRAY"
 
     candles = []
-
-    for i, timestamp in enumerate(
-        timestamps
-    ):
-
-        try:
-
-            candle = _normalize(
-                timestamp,
-                opens[i],
-                highs[i],
-                lows[i],
-                closes[i],
-                (
-                    volumes[i]
-                    if i < len(volumes)
-                    else 0
-                ),
-            )
-
-            if candle:
-                candles.append(
-                    candle
-                )
-
-        except (
-            IndexError,
-            TypeError,
-        ):
-            continue
+    for i, timestamp in enumerate(timestamps):
+        candle = _normalize(
+            timestamp,
+            opens[i],
+            highs[i],
+            lows[i],
+            closes[i],
+            volumes[i] if volumes else 0,
+        )
+        if candle:
+            candles.append(candle)
 
     candles, validation_error = (
         _validate_candles(
