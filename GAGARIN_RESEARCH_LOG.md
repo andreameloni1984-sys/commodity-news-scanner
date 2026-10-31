@@ -55,3 +55,14 @@
 - Added regression tests for the eight retained commodities, removed symbols, preserved Forex group, and explicit provider routing.
 - This verifies configured routing only; live availability and data freshness still require the scheduled run to confirm. CI must pass before merge.
 - Change is on branch `chore/gagarin-trim-commodity-universe-20261028`. No merge/deploy, no Telegram test message, PAPER/DEMO only.
+
+
+## 2026-10-31 — Measure Narwhal reference age at response receipt
+
+- **Finding:** the Narwhal adapter calculated `age_seconds` from the clock captured before the HTTP request. Network latency was therefore omitted and the recorded age could be slightly understated.
+- **Implemented:** retain the original provider `source_timestamp`, add local `observed_at` in UTC after the JSON response is received, and calculate age from that observation time. This affects reference provenance only; Narwhal remains delayed/reference-only and never changes the Yahoo execution price.
+- **Files:** `engine/data.py`, `tests/test_narwhal_futures_reference.py`.
+- **Regression:** a mocked seven-second request verifies that a source timestamp 60 seconds old is recorded as 67 seconds old at response receipt.
+- **Commits:** code `cd48cb207b8578e9507efe4630c6ef7dc77c0b9d`; test `adbd565b0beb29adc9f55bc9a081225c4bd78313`.
+- **CI:** pending on branch `fix/gagarin-narwhal-observed-at-20261031-2246`; no test pass is claimed until Actions completes.
+- **Limits:** mocked HTTP only; no live Narwhal key or quote was inspected. Exact front-month contract month and upstream-source independence remain undisclosed, so no futures deviation is calculated. PAPER/DEMO only; no paid provider or real order.
