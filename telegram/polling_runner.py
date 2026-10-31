@@ -50,20 +50,22 @@ def get_updates(offset: int | None = None, timeout: int = 0) -> list[dict]:
     return updates
 
 
-def process_update(update: dict) -> None:
+def process_update(update: dict) -> bool:
+    """Return True only when the update needs no reply or its reply is confirmed."""
     message = update.get("message") or {}
     chat = message.get("chat") or {}
     chat_id = chat.get("id")
     text = (message.get("text") or "").strip()
 
     if chat_id is None or not text:
-        return
+        return True
 
     print(f"Processing update | chat_id={chat_id} | text={text}", flush=True)
 
     if not text.startswith("/"):
-        _reply(chat_id, "Comando non riconosciuto. Usa /help o i comandi del menu.")
-        return
+        delivered = _reply(chat_id, "Comando non riconosciuto. Usa /help o i comandi del menu.")
+        print(f"Reply delivered: {delivered}", flush=True)
+        return delivered
 
     response = _command_response(text)
     if response:
@@ -71,8 +73,11 @@ def process_update(update: dict) -> None:
         reply_markup = telegram_menu() if command_name in {"/start", "/help", "/menu"} else None
         delivered = _reply(chat_id, response, reply_markup=reply_markup)
         print(f"Reply delivered: {delivered}", flush=True)
-    else:
-        _reply(chat_id, "Comando non gestito in modalità polling. Prova /analisi o /help.")
+        return delivered
+
+    delivered = _reply(chat_id, "Comando non gestito in modalità polling. Prova /analisi o /help.")
+    print(f"Reply delivered: {delivered}", flush=True)
+    return delivered
 
 
 def main() -> None:
@@ -90,12 +95,30 @@ def main() -> None:
 
     max_offset = None
     for update in updates:
-        process_update(update)
+        try:
+            reply_confirmed = process_update(update)
+        except Exception:
+            # Acknowledge only earlier updates whose processing completed.
+            if max_offset is not None:
+                get_updates(offset=max_offset, timeout=0)
+            raise
+
+        if not reply_confirmed:
+            # Offset acknowledges every update below it. Preserve the failed
+            # update, while safely acknowledging any earlier confirmed replies.
+            if max_offset is not None:
+                get_updates(offset=max_offset, timeout=0)
+            update_id = update.get("update_id")
+            raise RuntimeError(
+                f"Telegram reply not confirmed for update_id={update_id}; "
+                "update left pending for retry."
+            )
+
         uid = update.get("update_id")
         if uid is not None:
             max_offset = uid + 1 if max_offset is None else max(max_offset, uid + 1)
 
-    # Acknowledge by fetching with offset so they are not returned again.
+    # Acknowledge only after every reply in this batch has been confirmed.
     if max_offset is not None:
         get_updates(offset=max_offset, timeout=0)
 
