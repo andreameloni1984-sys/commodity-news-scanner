@@ -1343,6 +1343,8 @@ def _parse_yahoo(
 
     # Yahoo returns parallel arrays. Never let enumerate/indexing silently
     # drop a tail row: that can make an older close look like the latest quote.
+    if not isinstance(timestamps, list):
+        return [], "YAHOO_INVALID_TIMESTAMP_ARRAY"
     ohlc_arrays = (opens, highs, lows, closes)
     if not all(isinstance(values, list) for values in ohlc_arrays):
         return [], "YAHOO_INVALID_OHLC_ARRAY"
