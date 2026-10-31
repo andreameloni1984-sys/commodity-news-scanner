@@ -2295,8 +2295,417 @@ def _finalize(
     return state
 
 
+
+# ============================================================
+# SILV DATA — OPTIONAL FREE SPOT REFERENCE (GOLD / SILVER)
+# ============================================================
+
+def _silv_reference_status(status: str, instrument: str):
+    _, expected_symbol = SILV_SPOT_INSTRUMENTS.get(
+        instrument, (None, None)
+    )
+    return {
+        "provider": "SILV_DATA",
+        "requested_instrument": instrument,
+        "symbol": expected_symbol,
+        "source_timestamp": None,
+        "response_timestamp": None,
+        "observed_at": None,
+        "currency": None,
+        "unit": None,
+        "price": None,
+        "bid": None,
+        "ask": None,
+        "bid_ask_available": False,
+        "age_seconds": None,
+        "market_type": "SPOT",
+        "status": status,
+        "cache_status": "NOT_USED",
+        "source_components": [],
+        "source_component_count": 0,
+        "source_independence_status": "NOT_ASSESSED",
+        "comparison_status": "NOT_COMPARABLE",
+        "deviation_pct": None,
+        "basis_spot_minus_futures_pct": None,
+        "basis_status": "NOT_CALCULATED",
+        "use_restriction": "REFERENCE_ONLY_NOT_FOR_TRADE_EXECUTION",
+        "attribution": "Data by SILV DATA",
+        "attribution_url": "https://datadocs.silv.app/",
+    }
+
+
+def _silv_positive_number(value):
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return number if math.isfinite(number) and number > 0 else None
+
+
+def _silv_component_timestamp(value):
+    if isinstance(value, bool) or value is None:
+        return None, None
+    if isinstance(value, (int, float)):
+        try:
+            epoch = float(value)
+        except (TypeError, ValueError, OverflowError):
+            return None, None
+        if not math.isfinite(epoch):
+            return None, None
+        if epoch > 100_000_000_000:
+            epoch /= 1000.0
+    else:
+        epoch = _parse_time(value)
+    if epoch is None or not math.isfinite(epoch):
+        return None, None
+    return epoch, datetime.fromtimestamp(
+        epoch, tz=timezone.utc
+    ).isoformat()
+
+
+def _silv_component_quotes(rows, now_epoch, currency, unit, symbol):
+    quotes = []
+    if not isinstance(rows, list):
+        return quotes
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        provider = str(row.get("source") or "").strip().upper()
+        if not provider:
+            continue
+        price = _silv_positive_number(row.get("price"))
+        timestamp_epoch, source_timestamp = _silv_component_timestamp(
+            row.get("timestamp")
+        )
+        age_seconds = (
+            now_epoch - timestamp_epoch
+            if timestamp_epoch is not None else None
+        )
+        if price is None:
+            status = "INVALID_PRICE"
+        elif timestamp_epoch is None:
+            status = "TIMESTAMP_UNAVAILABLE"
+        elif age_seconds < -FUTURE_TIMESTAMP_TOLERANCE_SECONDS:
+            status = "FUTURE_TIMESTAMP"
+        elif age_seconds > SILV_SPOT_MAX_AGE_SECONDS:
+            status = "STALE"
+        else:
+            status = "WITHIN_AGE_LIMIT"
+        bid = _silv_positive_number(row.get("bid"))
+        ask = _silv_positive_number(row.get("ask"))
+        if bid is not None and ask is not None and bid > ask:
+            bid = None
+            ask = None
+            bid_ask_status = "INVALID_BID_ASK_OMITTED"
+        elif bid is None and ask is None:
+            bid_ask_status = "NOT_PROVIDED"
+        elif bid is None or ask is None:
+            bid_ask_status = "PARTIAL"
+        else:
+            bid_ask_status = "AVAILABLE"
+        quotes.append({
+            "provider": provider,
+            "symbol": symbol,
+            "source_timestamp": source_timestamp,
+            "currency": currency,
+            "unit": unit,
+            "price": price,
+            "bid": bid,
+            "ask": ask,
+            "bid_ask_status": bid_ask_status,
+            "age_seconds": (
+                round(max(0.0, age_seconds), 1)
+                if age_seconds is not None else None
+            ),
+            "market_type": "SPOT",
+            "status": status,
+        })
+    return quotes
+
+
+def _silv_payload_failure(status, error=None, retry_after=None):
+    cache = _SILV_SPOT_CACHE
+    now_epoch = time.time()
+    delay = SILV_SPOT_FAILURE_COOLDOWN_SECONDS
+    if retry_after is not None:
+        try:
+            requested_delay = float(retry_after)
+            if math.isfinite(requested_delay) and requested_delay >= 0:
+                delay = max(30.0, min(900.0, requested_delay))
+        except (TypeError, ValueError, OverflowError):
+            pass
+    cache["retry_after_epoch"] = now_epoch + delay
+    cache["last_error"] = status
+    if cache.get("payload") is not None and cache.get("observed_at_epoch") is not None:
+        return (
+            cache["payload"],
+            cache["observed_at_epoch"],
+            "CACHE_FALLBACK",
+            status,
+        )
+    return None, None, status, (str(error or status)[:240])
+
+
+def _load_silv_spot_payload():
+    now_epoch = time.time()
+    cache = _SILV_SPOT_CACHE
+    cached_payload = cache.get("payload")
+    cached_observed_at = cache.get("observed_at_epoch")
+    if (
+        cached_payload is not None
+        and cached_observed_at is not None
+        and now_epoch < float(cache.get("expires_at_epoch") or 0)
+    ):
+        return cached_payload, cached_observed_at, "CACHE_HIT", None
+
+    if now_epoch < float(cache.get("retry_after_epoch") or 0):
+        if cached_payload is not None and cached_observed_at is not None:
+            return cached_payload, cached_observed_at, "CACHE_FALLBACK", (
+                cache.get("last_error") or "COOLDOWN"
+            )
+        return None, None, "COOLDOWN", cache.get("last_error") or "COOLDOWN"
+
+    try:
+        response = requests.get(
+            SILV_SPOT_URL,
+            headers=HEADERS,
+            timeout=TIMEOUT_SECONDS,
+        )
+    except requests.Timeout as exc:
+        return _silv_payload_failure("REQUEST_TIMEOUT", exc)
+    except requests.RequestException as exc:
+        return _silv_payload_failure("REQUEST_ERROR", exc)
+
+    if response.status_code == 429:
+        retry_after = (getattr(response, "headers", {}) or {}).get("Retry-After")
+        return _silv_payload_failure(
+            "RATE_LIMITED",
+            "HTTP_429",
+            retry_after=retry_after,
+        )
+    if response.status_code != 200:
+        return _silv_payload_failure(
+            f"HTTP_ERROR_{response.status_code}",
+            f"HTTP_{response.status_code}",
+        )
+
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        return _silv_payload_failure("INVALID_JSON", exc)
+
+    if (
+        not isinstance(payload, dict)
+        or not isinstance(payload.get("commodities"), dict)
+    ):
+        return _silv_payload_failure("INVALID_RESPONSE_SCHEMA")
+
+    # Receipt time is captured only after the response body has been decoded.
+    observed_at_epoch = time.time()
+    cache.update({
+        "payload": payload,
+        "observed_at_epoch": observed_at_epoch,
+        "expires_at_epoch": observed_at_epoch + SILV_SPOT_CACHE_SECONDS,
+        "retry_after_epoch": 0.0,
+        "last_error": None,
+    })
+    return payload, observed_at_epoch, "FETCHED", None
+
+
+def _fetch_silv_spot_reference(
+    instrument: str,
+    *,
+    execution_price=None,
+    execution_currency=None,
+    execution_unit=None,
+    execution_market_type=None,
+    execution_status=None,
+    execution_provider=None,
+    execution_symbol=None,
+    execution_timestamp=None,
+):
+    """Fetch a free gold/silver SPOT reference; never an execution fallback."""
+    result = _silv_reference_status("NOT_COVERED", instrument)
+    spec = SILV_SPOT_INSTRUMENTS.get(instrument)
+    if spec is None:
+        return result
+    if os.getenv("SILV_SPOT_REFERENCE_ENABLED", "1").strip() != "1":
+        return _silv_reference_status("DISABLED", instrument)
+
+    key, expected_symbol = spec
+    payload, observed_at_epoch, cache_status, error = _load_silv_spot_payload()
+    if payload is None:
+        result = _silv_reference_status(cache_status, instrument)
+        result["error"] = str(error or cache_status)[:240]
+        return result
+
+    commodity = (payload.get("commodities") or {}).get(key)
+    if not isinstance(commodity, dict):
+        result = _silv_reference_status("SYMBOL_UNAVAILABLE", instrument)
+        result["cache_status"] = cache_status
+        return result
+
+    actual_symbol = str(commodity.get("symbol") or "").strip().upper()
+    if actual_symbol != expected_symbol:
+        result = _silv_reference_status("SYMBOL_MISMATCH", instrument)
+        result["cache_status"] = cache_status
+        result["returned_symbol"] = actual_symbol or None
+        return result
+
+    currency = str(commodity.get("currency") or "").strip().upper()
+    unit = str(commodity.get("unit") or "").strip().lower()
+    if currency != "USD" or unit != "troy_oz":
+        result = _silv_reference_status("INVALID_PRICE_METADATA", instrument)
+        result["cache_status"] = cache_status
+        result["currency"] = currency or None
+        result["unit"] = unit or None
+        return result
+
+    price = _silv_positive_number(commodity.get("price"))
+    if price is None:
+        result = _silv_reference_status("INVALID_PRICE", instrument)
+        result["cache_status"] = cache_status
+        result["currency"] = currency
+        result["unit"] = unit
+        return result
+
+    source_timestamp = commodity.get("last_updated")
+    source_epoch = _parse_time(source_timestamp)
+    if source_epoch is None:
+        result = _silv_reference_status("INVALID_TIMESTAMP", instrument)
+        result["cache_status"] = cache_status
+        result["currency"] = currency
+        result["unit"] = unit
+        result["price"] = price
+        return result
+
+    now_epoch = time.time()
+    age_seconds = now_epoch - source_epoch
+    if age_seconds < -FUTURE_TIMESTAMP_TOLERANCE_SECONDS:
+        status = "FUTURE_TIMESTAMP"
+    elif age_seconds > SILV_SPOT_MAX_AGE_SECONDS:
+        status = "STALE"
+    elif cache_status == "CACHE_FALLBACK":
+        status = "CACHED_WITHIN_AGE_LIMIT"
+    else:
+        status = "WITHIN_AGE_LIMIT"
+
+    bid = _silv_positive_number(commodity.get("bid"))
+    ask = _silv_positive_number(commodity.get("ask"))
+    if bid is not None and ask is not None and bid > ask:
+        bid = None
+        ask = None
+        bid_ask_status = "INVALID_BID_ASK_OMITTED"
+    elif bid is None and ask is None:
+        bid_ask_status = "NOT_PROVIDED"
+    elif bid is None or ask is None:
+        bid_ask_status = "PARTIAL"
+    else:
+        bid_ask_status = "AVAILABLE"
+
+    observed_at = datetime.fromtimestamp(
+        observed_at_epoch, tz=timezone.utc
+    ).isoformat()
+    component_quotes = _silv_component_quotes(
+        commodity.get("source_prices"),
+        now_epoch,
+        currency,
+        unit,
+        actual_symbol,
+    )
+    component_sources = sorted({
+        quote["provider"] for quote in component_quotes
+    })
+    if "YAHOO" in component_sources:
+        independence_status = "UPSTREAM_OVERLAP_WITH_YAHOO_EXECUTION_PROVIDER"
+    elif len(component_sources) >= 3:
+        independence_status = (
+            "PROVIDER_REPORTED_MULTIPLE_COMPONENTS_NOT_INDEPENDENTLY_AUDITED"
+        )
+    else:
+        independence_status = "INDEPENDENCE_NOT_ESTABLISHED"
+
+    execution_value = _silv_positive_number(execution_price)
+    same_currency_unit = (
+        currency == str(execution_currency or "").upper()
+        and unit == str(execution_unit or "").strip().lower()
+    )
+    same_market_basis = (
+        execution_market_type == "FUTURES_CONTINUOUS"
+        and same_currency_unit
+    )
+    comparison_status = (
+        "BASIS_SPOT_VS_FUTURES"
+        if same_market_basis else "NOT_COMPARABLE"
+    )
+    basis_pct = None
+    if not same_market_basis:
+        basis_status = "CURRENCY_UNIT_OR_MARKET_BASIS_MISMATCH"
+    elif status in {"STALE", "FUTURE_TIMESTAMP"}:
+        basis_status = "SPOT_REFERENCE_NOT_FRESH"
+    elif execution_status != "LIVE":
+        basis_status = "EXECUTION_NOT_LIVE"
+    elif execution_value is None:
+        basis_status = "INVALID_EXECUTION_PRICE"
+    else:
+        basis_pct = round(
+            ((price - execution_value) / execution_value) * 100.0,
+            6,
+        )
+        basis_status = "CALCULATED_SPOT_MINUS_FUTURES"
+
+    result = {
+        "provider": "SILV_DATA",
+        "requested_instrument": instrument,
+        "symbol": actual_symbol,
+        "source_timestamp": str(source_timestamp),
+        "response_timestamp": commodity.get("timestamp"),
+        "observed_at": observed_at,
+        "currency": currency,
+        "unit": unit,
+        "price": price,
+        "bid": bid,
+        "ask": ask,
+        "bid_ask_available": bid is not None and ask is not None,
+        "bid_ask_status": bid_ask_status,
+        "age_seconds": round(max(0.0, age_seconds), 1),
+        "provider_reported_age_minutes": commodity.get("data_age_minutes"),
+        "market_type": "SPOT",
+        "market_session": commodity.get("market_session"),
+        "status": status,
+        "cache_status": cache_status,
+        "cache_age_seconds": round(
+            max(0.0, now_epoch - observed_at_epoch), 1
+        ),
+        "source_components": component_quotes,
+        "source_component_count": sum(
+            1 for quote in component_quotes
+            if quote.get("status") == "WITHIN_AGE_LIMIT"
+        ),
+        "source_independence_status": independence_status,
+        "comparison_status": comparison_status,
+        "deviation_pct": None,
+        "basis_spot_minus_futures_pct": basis_pct,
+        "basis_status": basis_status,
+        "basis_formula": (
+            "(spot_price - futures_execution_price) / futures_execution_price * 100"
+        ),
+        "basis_execution_provider": execution_provider,
+        "basis_execution_symbol": execution_symbol,
+        "basis_execution_price": execution_value,
+        "basis_execution_timestamp": execution_timestamp,
+        "error": str(error)[:240] if error else None,
+        "attribution": "Data by SILV DATA",
+        "attribution_url": "https://datadocs.silv.app/",
+        "use_restriction": "REFERENCE_ONLY_NOT_FOR_TRADE_EXECUTION",
+    }
+    return result
+
+
 def _finalize_with_narwhal_reference(state, candles, provider, error=None):
-    """Finalize the execution quote, then attach a separate delayed reference."""
+    """Finalize the execution quote, then attach isolated reference providers."""
     finalized = _finalize(state, candles, provider, error)
     if finalized.symbol in EXECUTION_MARKET_TYPES and (
         EXECUTION_MARKET_TYPES.get(finalized.symbol) == "FUTURES_CONTINUOUS"
@@ -2305,6 +2714,20 @@ def _finalize_with_narwhal_reference(state, candles, provider, error=None):
         finalized.metadata["reference_quotes"]["NARWHAL"] = (
             _fetch_narwhal_reference(finalized.symbol)
         )
+        if finalized.symbol in SILV_SPOT_INSTRUMENTS:
+            finalized.metadata["reference_quotes"]["SILV_DATA"] = (
+                _fetch_silv_spot_reference(
+                    finalized.symbol,
+                    execution_price=finalized.price,
+                    execution_currency=finalized.metadata.get("quote_currency"),
+                    execution_unit=finalized.metadata.get("quote_unit"),
+                    execution_market_type=finalized.metadata.get("execution_market_type"),
+                    execution_status=finalized.metadata.get("data_status"),
+                    execution_provider=finalized.metadata.get("execution_provider") or provider,
+                    execution_symbol=finalized.metadata.get("execution_symbol") or finalized.metadata.get("quote_symbol"),
+                    execution_timestamp=finalized.metadata.get("quote_timestamp"),
+                )
+            )
     return finalized
 
 
