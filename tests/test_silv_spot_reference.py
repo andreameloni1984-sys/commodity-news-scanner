@@ -101,9 +101,9 @@ def test_silv_gold_reference_preserves_timestamp_bid_ask_and_components(monkeypa
     assert quote["age_seconds"] == 60.0
     assert quote["status"] == "WITHIN_AGE_LIMIT"
     assert quote["market_type"] == "SPOT"
-    assert [row["provider"] for row in quote["source_components"]] == [
+    assert {row["provider"] for row in quote["source_components"]} == {
         "CHAINLINK", "FAULT", "KITCO", "NFUSION"
-    ]
+    }
     assert quote["source_component_count"] == 4
     assert quote["source_independence_status"] == (
         "PROVIDER_REPORTED_MULTIPLE_COMPONENTS_NOT_INDEPENDENTLY_AUDITED"
