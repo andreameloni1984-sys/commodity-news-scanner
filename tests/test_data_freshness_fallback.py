@@ -76,7 +76,7 @@ def test_all_stale_providers_keep_freshest_sample_as_non_live_context(monkeypatc
 
     state = _load(monkeypatch, provider_rows)
 
-    assert state.data_source == "BIQUOTE"
+    assert state.data_source == "YAHOO"
     assert state.data_ok is True
     assert state.live is False
     assert state.metadata["freshness_status"] == "STALE"
@@ -103,8 +103,8 @@ def test_closed_market_marks_stale_fallback_as_market_closed(monkeypatch):
 
     monkeypatch.setattr(data, "_try_provider", provider_call)
     state = data.load_data(
-        SoyuzState(commodity="Oro", symbol="XAU/USD"),
-        SimpleNamespace(name="Oro", symbol="XAU/USD"),
+        SoyuzState(commodity="EUR/USD", symbol="EUR/USD"),
+        SimpleNamespace(name="EUR/USD", symbol="EUR/USD"),
     )
 
     assert calls == ["BIQUOTE"]
