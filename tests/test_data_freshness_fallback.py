@@ -27,7 +27,7 @@ def _configure_provider_chain(monkeypatch, provider_rows):
     monkeypatch.setattr(
         data,
         "PROVIDER_ORDER",
-        {"XAU/USD": tuple(provider_rows)},
+        {"EUR/USD": tuple(provider_rows)},
     )
     monkeypatch.setattr(
         data,
@@ -44,20 +44,20 @@ def _configure_provider_chain(monkeypatch, provider_rows):
 
 def _load(monkeypatch, provider_rows):
     _configure_provider_chain(monkeypatch, provider_rows)
-    state = SoyuzState(commodity="Oro", symbol="XAU/USD")
-    commodity = SimpleNamespace(name="Oro", symbol="XAU/USD")
+    state = SoyuzState(commodity="EUR/USD", symbol="EUR/USD")
+    commodity = SimpleNamespace(name="EUR/USD", symbol="EUR/USD")
     return data.load_data(state, commodity)
 
 
 def test_stale_primary_provider_falls_through_to_fresh_provider(monkeypatch):
     provider_rows = {
-        "TWELVE_DATA": (_candles(900), None, "XAU/USD"),
-        "BIQUOTE": (_candles(90), None, "XAUUSD"),
+        "BIQUOTE": (_candles(900), None, "EURUSD"),
+        "YAHOO": (_candles(90), None, "EURUSD=X"),
     }
 
     state = _load(monkeypatch, provider_rows)
 
-    assert state.data_source == "BIQUOTE"
+    assert state.data_source == "YAHOO"
     assert state.live is True
     assert state.metadata["freshness_status"] == "LIVE"
     assert state.metadata["freshness_fallback_used"] is True
@@ -70,8 +70,8 @@ def test_stale_primary_provider_falls_through_to_fresh_provider(monkeypatch):
 
 def test_all_stale_providers_keep_freshest_sample_as_non_live_context(monkeypatch):
     provider_rows = {
-        "TWELVE_DATA": (_candles(1200), None, "XAU/USD"),
-        "BIQUOTE": (_candles(720), None, "XAUUSD"),
+        "BIQUOTE": (_candles(1200), None, "EURUSD"),
+        "YAHOO": (_candles(720), None, "EURUSD=X"),
     }
 
     state = _load(monkeypatch, provider_rows)
@@ -86,8 +86,8 @@ def test_all_stale_providers_keep_freshest_sample_as_non_live_context(monkeypatc
 
 def test_closed_market_marks_stale_fallback_as_market_closed(monkeypatch):
     provider_rows = {
-        "TWELVE_DATA": (_candles(1200), None, "XAU/USD"),
-        "BIQUOTE": (_candles(720), None, "XAUUSD"),
+        "BIQUOTE": (_candles(1200), None, "EURUSD"),
+        "YAHOO": (_candles(720), None, "EURUSD=X"),
     }
     _configure_provider_chain(monkeypatch, provider_rows)
     monkeypatch.setattr(
@@ -107,7 +107,7 @@ def test_closed_market_marks_stale_fallback_as_market_closed(monkeypatch):
         SimpleNamespace(name="Oro", symbol="XAU/USD"),
     )
 
-    assert calls == ["TWELVE_DATA"]
+    assert calls == ["BIQUOTE"]
     assert state.live is False
     assert state.metadata["data_status"] == "MARKET_CLOSED"
     assert state.metadata["freshness_fallback_reason"] == "MARKET_CLOSED"
