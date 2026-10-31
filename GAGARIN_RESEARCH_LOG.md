@@ -69,3 +69,12 @@
 - **Commits:** configuration `c18aecf75c68cd9377769260bfc93223ba9721cf`; implementation `b88236a631b352f0512a5632df9fe00f48cf6a7c`; existing-test isolation `291d726c427be01a74cbb3d15bf99de5c9db421e`; new tests `1bfab4259c31519168db47b8bb197677ff1ba9b4`.
 - **Tests:** six new offline mocked regressions cover no-auth request/provenance, component metadata, shared cache, source-timestamp freshness, separate spot/futures basis, timeout behavior, and execution-price isolation. Existing Narwhal finalizer test is isolated from the new provider. GitHub Actions must pass on the PR before this is considered verified.
 - **Limits:** the endpoint response inspected during this run is an old snapshot, not a current trading quote. No direct Gagarin monitor request, live Telegram delivery, deploy, or trade is claimed. PAPER/DEMO only; no paid API or real order.
+
+
+### CI follow-up for the 2026-10-31 SILV reference change
+
+- First PR run `41249703393` found one test-only assertion error: the test assumed provider component order, while the implementation preserves the source response order. The other 450 tests passed. No production-code failure was reported.
+- Corrected the assertion to compare the component-provider set in commit `d6f916a6567ecc047cb346bd752d4ef94f9d003d`.
+- Final PR-head integration run `41249739091`: **451 passed in 1.64s**.
+- Additional PR-head workflows: NEWS alert `41249739042` SUCCESS; Execution Layer `41249739083` SUCCESS; Public Event Brain `41249739135` SUCCESS; PAPER `41249739204` SUCCESS.
+- CI is green on the current PR head. The PR remains open and unmerged; no deployment or live Telegram delivery was performed.
