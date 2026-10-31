@@ -45,6 +45,8 @@ jobs:
       EIA_ENABLED: "1"
       SOLE24_ENABLED: "1"
       GAGARIN_FOREX_ON_DEMAND: "0"
+      NARWHAL_REFERENCE_ENABLED: "1"
+      NARWHAL_API_KEY: ${{ secrets.NARWHAL_API_KEY }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
