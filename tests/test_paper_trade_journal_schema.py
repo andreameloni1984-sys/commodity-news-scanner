@@ -261,3 +261,26 @@ def test_manual_and_scheduled_workflows_persist_both_journals():
         assert "for file in gagarin_feedback.csv paper_trade_log.csv" in block, workflow_name
         assert 'git add -- "${files[@]}"' in block, workflow_name
         assert "git push origin HEAD:main" in block, workflow_name
+
+
+def test_failed_atomic_append_preserves_existing_journal_and_cleans_temp_file(
+    monkeypatch, tmp_path
+):
+    path = tmp_path / "paper_trade_log.csv"
+    monkeypatch.setattr(journal, "JOURNAL_FILE", path)
+
+    first_entry = _entry_state(bar_timestamp=1790848800)
+    assert journal.record_entries([first_entry]) == 1
+    original_bytes = path.read_bytes()
+
+    def fail_replace(source, destination):
+        raise OSError("simulated interruption before atomic replace")
+
+    monkeypatch.setattr(journal.os, "replace", fail_replace)
+    next_entry = _entry_state(bar_timestamp=1790849100)
+
+    with pytest.raises(OSError, match="simulated interruption"):
+        journal.record_entries([next_entry])
+
+    assert path.read_bytes() == original_bytes
+    assert list(tmp_path.glob(".paper_trade_log.csv.*.tmp")) == []
