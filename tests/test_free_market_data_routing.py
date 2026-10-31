@@ -148,3 +148,21 @@ def test_quote_provenance_metadata_is_complete_without_fabricated_bid_ask(monkey
     assert metadata["quote_freshness_status"] == "LIVE"
     assert metadata["quote_status"] == "LIVE"
     assert metadata["quote_price"] == state.price
+
+
+def test_twelve_data_provider_is_hard_disabled_even_if_called_directly(monkeypatch):
+    def forbidden(*args, **kwargs):
+        raise AssertionError("A paid/unverified provider must never be called.")
+
+    monkeypatch.setattr(data, "_fetch_twelve", forbidden)
+    monkeypatch.setattr(data, "_fetch_twelve_agriculture", forbidden)
+
+    candles, error, provider_symbol = data._try_provider(
+        SoyuzState(commodity="Oro", symbol="XAU/USD"),
+        "XAU/USD",
+        "TWELVE_DATA",
+    )
+
+    assert candles == []
+    assert error == "PAID_OR_UNVERIFIED_PROVIDER_DISABLED_BY_FREE_ONLY_POLICY"
+    assert provider_symbol is None
