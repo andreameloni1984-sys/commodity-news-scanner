@@ -84,7 +84,6 @@ def test_narwhal_reference_is_disabled_without_free_key(monkeypatch):
     monkeypatch.setattr(data.time, "time", lambda: 6300)
     monkeypatch.setenv("NARWHAL_REFERENCE_ENABLED", "1")
     monkeypatch.delenv("NARWHAL_API_KEY", raising=False)
-    monkeypatch.delenv("NARWHAL_API_KEY", raising=False)
 
     def forbidden(*args, **kwargs):
         raise AssertionError("No request may be made without a configured key.")
@@ -186,6 +185,9 @@ def test_narwhal_reference_does_not_replace_execution_price(monkeypatch):
     )
 
     state = SoyuzState(commodity="Oro", symbol="XAU/USD")
+    state.metadata["execution_provider"] = "YAHOO"
+    state.metadata["execution_symbol"] = "GC=F"
+    state.metadata["execution_market_type"] = "FUTURES_CONTINUOUS"
     finalized = data._finalize_with_narwhal_reference(
         state, candles, "YAHOO"
     )
