@@ -21,7 +21,6 @@ jobs:
 
     env:
 
-      TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -75,11 +74,6 @@ jobs:
           echo "SOYUZ GAGARIN ENVIRONMENT"
           echo "=============================================="
           python --version
-          if [ -z "$TWELVE_DATA_API_KEY" ]; then
-            echo "TWELVE_DATA_API_KEY MISSING"
-            exit 1
-          fi
-          echo "TWELVE_DATA_API_KEY PRESENT"
           if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
             echo "TELEGRAM_BOT_TOKEN MISSING"
             exit 1
