@@ -1,4 +1,4 @@
-"""Regression tests for safe migration of historical Gagarin paper journals."""
+"""Regression tests for safe migration and idempotent Gagarin paper journals."""
 
 import csv
 from types import SimpleNamespace
@@ -17,11 +17,13 @@ LEGACY_CSV = (
 )
 
 
-def _entry_state():
+def _entry_state(bar_timestamp=1790848800, timeframe="5min"):
     return SimpleNamespace(
         commodity="Oro",
         symbol="XAU/USD",
         setup_direction="LONG",
+        timeframe=timeframe,
+        candles=[{"timestamp": bar_timestamp, "high": 2010.0, "low": 1995.0}],
         probability=72.0,
         quality=66.0,
         confidence=70.0,
@@ -76,6 +78,7 @@ def test_historical_13_column_journal_is_migrated_without_losing_legacy_fields(
         "Shock energia 14:40. Chiusura spot 6 ott 2026. Nessun esito."
     )
     assert old["data_status"] == "LEGACY_IMPORT"
+    assert old["signal_id"] == ""
 
     # The next new-format entry appends under the migrated header.
     assert journal.record_entries([_entry_state()]) == 1
@@ -86,6 +89,7 @@ def test_historical_13_column_journal_is_migrated_without_losing_legacy_fields(
     assert rows[1]["probability"] == "72.0"
     assert rows[1]["data_status"] == "LIVE"
     assert rows[1]["legacy_action"] == ""
+    assert rows[1]["signal_id"]
 
 
 def test_previous_18_column_journal_is_extended_without_losing_values(
@@ -120,6 +124,78 @@ def test_previous_18_column_journal_is_extended_without_losing_values(
     assert rows[0]["probability"] == "65"
     assert rows[0]["data_source"] == "BIQUOTE"
     assert rows[0]["legacy_action"] == ""
+    assert rows[0]["signal_id"] == ""
+
+
+def test_previous_23_column_journal_migrates_and_preserves_legacy_columns(
+    monkeypatch, tmp_path
+):
+    path = tmp_path / "paper_trade_log.csv"
+    previous_fields = journal.FIELDS[:-1]
+    previous_row = {field: "" for field in previous_fields}
+    previous_row.update(
+        timestamp_utc="2026-10-30T10:00:00+00:00",
+        commodity="Petrolio Brent",
+        symbol="BRENT/USD",
+        direction="LONG",
+        entry="75.0",
+        legacy_action="PAPER_ENTRY",
+        legacy_allocation="12.5",
+        legacy_status="OPEN",
+        legacy_note="archived note",
+    )
+    with path.open("w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=previous_fields)
+        writer.writeheader()
+        writer.writerow(previous_row)
+    monkeypatch.setattr(journal, "JOURNAL_FILE", path)
+
+    assert journal.record_entries([]) == 0
+    header, rows = _read(path)
+
+    assert header == journal.FIELDS
+    assert len(rows) == 1
+    assert rows[0]["symbol"] == "BRENT/USD"
+    assert rows[0]["entry"] == "75.0"
+    assert rows[0]["legacy_action"] == "PAPER_ENTRY"
+    assert rows[0]["legacy_allocation"] == "12.5"
+    assert rows[0]["legacy_status"] == "OPEN"
+    assert rows[0]["legacy_note"] == "archived note"
+    assert rows[0]["signal_id"] == ""
+
+
+def test_repeated_entry_on_same_candle_is_not_duplicated(monkeypatch, tmp_path):
+    path = tmp_path / "paper_trade_log.csv"
+    monkeypatch.setattr(journal, "JOURNAL_FILE", path)
+    state = _entry_state()
+
+    assert journal.record_entries([state]) == 1
+    assert journal.record_entries([state]) == 0
+
+    header, rows = _read(path)
+    assert header == journal.FIELDS
+    assert len(rows) == 1
+    assert rows[0]["signal_id"]
+
+
+def test_new_candle_or_timeframe_creates_a_distinct_journal_sample(
+    monkeypatch, tmp_path
+):
+    path = tmp_path / "paper_trade_log.csv"
+    monkeypatch.setattr(journal, "JOURNAL_FILE", path)
+
+    five_min = _entry_state(bar_timestamp=1790848800, timeframe="5min")
+    next_five_min = _entry_state(bar_timestamp=1790849100, timeframe="5min")
+    fifteen_min = _entry_state(bar_timestamp=1790848800, timeframe="15min")
+
+    assert journal.record_entries([five_min]) == 1
+    assert journal.record_entries([five_min]) == 0
+    assert journal.record_entries([next_five_min]) == 1
+    assert journal.record_entries([fifteen_min]) == 1
+
+    _, rows = _read(path)
+    assert len(rows) == 3
+    assert len({row["signal_id"] for row in rows}) == 3
 
 
 def test_unknown_schema_fails_closed_and_leaves_original_file_untouched(
