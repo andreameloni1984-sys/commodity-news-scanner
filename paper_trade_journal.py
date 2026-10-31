@@ -55,11 +55,36 @@ LEGACY_FIELDS = [
 
 # Appended fields keep every previously deployed column in its original order.
 IDENTITY_FIELDS = ["signal_id"]
-FIELDS = _BASE_FIELDS + LEGACY_FIELDS + IDENTITY_FIELDS
+
+# Quote provenance is copied from the validated data-engine metadata at the
+# moment the PAPER entry is recorded. Empty values mean the source did not
+# provide that field; the journal never reconstructs bid/ask or timestamps.
+QUOTE_PROVENANCE_FIELDS = [
+    "quote_provider",
+    "quote_symbol",
+    "quote_timestamp",
+    "quote_currency",
+    "quote_unit",
+    "quote_market_type",
+    "quote_bid",
+    "quote_ask",
+    "quote_bid_ask_available",
+    "quote_age_seconds",
+    "quote_freshness_status",
+    "quote_status",
+    "quote_price",
+    "execution_provider",
+    "execution_symbol",
+    "execution_market_type",
+]
+FIELDS = _BASE_FIELDS + LEGACY_FIELDS + IDENTITY_FIELDS + QUOTE_PROVENANCE_FIELDS
 
 # Schema used by the previous journal writer (before legacy columns were added).
 _PREVIOUS_FIELDS = list(_BASE_FIELDS)
 _PREVIOUS_FIELDS_WITH_LEGACY = _PREVIOUS_FIELDS + LEGACY_FIELDS
+# The 24-column schema (including signal_id) shipped immediately before quote
+# provenance was added. Preserve its identity values during migration.
+_PREVIOUS_FIELDS_WITH_IDENTITY = _PREVIOUS_FIELDS_WITH_LEGACY + IDENTITY_FIELDS
 
 # Schema found in the tracked historical paper_trade_log.csv.
 _HISTORICAL_FIELDS = [
@@ -184,6 +209,7 @@ def _ensure_journal_schema(path: Path) -> None:
             _HISTORICAL_FIELDS,
             _PREVIOUS_FIELDS,
             _PREVIOUS_FIELDS_WITH_LEGACY,
+            _PREVIOUS_FIELDS_WITH_IDENTITY,
         )
         if header not in supported_headers:
             raise ValueError(
@@ -294,6 +320,10 @@ def record_entries(results):
                 "legacy_pnl": "",
                 "legacy_note": "",
                 "signal_id": signal_id,
+                **{
+                    field: metadata.get(field, "")
+                    for field in QUOTE_PROVENANCE_FIELDS
+                },
             }
         )
 
