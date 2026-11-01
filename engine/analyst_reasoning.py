@@ -163,7 +163,10 @@ def build_reasoning(state: object, decision: object | None = None) -> dict[str, 
     elif rr1 is not None:
         evidence.append(f"rischio/rendimento TP1 = {rr1:.2f}R")
 
-    action = str(getattr(decision, "action", "") or meta.get("gagarin_action", "WAIT")).upper()
+    raw_action = getattr(decision, "action", "") or meta.get("gagarin_action")
+    action = str(raw_action or "NO_DECISION").strip().upper()
+    if action == "WAIT":
+        action = "PAPER_WATCH" if setup_side in {"LONG", "SHORT"} else "NO_DECISION"
     governor_reason = str(getattr(decision, "reason", "") or meta.get("gagarin_reason", ""))
     if action in {"PAPER_ENTRY", "PAPER_SIGNAL"}:
         verdict = "PAPER_SIGNAL"
