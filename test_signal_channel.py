@@ -108,3 +108,15 @@ def test_top_is_non_empty_and_uses_separate_states():
     assert "SETUP CONFIRMED" in out
     assert "TRADE PAPER ENTRY_AUTHORIZED_PAPER_ONLY" in out
     assert "WAIT" not in out
+
+def test_signal_displays_systematic_forecast_as_diagnostic_only():
+    diagnostic = {
+        "status": "CALCULATED",
+        "direction": "LONG",
+        "score": 12.5,
+        "components": {"ewmac_trend": 15.0, "breakout": 9.0},
+        "decision_impact": "DIAGNOSTIC_ONLY",
+    }
+    out = format_signal(state(metadata={"systematic_forecast": diagnostic}))
+    assert "Systematic (diagnostico): LONG (+12.5/20)" in out
+    assert "trend +15.0" in out
