@@ -78,3 +78,13 @@
 - Final PR-head integration run `41249739091`: **451 passed in 1.64s**.
 - Additional PR-head workflows: NEWS alert `41249739042` SUCCESS; Execution Layer `41249739083` SUCCESS; Public Event Brain `41249739135` SUCCESS; PAPER `41249739204` SUCCESS.
 - CI is green on the current PR head. The PR remains open and unmerged; no deployment or live Telegram delivery was performed.
+
+
+## 2026-11-01 — Measure Narwhal reference age at response receipt (rebased branch)
+
+- **Finding:** the Narwhal adapter previously captured the age clock before HTTP I/O, understating quote age by request latency.
+- **Change:** preserve the provider's original `source_timestamp`, record UTC `observed_at` after a valid JSON response arrives, and calculate `age_seconds` from that receipt time. Narwhal remains reference-only; Yahoo remains the execution-price basis.
+- **Regression:** a mocked seven-second HTTP request verifies a source timestamp 60 seconds old is recorded as 67 seconds old at receipt.
+- **Files:** `engine/data.py`, `tests/test_narwhal_futures_reference.py`.
+- **Branch:** `fix/gagarin-narwhal-observed-at-receipt-main-20261101`, created from current `main` commit `2ae68eb2ddbb800c3f68f60b91c02d64977174f3` to avoid the stale-base conflict on PR #108.
+- **Limits:** mocked HTTP only; no live Narwhal credential or quote was inspected. Contract month and upstream-source independence remain undisclosed, so no futures deviation is calculated. PAPER/DEMO only; no paid provider or real order.
