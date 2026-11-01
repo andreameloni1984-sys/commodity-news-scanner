@@ -120,3 +120,14 @@
 - CI correction: the first PAPER safety run exposed one legacy assertion in tests/test_canonical_governor_pipeline.py that still expected WAIT for a stop-distance blocker. Updated that expectation to BLOCKED; production safety criteria were unchanged. The failing run had 25 passed and 1 failed before this test-only correction; rerun is pending.
 
 - Integration CI follow-up: the first full GAGARIN integration run found seven legacy assertions expecting WAIT/IN ATTESA after the status contract changed (8 failed, 453 passed, including one earlier governor test already corrected). Updated pipeline, opportunity-priority, and Telegram formatter tests to expect BLOCKED and the explicit BIAS/SETUP/TRADE PAPER labels. No further runtime logic was changed in this correction; fresh CI is pending.
+
+
+## 2026-11-01 — Multi-source execution audit; no unverified provider added
+
+- **Inspected main:** `71884cf38abf16e1dbc96e928750edd5ddaee175`.
+- **Current commodity execution route:** Yahoo Finance continuous futures is still the sole active execution provider for XAU, XAG, copper, WTI, Brent, wheat, corn and soybeans. BiQuote commodity CFD/MT5 prices are deliberately excluded as futures fallbacks; Twelve Data commodity helpers remain isolated from the active route. FX uses BiQuote then Yahoo spot.
+- **Reference feeds:** SILV DATA is spot-only for gold/silver and cannot replace futures execution. Narwhal remains optional/free-plan reference-only; this run did not verify a live credential/response, exact contract month or upstream source independence, so it was not promoted to execution or treated as a confirmed independent same-contract futures check.
+- **Candidate review:** Gold API documents free, no-key spot prices for precious metals, but direct endpoint response and provider-source independence were not verified from the bot runtime in this run. It was not integrated or counted as a validated third source. No paid service or paid key was used.
+- **GitHub Actions on inspected main:** GAGARIN integration run `41281237547`, execution safety `41281237569`, NEWS alerts `41281237535`, Telegram menu `41281237540`, PAPER safety/smoke `41281237572`, and paper monitor `41281581613` all completed with SUCCESS. This confirms CI/workflow completion, not market-data quality or user-facing Telegram delivery.
+- **Code changes this run:** none in Gagarin. The single code improvement for this run was made in SPUTNIK; this entry records the Gagarin provider audit and why no unsafe/unverified feed was added.
+- **Open:** obtain a verifiable free source with comparable futures contract/expiry and documented provenance; verify Narwhal free-plan activation/rotation and independence; close residual WAIT labels in convergence conflict/no-catalyst paths in favour of explicit CONFLICT/NEUTRAL; continue real historical setup diary toward 100 out-of-sample cases. PAPER ONLY; no real orders.
