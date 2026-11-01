@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from commodities.universe import enabled_commodities, validate_universe
 from engine.gagarin import analyze_universe
 from engine.forex_session import filter_forex_for_session
+from engine.cloud_api_status import cloud_api_decision_status
 from soyuz_gagarin.adapter import evaluate_states
 from paper_portfolio import PaperPortfolio
 from engine.day_registry import load as load_day_registry, run as run_day_registry, summary as day_summary
@@ -47,16 +48,23 @@ def _authorize(x_api_key: str | None) -> None:
 
 def _state_json(state):
     meta = getattr(state, "metadata", {}) or {}
+    decision_status = cloud_api_decision_status(state, meta)
+    bias = decision_status["bias"]
     return {
         "symbol": str(getattr(state, "symbol", "")).upper(),
         "commodity": getattr(state, "commodity", ""),
         "price": getattr(state, "price", None),
-        "direction": getattr(state, "setup_direction", "") or "",
+        "direction": bias if bias in {"LONG", "SHORT"} else "",
+        "bias": bias,
+        "bias_source": decision_status["bias_source"],
+        "setup": decision_status["setup"],
+        "trade_paper": decision_status["trade_paper"],
+        "blockers": decision_status["blockers"],
         "probability": getattr(state, "probability", None),
         "quality": getattr(state, "quality", None),
         "confidence": getattr(state, "confidence", None),
-        "action": meta.get("gagarin_action", "WAIT"),
-        "reason": meta.get("gagarin_reason", ""),
+        "action": decision_status["action"],
+        "reason": decision_status["reason"],
         "entry": getattr(state, "entry", None),
         "stop": getattr(state, "stop", None),
         "tp1": getattr(state, "tp1", None),
@@ -98,12 +106,12 @@ def _run_gagarin(*, on_demand: bool = False):
         if not isinstance(metadata, dict):
             metadata = {}
             state.metadata = metadata
-        metadata["gagarin_action"] = decision.action if decision else "WAIT"
-        metadata["gagarin_reason"] = decision.reason if decision else "NO_DECISION"
+        metadata["gagarin_action"] = decision.action if decision else "NO_DECISION"
+        metadata["gagarin_reason"] = decision.reason if decision else "DECISION_NOT_RETURNED"
 
     rows = [_state_json(s) for s in results]
     operational = [r for r in rows if r["action"] in {"PAPER_ENTRY", "PAPER_SIGNAL"} and str(r.get("symbol") or "").upper() not in {"EUR/USD", "GBP/USD"}]
-    # Operational signals first, then strong market opportunities, then normal WAITs.
+    # Operational signals first, then strong market opportunities, then watch-only rows.
     rows.sort(key=lambda x: (x["action"] not in {"PAPER_ENTRY", "PAPER_SIGNAL"}, x.get("opportunity_alert") not in {"STRONG_MOVE", "OPPORTUNITY"}, -(x.get("opportunity_score") or 0), -(x["probability"] or 0)))
 
     prices = {r["symbol"]: r["price"] for r in rows if r.get("symbol") and r.get("price") is not None}
@@ -238,8 +246,8 @@ def _run_sputnik_confirmation(events: list[dict]) -> dict:
         if not isinstance(metadata, dict):
             metadata = {}
             state.metadata = metadata
-        metadata["gagarin_action"] = getattr(decision, "action", "WAIT")
-        metadata["gagarin_reason"] = getattr(decision, "reason", "NO_DECISION")
+        metadata["gagarin_action"] = getattr(decision, "action", "NO_DECISION")
+        metadata["gagarin_reason"] = getattr(decision, "reason", "DECISION_NOT_RETURNED")
     rows = [_state_json(state) for state in results]
     output = []
     for event in events:
