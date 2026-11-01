@@ -161,8 +161,8 @@ def position_monitor_loop() -> None:
                         if not isinstance(metadata, dict):
                             metadata = {}
                             state.metadata = metadata
-                        metadata["gagarin_action"] = decision.action if decision else "WAIT"
-                        metadata["gagarin_reason"] = decision.reason if decision else "NO_DECISION"
+                        from engine.cloud_api_status import attach_runtime_decision_metadata
+                        attach_runtime_decision_metadata(state, decision)
                     updated = update_open_outcomes(states)
                     recorded = record_forecasts(states)
                     summary = summarize()
