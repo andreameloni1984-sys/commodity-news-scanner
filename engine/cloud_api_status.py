@@ -103,3 +103,57 @@ def cloud_api_decision_status(state: Any, metadata: dict | None = None) -> dict[
         "blockers": status["blockers"],
         "reason": reason,
     }
+
+def attach_runtime_decision_metadata(state: Any, decision: Any = None) -> dict:
+    """Attach one consistent BIAS / SETUP / PAPER contract to runtime states.
+
+    A missing governor result is NO_DECISION, not a market WAIT. Legacy WAIT
+    decisions are retained as a safety block, never as a directional veto.
+    This helper only annotates metadata; it does not create prices or orders.
+    """
+    metadata = getattr(state, "metadata", None)
+    if not isinstance(metadata, dict):
+        metadata = {}
+        setattr(state, "metadata", metadata)
+
+    if decision is None:
+        action = "NO_DECISION"
+        reason = "DECISION_NOT_RETURNED"
+    else:
+        action = str(getattr(decision, "action", "") or "NO_DECISION").strip().upper()
+        reason = str(getattr(decision, "reason", "") or "").strip()
+        if action == "WAIT":
+            action = "BLOCKED"
+            reason = reason or "LEGACY_WAIT_NORMALIZED"
+        elif not action:
+            action = "NO_DECISION"
+
+    metadata["gagarin_action"] = action
+    metadata["gagarin_reason"] = reason or (
+        "DECISION_NOT_RETURNED" if action == "NO_DECISION" else "NO_ENTRY_AUTHORIZATION"
+    )
+
+    status = cloud_api_decision_status(state, metadata)
+    if action in {"PAPER_ENTRY", "PAPER_SIGNAL", "PAPER_WATCH"}:
+        # The shared adapter can downgrade a stale/malformed PAPER_ENTRY.
+        action = status["action"]
+        metadata["gagarin_action"] = action
+        if status["reason"]:
+            metadata["gagarin_reason"] = status["reason"]
+
+    trade_paper = status["trade_paper"]
+    if action == "BLOCKED":
+        trade_paper = "BLOCKED_NOT_EXECUTED"
+    elif action == "AUXILIARY_ONLY":
+        trade_paper = "NOT_EXECUTED"
+
+    metadata.update({
+        "gagarin_bias": status["bias"],
+        "gagarin_bias_source": status["bias_source"],
+        "gagarin_setup": status["setup"],
+        "gagarin_trade_paper": trade_paper,
+        "gagarin_blockers": status["blockers"],
+        "gagarin_status_reason": metadata["gagarin_reason"],
+    })
+    return metadata
+
