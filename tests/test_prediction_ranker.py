@@ -2,6 +2,7 @@ import unittest
 from types import SimpleNamespace
 
 from engine.prediction_ranker import rank_predictions, format_best_prediction
+from soyuz_gagarin.aggressive_desk import format_aggressive_desk
 
 
 def state(name, **overrides):
@@ -22,6 +23,22 @@ def state(name, **overrides):
 
 
 class PredictionRankerTests(unittest.TestCase):
+    def test_n_d_placeholders_trigger_indicative_bracket_fallback(self):
+        candidate = state(
+            "Gold", symbol="XAU/USD", price=2000.0, atr=10.0,
+            setup_direction="SHORT", structure_direction="SHORT",
+            mtf_direction="SHORT", pre_move_direction="SHORT",
+            entry="N/D", stop="N/D", tp1="N/D", tp2="N/D", tp3="N/D", rr3="N/D",
+        )
+        ranked = rank_predictions([candidate])
+        self.assertEqual(len(ranked), 1)
+        self.assertTrue(ranked[0]["bracket_generated"])
+        self.assertIsNotNone(ranked[0]["entry"])
+        self.assertIsNotNone(ranked[0]["stop"])
+        self.assertIsNotNone(ranked[0]["tp1"])
+        self.assertIsNotNone(ranked[0]["tp2"])
+        self.assertIsNotNone(ranked[0]["tp3"])
+
     def test_ranks_stronger_confluence_first(self):
         strong = state("WTI")
         weak = state("GOLD", regime="RANGE", structure="UNKNOWN",
@@ -48,6 +65,38 @@ class PredictionRankerTests(unittest.TestCase):
         self.assertIn("SCELTA #1: WTI", message)
         self.assertIn("PAPER ONLY", message)
         self.assertIn("MOVIMENTO ATTESO", message)
+
+    def test_generates_indicative_atr_bracket_when_entire_plan_is_missing(self):
+        candidate = state(
+            "Silver", symbol="XAG/USD", price=53.503, atr=0.8,
+            setup_direction="SHORT", pre_move_direction="SHORT",
+            structure_direction="SHORT", mtf_direction="SHORT",
+            opportunity_direction="SHORT", regime="TREND_DOWN",
+            structure="BEARISH", entry=None, stop=None, tp1=None, tp2=None,
+            tp3=None, rr3=None, trigger_confirmed=False,
+        )
+        result = rank_predictions([candidate])[0]
+        self.assertTrue(result["bracket_generated"])
+        self.assertEqual(result["entry"], 53.503)
+        self.assertGreater(result["stop"], result["entry"])
+        self.assertGreater(result["entry"], result["tp1"])
+        self.assertGreater(result["tp1"], result["tp2"])
+        self.assertGreater(result["tp2"], result["tp3"])
+        self.assertIn(result["bracket_basis"], {"ATR_FALLBACK", "RECENT_SWING_PLUS_ATR_BUFFER"})
+
+    def test_does_not_overwrite_partial_plan(self):
+        candidate = state("WTI", entry=None, stop=103.0, tp1=None, tp2=None, tp3=None)
+        result = rank_predictions([candidate])[0]
+        self.assertFalse(result["bracket_generated"])
+        self.assertIsNone(result["entry"])
+        self.assertEqual(result["stop"], 103.0)
+
+    def test_aggressive_desk_uses_only_configured_universe(self):
+        silver = state("Argento", symbol="XAG/USD")
+        excluded = state("Palladio", symbol="XPD/USD")
+        message = format_aggressive_desk([excluded, silver])
+        self.assertIn("Argento", message)
+        self.assertNotIn("Palladio", message)
 
 
 if __name__ == "__main__":
