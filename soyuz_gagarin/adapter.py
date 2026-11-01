@@ -13,7 +13,7 @@ from typing import Iterable
 
 from .engine import GagarinEngine
 from .commodity_trade_plan import build_commodity_bracket
-from .systematic_forecast import systematic_forecast
+from engine.systematic_forecast import systematic_forecast
 from .models import Candidate, MarketSnapshot
 
 
