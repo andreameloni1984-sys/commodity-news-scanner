@@ -302,3 +302,14 @@
   - All five workflows completed with SUCCESS. These are final PR-head checks before merge.
 - **Post-merge caveat:** no separate PR-triggered workflow runs were returned for squash merge commit `b08798e36b65de71badc33ffd9060ffc40b00dbf`. Main code/test readback succeeded; production runtime/deploy remains unverified.
 - **Safety:** no live order, price request or Telegram message; PAPER ONLY.
+
+
+## 2026-11-01 — Public backtesting framework review: vectorbt
+
+- **Project reviewed:** polakowo/vectorbt public repository and official documentation. The current repository README describes the community edition as fair-code under Apache 2.0 with Commons Clause; VectorBT PRO is a separate expanded product. The public API exposes fee and slippage assumptions in portfolio simulations, including per-order costs and time-varying parameter arrays.
+- **Applicable lesson:** GAGARIN's historical trade journal should report gross and net outcomes separately and stress-test spread, commission and adverse slippage by instrument/session/regime. A single zero-cost backtest is not sufficient evidence of edge.
+- **Not imported:** no code or dependency was added. The Commons Clause is not treated as plain Apache-2.0 permissive licensing, and PRO-only features/services are excluded. Vectorized OHLCV simulation also does not recreate real DOM/footprint or queue-position fills; these remain explicit limitations.
+- **Repository audit:** PR #122's analyst-state correction remains in main. engine/analyst_reasoning.py retains WAIT only as a legacy input-normalization case; missing action metadata defaults to NO_DECISION and directional legacy WAIT maps to PAPER_WATCH. Current main.py and telegram/render_runner.py reads contained no WAIT literal in the inspected versions.
+- **Code change this run:** none in GAGARIN; the single functional improvement for this execution is the SPUTNIK persistence privacy fix. No GAGARIN tests were run in this documentation-only review.
+- **Next quantitative priority:** inspect GAGARIN's existing backtest cost model before adding any cost-stress module, avoiding duplicate fee/slippage logic. Require real historical fills/quotes, point-in-time splits and out-of-sample reporting; do not infer edge from VectorBT examples or published headline returns.
+- **Reference:** https://github.com/polakowo/vectorbt and https://vectorbt.dev/getting-started/features/ . PAPER ONLY.
