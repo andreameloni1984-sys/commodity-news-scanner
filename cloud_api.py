@@ -61,6 +61,8 @@ _QUOTE_REFERENCE_FIELDS = (
 
 def _finite_quote_number(value, *, positive: bool = False, non_negative: bool = False):
     """Return a finite numeric quote field, or None; never serialize NaN/Infinity."""
+    if isinstance(value, bool):
+        return None
     try:
         number = float(value)
     except (TypeError, ValueError, OverflowError):
