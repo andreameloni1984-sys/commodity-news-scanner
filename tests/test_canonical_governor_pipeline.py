@@ -101,5 +101,5 @@ def test_safety_uses_canonical_min_stop_atr_and_thresholds(monkeypatch):
 
     result = apply_safety(state)
 
-    assert result.final_decision == "WAIT"
+    assert result.final_decision == "BLOCKED"
     assert "STOP_LT_MIN_ATR" in result.blockers

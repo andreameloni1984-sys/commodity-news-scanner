@@ -296,7 +296,7 @@ class SoyuzState:
     # FINAL GAGARIN DECISION
     # ========================================================
 
-    final_decision: str = "WAIT"
+    final_decision: str = "BLOCKED"
 
     # ========================================================
     # METADATA

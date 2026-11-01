@@ -35,7 +35,7 @@ class OpportunityPriorityTests(unittest.TestCase):
 
     def test_entry_authority_is_not_changed(self):
         state = scan_market_opportunity(state_for_move(2.0))
-        self.assertEqual(state.final_decision, "WAIT")
+        self.assertEqual(state.final_decision, "BLOCKED")
 
 
 if __name__ == "__main__":
