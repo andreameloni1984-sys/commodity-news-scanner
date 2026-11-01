@@ -584,3 +584,74 @@ def test_alert_scorecard_rejects_non_finite_prices_and_invalid_levels():
     assert report["tp1_observed"] == 0
     assert report["sl_observed"] == 0
     assert report["open_at_last_check"] == 1
+
+def test_gagarin_handoff_missing_action_preserves_long_bias_without_wait():
+    from trump_tracker import gagarin_confirmation_message
+
+    message = gagarin_confirmation_message({
+        "events": [{
+            "title": "Public policy catalyst",
+            "status": "WATCH_ONLY",
+            "matched_instruments": [{
+                "commodity": "Petrolio WTI",
+                "symbol": "CL=F",
+                "bias": "LONG",
+                "setup": "EARLY_BIAS",
+                "trade_paper": "NOT_EXECUTED",
+                "price": None,
+                "probability": 68.0,
+            }],
+        }],
+    })
+
+    assert "BIAS: LONG" in message
+    assert "SETUP: EARLY_BIAS" in message
+    assert "TRADE PAPER: NOT_EXECUTED" in message
+    assert "AZIONE: NO_DECISION" in message
+    assert "WAIT" not in message
+    assert "Entry:" not in message
+
+
+def test_gagarin_handoff_normalizes_legacy_wait_without_erasing_short_bias():
+    from trump_tracker import gagarin_confirmation_message
+
+    message = gagarin_confirmation_message({
+        "events": [{
+            "title": "Public policy catalyst",
+            "status": "WATCH_ONLY",
+            "matched_instruments": [{
+                "commodity": "Brent",
+                "symbol": "BZ=F",
+                "bias": "SHORT",
+                "setup": "EARLY_SETUP",
+                "trade_paper": "BLOCKED_NOT_EXECUTED",
+                "action": "WAIT",
+                "price": 75.0,
+                "probability": 72.0,
+            }],
+        }],
+    })
+
+    assert "BIAS: SHORT" in message
+    assert "SETUP: EARLY_SETUP" in message
+    assert "TRADE PAPER: BLOCKED_NOT_EXECUTED" in message
+    assert "AZIONE: PAPER_WATCH" in message
+    assert "WAIT" not in message
+
+
+def test_gagarin_handoff_missing_direction_is_explicit_neutral():
+    from trump_tracker import gagarin_confirmation_message
+
+    message = gagarin_confirmation_message({
+        "events": [{
+            "title": "Ambiguous public event",
+            "status": "WATCH_ONLY",
+            "matched_instruments": [{"commodity": "Oro", "symbol": "GC=F"}],
+        }],
+    })
+
+    assert "BIAS: NEUTRAL / NO_DIRECTION" in message
+    assert "SETUP: NEUTRAL" in message
+    assert "TRADE PAPER: NOT_EXECUTED" in message
+    assert "AZIONE: NO_DECISION" in message
+    assert "WAIT" not in message

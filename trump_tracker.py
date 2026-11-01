@@ -523,9 +523,22 @@ def gagarin_confirmation_message(result: dict[str, Any]) -> str:
         if not matched:
             lines.append("⚪ Nessuno strumento corrispondente nell'universo Gagarin.")
         for row in matched[:3]:
+            raw_bias = str(row.get("bias") or row.get("direction") or "").strip().upper()
+            directional = raw_bias in {"LONG", "SHORT"}
+            bias = raw_bias if directional else "NEUTRAL / NO_DIRECTION"
+            setup = str(row.get("setup") or ("EARLY_BIAS" if directional else "NEUTRAL")).strip().upper()
+            trade_paper = str(row.get("trade_paper") or "NOT_EXECUTED").strip().upper()
+            raw_action = str(row.get("action") or "").strip().upper()
+            if raw_action == "WAIT":
+                action = "PAPER_WATCH" if directional else "NO_DECISION"
+            else:
+                action = raw_action or "NO_DECISION"
             lines.append(
                 f"• {row.get('commodity') or row.get('symbol')}: "
-                f"{row.get('action', 'WAIT')} | prezzo {row.get('price', 'N/D')} | "
+                f"BIAS: {bias} | SETUP: {setup} | TRADE PAPER: {trade_paper}"
+            )
+            lines.append(
+                f"  AZIONE: {action} | prezzo {row.get('price', 'N/D')} | "
                 f"prob. {row.get('probability', 'N/D')}"
             )
     lines.append("ℹ️ L'evento è un contesto; Gagarin mantiene il proprio filtro tecnico.")
