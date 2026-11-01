@@ -171,6 +171,11 @@ def _state_json(state):
     meta = getattr(state, "metadata", {}) or {}
     decision_status = cloud_api_decision_status(state, meta)
     bias = decision_status["bias"]
+    # Risk levels are meaningful only when the canonical D-L-A adapter has
+    # validated fresh price/ATR inputs. Keep the directional BIAS visible,
+    # but never leak stale or unvalidated entry/SL/TP values through the API.
+    levels_visible = decision_status["setup"] in {"EARLY_SETUP", "CONFIRMED"}
+    risk_level = lambda name: getattr(state, name, None) if levels_visible else None
     return {
         "symbol": str(getattr(state, "symbol", "")).upper(),
         "commodity": getattr(state, "commodity", ""),
@@ -186,12 +191,12 @@ def _state_json(state):
         "confidence": getattr(state, "confidence", None),
         "action": decision_status["action"],
         "reason": decision_status["reason"],
-        "entry": getattr(state, "entry", None),
-        "stop": getattr(state, "stop", None),
-        "tp1": getattr(state, "tp1", None),
-        "tp2": getattr(state, "tp2", None),
-        "tp3": getattr(state, "tp3", None),
-        "rr3": getattr(state, "rr3", None),
+        "entry": risk_level("entry"),
+        "stop": risk_level("stop"),
+        "tp1": risk_level("tp1"),
+        "tp2": risk_level("tp2"),
+        "tp3": risk_level("tp3"),
+        "rr3": risk_level("rr3"),
         "data_source": getattr(state, "data_source", None),
         "quote_provenance": _quote_provenance_json(state, meta),
         "data_status": meta.get("data_status", "UNKNOWN"),
