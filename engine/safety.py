@@ -42,7 +42,7 @@ from soyuz_gagarin.config import GagarinConfig
 # Se anche UN cancello fallisce:
 #
 #       SAFETY = BLOCKED
-#       FINAL_DECISION = WAIT
+#       FINAL_DECISION = BLOCKED
 #
 # Solo se tutti i cancelli passano:
 #
@@ -533,7 +533,7 @@ def apply_safety(
 
         state.safety = "BLOCKED"
 
-        state.final_decision = "WAIT"
+        state.final_decision = "BLOCKED"
 
     else:
 
