@@ -87,6 +87,8 @@ def test_new_news_triggers_immediate_analysis_then_waits_for_price_confirmation(
         tp1=83.0,
         tp2=84.0,
         data_source="TEST_FEED",
+        data_ok=True,
+        atr=1.5,
     )
     analysis_calls = []
     messages = []
