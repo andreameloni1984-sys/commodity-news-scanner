@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 from datetime import datetime, timezone
 from threading import Lock
@@ -46,6 +47,126 @@ def _authorize(x_api_key: str | None) -> None:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
+
+_QUOTE_REFERENCE_FIELDS = (
+    "provider", "symbol", "source_timestamp", "observed_at",
+    "currency", "unit", "unit_key", "price_scale", "price", "bid", "ask",
+    "age_seconds", "market_type", "contract_month", "delayed",
+    "market_session", "stale", "status", "comparison_status",
+    "deviation_pct", "basis_status", "basis_spot_minus_futures_pct",
+    "source_independence_status", "use_restriction", "cache_status",
+    "scheduled_symbol",
+)
+
+
+def _finite_quote_number(value, *, positive: bool = False, non_negative: bool = False):
+    """Return a finite numeric quote field, or None; never serialize NaN/Infinity."""
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not math.isfinite(number):
+        return None
+    if positive and number <= 0:
+        return None
+    if non_negative and number < 0:
+        return None
+    return number
+
+
+def _quote_provenance_json(state, meta: dict) -> dict:
+    """Expose the data-engine quote audit without inventing missing provenance."""
+    bid = _finite_quote_number(meta.get("quote_bid"), positive=True)
+    ask = _finite_quote_number(meta.get("quote_ask"), positive=True)
+    age = _finite_quote_number(meta.get("quote_age_seconds"), non_negative=True)
+    if age is None:
+        age = _finite_quote_number(
+            getattr(state, "data_age_seconds", None), non_negative=True
+        )
+
+    quote_provider = meta.get("quote_provider") or getattr(state, "data_source", None)
+    quote_symbol = (
+        meta.get("quote_symbol")
+        or meta.get("resolved_symbol")
+        or meta.get("execution_symbol")
+    )
+    quote_market_type = (
+        meta.get("quote_market_type") or meta.get("execution_market_type")
+    )
+    bid_ask_flag = meta.get("quote_bid_ask_available")
+    bid_ask_available = (
+        bid is not None and ask is not None
+        if bid_ask_flag is None
+        else bid_ask_flag is True and bid is not None and ask is not None
+    )
+
+    execution_quote = {
+        "provider": str(quote_provider) if quote_provider else None,
+        "symbol": str(quote_symbol) if quote_symbol else None,
+        "source_timestamp": (
+            str(meta.get("quote_timestamp") or meta.get("last_bar_timestamp"))
+            if (meta.get("quote_timestamp") or meta.get("last_bar_timestamp"))
+            else None
+        ),
+        "currency": meta.get("quote_currency"),
+        "unit": meta.get("quote_unit"),
+        "market_type": quote_market_type,
+        "price": _finite_quote_number(meta.get("quote_price"), positive=True),
+        "bid": bid,
+        "ask": ask,
+        "bid_ask_available": bid_ask_available,
+        "age_seconds": age,
+        "freshness_status": (
+            meta.get("quote_freshness_status")
+            or meta.get("freshness_status")
+            or meta.get("data_status")
+            or "UNKNOWN"
+        ),
+        "status": meta.get("quote_status") or meta.get("data_status") or "UNKNOWN",
+    }
+
+    references = {}
+    raw_references = meta.get("reference_quotes")
+    if isinstance(raw_references, dict):
+        numeric_fields = {
+            "price": {"positive": True},
+            "bid": {"positive": True},
+            "ask": {"positive": True},
+            "age_seconds": {"non_negative": True},
+            "deviation_pct": {},
+            "basis_spot_minus_futures_pct": {},
+        }
+        for name, raw in raw_references.items():
+            if not isinstance(raw, dict):
+                continue
+            record = {}
+            for field in _QUOTE_REFERENCE_FIELDS:
+                if field not in raw:
+                    continue
+                value = raw[field]
+                if field in numeric_fields:
+                    options = numeric_fields[field]
+                    value = _finite_quote_number(
+                        value,
+                        positive=options.get("positive", False),
+                        non_negative=options.get("non_negative", False),
+                    )
+                record[field] = value
+            references[str(name).upper()] = record
+
+    return {
+        "execution_quote": execution_quote,
+        "execution_basis": {
+            "provider": meta.get("execution_provider") or execution_quote["provider"],
+            "symbol": meta.get("execution_symbol") or execution_quote["symbol"],
+            "market_type": meta.get("execution_market_type") or quote_market_type,
+        },
+        "reference_quotes": references,
+    }
+
+
 def _state_json(state):
     meta = getattr(state, "metadata", {}) or {}
     decision_status = cloud_api_decision_status(state, meta)
@@ -72,6 +193,7 @@ def _state_json(state):
         "tp3": getattr(state, "tp3", None),
         "rr3": getattr(state, "rr3", None),
         "data_source": getattr(state, "data_source", None),
+        "quote_provenance": _quote_provenance_json(state, meta),
         "data_status": meta.get("data_status", "UNKNOWN"),
         "live": meta.get("live") is True,
         "volume_confirmed": meta.get("volume_confirmed") is True,
