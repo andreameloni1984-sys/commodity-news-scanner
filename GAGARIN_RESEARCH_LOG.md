@@ -195,3 +195,13 @@
 - **Sources:** CME delayed quote page and delay explanation; CME Data Terms of Use (updated 2023); CME delayed-snapshot API onboarding; CBOE delayed quote page. Reviewed 2026-11-01.
 - **Tests:** no code changed; no provider tests run. This is a terms/eligibility audit only.
 - **Open:** Narwhal free-key authentication and source independence remain unverified; no third independent same-contract futures source is established. PAPER ONLY.
+
+
+## 2026-11-01 — Audit residual PAPER-state presentation and quote provenance
+
+- **Finding 1 — Aggressive dashboard:** `static/aggressive.html` treats both `PAPER_ENTRY` and `PAPER_SIGNAL` as `ok`, then labels either as `PAPER AUTORIZZATO`. GAGARIN's canonical API contract distinguishes `ENTRY_AUTHORIZED_PAPER_ONLY` from `SIGNAL_ONLY_NOT_EXECUTED`; the dashboard currently collapses these states. It also falls back from missing `entry` to `price` in a field labelled “Prezzo / Entry indicativa”, without rendering the quote's original timestamp/age. This is a user-facing presentation defect; no change made in this execution because the single functional change was the SPUTNIK handoff fix.
+- **Finding 2 — API quote provenance:** `cloud_api.py:_state_json()` returns `price`, `data_source`, `data_status` and `live`, but does not expose a complete per-price record with original provider timestamp, currency, unit, bid/ask and computed age. The multi-source metadata may exist upstream, but the public JSON projection does not yet meet the requested provenance contract.
+- **Finding 3 — legacy reasoning default:** `engine/analyst_reasoning.py` still uses `meta.get("gagarin_action", "WAIT")` as an internal fallback. The current verdict branch can still produce WATCH_LONG/WATCH_SHORT/NO_DIRECTION, so this is not the same as a user-facing WAIT board, but the default should eventually become `NO_DECISION` for consistency.
+- **No GAGARIN code/test change in this execution:** the current main runtime paths `main.py`, `telegram/render_runner.py`, `convergence_engine.py` and `telegram/signals.py` have no user-facing WAIT fallback. Legacy WAIT is still recognized only by canonical safety/status normalizers.
+- **Next functional priority:** correct the aggressive dashboard so `PAPER_SIGNAL` is never presented as an authorized entry, show BIAS / SETUP / TRADE PAPER explicitly, and never use `price` as an entry fallback. In parallel, expose full timestamped quote provenance in the API.
+- **Open:** third independent same-contract futures source; free Narwhal key and actual endpoint response; per-price provenance projection; monitor/Telegram acknowledgement; real 100-setup out-of-sample journal. PAPER ONLY.
