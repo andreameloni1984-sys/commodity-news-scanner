@@ -650,12 +650,8 @@ def run():
             metadata["gagarin_action"] = "AUXILIARY_ONLY"
             metadata["gagarin_reason"] = "FOREX_CONTEXT_ONLY"
         else:
-            metadata["gagarin_action"] = (
-                decision.action if decision is not None else "WAIT"
-            )
-            metadata["gagarin_reason"] = (
-                decision.reason if decision is not None else "NO_DECISION"
-            )
+            from engine.cloud_api_status import attach_runtime_decision_metadata
+            attach_runtime_decision_metadata(state, decision)
 
     # --------------------------------------------------------
     # EXPLAINABLE ANALYST LAYER
