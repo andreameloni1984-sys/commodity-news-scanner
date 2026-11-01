@@ -43,6 +43,22 @@ class SystematicForecastTests(unittest.TestCase):
         self.assertEqual(result["status"], "INSUFFICIENT_DATA")
         self.assertIsNone(result["score"])
 
+    def test_misaligned_ohlc_omits_breakout_instead_of_using_wrong_bars(self):
+        closes = [100 + i * 0.1 for i in range(80)]
+        highs = [value + 0.2 for value in closes[:-1]]
+        lows = [value - 0.2 for value in closes]
+        result = systematic_forecast(closes=closes, highs=highs, lows=lows, atr=1.0)
+        self.assertEqual(result["status"], "CALCULATED")
+        self.assertIn("ewmac_trend", result["components"])
+        self.assertNotIn("breakout", result["components"])
+
+    def test_boolean_market_values_and_atr_are_rejected(self):
+        invalid_closes = [100.0] * 64 + [True]
+        result = systematic_forecast(closes=invalid_closes, atr=1.0)
+        self.assertEqual(result["status"], "INSUFFICIENT_DATA")
+        boolean_atr = systematic_forecast(closes=[100.0] * 70, atr=True)
+        self.assertEqual(boolean_atr["status"], "INSUFFICIENT_DATA")
+
 
 if __name__ == "__main__":
     unittest.main()
