@@ -29,17 +29,19 @@ On the default `main` branch, `cloud_api.py` used `WAIT` as the fallback for mis
 - PR #115: https://github.com/andreameloni1984-sys/commodity-news-scanner/pull/115
 - Base: `main` at `4bd54a827bfe6301d4620c766ad80ed1e819946a`
 - Head: `fix/cloud-api-bias-setup-paper-20261101`
-- State at verification: OPEN, mergeable, not merged, not deployed.
+- State at verification: CLOSED / MERGED on 2026-11-01; merge commit `9a5b1d6d27686d5a504230a562c98e6b08be84e3`. No production deploy is claimed.
 
 ## Verified GitHub Actions
-All five workflows on PR head `88f5d820271039257b7f83c6bda6ea37143942d1` completed successfully:
+All five workflows on PR code/test head `88f5d820271039257b7f83c6bda6ea37143942d1` completed successfully. The documentation-updated head `249510dc11b7a061d46846676f55ab8de25d0312` also passed all five workflows:
 - SOYUZ GAGARIN Tests: 470 passed in 1.49s (includes the five new regressions).
 - Gagarin Public Event Brain Tests: 82 passed in 0.56s.
 - SOYUZ GAGARIN PAPER: 26 passed in 0.17s.
 - Gagarin NEWS alert tests: 68 passed in 0.35s.
 - Gagarin Execution Layer Tests: 3 passed in 0.03s.
 
-Run IDs: `41310551008`, `41310550976`, `41310551042`, `41310551049`, `41310551045`.
+Code/test head run IDs: `41310551008`, `41310550976`, `41310551042`, `41310551049`, `41310551045`. Final documentation head run IDs: `41310639661`, `41310639660`, `41310639706`, `41310639670`, `41310639668`.
+
+The PR-head checks were green before squash merge. The Actions connector did not return PR-triggered workflow runs for the merge commit itself; therefore no post-merge CI or production deployment is claimed.
 
 ## Open problems
 - `main.py` and `telegram/render_runner.py` still contain independent missing-decision `WAIT` fallbacks; they were deliberately not changed in this one-improvement run.
