@@ -20,6 +20,7 @@ import requests
 
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 from engine.gagarin import analyze_universe
+from engine.decision_status import market_decision_status
 from engine.forex_session import filter_forex_for_session
 from commodities.universe import enabled_commodities, get_commodity_by_name
 from engine.invest import (
@@ -178,16 +179,18 @@ def _format_classifica(results):
         return "📊 CLASSIFICA GAGARIN\nNessun risultato disponibile."
     lines = ["🚀 SOYUZ GAGARIN", "📊 CLASSIFICA", "━━━━━━━━━━━━━━━━━━━━", "🧪 PAPER ONLY", ""]
     for index, state in enumerate(results, start=1):
-        direction = state.setup_direction if state.setup_direction in {"LONG", "SHORT"} else "—"
-        decision_label = (
-            "CONTESTO FX — NON OPERATIVO"
-            if _is_auxiliary_forex(state)
-            else state.final_decision
-        )
+        status = market_decision_status(state)
+        if _is_auxiliary_forex(state):
+            label = "CONTESTO FX — NON OPERATIVO"
+        else:
+            label = (
+                f"BIAS {status['bias']} | SETUP {status['setup']} | "
+                f"TRADE PAPER {status['trade_paper']}"
+            )
         lines.append(
-            f"{index}. {state.commodity} | {direction} | "
+            f"{index}. {state.commodity} | {status['bias']} | "
             f"Confluence {state.probability:.1f} | Q {state.quality:.1f} | "
-            f"C {state.confidence:.1f} | {decision_label}"
+            f"C {state.confidence:.1f} | {label}"
         )
     entries = [
         s for s in results
@@ -197,47 +200,41 @@ def _format_classifica(results):
     lines.append("🎯 OPERATIVITÀ")
     lines.append(f"🟢 {len(entries)} ENTRATA/E AUTORIZZATA/E" if entries else "🟡 NESSUNA ENTRATA AUTORIZZATA")
     return "\n".join(lines)
-
 def _format_setup(results):
     if not results:
         return "📊 SETUP\nNessun risultato disponibile."
     lines = ["🚀 SOYUZ GAGARIN", "📊 SETUP", "━━━━━━━━━━━━━━━━━━━━", "🧪 PAPER ONLY", ""]
     for state in results:
-        direction = state.setup_direction if state.setup_direction in {"LONG", "SHORT"} else "—"
+        status = market_decision_status(state)
         if _is_auxiliary_forex(state):
-            status = "CONTESTO FX — NON OPERATIVO"
-        elif state.setup_direction in {"LONG", "SHORT"} and not getattr(state, "trigger_confirmed", False):
-            status = "IN ATTESA"
-        elif state.setup_direction in {"LONG", "SHORT"} and getattr(state, "trigger_confirmed", False):
-            status = "TRIGGER CONFERMATO"
-        else:
-            status = "NESSUN SETUP"
-        lines.append(
-            f"{state.commodity} | {direction} | {status} | "
+            lines.append(f"{state.commodity} | CONTESTO FX — NON OPERATIVO")
+            continue
+        line = (
+            f"{state.commodity} | BIAS {status['bias']} | "
+            f"SETUP {status['setup']} | TRADE PAPER {status['trade_paper']} | "
             f"Setup Q {getattr(state, 'setup_quality', 0):.1f} | "
-            f"Confluence {state.probability:.1f} | Q {state.quality:.1f} | C {state.confidence:.1f}"
+            f"Confluence {state.probability:.1f} | Q {state.quality:.1f} | "
+            f"C {state.confidence:.1f}"
         )
+        if status["blockers"]:
+            line += f" | BLOCKER {status['blockers']}"
+        lines.append(line)
     return "\n".join(lines)
-
 def _format_intraday(results):
     if not results:
         return "INTRADAY\nNessun risultato disponibile."
     lines = ["🚀 SOYUZ GAGARIN", "INTRADAY", "━━━━━━━━━━━━━━━━━━━━", "🧪 PAPER ONLY", ""]
     for state in results:
-        direction = state.setup_direction if state.setup_direction in {"LONG", "SHORT"} else "—"
-        setup = getattr(state, "setup", "NONE")
-        trigger = getattr(state, "trigger", "NONE")
-        decision_label = (
-            "CONTESTO FX — NON OPERATIVO"
-            if _is_auxiliary_forex(state)
-            else state.final_decision
-        )
+        status = market_decision_status(state)
+        if _is_auxiliary_forex(state):
+            lines.append(f"{state.commodity} | CONTESTO FX — NON OPERATIVO")
+            continue
         lines.append(
-            f"{state.commodity} | {direction} | {setup} | {trigger} | "
-            f"{decision_label}"
+            f"{state.commodity} | BIAS {status['bias']} | "
+            f"SETUP {status['setup']} | TRADE PAPER {status['trade_paper']} | "
+            f"{getattr(state, 'setup', 'NONE')} | {getattr(state, 'trigger', 'NONE')}"
         )
     return "\n".join(lines)
-
 def _format_buy(results):
     if not results:
         return "GAGARIN — OGGI\nNessun risultato disponibile."
@@ -554,18 +551,20 @@ def _command_response(command: str) -> Optional[str]:
             return "Nessun risultato."
         if commodity:
             state = results[0]
-            direction = state.setup_direction if state.setup_direction in {"LONG", "SHORT"} else "—"
+            status = market_decision_status(state)
             price = "N/D" if state.price is None else f"{state.price:.6g}"
             return (
                 f"🛰 SOYUZ GAGARIN — {state.commodity.upper()}\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n"
                 f"🧪 PAPER ONLY\n\n"
                 f"Prezzo: {price}\n"
-                f"Direzione: {direction}\n"
+                f"BIAS: {'CONTESTO AUSILIARIO — NON OPERATIVO' if _is_auxiliary_forex(state) else status['bias']}\n"
+                f"SETUP: {status['setup']}\n"
+                f"TRADE PAPER: {status['trade_paper']}\n"
                 f"Confluence: {state.probability:.1f} / 100\n"
                 f"Quality: {state.quality:.1f}\n"
                 f"Confidence: {state.confidence:.1f}\n"
-                f"Decisione: {'CONTESTO AUSILIARIO — NON OPERATIVO' if _is_auxiliary_forex(state) else state.final_decision}"
+                f"Blocker: {status['blockers'] or 'N/D'}"
             )
         return _format_classifica(results)
 
