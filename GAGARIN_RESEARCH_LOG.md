@@ -237,3 +237,17 @@
 - **Post-merge:** code, tests and log entry were read back from `main`. The recorded CI runs are PR-head checks before merge; no separate post-merge CI status was returned by the connector.
 - **Limits:** no live API request, authenticated Narwhal key, Telegram send, Render deployment or broker order was performed. PAPER ONLY.
 - **Open:** confirm the serialized response on a read-only live runtime when available; verify the free Narwhal credential and actual endpoint response; locate a third independent same-contract futures source; continue monitor/Telegram acknowledgement audit and build the real 100-setup out-of-sample journal.
+
+
+
+## 2026-11-01 — Hide unvalidated risk levels in the Gagarin Cloud API
+
+- **Public-system study:** reviewed QuantConnect LEAN's Apache-2.0 risk-management interface, where a risk model evaluates portfolio targets at each time step, and Freqtrade's documented protections (including StoplossGuard and MaxDrawdown, with protections explicitly enabled in backtests). Applicable lesson: risk state and authorization should be explicit, independently testable outputs. No external code or dependency was imported; LEAN's license is permissive, while Freqtrade's code was not copied.
+- **Finding:** `cloud_api.py:_state_json()` serialized `entry`, `stop`, `tp1`, `tp2`, `tp3` and `rr3` unconditionally. This could expose stale/unvalidated risk levels in the JSON API even when the canonical status was `EARLY_BIAS` or `NEUTRAL`.
+- **Implemented:** keep BIAS/SETUP/TRADE PAPER visible, but serialize risk levels only when the shared Cloud status adapter reports `EARLY_SETUP` or `CONFIRMED`. That adapter requires fresh-live metadata, live/data-ok state, finite positive price and ATR, and a valid non-stale analysis timestamp; stale PAPER_ENTRY is downgraded before this projection. No price or risk level is calculated or fabricated.
+- **Files:** `cloud_api.py`; `tests/test_cloud_api_quote_provenance.py`; this log.
+- **Commits:** implementation `451d4ebe5429489b2ca6195682fd5d6498cc5ec3`; regression tests `1ca95766c74cd5f50d3c4c95f663837435c16f0d`; documentation commit to follow.
+- **Regression coverage added:** EARLY_BIAS and NEUTRAL hide all six risk fields; fresh EARLY_SETUP and CONFIRMED preserve already-calculated levels. Existing quote-provenance serialization tests remain in the same module.
+- **Validation:** source and test changes were committed to branch `fix/cloud-api-hide-unfresh-risk-levels-20261101`. GitHub Actions have not yet been verified for this new head; no local test execution was available through the GitHub connector. No production API response, live quote, Telegram delivery, Render deploy, broker connection or order is claimed.
+- **SPUTNIK audit:** main contains the merged handoff state-contract fix from `cfb0cea6180b1cf90b8fd974aa68908b7c2fee19`; no duplicate SPUTNIK change was made in this execution.
+- **Open:** verify PR CI; audit the aggressive dashboard and the actual monitor/Telegram runtime; configure and verify the free Narwhal credential and source independence; obtain a third independent same-contract futures source; complete the real 100-setup out-of-sample journal. PAPER ONLY.
