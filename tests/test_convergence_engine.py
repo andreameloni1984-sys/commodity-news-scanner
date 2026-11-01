@@ -20,7 +20,8 @@ def state(symbol="WTI", direction="LONG", entry=False, fresh=True):
 def test_convergence_requires_both_same_direction_and_gagarin_entry():
     result = evaluate_convergence({"instrument": "WTI", "bias": "LONG"}, [state(entry=True)])
     assert result["status"] == "CONVERGENCE"
-    assert result["decision"] == "PAPER_CANDIDATE"
+    assert result["decision"] == "CONFIRMED"
+    assert result["trade_paper"] == "PAPER_CANDIDATE"
     assert result["entry"] == 70.0
 
 
