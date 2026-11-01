@@ -176,3 +176,12 @@
 - **SPUTNIK cross-check:** last visible scheduled tracker run `41287080980` at 09:01:18Z succeeded but confirmed only message IDs 623/624/625 and logged four unconfirmed sends; source OSError/SEC 403 issues remain. Its PR #82 is still open.
 - **Open:** configure/verify the free Narwhal key; obtain a third comparable futures source; observe post-merge Gagarin monitor output and Telegram API acknowledgements; investigate monitor schedule gaps; integrate SPUTNIK PR #82; complete the real 100-setup out-of-sample journal and metrics. PAPER ONLY.
 
+
+
+## 2026-11-01 — Cross-bot handoff verification after SPUTNIK PR #82 merge
+
+- **GAGARIN main inspected:** latest functional change remains `b7e570abbaec7519497d1273b9e6897d6431f40f`; no GAGARIN functional file was changed in this execution.
+- **Runtime state audit:** `main.py`, `telegram/render_runner.py`, `convergence_engine.py`, and `telegram/signals.py` contain no user-facing WAIT fallback. `engine/cloud_api_status.py` still recognizes legacy WAIT only as an input to normalize it into a blocked/non-executed state; it is not a default market direction. `cloud_api.py` retains a CSS class named `.wait` for neutral card styling, while its displayed default alert is `NONE`, not WAIT.
+- **SPUTNIK handoff:** PR #82 is now merged in SPUTNIK as `cfb0cea6180b1cf90b8fd974aa68908b7c2fee19`. The handoff preserves LONG/SHORT BIAS and explicit D-L-A setup provenance; a legacy `PAPER_SIGNAL` alone no longer implies CONFIRMED.
+- **GAGARIN tests/CI this execution:** no GAGARIN code change and no new GAGARIN test run were made. Last verified GAGARIN CI remains the prior PR #116 evidence: full suite 473; PAPER safety/smoke 26; trade-plan 34; Public Event Brain 82; Execution Layer 3; NEWS alert 68 — all SUCCESS (runs recorded above). Current commit status query returned no individual status records.
+- **Open:** Narwhal is still not a verified runtime reference while the free API key is empty/unverified; no third independent same-contract futures source; complete Telegram API acknowledgement and monitor continuity; real 100-setup out-of-sample journal and metrics. No live quote, deployment or order is claimed. PAPER ONLY.
