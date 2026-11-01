@@ -347,7 +347,7 @@ def test_safety_blocks_missing_trigger():
     apply_safety(state)
 
     assert state.safety == "BLOCKED"
-    assert state.final_decision == "WAIT"
+    assert state.final_decision == "BLOCKED"
     assert "TRIGGER_NOT_CONFIRMED" in state.blockers
 
 
@@ -363,7 +363,7 @@ def test_safety_blocks_bad_rr():
     apply_safety(state)
 
     assert state.safety == "BLOCKED"
-    assert state.final_decision == "WAIT"
+    assert state.final_decision == "BLOCKED"
 
 
 # ============================================================
@@ -388,7 +388,7 @@ def test_complete_pipeline_long():
     }
 
     assert state.final_decision in {
-        "WAIT",
+        "BLOCKED",
         "ENTRY",
     }
 
@@ -410,7 +410,7 @@ def test_complete_pipeline_short():
     }
 
     assert state.final_decision in {
-        "WAIT",
+        "BLOCKED",
         "ENTRY",
     }
 
@@ -562,18 +562,21 @@ def test_intraday_dashboard_is_paper_and_compact():
     state.setup = "TREND_CONTINUATION"
     state.setup_direction = "LONG"
     state.trigger = "NOT_CONFIRMED"
-    state.final_decision = "WAIT"
+    state.final_decision = "BLOCKED"
     text = _format_intraday([state])
     assert "INTRADAY" in text
     assert "PAPER ONLY" in text
     assert "TREND_CONTINUATION" in text
-    assert "WAIT" in text
+    assert "BIAS LONG" in text
+    assert "SETUP EARLY_SETUP" in text
+    assert "TRADE PAPER BLOCKED_NOT_EXECUTED" in text
+    assert "WAIT" not in text
 
 
 def test_buy_board_never_claims_buy_when_no_entry():
     from telegram.bot import _format_buy
     state = _prepare_directional_state("LONG")
-    state.final_decision = "WAIT"
+    state.final_decision = "BLOCKED"
     text = _format_buy([state])
     assert "GAGARIN — OGGI" in text
     assert "PAPER ONLY" in text
@@ -854,7 +857,7 @@ def test_safety_blocks_non_finite_numeric_scores_and_rr():
         setattr(state, field, value)
         apply_safety(state)
         assert state.safety == "BLOCKED"
-        assert state.final_decision == "WAIT"
+        assert state.final_decision == "BLOCKED"
         assert "NUMERIC_FIELD_NON_FINITE" in state.blockers
 
 
