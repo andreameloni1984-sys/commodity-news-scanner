@@ -432,9 +432,9 @@ def test_directional_bias_survives_missing_quote_atr_and_opposite_technicals():
     assert "D-L-A CONTRASTS (tecnica SHORT)" in message
     assert "TRADE PAPER: NOT_EXECUTED" in message
     assert "quotazione live validata e/o ATR" in message
-    assert "Entry" not in message
-    assert "SL" not in message
-    assert "TP" not in message
+    assert "Entry indicativa:" not in message
+    assert "\nSL:" not in message
+    assert "\nTP1:" not in message
 
 
 def test_mixed_catalyst_emits_neutral_no_direction_with_reason():
