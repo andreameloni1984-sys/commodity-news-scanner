@@ -630,13 +630,14 @@ def _capture_baseline(event: dict[str, Any], states: list[Any]) -> dict[str, flo
     baseline: dict[str, float] = {}
     for asset in event.get("assets") or classify_event(event.get("title", ""))["assets"]:
         for state in states:
-            if not _asset_matches(asset, state) or not bool(getattr(state, "live", False)):
+            if (
+                not _asset_matches(asset, state)
+                or not bool(getattr(state, "live", False))
+                or not bool(getattr(state, "data_ok", False))
+            ):
                 continue
-            try:
-                value = float(getattr(state, "price", None))
-            except (TypeError, ValueError):
-                continue
-            if value > 0:
+            value = _finite_positive(getattr(state, "price", None))
+            if value is not None:
                 baseline[asset] = value
                 break
     return baseline
@@ -680,8 +681,86 @@ def _valid_signal_levels(
     return True
 
 
+def _technical_direction(state: Any) -> str | None:
+    """Return an explicit OHLCV-derived direction; it is not DOM/footprint evidence."""
+    if state is None:
+        return None
+    for field in ("setup_direction", "trigger_direction", "structure_direction",
+                  "opportunity_direction", "pre_move_direction"):
+        raw = str(getattr(state, field, "") or "").strip().upper()
+        if raw in {"LONG", "SHORT"}:
+            return raw
+        if raw in {"BULLISH", "BULL", "UP", "TREND_UP"}:
+            return "LONG"
+        if raw in {"BEARISH", "BEAR", "DOWN", "TREND_DOWN"}:
+            return "SHORT"
+    return None
+
+
+def _has_fresh_price_and_atr(state: Any) -> bool:
+    """A live, validated quote and finite ATR are required before publishing levels."""
+    return bool(
+        state is not None
+        and getattr(state, "live", False)
+        and getattr(state, "data_ok", False)
+        and _finite_positive(getattr(state, "price", None)) is not None
+        and _finite_positive(getattr(state, "atr", None)) is not None
+    )
+
+
+def _format_bias_alert(
+    event: dict[str, Any], states: list[Any], confirmed_assets: set[str] | None = None
+) -> str:
+    """Publish catalyst direction even when a fresh quote, ATR or trigger is absent."""
+    classified = classify_event(event.get("title", ""))
+    confirmed_assets = confirmed_assets or set()
+    lines: list[str] = []
+    for asset in classified.get("assets", []):
+        if asset in confirmed_assets:
+            continue
+        impact = classified.get("impact", {}).get(asset, "MISTA")
+        matched = classified.get("matched_terms", {}).get(asset, {})
+        bullish = matched.get("bullish", [])
+        bearish = matched.get("bearish", [])
+        state = next((item for item in states if _asset_matches(asset, item)), None)
+        technical = _technical_direction(state)
+        fresh = _has_fresh_price_and_atr(state)
+        if impact in {"RIALZISTA", "RIBASSISTA"}:
+            direction = "LONG" if impact == "RIALZISTA" else "SHORT"
+            dla = "ALIGNS" if technical == direction else "CONTRASTS" if technical else "NOT_CONFIRMED"
+            stage = "EARLY_SETUP" if fresh else "EARLY_BIAS"
+            lines.append(
+                f"{asset}: BIAS {direction} | SETUP {stage} | D-L-A {dla}"
+                + (f" (tecnica {technical})" if technical else "")
+            )
+            if not fresh:
+                lines.append("  Dati mancanti: quotazione live validata e/o ATR; entry/SL/TP omessi.")
+            else:
+                lines.append("  Prezzo e ATR disponibili; trigger e rischio non confermati; livelli omessi.")
+        else:
+            if bullish and bearish:
+                reason = f"evidenze miste: rialziste [{', '.join(bullish)}], ribassiste [{', '.join(bearish)}]"
+            else:
+                reason = "nessuna evidenza direzionale verificabile nel catalizzatore"
+            lines.append(f"{asset}: BIAS NEUTRAL / NO_DIRECTION | SETUP NEUTRAL | D-L-A NOT_ASSESSED")
+            lines.append(f"  Motivo: {reason}.")
+        lines.append("  TRADE PAPER: NOT_EXECUTED — nessun ordine.")
+    if not lines:
+        return ""
+    return (
+        "🛰 GAGARIN — CATALIZZATORE / IPOTESI DIREZIONALE\n"
+        "🧪 PAPER ONLY — nessun ordine\n\n"
+        f"NEWS: {event.get('title', '')}\n"
+        f"Fonte: {event.get('source', 'N/D')} | Pubblicazione UTC: {event.get('published_at', 'N/D')}\n"
+        f"Link: {event.get('url', '')}\n\n"
+        + "\n".join(lines)
+        + "\n\nD-L-A usa proxy OHLCV/struttura; non sono disponibili DOM/footprint nativi. "
+        "Le ipotesi non sono ordini e non contengono livelli inventati."
+    )
+
+
 def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str, Any]]:
-    """Require a live Gagarin trigger and measurable price movement after news detection."""
+    """Require live validated price, finite ATR, aligned trigger and measurable reaction."""
     classified = classify_event(event.get("title", ""))
     baselines = event.get("baseline_prices") or {}
     min_reaction_pct = max(0.0, float(os.getenv("GAGARIN_NEWS_MIN_REACTION_PCT", "0.05")))
@@ -690,11 +769,8 @@ def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str
         impact = classified["impact"].get(asset, "MISTA")
         if impact == "MISTA":
             continue
-        try:
-            baseline = float(baselines.get(asset))
-        except (TypeError, ValueError):
-            continue
-        if baseline <= 0:
+        baseline = _finite_positive(baselines.get(asset))
+        if baseline is None:
             continue
         expected_direction = "LONG" if impact == "RIALZISTA" else "SHORT"
         for state in states:
@@ -707,6 +783,10 @@ def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str
             if not bool(getattr(state, "trigger_confirmed", False)):
                 continue
             if not bool(getattr(state, "live", False)):
+                continue
+            if not bool(getattr(state, "data_ok", False)):
+                continue
+            if _finite_positive(getattr(state, "atr", None)) is None:
                 continue
             if decision not in {"ENTRY", "PAPER_ENTRY", "PAPER_SIGNAL"}:
                 continue
@@ -721,7 +801,9 @@ def _confirmed_setups(event: dict[str, Any], states: list[Any]) -> list[dict[str
                 direction, price, entry, stop, tp1, getattr(state, "tp2", None)
             ):
                 continue
-            price_value = float(price)
+            price_value = _finite_positive(price)
+            if price_value is None:
+                continue
             move_pct = (price_value / baseline - 1.0) * 100.0
             if impact == "RIALZISTA" and move_pct < min_reaction_pct:
                 continue
@@ -754,9 +836,10 @@ def _format_news_alert(event: dict[str, Any], setup: dict[str, Any]) -> str:
         f"Rilevata UTC: {event.get('first_seen_at', 'N/D')}\n"
         f"Link: {event.get('url', '')}\n\n"
         f"Strumento: {setup['asset']}\n"
-        f"Impatto ipotizzato: {setup['impact']}\n"
+        f"BIAS: {setup['direction']} — catalizzatore {setup['impact']}\n"
+        "SETUP: CONFIRMED — trigger D-L-A allineato\n"
+        "TRADE PAPER: NOT_EXECUTED — alert di setup, nessun ordine inviato\n"
         f"Reazione dal rilevamento: {float(setup.get('move_pct', 0.0)):+.3f}%\n"
-        f"Setup Gagarin: {setup['direction']} — TRIGGER CONFERMATO\n"
         f"Feed prezzo Gagarin: {setup.get('price_source', 'N/D')}\n"
         f"Prezzo: {float(setup['price']):.6g}\n"
         f"Entry indicativa: {float(setup['entry']):.6g}\n"
@@ -886,6 +969,7 @@ def poll_news_once(
         should_analyze = True
 
     sent = 0
+    bias_sent = 0
     if should_analyze:
         try:
             raw_results = run_analysis()
@@ -893,6 +977,49 @@ def poll_news_once(
             state["last_analysis_at"] = now.timestamp()
             still_pending = []
             for event in pending:
+                delivery_timing = _catalyst_delivery_timing(event.get("published_at"), now)
+                if delivery_timing["timing"] in {
+                    "STALE_CATALYST", "FUTURE_TIMESTAMP_INVALID", "TIME_UNVERIFIED"
+                }:
+                    if not event.get("alert_suppressed_reason"):
+                        event["alert_suppressed_reason"] = delivery_timing["timing"]
+                        _journal({
+                            "kind": "NEWS_ALERT_SUPPRESSED",
+                            "event_id": event.get("event_id"),
+                            "title": event.get("title"),
+                            "source": event.get("source"),
+                            "url": event.get("url"),
+                            "published_at": event.get("published_at"),
+                            "catalyst_timing": delivery_timing["timing"],
+                            "catalyst_age_minutes": delivery_timing.get("age_minutes"),
+                            "reason": delivery_timing["reason"],
+                        })
+                    if not event.get("alert_sent"):
+                        continue
+
+                existing_matches = _confirmed_setups(event, states) if event.get("baseline_prices") else []
+                confirmed_assets = {row["asset"] for row in existing_matches}
+                if not event.get("bias_alert_sent") and not event.get("alert_sent"):
+                    bias_message = _format_bias_alert(event, states, confirmed_assets)
+                    if bias_message and send_telegram(bias_message):
+                        bias_sent += 1
+                        event["bias_alert_sent"] = True
+                        _journal({
+                            "kind": "NEWS_BIAS_SENT",
+                            "event_id": event.get("event_id"),
+                            "title": event.get("title"),
+                            "source": event.get("source"),
+                            "published_at": event.get("published_at"),
+                            "hypotheses": [
+                                {"asset": asset,
+                                 "direction": "LONG" if impact == "RIALZISTA" else "SHORT" if impact == "RIBASSISTA" else "NEUTRAL",
+                                 "impact": impact}
+                                for asset, impact in (classify_event(event.get("title", "")).get("impact", {}) or {}).items()
+                            ],
+                            "setup_stage": "EARLY_BIAS_OR_EARLY_SETUP",
+                            "trade_paper": "NOT_EXECUTED",
+                        })
+
                 # Capture a baseline at the first analysis after detection.
                 # Later checks require a measurable move aligned with the news bias.
                 if not event.get("baseline_prices"):
@@ -950,30 +1077,6 @@ def poll_news_once(
                             "aligned_setup_count": len(matches),
                         })
                         break
-                # A pending event can age beyond the four-hour source window
-                # while waiting for price confirmation. Recheck before Telegram.
-                delivery_timing = _catalyst_delivery_timing(event.get("published_at"), now)
-                if delivery_timing["timing"] in {
-                    "STALE_CATALYST", "FUTURE_TIMESTAMP_INVALID", "TIME_UNVERIFIED"
-                }:
-                    if not event.get("alert_suppressed_reason"):
-                        event["alert_suppressed_reason"] = delivery_timing["timing"]
-                        _journal({
-                            "kind": "NEWS_ALERT_SUPPRESSED",
-                            "event_id": event.get("event_id"),
-                            "title": event.get("title"),
-                            "source": event.get("source"),
-                            "url": event.get("url"),
-                            "published_at": event.get("published_at"),
-                            "catalyst_timing": delivery_timing["timing"],
-                            "catalyst_age_minutes": delivery_timing.get("age_minutes"),
-                            "reason": delivery_timing["reason"],
-                        })
-                    # Drop an undelivered stale event. If already sent, retain
-                    # it below so the post-alert scorecard can finish observing it.
-                    if not event.get("alert_sent"):
-                        continue
-
                 delivered = bool(event.get("alert_sent"))
                 for setup in ([] if delivered else matches):
                     if send_telegram(_format_news_alert(event, setup)):
@@ -981,6 +1084,20 @@ def poll_news_once(
                         delivered = True
                         event["alert_sent"] = True
                         event["alert_sent_at"] = now.isoformat()
+                        if not event.get("bias_alert_sent"):
+                            event["bias_alert_sent"] = True
+                            _journal({
+                                "kind": "NEWS_BIAS_SENT",
+                                "event_id": event.get("event_id"),
+                                "title": event.get("title"),
+                                "source": event.get("source"),
+                                "published_at": event.get("published_at"),
+                                "asset": setup.get("asset"),
+                                "direction": setup.get("direction"),
+                                "impact": setup.get("impact"),
+                                "setup_stage": "CONFIRMED",
+                                "trade_paper": "NOT_EXECUTED",
+                            })
                         # Measure the full four-hour reaction window from delivery,
                         # not from the original headline detection.
                         event["expires_at"] = (now + timedelta(seconds=PENDING_TTL_SECONDS)).isoformat()
@@ -1017,10 +1134,12 @@ def poll_news_once(
     _save_state(state)
     print(
         f"NEWS poll | fetched={len(fetched)} | new_relevant={len(new_relevant)} | "
-        f"pending={len(pending)} | analysis={'YES' if should_analyze else 'NO'} | alerts={sent}",
+        f"pending={len(pending)} | analysis={'YES' if should_analyze else 'NO'} | "
+        f"bias_alerts={bias_sent} | confirmed_alerts={sent}",
         flush=True,
     )
-    return {"fetched": len(fetched), "new_relevant": len(new_relevant), "pending": len(pending), "alerts": sent, "analysis": int(should_analyze)}
+    return {"fetched": len(fetched), "new_relevant": len(new_relevant), "pending": len(pending),
+            "bias_alerts": bias_sent, "alerts": sent, "analysis": int(should_analyze)}
 
 
 def news_monitor_loop(
