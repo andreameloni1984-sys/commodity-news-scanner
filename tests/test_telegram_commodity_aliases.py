@@ -56,7 +56,9 @@ def test_setup_formatter_distinguishes_pending_setup_from_no_setup():
 
     text = _format_setup([pending])
     assert "Grano" in text
-    assert "IN ATTESA" in text
+    assert "BIAS LONG" in text
+    assert "SETUP EARLY_BIAS" in text
+    assert "TRADE PAPER NOT_EXECUTED" in text
     assert "Nessun setup LONG/SHORT rilevato" not in text
 
     empty = _format_setup([])
