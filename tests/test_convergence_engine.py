@@ -82,3 +82,61 @@ def test_formatter_never_claims_real_order():
     message = format_convergence(result)
     assert "PAPER ONLY" in message
     assert "PAPER_CANDIDATE" in message
+
+
+from engine.analyst_reasoning import build_reasoning
+
+
+def _analyst_state(direction="LONG", metadata=None):
+    side = direction if direction in {"LONG", "SHORT"} else "NONE"
+    return SimpleNamespace(
+        metadata=metadata or {},
+        symbol="WTI",
+        commodity="Petrolio WTI",
+        setup_direction=side,
+        structure_direction=side,
+        mtf_direction=side,
+        mtf_alignment=80,
+        trigger_direction=side,
+        trigger_confirmed=False,
+        regime="TREND_UP" if side == "LONG" else "TREND_DOWN" if side == "SHORT" else "UNKNOWN",
+        opportunity_type="BREAKOUT",
+        trigger="BREAKOUT",
+        data_ok=False,
+        live=False,
+        price=None,
+        atr=None,
+        entry=None,
+        stop=None,
+        tp1=None,
+        rr1=None,
+    )
+
+
+def test_analyst_missing_action_defaults_to_no_decision_and_preserves_long_bias():
+    result = build_reasoning(_analyst_state("LONG"))
+    assert result["direction"] == "LONG"
+    assert result["verdict"] == "WATCH_LONG"
+    assert result["governor_action"] == "NO_DECISION"
+
+
+def test_analyst_legacy_wait_becomes_paper_watch_without_losing_short_bias():
+    result = build_reasoning(_analyst_state("SHORT", {"gagarin_action": "WAIT"}))
+    assert result["direction"] == "SHORT"
+    assert result["verdict"] == "WATCH_SHORT"
+    assert result["governor_action"] == "PAPER_WATCH"
+
+
+def test_analyst_missing_action_without_direction_is_explicit_no_direction():
+    result = build_reasoning(_analyst_state("NEUTRAL"))
+    assert result["direction"] == "NONE"
+    assert result["verdict"] == "NO_DIRECTION"
+    assert result["governor_action"] == "NO_DECISION"
+
+
+def test_analyst_preserves_explicit_paper_action():
+    result = build_reasoning(
+        _analyst_state("LONG"),
+        SimpleNamespace(action="PAPER_ENTRY", reason="explicit paper authorization"),
+    )
+    assert result["governor_action"] == "PAPER_ENTRY"
