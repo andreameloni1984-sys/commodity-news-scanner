@@ -15,6 +15,11 @@ def test_market_price_is_not_used_as_entry_fallback():
     assert "const marketPrice=val(x,'price');" in HTML
     assert "val(x,'entry','price')" not in HTML
     assert "Prezzo di mercato" in HTML
+    assert "const hasFreshSetup=['EARLY_SETUP','CONFIRMED'].includes(setup);" in HTML
+    assert "const entry=hasFreshSetup?val(x,'entry'):null;" in HTML
+    assert "const marketPrice=hasFreshSetup?val(x,'price'):null;" in HTML
+    assert "Entry/SL/TP omessi: prezzo o ATR freschi non disponibili" in HTML
+    assert "'+esc(levelNote)+'" in HTML
 
 
 def test_dashboard_keeps_bias_setup_and_paper_state_separate():
