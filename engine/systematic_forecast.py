@@ -13,6 +13,8 @@ from typing import Any, Iterable
 def _series(values: Iterable[Any]) -> list[float]:
     result: list[float] = []
     for value in values or []:
+        if isinstance(value, bool):
+            return []
         try:
             number = float(value)
         except (TypeError, ValueError, OverflowError):
@@ -57,7 +59,7 @@ def systematic_forecast(
     """
     prices = _series(closes)
     try:
-        volatility = float(atr)
+        volatility = 0.0 if isinstance(atr, bool) else float(atr)
     except (TypeError, ValueError, OverflowError):
         volatility = 0.0
     if len(prices) < 65 or not math.isfinite(volatility) or volatility <= 0:
@@ -78,9 +80,19 @@ def systematic_forecast(
     if fast is not None and slow is not None:
         components["ewmac_trend"] = _clamp(((fast - slow) / volatility) * 8.0)
 
-    high_values = _series(highs or [])
-    low_values = _series(lows or [])
-    if len(high_values) >= 21 and len(low_values) >= 21:
+    high_values = _series(highs if highs is not None else [])
+    low_values = _series(lows if lows is not None else [])
+    # Breakout levels are meaningful only when every high/low belongs to
+    # the same close index and each close is inside its own candle range.
+    aligned_ohlc = (
+        len(high_values) == len(prices) == len(low_values)
+        and len(prices) >= 21
+        and all(
+            low <= close <= high and low <= high
+            for close, high, low in zip(prices, high_values, low_values)
+        )
+    )
+    if aligned_ohlc:
         prior_high = max(high_values[-21:-1])
         prior_low = min(low_values[-21:-1])
         latest = prices[-1]
