@@ -13,6 +13,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Iterable
 
+from engine.decision_status import market_decision_status
+
 
 def _fmt(value, digits=5):
     if value is None:
@@ -34,8 +36,8 @@ def _age_label(state) -> str:
 
 
 def _direction(state) -> str:
-    direction = str(getattr(state, "setup_direction", "") or "").upper()
-    return direction if direction in {"LONG", "SHORT"} else "WAIT"
+    """Return the supported market bias."""
+    return market_decision_status(state)["bias"]
 
 
 def _is_signal(state) -> bool:
@@ -82,6 +84,7 @@ def format_signal(state) -> str:
     icon = "🟢" if direction == "LONG" else "🔴"
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     metadata = getattr(state, "metadata", {}) or {}
+    status = market_decision_status(state)
     risk_pct = metadata.get("risk_pct") or 0.01
     score = _opportunity_score(state)
 
@@ -91,7 +94,9 @@ def format_signal(state) -> str:
         "🧪 PAPER ONLY • NESSUN ORDINE AUTOMATICO",
         f"🕒 {now}",
         "",
-        f"📌 DIREZIONE: {direction}",
+        f"📌 BIAS: {status['bias']}",
+        f"🧭 SETUP: {status['setup']}",
+        f"🧪 TRADE PAPER: {status['trade_paper']}",
         f"💰 ENTRY: {_fmt(state.entry)}",
         f"🛑 SL: {_fmt(state.stop)}",
         f"🎯 TP1: {_fmt(state.tp1)}",
@@ -123,6 +128,7 @@ def format_signal(state) -> str:
 def format_watch(state) -> str:
     """Pre-alert for setups close to threshold but not fully confirmed."""
     direction = _direction(state)
+    status = market_decision_status(state)
     score = _opportunity_score(state)
     blockers = list(getattr(state, "blockers", []) or [])
     reason = ", ".join(str(x) for x in blockers[:3]) or "Vicino alla soglia"
@@ -133,7 +139,8 @@ def format_watch(state) -> str:
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"🕒 {now}\n"
         f"📊 Score: {score:.0f}/100\n"
-        f"Direzione: {direction}\n"
+        f"BIAS: {status['bias']} | SETUP: {status['setup']}\n"
+        f"TRADE PAPER: {status['trade_paper']}\n"
         f"Motivo: {reason}\n"
         f"🧠 Analisi: {((getattr(state, 'metadata', {}) or {}).get('analyst_reasoning') or {}).get('conclusion', 'In attesa di evidenze.')[:240]}\n"
         f"⚠️ Contrasti: {', '.join(((getattr(state, 'metadata', {}) or {}).get('analyst_reasoning') or {}).get('conflicts', [])[:2]) or 'N/D'}\n"
@@ -170,26 +177,36 @@ def format_watch_board(results: Iterable[object], min_score: float = 45.0) -> st
     for i, state in enumerate(candidates[:3], 1):
         score = _opportunity_score(state)
         direction = _direction(state)
+        status = market_decision_status(state)
         lines.append(
-            f"{i}. {state.commodity} {direction} — score {score:.0f}\n"
-            f"   {_rule_label(state)}"
+            f"{i}. {state.commodity} — BIAS {status['bias']} | SETUP {status['setup']}\n"
+            f"   TRADE PAPER {status['trade_paper']} | {_rule_label(state)}"
         )
 
     lines += ["", "⚠️ Solo monitoraggio. Non è un segnale di entrata."]
     return "\n".join(lines)
 
 
-def format_wait(state) -> str:
+def format_blocked(state) -> str:
+    """Explain why a PAPER trade is blocked without hiding the market bias."""
+    status = market_decision_status(state)
     blockers = list(getattr(state, "blockers", []) or [])
-    reason = ", ".join(str(x) for x in blockers[:5]) or "GATE_NOT_CONFIRMED"
+    reason = ", ".join(str(x) for x in blockers[:5]) or "SAFETY_OR_CONFIRMATION_NOT_PASSED"
     return (
-        f"🟡 WAIT — {str(state.commodity).upper()}\n"
-        f"Direzione: {_direction(state)}\n"
+        f"🟠 BLOCKED / NOT EXECUTED — {str(state.commodity).upper()}\n"
+        f"BIAS: {status['bias']}\n"
+        f"SETUP: {status['setup']}\n"
+        f"TRADE PAPER: {status['trade_paper']}\n"
         f"Motivo: {reason}\n"
         f"Regime: {getattr(state, 'regime', 'UNKNOWN')} | "
         f"Trigger: {getattr(state, 'trigger', 'NONE')}\n"
         f"⏱ {_age_label(state)}"
     )
+
+
+def format_wait(state) -> str:
+    """Deprecated compatibility alias; output follows the BLOCKED state contract."""
+    return format_blocked(state)
 
 
 def format_signal_board(results: Iterable[object]) -> str:
@@ -208,19 +225,45 @@ def format_signal_board(results: Iterable[object]) -> str:
 
     if not signals:
         lines += [
-            "🟡 NESSUN SEGNALE OPERATIVO — NESSUNA OPPORTUNITÀ OPERATIVA",
+            "🟡 NESSUN TRADE PAPER AUTORIZZATO",
+            "Le ipotesi di direzione restano visibili anche prima della conferma tecnica.",
             "",
-            "Gagarin mantiene WAIT finché i dati e la confluence",
-            "non sono sufficienti. Nessun segnale viene inventato.",
         ]
+        directional = [s for s in results if _direction(s) in {"LONG", "SHORT"}]
+        directional.sort(key=_opportunity_score, reverse=True)
+        if directional:
+            for state in directional[:3]:
+                status = market_decision_status(state)
+                lines.append(
+                    f"{state.commodity} | BIAS {status['bias']} | "
+                    f"SETUP {status['setup']} | TRADE PAPER {status['trade_paper']}"
+                )
+                reason = status["blockers"] or ", ".join(
+                    str(x) for x in (getattr(state, "blockers", []) or [])[:3]
+                )
+                if reason:
+                    lines.append(f"   BLOCKER: {reason}")
+        elif results:
+            lines += [
+                "BIAS: NEUTRAL / NO_DIRECTION",
+                "Motivo: nessuna direzione LONG/SHORT sostenibile nei dati disponibili.",
+            ]
+        else:
+            lines += [
+                "Nessuno stato di mercato disponibile.",
+                "TRADE PAPER: NOT_EXECUTED",
+            ]
         return "\n".join(lines)
 
     for i, state in enumerate(signals[:3], 1):
         direction = _direction(state)
         icon = "🟢" if direction == "LONG" else "🔴"
+        status = market_decision_status(state)
         score = _opportunity_score(state)
         lines.append(
             f"{i}. {icon} **{state.commodity} {direction}** (score {score:.0f})\n"
+            f"   BIAS {status['bias']} | SETUP {status['setup']} | "
+            f"TRADE PAPER {status['trade_paper']}\n"
             f"   Entry {_fmt(state.entry)} | SL {_fmt(state.stop)} | TP1 {_fmt(state.tp1)}\n"
             f"   RR {_fmt(getattr(state, 'rr1', None), 2)} | {_rule_label(state)}"
         )
@@ -241,12 +284,12 @@ def format_top(results: Iterable[object], limit: int = 5) -> str:
         "",
     ]
     for i, state in enumerate(results[:limit], 1):
-        direction = _direction(state)
+        status = market_decision_status(state)
         lines.append(
-            f"{i}. {state.commodity} | {direction} | "
+            f"{i}. {state.commodity} | BIAS {status['bias']} | "
+            f"SETUP {status['setup']} | TRADE PAPER {status['trade_paper']} | "
             f"C {_fmt(getattr(state, 'probability', 0), 1)} | "
-            f"Q {_fmt(getattr(state, 'quality', 0), 1)} | "
-            f"{getattr(state, 'final_decision', 'WAIT')}"
+            f"Q {_fmt(getattr(state, 'quality', 0), 1)}"
         )
     if not results:
         lines.append("Nessun dato disponibile.")
@@ -259,9 +302,11 @@ def format_channel_guide() -> str:
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Il canale pubblica segnali e contesto, non ordini.\n"
         "🧪 PAPER ONLY: nessuna esecuzione automatica.\n\n"
-        "🟢 SIGNAL — setup che supera i controlli disponibili.\n"
-        "🟡 WAIT — setup interessante ma non ancora confermato.\n"
-        "🔴 BLOCKED — dati o condizioni operative insufficienti.\n\n"
+        "🟢 CONFIRMED — setup che supera i controlli disponibili.\n"
+        "🟡 EARLY_BIAS — direzione ipotizzata; prezzo/ATR freschi non disponibili.\n"
+        "🟡 EARLY_SETUP — prezzo/ATR disponibili; trigger o safety non confermati.\n"
+        "🔴 BLOCKED — TRADE PAPER non eseguito per dati, rischio o conferme mancanti.\n"
+        "⚪ NEUTRAL / NO_DIRECTION — nessuna direzione sostenibile.\n\n"
         "Ogni segnale mostra Entry, SL, TP1/2/3, RR, ATR, regime, "
         "structure, setup e trigger.\n\n"
         "I punteggi sono score di confluence: non sono probabilità "
@@ -277,7 +322,7 @@ def format_risk_guide() -> str:
         "• Il segnale non è un ordine.\n"
         "• Lo SL definisce il punto di invalidazione del setup.\n"
         "• RR viene mostrato per TP1/TP2/TP3 quando disponibile.\n"
-        "• Se i dati sono stale, incoerenti o incompleti → WAIT.\n"
+        "• Se i dati sono stale, incoerenti o incompleti → BLOCKED / NOT_EXECUTED; il BIAS resta visibile se supportato.\n"
         "• Nessun edge statistico viene dichiarato senza validazione.\n"
         "• PAPER ONLY: nessuna esecuzione automatica."
     )
