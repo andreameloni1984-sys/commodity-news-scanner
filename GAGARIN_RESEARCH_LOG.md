@@ -55,3 +55,26 @@
 - Added regression tests for the eight retained commodities, removed symbols, preserved Forex group, and explicit provider routing.
 - This verifies configured routing only; live availability and data freshness still require the scheduled run to confirm. CI must pass before merge.
 - Change is on branch `chore/gagarin-trim-commodity-universe-20261028`. No merge/deploy, no Telegram test message, PAPER/DEMO only.
+
+
+## 2026-10-31 — Add free SILV spot references for Gagarin gold and silver
+
+- **Finding:** Gagarin had a Yahoo futures execution quote and an optional delayed Narwhal futures reference, but no separately recorded spot reference for its two precious-metal futures instruments.
+- **Provider verification:** the official SILV DATA documentation states that its JSON endpoint is free and requires no authentication; precious-metal spot observations are published on a 15-minute schedule. The public JSON endpoint was opened successfully during this run. The returned snapshot had response timestamp `2026-10-31T21:50:08.963Z` and gold/silver `last_updated` timestamps around `21:46Z`; at the time of this run (22:42Z) those values were older than the bot's 30-minute reference limit and are not used as current prices.
+- **Implemented on branch** `feat/gagarin-silv-spot-reference-20261031`: add SILV DATA as a reference-only provider for XAU/USD and XAG/USD. A single response is cached for 900 seconds and shared between gold and silver. The code uses the provider's `last_updated` field—not its response-generation timestamp or rounded `data_age_minutes`—to calculate age.
+- **Per-price provenance:** record provider, returned symbol, source timestamp, response timestamp, local receipt time, USD, `troy_oz`, price, bid/ask, age, status, and raw provider-reported component quotes with their own timestamps/ages/status. Component names are recorded as provider-reported and are not asserted to be independently audited.
+- **Basis rule:** SILV is SPOT and Yahoo execution is FUTURES_CONTINUOUS. The code never writes SILV into execution price/ATR/entry/SL/TP. It keeps `deviation_pct` null and reports any same-unit/currency comparison separately as `basis_spot_minus_futures_pct`, only when both reference and execution quotes are within their permitted freshness states and execution status is LIVE.
+- **Scope:** copper is deliberately excluded from SILV integration because the inspected endpoint response listed Yahoo among copper's component sources, which would overlap the Yahoo execution provider. No averaging across source components is performed.
+- **Files:** `engine/data.py`; `tests/test_silv_spot_reference.py`; `tests/test_narwhal_futures_reference.py`.
+- **Commits:** configuration `c18aecf75c68cd9377769260bfc93223ba9721cf`; implementation `b88236a631b352f0512a5632df9fe00f48cf6a7c`; existing-test isolation `291d726c427be01a74cbb3d15bf99de5c9db421e`; new tests `1bfab4259c31519168db47b8bb197677ff1ba9b4`.
+- **Tests:** six new offline mocked regressions cover no-auth request/provenance, component metadata, shared cache, source-timestamp freshness, separate spot/futures basis, timeout behavior, and execution-price isolation. Existing Narwhal finalizer test is isolated from the new provider. GitHub Actions must pass on the PR before this is considered verified.
+- **Limits:** the endpoint response inspected during this run is an old snapshot, not a current trading quote. No direct Gagarin monitor request, live Telegram delivery, deploy, or trade is claimed. PAPER/DEMO only; no paid API or real order.
+
+
+### CI follow-up for the 2026-10-31 SILV reference change
+
+- First PR run `41249703393` found one test-only assertion error: the test assumed provider component order, while the implementation preserves the source response order. The other 450 tests passed. No production-code failure was reported.
+- Corrected the assertion to compare the component-provider set in commit `d6f916a6567ecc047cb346bd752d4ef94f9d003d`.
+- Final PR-head integration run `41249739091`: **451 passed in 1.64s**.
+- Additional PR-head workflows: NEWS alert `41249739042` SUCCESS; Execution Layer `41249739083` SUCCESS; Public Event Brain `41249739135` SUCCESS; PAPER `41249739204` SUCCESS.
+- CI is green on the current PR head. The PR remains open and unmerged; no deployment or live Telegram delivery was performed.
