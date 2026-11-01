@@ -226,3 +226,14 @@
 - **Regression coverage:** complete Yahoo execution provenance with separate Narwhal delayed-futures and SILV spot references; missing metadata stays null rather than borrowing the analysis timestamp; non-finite values are nulled and cannot falsely enable bid/ask.
 - **Verification:** PR CI pending at time of log update. No live quote, authenticated Narwhal response, Telegram delivery, Render deployment, broker connection or order is claimed. PAPER ONLY.
 - **Open:** verify the new API contract against a live but read-only runtime response when available; configure and verify the free Narwhal key; find a third independently sourced same-contract futures feed; complete the real 100-setup out-of-sample journal and monitor/Telegram delivery audit.
+
+
+### Verification — Cloud API quote provenance projection
+
+- **PR:** #118 merged into `main`; merge commit `9ca873e3c639dab656ed2280964a6e78de1c3d8c`.
+- **Main readback:** `cloud_api.py` contains `_quote_provenance_json()` and `_state_json()` exposes `quote_provenance`; `tests/test_cloud_api_quote_provenance.py` is present with three regression tests.
+- **GitHub Actions on PR head `07b3b255895e3aba02cf76ce1de2f8e7f60d3169`:** Integration run `41330903449` — **479 passed in 2.14s**; Execution Layer `41330903430`, NEWS Alert `41330903433`, Public Event Brain `41330903525`, and PAPER `41330903542` all SUCCESS.
+- **Coverage:** execution quote provenance is serialized independently from reference quotes; Narwhal's delayed continuous futures record remains reference-only and incomparable without a contract month; SILV spot basis remains separate; missing timestamps are not reconstructed from analysis time; non-finite values and incomplete bid/ask are not treated as valid.
+- **Post-merge:** code, tests and log entry were read back from `main`. The recorded CI runs are PR-head checks before merge; no separate post-merge CI status was returned by the connector.
+- **Limits:** no live API request, authenticated Narwhal key, Telegram send, Render deployment or broker order was performed. PAPER ONLY.
+- **Open:** confirm the serialized response on a read-only live runtime when available; verify the free Narwhal credential and actual endpoint response; locate a third independent same-contract futures source; continue monitor/Telegram acknowledgement audit and build the real 100-setup out-of-sample journal.
