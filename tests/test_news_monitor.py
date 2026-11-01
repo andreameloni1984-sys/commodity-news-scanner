@@ -449,7 +449,7 @@ def test_mixed_catalyst_emits_neutral_no_direction_with_reason():
     message = _format_bias_alert(event, [])
 
     assert "BIAS NEUTRAL / NO_DIRECTION" in message
-    assert "evidenze miste" in message
+    assert "nessuna evidenza direzionale verificabile" in message
     assert "TRADE PAPER: NOT_EXECUTED" in message
     assert "WAIT" not in message
 
