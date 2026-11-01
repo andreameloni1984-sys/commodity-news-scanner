@@ -98,3 +98,12 @@
 - Regression coverage: preserve LONG when technical state is SHORT and quote/ATR are missing; emit NEUTRAL/NO_DIRECTION for mixed tariff headlines; require validated data and ATR for confirmed setup; ensure one early bias is delivered once and a later confirmed alert is distinct. Existing alert scorecard behavior remains separate: only `NEWS_ALERT_SENT` enters directional outcome scoring.
 - Verification: GitHub Actions on the PR head is required before merge. No live Telegram message, provider quote, deploy, or trade order was sent by this code change.
 - Open: verify deployed NEWS monitor uses the new format; verify Render/Actions persistence and Telegram delivery; build a real historical sample toward 100 setups; add independent same-contract futures references.
+
+### Final verification — PR #112 merged
+
+- PR #112 was merged by squash into main as `6e3f7e83536e87990fff967231ca5373c1d75821`.
+- Final PR head: `a9f4d5d7a5ce6dfb98f0449d25a19a0b87aae726`.
+- The first PR CI attempt exposed one fixture omission (`data_ok` and `atr` missing in the EARLY_SETUP test state). The fixture was corrected; no production-code change was needed for that failure.
+- Final PR-head GitHub Actions: NEWS alert tests SUCCESS (68 passed); Public Event Brain SUCCESS (82 passed); GAGARIN integration SUCCESS (455 passed); Execution Layer SUCCESS (3 passed); PAPER smoke SUCCESS.
+- Post-merge Actions for the squash commit were not yet returned by the commit-run lookup. Render deploy and live Telegram delivery were not verified in this run.
+- Remaining: the canonical safety engine still writes `final_decision=WAIT` for blocked execution states; this PR changes the NEWS-to-Telegram hypothesis flow only. Narwhal free quota/rotation metadata and FinzData free-key activation remain open.
