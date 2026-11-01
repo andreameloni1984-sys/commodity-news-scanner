@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from types import SimpleNamespace
 
-from engine.cloud_api_status import cloud_api_decision_status
+from engine.cloud_api_status import attach_runtime_decision_metadata, cloud_api_decision_status
 
 
 def make_state(
@@ -104,3 +105,33 @@ def test_no_direction_is_explicitly_neutral_not_wait():
     assert result["setup"] == "NEUTRAL"
     assert result["trade_paper"] == "NOT_EXECUTED"
     assert "WAIT" not in result.values()
+
+
+
+def test_runtime_missing_decision_preserves_bias_without_wait():
+    state = make_state("SHORT")
+    metadata = attach_runtime_decision_metadata(state, None)
+
+    assert metadata["gagarin_action"] == "NO_DECISION"
+    assert metadata["gagarin_bias"] == "SHORT"
+    assert metadata["gagarin_setup"] == "EARLY_BIAS"
+    assert metadata["gagarin_trade_paper"] == "NOT_EXECUTED"
+    assert "WAIT" not in metadata.values()
+
+
+def test_runtime_legacy_wait_becomes_safety_block_not_market_wait():
+    state = make_state("LONG")
+    decision = SimpleNamespace(action="WAIT", reason="TRIGGER_NOT_CONFIRMED")
+    metadata = attach_runtime_decision_metadata(state, decision)
+
+    assert metadata["gagarin_action"] == "BLOCKED"
+    assert metadata["gagarin_bias"] == "LONG"
+    assert metadata["gagarin_trade_paper"] == "BLOCKED_NOT_EXECUTED"
+    assert "WAIT" not in metadata.values()
+
+
+def test_cli_and_monitor_use_shared_runtime_status_adapter():
+    for path in ("main.py", "telegram/render_runner.py"):
+        source = Path(path).read_text(encoding="utf-8")
+        assert "attach_runtime_decision_metadata" in source
+        assert 'else "WAIT"' not in source
