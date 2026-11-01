@@ -35,6 +35,28 @@ def _age_label(state) -> str:
         return "FRESHNESS N/D"
 
 
+
+def _systematic_label(state) -> str:
+    metadata = getattr(state, "metadata", {}) or {}
+    diagnostic = metadata.get("systematic_forecast", {}) if isinstance(metadata, dict) else {}
+    if not isinstance(diagnostic, dict) or diagnostic.get("status") != "CALCULATED":
+        return "N/D"
+    score = diagnostic.get("score")
+    try:
+        score_text = f"{float(score):+.1f}/20"
+    except (TypeError, ValueError, OverflowError):
+        score_text = "N/D"
+    components = diagnostic.get("components", {})
+    names = {"ewmac_trend": "trend", "breakout": "breakout", "range_mean_reversion": "mean-reversion"}
+    detail = ", ".join(
+        f"{names.get(key, key)} {float(value):+.1f}"
+        for key, value in components.items()
+        if isinstance(value, (int, float))
+    )
+    suffix = f" | {detail}" if detail else ""
+    return f"{diagnostic.get('direction', 'NEUTRAL')} ({score_text}){suffix}"
+
+
 def _direction(state) -> str:
     """Return the supported market bias."""
     return market_decision_status(state)["bias"]
@@ -111,6 +133,7 @@ def format_signal(state) -> str:
         f"⚠️ RISK: {float(risk_pct)*100:.1f}% max",
         "",
         f"🌐 Regime: {getattr(state, 'regime', 'UNKNOWN')}",
+        f"🧮 Systematic (diagnostico): {_systematic_label(state)}",
         f"🏗 Structure: {getattr(state, 'structure', 'UNKNOWN')}",
         f"🎯 Setup: {getattr(state, 'setup', 'NONE')}",
         f"⚡ Trigger: {getattr(state, 'trigger', 'NONE')}",
@@ -145,6 +168,7 @@ def format_watch(state) -> str:
         f"🧠 Analisi: {((getattr(state, 'metadata', {}) or {}).get('analyst_reasoning') or {}).get('conclusion', 'In attesa di evidenze.')[:240]}\n"
         f"⚠️ Contrasti: {', '.join(((getattr(state, 'metadata', {}) or {}).get('analyst_reasoning') or {}).get('conflicts', [])[:2]) or 'N/D'}\n"
         f"Regime: {getattr(state, 'regime', 'UNKNOWN')} | Trigger: {getattr(state, 'trigger', 'NONE')}\n"
+        f"Systematic (diagnostico): {_systematic_label(state)}\n"
         f"⏱ {_age_label(state)}\n\n"
         f"⚠️ Setup interessante ma non ancora confermato. Monitorare."
     )
