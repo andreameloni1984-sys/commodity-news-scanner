@@ -39,6 +39,8 @@ def test_alert_requires_existing_live_confirmed_aligned_setup():
         tp1=83.0,
         tp2=84.0,
         data_source="TEST_FEED",
+        data_ok=True,
+        atr=1.5,
     )
     not_live = SimpleNamespace(
         commodity="Petrolio Brent",
@@ -101,7 +103,13 @@ def test_new_news_triggers_immediate_analysis_then_waits_for_price_confirmation(
     )
     assert first["analysis"] == 1
     assert first["alerts"] == 0
+    assert first["bias_alerts"] == 1
     assert len(analysis_calls) == 1
+    assert len(messages) == 1
+    assert "BIAS LONG" in messages[0]
+    assert "SETUP EARLY_SETUP" in messages[0]
+    assert "D-L-A ALIGNS" in messages[0]
+    assert "TRADE PAPER: NOT_EXECUTED" in messages[0]
 
     state.price = 80.1
     second = monitor.poll_news_once(
@@ -112,14 +120,19 @@ def test_new_news_triggers_immediate_analysis_then_waits_for_price_confirmation(
     )
     assert second["analysis"] == 1
     assert second["alerts"] == 1
-    assert len(messages) == 1
-    assert "Reazione dal rilevamento" in messages[0]
-    assert "PAPER/DEMO" in messages[0]
+    assert second["bias_alerts"] == 0
+    assert len(messages) == 2
+    assert "SETUP: CONFIRMED" in messages[1]
+    assert "BIAS: LONG" in messages[1]
+    assert "TRADE PAPER: NOT_EXECUTED" in messages[1]
+    assert "Reazione dal rilevamento" in messages[1]
+    assert "PAPER/DEMO" in messages[1]
 
     # The observation window starts when Telegram delivery succeeds.
     import json
     saved = json.loads((tmp_path / "news_state.json").read_text(encoding="utf-8"))
     sent_event = next(event for event in saved["pending"] if event.get("alert_sent"))
+    assert sent_event["bias_alert_sent"] is True
     assert sent_event["alert_sent_at"] == (now + timedelta(minutes=5)).isoformat()
     assert sent_event["expires_at"] == (now + timedelta(minutes=5, hours=4)).isoformat()
 
@@ -376,6 +389,7 @@ def test_confirmed_setups_rejects_nonfinite_and_inverted_levels():
     base = dict(
         commodity="Petrolio WTI", symbol="WTI/USD", setup_direction="LONG",
         final_decision="PAPER_SIGNAL", trigger_confirmed=True, live=True,
+        data_ok=True, atr=1.5,
         price=80.1, entry=80.1, stop=78.5, tp1=83.0, tp2=84.0,
         data_source="TEST_FEED",
     )
@@ -389,6 +403,69 @@ def test_confirmed_setups_rejects_nonfinite_and_inverted_levels():
     for override in invalid_variants:
         state_data = {**base, **override}
         assert _confirmed_setups(event, [SimpleNamespace(**state_data)]) == []
+
+
+
+def test_directional_bias_survives_missing_quote_atr_and_opposite_technicals():
+    from telegram.news_monitor import _format_bias_alert
+
+    event = {
+        "title": "OPEC announces production cut",
+        "source": "Test RSS",
+        "published_at": "2026-11-01T06:00:00+00:00",
+        "url": "https://example.test/opec-cut",
+    }
+    state = SimpleNamespace(
+        commodity="Petrolio WTI",
+        symbol="WTI/USD",
+        setup_direction="SHORT",
+        structure_direction="BEARISH",
+        live=False,
+        data_ok=False,
+        price=None,
+        atr=None,
+    )
+    message = _format_bias_alert(event, [state])
+
+    assert "BIAS LONG" in message
+    assert "SETUP EARLY_BIAS" in message
+    assert "D-L-A CONTRASTS (tecnica SHORT)" in message
+    assert "TRADE PAPER: NOT_EXECUTED" in message
+    assert "quotazione live validata e/o ATR" in message
+    assert "Entry" not in message
+    assert "SL" not in message
+    assert "TP" not in message
+
+
+def test_mixed_catalyst_emits_neutral_no_direction_with_reason():
+    from telegram.news_monitor import _format_bias_alert
+
+    event = {
+        "title": "Trump comments on tariffs",
+        "source": "Test RSS",
+        "published_at": "2026-11-01T06:00:00+00:00",
+        "url": "https://example.test/tariffs",
+    }
+    message = _format_bias_alert(event, [])
+
+    assert "BIAS NEUTRAL / NO_DIRECTION" in message
+    assert "evidenze miste" in message
+    assert "TRADE PAPER: NOT_EXECUTED" in message
+    assert "WAIT" not in message
+
+
+def test_confirmed_setup_requires_validated_fresh_price_and_atr():
+    from telegram.news_monitor import _confirmed_setups
+
+    event = {"title": "OPEC announces production cut", "baseline_prices": {"WTI": 80.0}}
+    state = SimpleNamespace(
+        commodity="Petrolio WTI", symbol="WTI/USD", setup_direction="LONG",
+        final_decision="PAPER_SIGNAL", trigger_confirmed=True, live=True,
+        data_ok=True, price=80.1, atr=None,
+        entry=80.1, stop=78.5, tp1=83.0, tp2=84.0,
+        data_source="TEST_FEED",
+    )
+    assert _confirmed_setups(event, [state]) == []
 
 
 def test_stale_pending_catalyst_is_suppressed_before_telegram(tmp_path, monkeypatch):
