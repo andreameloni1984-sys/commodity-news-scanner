@@ -1,6 +1,6 @@
 """Cloud API quote-provenance serialization regressions."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from engine.state import SoyuzState
 from cloud_api import _state_json
@@ -214,3 +214,30 @@ def test_state_json_keeps_levels_for_fresh_early_setup_and_confirmed_setup():
         assert result["tp2"] == 2835.0
         assert result["tp3"] == 2850.0
         assert result["rr3"] == 4.0
+
+
+
+def test_state_json_hides_levels_when_paper_entry_inputs_are_stale():
+    stale = _add_risk_levels(_state())
+    stale.setup_direction = "LONG"
+    stale.live = True
+    stale.data_ok = True
+    stale.price = 2801.25
+    stale.atr = 14.0
+    stale.analysis_timestamp = (
+        datetime.now(timezone.utc) - timedelta(hours=2)
+    ).isoformat()
+    stale.metadata.update(fresh_live=True, gagarin_action="PAPER_ENTRY")
+
+    result = _state_json(stale)
+
+    assert result["bias"] == "LONG"
+    assert result["setup"] == "EARLY_BIAS"
+    assert result["action"] == "PAPER_WATCH"
+    assert result["trade_paper"] == "BLOCKED_NOT_EXECUTED"
+    assert result["entry"] is None
+    assert result["stop"] is None
+    assert result["tp1"] is None
+    assert result["tp2"] is None
+    assert result["tp3"] is None
+    assert result["rr3"] is None
