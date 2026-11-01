@@ -185,3 +185,13 @@
 - **SPUTNIK handoff:** PR #82 is now merged in SPUTNIK as `cfb0cea6180b1cf90b8fd974aa68908b7c2fee19`. The handoff preserves LONG/SHORT BIAS and explicit D-L-A setup provenance; a legacy `PAPER_SIGNAL` alone no longer implies CONFIRMED.
 - **GAGARIN tests/CI this execution:** no GAGARIN code change and no new GAGARIN test run were made. Last verified GAGARIN CI remains the prior PR #116 evidence: full suite 473; PAPER safety/smoke 26; trade-plan 34; Public Event Brain 82; Execution Layer 3; NEWS alert 68 — all SUCCESS (runs recorded above). Current commit status query returned no individual status records.
 - **Open:** Narwhal is still not a verified runtime reference while the free API key is empty/unverified; no third independent same-contract futures source; complete Telegram API acknowledgement and monitor continuity; real 100-setup out-of-sample journal and metrics. No live quote, deployment or order is claimed. PAPER ONLY.
+
+
+## 2026-11-01 — Exclude non-redistributable public futures quote pages from multi-source intake
+
+- **CME delayed quotes:** the public page confirms a minimum 10-minute delay and exposes contract month/venue, but CME Data Terms permit access only in the presented form for personal non-commercial use, prohibit automated extraction/scraping/systematic retrieval and prohibit use in software/AI development without prior written consent. The separate delayed-snapshot REST API requires OAuth, API entitlement and an active Public Website (Delayed) Redistribution license. It is therefore **not eligible** as a free automated provider for GAGARIN/SPUTNIK.
+- **CBOE delayed quotes:** the public CME quote dashboard explicitly prohibits downloading delayed quote table data through auto-extraction programs/queries/software. Excluded from automated ingestion.
+- **Decision:** no code/provider was added. Do not scrape either website or treat a public browser table as an API. Continue searching for a provider whose free endpoint, redistribution/use terms, exact contract mapping and timestamp semantics are all verifiable.
+- **Sources:** CME delayed quote page and delay explanation; CME Data Terms of Use (updated 2023); CME delayed-snapshot API onboarding; CBOE delayed quote page. Reviewed 2026-11-01.
+- **Tests:** no code changed; no provider tests run. This is a terms/eligibility audit only.
+- **Open:** Narwhal free-key authentication and source independence remain unverified; no third independent same-contract futures source is established. PAPER ONLY.
