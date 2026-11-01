@@ -287,3 +287,18 @@
 - **Validation:** source and tests are committed on the feature branch. GitHub Actions/PR checks are not yet available at the time of this log entry; do not count these tests as passed until CI completes.
 - **Limits/open:** this removes the legacy WAIT value from the analyst result, not every internal trigger-maturity state. Runtime/Render behavior, live source health, Telegram delivery acknowledgement, independent same-contract futures references and the real 100-setup out-of-sample journal remain unverified/open. PAPER ONLY; no live order or Telegram send.
 - **References:** NautilusTrader official architecture documentation (https://nautilustrader.io/docs/); official open-source and release information (https://nautilustrader.io/open-source/); repository/license (https://github.com/nautechsystems/nautilus_trader).
+
+
+### CI and merge follow-up — analyst action-state correction
+
+- **PR #122:** merged successfully with squash commit `b08798e36b65de71badc33ffd9060ffc40b00dbf`.
+- **Main readback:** `engine/analyst_reasoning.py` contains the `NO_DECISION` default and legacy `WAIT` → `PAPER_WATCH` normalization for directional bias; all four regression tests are present in `tests/test_convergence_engine.py`.
+- **GitHub Actions on final PR head `51e5c86c817a1f443ff99eecee314656d27063fb`:**
+  - GAGARIN Integration run `41346755165`: **489 passed in 2.22s** (includes four new analyst regressions).
+  - GAGARIN PAPER pipeline run `41346755113`: **26 passed in 0.46s**, paper-only smoke test SUCCESS.
+  - Execution Layer run `41346755104`: **3 passed in 0.02s**.
+  - Public Event Brain run `41346755149`: **85 passed in 0.62s**.
+  - NEWS Alert run `41346755125`: **71 passed in 0.43s**.
+  - All five workflows completed with SUCCESS. These are final PR-head checks before merge.
+- **Post-merge caveat:** no separate PR-triggered workflow runs were returned for squash merge commit `b08798e36b65de71badc33ffd9060ffc40b00dbf`. Main code/test readback succeeded; production runtime/deploy remains unverified.
+- **Safety:** no live order, price request or Telegram message; PAPER ONLY.
