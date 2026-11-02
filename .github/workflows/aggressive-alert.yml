@@ -39,11 +39,10 @@ jobs:
           python - <<'PY'
           from commodities.universe import operational_commodities
           from engine.gagarin import analyze_universe
-          from engine.session_filter import filter_by_session
           from telegram.aggressive_alert import format_aggressive_alert, run_aggressive_alert
 
-          instruments = filter_by_session(operational_commodities(), on_demand=False)
-          print(f"SESSION FILTER: {len(instruments)} instruments in window; manual dispatch bypasses gate.")
+          instruments = operational_commodities()
+          print(f"FULL UNIVERSE SCAN: {len(instruments)} instruments; no session window gate.")
           states = analyze_universe(instruments)
           message = format_aggressive_alert(states)
           if not message:
