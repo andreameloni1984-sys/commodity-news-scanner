@@ -145,7 +145,7 @@ def test_d1_failure_does_not_log_secret_or_provider_response(monkeypatch, capsys
 
 
 
-def test_d1_paper_journal_is_idempotent_and_preserves_null_signal_id(monkeypatch):
+def test_d1_paper_journal_is_idempotent_and_uses_sql_null_without_binding_null(monkeypatch):
     configure_d1(monkeypatch)
     calls = []
 
@@ -165,7 +165,9 @@ def test_d1_paper_journal_is_idempotent_and_preserves_null_signal_id(monkeypatch
             return FakeResponse(success([{"id": 1}]) if sum(
                 1 for item in calls if item["params"][0] == "stable-signal"
             ) == 1 else success([]))
-        assert params[0] is None
+        assert "VALUES (NULL, ?, ?)" in sql
+        assert len(params) == 2
+        assert json.loads(params[0]) == legacy
         return FakeResponse(success([{"id": 2}]))
 
     monkeypatch.setattr(requests, "post", fake_post)
@@ -174,7 +176,7 @@ def test_d1_paper_journal_is_idempotent_and_preserves_null_signal_id(monkeypatch
     assert state_store.append_paper_trade_rows([stable, stable, legacy]) == 2
 
     stable_calls = [item for item in calls if item["params"][0] == "stable-signal"]
-    null_calls = [item for item in calls if item["params"][0] is None]
+    null_calls = [item for item in calls if "VALUES (NULL, ?, ?)" in item["sql"]]
     assert len(stable_calls) == 2
     assert len(null_calls) == 1
     assert "ON CONFLICT(signal_id) DO NOTHING" in stable_calls[0]["sql"]
@@ -204,4 +206,4 @@ def test_d1_paper_journal_loads_oldest_first_and_bounds_limit(monkeypatch):
     monkeypatch.setattr(requests, "post", fake_post)
     rows = state_store.load_paper_trade_rows(limit=999999)
     assert rows == [{"signal_id": "older"}, {"signal_id": "newer"}]
-    assert requests_seen[0]["params"] == [100000]
+    assert requests_seen[0]["params"] == ["100000"]
