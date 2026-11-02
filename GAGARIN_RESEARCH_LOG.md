@@ -335,9 +335,9 @@
 - **Files:** `engine/data.py`; `tests/test_data_finite_values.py`; this log.
 - **Code commit:** `ef9e013e380d8a46ae9100cda1c432e9402167a2`.
 - **Regression-test commit:** `a92481230b033cbae4845093f025fdb6eb5dcd42`.
-- **Validation:** committed on branch `fix/gagarin-reject-naive-provider-timestamps-20261102`; local execution and GitHub Actions are not yet verified. Do not treat the change as merged or active on main until CI passes and the PR is integrated.
+- **Initial validation status:** pending when this entry was first written; superseded by the CI and merge follow-up below. PR #123 is now merged and the changed files were read back from `main`.
 - **Safety:** no provider, symbol mapping, price, ATR, entry/SL/TP, risk threshold, Governor, or PAPER authorization changed. No network quote, Telegram send, deployment, or order was performed.
-- **Open:** confirm CI; inspect actual BiQuote timestamp shape in a controlled read-only provider response before considering any explicit timezone exception; verify free/independent same-contract futures sources; build the 100+ real-setup out-of-sample journal with spread/fees/slippage.
+- **Open:** inspect the actual BiQuote timestamp shape in a controlled read-only provider response before considering any explicit timezone exception; verify free/independent same-contract futures sources; build the 100+ real-setup out-of-sample journal with spread/fees/slippage.
 - **References:** Qlib repository and data-handler architecture: https://github.com/microsoft/qlib and https://github.com/microsoft/qlib/blob/main/qlib/data/dataset/handler.py; Qlib point-in-time database documentation: https://qlib.readthedocs.io/en/latest/advanced/PIT.html.
 
 
