@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#090e17"><title>Gagarin Intelligence Terminal</title>
+<meta name="theme-color" content="#090e17"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="GAGARIN"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><link rel="manifest" href="/static/manifest.webmanifest"><link rel="apple-touch-icon" href="/static/icon.svg"><link rel="icon" href="/static/icon.svg" type="image/svg+xml"><title>Gagarin Intelligence Terminal</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
 :root{color-scheme:dark;--bg:#090e17;--panel:#111a28;--line:#233249;--muted:#8ea0b8;--text:#edf4ff;--cyan:#55d6ff;--green:#48d597;--red:#ff6e79;--amber:#ffc66d}
@@ -17,7 +17,7 @@ input,button{background:#101a29;color:var(--text);border:1px solid var(--line);b
 table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:11px 8px;border-bottom:1px solid #233249;white-space:nowrap}th{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}tr:last-child td{border-bottom:0}.up{color:var(--green)}.down{color:var(--red)}.neutral{color:var(--amber)}
 .signal{border-left:3px solid var(--green)}.short{border-left-color:var(--red)}.watch{border-left-color:var(--amber)}
 .news{padding:12px 0;border-bottom:1px solid var(--line)}.news:last-child{border:0}.news a{color:var(--cyan);text-decoration:none}.small{font-size:11px;color:var(--muted)}
-.empty{padding:20px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:12px}.chartbox{height:245px;position:relative}.foot{padding:24px 0 40px;color:var(--muted);font-size:11px;text-align:center}
+.empty{padding:20px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:12px}.chartbox{height:245px;position:relative}.install-note{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 14px;margin:-4px 0 15px;border:1px solid var(--line);border-radius:12px;background:#101a29;color:var(--muted);font-size:12px}.install-note[hidden]{display:none}.install-note button{padding:8px 11px;font-size:11px;white-space:nowrap}.foot{padding:24px 0 40px;color:var(--muted);font-size:11px;text-align:center}
 @media(max-width:850px){.span-3,.span-4,.span-5,.span-7,.span-8{grid-column:span 6}}
 @media(max-width:560px){header{padding:15px}.pill{font-size:10px}main{padding:12px}.span-3,.span-4,.span-5,.span-7,.span-8,.span-12{grid-column:span 12}.metric{font-size:24px}.tablewrap{overflow:auto}.chartbox{height:210px}}
 </style>
@@ -25,7 +25,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;p
 <body>
 <header><div><div class="brand">🚀 GAGARIN <span>INTELLIGENCE</span></div><div class="sub">Terminal proprietario · Sputnik + Gagarin · Paper Only</div></div><div class="pill" id="connection">● NON COLLEGATO</div></header>
 <main>
-<div class="toolbar"><input id="apiKey" type="password" placeholder="Cloud API Key Gagarin"><button id="analyze">ANALIZZA MERCATI</button><button class="secondary" id="refresh">AGGIORNA DATI</button><button class="secondary" id="sputnikConnect">COLLEGA SPUTNIK</button></div>
+<div class="install-note" id="installNote" hidden><span id="installText">Installa Gagarin sul dispositivo.</span><button id="installBtn" hidden>INSTALLA APP</button></div><div class="toolbar"><input id="apiKey" type="password" placeholder="Cloud API Key Gagarin"><button id="analyze">ANALIZZA MERCATI</button><button class="secondary" id="refresh">AGGIORNA DATI</button><button class="secondary" id="sputnikConnect">COLLEGA SPUTNIK</button></div>
 <div class="tabs"><button class="active" data-tab="overview">Panoramica</button><button data-tab="sputnik">Sputnik Intelligence</button><button data-tab="gagarin">Gagarin Trading</button><button data-tab="performance">Performance Paper</button></div>
 <section id="overview" class="tabpage">
 <div class="grid">
@@ -60,5 +60,6 @@ const p=d.portfolio||{};$('equity').textContent=eur(p.equity);$('realized').text
 const top=rows.slice(0,8);if(chart)chart.destroy();chart=new Chart($('rankChart'),{type:'bar',data:{labels:top.map(x=>x.commodity||x.symbol),datasets:[{label:'Opportunity score',data:top.map(x=>Number(x.opportunity_score||0)),backgroundColor:top.map(x=>x.direction==='SHORT'?'#ff6e79':x.direction==='LONG'?'#48d597':'#55d6ff'),borderRadius:6}]},options:{indexAxis:'y',maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,max:100,grid:{color:'#233249'},ticks:{color:'#8ea0b8'}},y:{grid:{display:false},ticks:{color:'#edf4ff'}}}}});}
 async function analyze(){const key=$('apiKey').value.trim();if(!key){alert('Inserisci la Cloud API Key Gagarin.');return;}localStorage.setItem('gagarin_cloud_key',key);$('analyze').disabled=true;$('analyze').textContent='ANALISI…';try{const r=await fetch('/api/run',{method:'POST',headers:{'X-API-Key':key}});const d=await r.json();if(!r.ok)throw Error(d.detail||('HTTP '+r.status));render(d);}catch(e){$('connection').textContent='● ERRORE API';$('connection').style.color='var(--red)';alert('Analisi non riuscita: '+e.message);}finally{$('analyze').disabled=false;$('analyze').textContent='ANALIZZA MERCATI';}}
 $('analyze').onclick=analyze;$('refresh').onclick=()=>{loadSputnik();if(lastData)render(lastData);};$('sputnikConnect').onclick=connectSputnik;loadSputnik();
+let deferredInstallPrompt=null;const standalone=window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;const ios=/iphone|ipad|ipod/i.test(navigator.userAgent);if(!standalone){$('installNote').hidden=false;$('installText').textContent=ios?'Per installarla su iPhone: tocca Condividi e scegli “Aggiungi alla schermata Home”.':'Installa Gagarin come app sul dispositivo.';}window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();deferredInstallPrompt=event;$('installBtn').hidden=false;});$('installBtn').onclick=async()=>{if(!deferredInstallPrompt)return;deferredInstallPrompt.prompt();await deferredInstallPrompt.userChoice;deferredInstallPrompt=null;$('installBtn').hidden=true;};window.addEventListener('appinstalled',()=>{$('installNote').hidden=true;});if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/static/sw.js',{scope:'/static/'}).catch(()=>{}));}
 </script>
 </body></html>
