@@ -345,12 +345,14 @@ def _read_alert_state() -> dict:
 
 def _alert_signature(alert: dict) -> tuple:
     lubjanka = alert.get("lubjanka") if isinstance(alert.get("lubjanka"), dict) else {}
-    interceptors = tuple(sorted(
-        (
+    # Persist as a scalar: nested tuples become lists after JSON round-trip
+    # and would otherwise make every unchanged alert look new on the next scan.
+    interceptors = "|".join(sorted(
+        ":".join((
             str(event.get("interceptor") or ""),
             str(event.get("direction") or ""),
             str(event.get("stage") or ""),
-        )
+        ))
         for event in lubjanka.get("events", [])
         if isinstance(event, dict)
     ))
