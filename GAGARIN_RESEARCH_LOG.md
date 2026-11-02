@@ -369,3 +369,12 @@
 - **Limits:** this is a best-effort per-process throttle, not a distributed rate limiter. Counters reset on process restart, are not shared across multiple workers/instances, and an IP/NAT may represent several users. It is a first defensive layer, not a substitute for edge/WAF limits or a shared store. The login password remains a single shared account credential; no global account lockout was added because it could lock out the owner. No secrets were read or changed.
 - **Safety:** no trading signals, prices, provider routing, risk, Governor, PAPER authorization, portfolio, Telegram delivery, deployment or broker behavior changed. PAPER ONLY.
 - **References:** OWASP Authentication Cheat Sheet (login throttling and lockout trade-offs): https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html ; fastapi-login-shield 0.1.9 (MIT, Alpha; evaluated but not installed): https://pypi.org/project/fastapi-login-shield/ .
+
+## 2026-11-02 — Keep the personal dashboard API key out of persistent browser storage
+
+- Finding: `static/intelligence.html` stored `CLOUD_API_KEY` in `localStorage`, so the key survived browser restarts and remained available to same-origin JavaScript. This was unnecessary for a manually entered personal dashboard key.
+- Implemented on branch `security/gagarin-no-persistent-browser-api-key-20261102`: removed all localStorage persistence/restoration of the API key, disabled browser autocomplete on the password input, and clear the field on logout. The key remains in the password input only while the current page is open and is sent in the existing `X-API-Key` header.
+- Regression coverage: assert the dashboard has a password input with autocomplete disabled, contains no localStorage/sessionStorage references, and clears the field during logout. Existing inline JavaScript syntax test remains in place.
+- Limits: this reduces persistence at rest in the browser; it does not protect the key from same-origin script execution while the page is open. No API key value was read, logged, or committed. No production deployment or live API call was performed.
+- Verification: GitHub Actions pending on PR. Do not merge until all required checks pass.
+- Next: document the server-side `APP_PASSWORD_HASH`, `APP_SESSION_SECRET`, and `CLOUD_API_KEY` setup without example secrets; verify the authenticated production flow after the owner configures the variables.
