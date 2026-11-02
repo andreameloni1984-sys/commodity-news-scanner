@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import math
 import os
+import hashlib
+import hmac
+import time
 from datetime import datetime, timezone
 from threading import Lock
 
-from fastapi import FastAPI, Header, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from commodities.universe import enabled_commodities, validate_universe
@@ -19,6 +22,107 @@ from engine.day_registry import load as load_day_registry, run as run_day_regist
 from state_store import ensure_schema, load_state, save_state
 
 app = FastAPI(title="SOYUZ GAGARIN CLOUD", version="1.0")
+
+# Private dashboard authentication. Configure both secrets on Render.
+_APP_SESSION_TTL = 12 * 60 * 60
+_APP_COOKIE = "gagarin_session"
+
+
+def _verify_app_password(password: str, encoded: str | None = None) -> bool:
+    encoded = (encoded if encoded is not None else os.getenv("APP_PASSWORD_HASH", "")).strip()
+    try:
+        algorithm, rounds, salt_hex, digest_hex = encoded.split("$", 3)
+        if algorithm != "pbkdf2_sha256":
+            return False
+        rounds_i = int(rounds)
+        if rounds_i < 200_000 or rounds_i > 2_000_000:
+            return False
+        expected = bytes.fromhex(digest_hex)
+        actual = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), bytes.fromhex(salt_hex), rounds_i)
+        return hmac.compare_digest(actual, expected)
+    except (ValueError, TypeError):
+        return False
+
+
+def _session_token(secret: str, issued_at: int) -> str:
+    message = f"gagarin-session:{issued_at}".encode("ascii")
+    signature = hmac.new(secret.encode("utf-8"), message, hashlib.sha256).hexdigest()
+    return f"{issued_at}.{signature}"
+
+
+def _valid_app_session(token: str | None, secret: str | None = None, now: int | None = None) -> bool:
+    secret = (secret if secret is not None else os.getenv("APP_SESSION_SECRET", "")).strip()
+    if not secret or not token:
+        return False
+    try:
+        issued_text, signature = token.split(".", 1)
+        issued_at = int(issued_text)
+        current = int(time.time()) if now is None else int(now)
+        if issued_at > current or current - issued_at > _APP_SESSION_TTL:
+            return False
+        expected = _session_token(secret, issued_at).split(".", 1)[1]
+        return hmac.compare_digest(signature, expected)
+    except (ValueError, TypeError):
+        return False
+
+
+LOGIN_HTML = """<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#090e17"><title>Accesso Gagarin</title><style>
+:root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#090e17;color:#edf4ff;padding:20px}.box{width:min(100%,390px);padding:26px;background:#111a28;border:1px solid #233249;border-radius:18px}h1{font-size:22px;margin:0 0 8px}p{color:#8ea0b8;font-size:13px;line-height:1.5}input,button{box-sizing:border-box;width:100%;padding:14px;border-radius:11px;border:1px solid #233249;background:#0b1421;color:#fff;font-size:16px;margin-top:12px}button{background:#087da4;border:0;font-weight:750;cursor:pointer}#error{color:#ff6e79;min-height:20px;font-size:13px}</style></head><body><form class="box" id="login"><h1>🚀 GAGARIN INTELLIGENCE</h1><p>Area riservata. Inserisci la password personale per continuare.</p><input id="password" type="password" autocomplete="current-password" placeholder="Password" required><button id="submit" type="submit">ACCEDI</button><div id="error" role="alert"></div></form><script>
+document.getElementById('login').addEventListener('submit',async e=>{e.preventDefault();const b=document.getElementById('submit'),err=document.getElementById('error');b.disabled=true;err.textContent='Verifica in corso…';try{const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:document.getElementById('password').value})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Accesso non riuscito');location.replace('/static/intelligence.html');}catch(x){err.textContent=x.message;document.getElementById('password').value='';}finally{b.disabled=false;}});
+</script></body></html>"""
+
+
+@app.middleware("http")
+async def require_private_dashboard(request: Request, call_next):
+    # Static assets remain available to the browser, but the dashboard HTML itself
+    # is never served without a valid signed, HttpOnly session cookie.
+    if request.url.path == "/static/intelligence.html":
+        if not _valid_app_session(request.cookies.get(_APP_COOKIE)):
+            return RedirectResponse("/login", status_code=303)
+    return await call_next(request)
+
+
+@app.get("/login", response_class=HTMLResponse)
+def app_login_page():
+    if not os.getenv("APP_PASSWORD_HASH") or not os.getenv("APP_SESSION_SECRET"):
+        return HTMLResponse(
+            "<h2>Accesso privato non ancora configurato</h2><p>Imposta APP_PASSWORD_HASH e APP_SESSION_SECRET nelle variabili ambiente Render.</p>",
+            status_code=503,
+        )
+    return HTMLResponse(LOGIN_HTML)
+
+
+@app.post("/api/auth/login")
+async def app_login(request: Request):
+    if not os.getenv("APP_PASSWORD_HASH") or not os.getenv("APP_SESSION_SECRET"):
+        raise HTTPException(status_code=503, detail="Autenticazione non configurata")
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Richiesta non valida")
+    password = payload.get("password", "") if isinstance(payload, dict) else ""
+    if not isinstance(password, str) or not _verify_app_password(password):
+        raise HTTPException(status_code=401, detail="Password non corretta")
+    issued_at = int(time.time())
+    response = JSONResponse({"ok": True})
+    response.set_cookie(
+        _APP_COOKIE,
+        _session_token(os.environ["APP_SESSION_SECRET"].strip(), issued_at),
+        max_age=_APP_SESSION_TTL,
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        path="/",
+    )
+    return response
+
+
+@app.post("/api/auth/logout")
+def app_logout():
+    response = JSONResponse({"ok": True})
+    response.delete_cookie(_APP_COOKIE, path="/", secure=True, httponly=True, samesite="strict")
+    return response
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 RUN_LOCK = Lock()
 PORTFOLIO = PaperPortfolio(100.0)
@@ -434,7 +538,8 @@ def health():
 
 
 @app.post("/api/monitor")
-def monitor():
+def monitor(x_api_key: str | None = Header(default=None)):
+    _authorize(x_api_key)
     if not RUN_LOCK.acquire(blocking=False):
         raise HTTPException(status_code=409, detail="Analysis already running")
     try:
@@ -483,9 +588,11 @@ def run_analysis(x_api_key: str | None = Header(default=None)):
         RUN_LOCK.release()
 
 
-@app.get("/", response_class=HTMLResponse)
-def dashboard():
-    return HTMLResponse(DASHBOARD)
+@app.get("/")
+def dashboard(request: Request):
+    if _valid_app_session(request.cookies.get(_APP_COOKIE)):
+        return RedirectResponse("/static/intelligence.html")
+    return RedirectResponse("/login", status_code=303)
 
 
 DASHBOARD = r"""<!doctype html>
