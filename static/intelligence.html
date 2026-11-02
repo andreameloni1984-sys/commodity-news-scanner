@@ -25,7 +25,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;p
 <body>
 <header><div><div class="brand">🚀 GAGARIN <span>INTELLIGENCE</span></div><div class="sub">Terminal proprietario · Sputnik + Gagarin · Paper Only</div></div><div class="pill" id="connection">● NON COLLEGATO</div></header>
 <main>
-<div class="install-note" id="installNote" hidden><span id="installText">Installa Gagarin sul dispositivo.</span><button id="installBtn" hidden>INSTALLA APP</button></div><div class="toolbar"><input id="apiKey" type="password" placeholder="Cloud API Key Gagarin"><button id="analyze">ANALIZZA MERCATI</button><button class="secondary" id="refresh">AGGIORNA DATI</button><button class="secondary" id="sputnikConnect">COLLEGA SPUTNIK</button></div>
+<div class="install-note" id="installNote" hidden><span id="installText">Installa Gagarin sul dispositivo.</span><button id="installBtn" hidden>INSTALLA APP</button></div><div class="toolbar"><input id="apiKey" type="password" placeholder="Cloud API Key Gagarin"><button id="analyze">ANALIZZA MERCATI</button><button class="secondary" id="refresh">AGGIORNA DATI</button><button class="secondary" id="sputnikConnect">COLLEGA SPUTNIK</button><button class="secondary" id="logout">ESCI</button></div>
 <div class="tabs"><button class="active" data-tab="overview">Panoramica</button><button data-tab="sputnik">Sputnik Intelligence</button><button data-tab="gagarin">Gagarin Trading</button><button data-tab="performance">Performance Paper</button></div>
 <section id="overview" class="tabpage">
 <div class="grid">
@@ -43,7 +43,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;p
 <div class="foot">GAGARIN INTELLIGENCE · Dati e segnali a scopo informativo e di simulazione. Nessuna esecuzione reale abilitata.</div>
 </main>
 <script>
-const $=id=>document.getElementById(id);let lastData=null,chart=null;
+const $=id=>document.getElementById(id);let lastData=null,chart=null;\n$('logout').onclick=async()=>{await fetch('/api/auth/logout',{method:'POST'});localStorage.removeItem('gagarin_cloud_key');location.replace('/login');};
 $('apiKey').value=localStorage.getItem('gagarin_cloud_key')||'';
 const fmt=v=>v==null?'—':Number(v).toLocaleString('it-IT',{maximumFractionDigits:5});
 const eur=v=>'€'+Number(v||0).toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2});
