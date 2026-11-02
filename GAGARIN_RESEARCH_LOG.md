@@ -466,3 +466,13 @@
 - **Safety:** completed M5 OHLCV only; no forming bar; observation-only. No score, Governor, risk, entry/SL/TP, PAPER authorization or order execution changed. The pattern is an OHLCV rejection proxy, not proof of DOM/footprint liquidity or a calibrated reversal.
 - **Limits/open:** no live-data performance, real signal, Telegram message or post-merge Render deployment is claimed. The market monitor remains on a 15-minute cycle, so M5 candles are sampled every 15 minutes; do not shorten it until free-provider rate limits and request load are verified. Render account inspection is blocked until the owner confirms the workspace selection. The PWA/login and DATABASE_URL status therefore remain unverified in this run; the free database's previously reported expiry is 2026-11-06 10:44:06 UTC.
 - **Next:** verify actual LUBJANKA output on fresh provider M5 bars and measure free-source request capacity before considering a 5-minute monitor; keep SPUTNIK PR #91 unmerged until its base is refreshed and CI rerun, and PR #92 unmerged while ranking CI is red. PAPER ONLY.
+
+
+## 2026-11-02 — Protect every static HTML app and remove legacy browser API-key persistence
+
+- **Finding:** the authentication middleware protected only `/static/intelligence.html`, while `/static/aggressive.html` was served by the public StaticFiles mount without the private session check. The aggressive page and an unused legacy dashboard script also read/write `gagarin_key` in browser `localStorage`, contrary to the private-app credential boundary.
+- **Implemented:** require the signed, HttpOnly application session for every `/static/*.html` path; leave non-HTML app-shell assets public for PWA installation. Removed all API-key `localStorage` reads/writes from the aggressive page and legacy inline dashboard. Added password-input autocomplete controls and clear the aggressive page's in-memory key field on pagehide.
+- **Files:** `cloud_api.py`, `static/aggressive.html`, `tests/test_personal_app_pwa.py`, this research log.
+- **Regression coverage:** all static HTML paths must be covered by the private-session middleware; both current dashboard pages and the legacy inline dashboard must contain no localStorage/sessionStorage API-key persistence.
+- **Validation:** implementation is on a fresh branch from main. GitHub Actions CI is required before merge; no test result or production deployment is claimed in this entry.
+- **Security boundary:** manifest, icons and service worker remain publicly fetchable as PWA shell assets; private HTML requires the signed HttpOnly cookie; API routes continue to require `CLOUD_API_KEY`. No secrets were read, changed, or committed. PAPER ONLY; no broker or order action.
