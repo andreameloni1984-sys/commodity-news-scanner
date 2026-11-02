@@ -96,3 +96,30 @@ def test_lubjanka_direction_is_used_when_other_bias_fields_are_missing():
     alerts = find_aggressive_alerts([item])
     assert len(alerts) == 1
     assert alerts[0]["direction"] == "SHORT"
+
+
+def test_lubjanka_interception_is_not_dropped_by_telegram_top_ten_limit():
+    ordinary = []
+    for index in range(10):
+        item = candidate("EARLY_MOVE")
+        item.commodity = f"Ordinary-{index}"
+        item.symbol = f"ORD{index}"
+        item.metadata = {}
+        item.probability = 90
+        item.quality = 90
+        item.confidence = 90
+        ordinary.append(item)
+
+    early = candidate("FALSE_BREAKOUT")
+    early.commodity = "Early interception"
+    early.symbol = "EARLY"
+    early.probability = 0
+    early.quality = 0
+    early.confidence = 0
+
+    alerts = find_aggressive_alerts(ordinary + [early])
+
+    assert len(alerts) == 10
+    assert any(item["symbol"] == "EARLY" for item in alerts)
+    assert alerts[0]["symbol"] == "EARLY"
+    assert alerts[0]["stage"] == "OSSERVAZIONE"

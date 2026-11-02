@@ -212,8 +212,26 @@ def find_aggressive_alerts(states: Iterable[Any]) -> list[dict]:
         item["stage"] = _stage(item)
         if item["stage"]:
             found.append(item)
+    def alert_priority(item: dict) -> int:
+        # Keep risk and confirmed alerts first; surface early interceptions
+        # before ordinary candidates can crowd them out of the ten-item list.
+        if item["stage"] == "RISCHIO":
+            return 0
+        if item["stage"] == "CONFERMATA":
+            return 1
+        lubjanka = item.get("lubjanka")
+        if isinstance(lubjanka, dict) and lubjanka.get("status") == "INTERCEPTED":
+            return 2
+        if item["stage"] == "ATTENZIONE":
+            return 3
+        if item["stage"] == "PROFITTO":
+            return 4
+        if item["stage"] == "POSSIBILE":
+            return 5
+        return 6
+
     found.sort(key=lambda x: (
-        0 if x["stage"] == "RISCHIO" else 1 if x["stage"] == "ATTENZIONE" else 2 if x["stage"] == "PROFITTO" else 3 if x["stage"] == "CONFERMATA" else 4,
+        alert_priority(x),
         -float(x.get("probability") or 0),
         -float(x.get("quality") or 0),
     ))
