@@ -57,6 +57,17 @@ def _systematic_label(state) -> str:
     return f"{diagnostic.get('direction', 'NEUTRAL')} ({score_text}){suffix}"
 
 
+def _mtf_label(state) -> str:
+    metadata = getattr(state, "metadata", {}) or {}
+    diagnostic = metadata.get("multi_timeframe_pullback", {}) if isinstance(metadata, dict) else {}
+    if not isinstance(diagnostic, dict):
+        return "N/D"
+    status = str(diagnostic.get("status", "NOT_PROVIDED"))
+    if status != "CALCULATED":
+        return status
+    return f"{diagnostic.get('direction', 'NEUTRAL')} / {diagnostic.get('setup', 'NOT_EVALUATED')}"
+
+
 def _direction(state) -> str:
     """Return the supported market bias."""
     return market_decision_status(state)["bias"]
@@ -134,6 +145,7 @@ def format_signal(state) -> str:
         "",
         f"🌐 Regime: {getattr(state, 'regime', 'UNKNOWN')}",
         f"🧮 Systematic (diagnostico): {_systematic_label(state)}",
+        f"⏱️ MTF 15m/5m (diagnostico): {_mtf_label(state)}",
         f"🏗 Structure: {getattr(state, 'structure', 'UNKNOWN')}",
         f"🎯 Setup: {getattr(state, 'setup', 'NONE')}",
         f"⚡ Trigger: {getattr(state, 'trigger', 'NONE')}",
