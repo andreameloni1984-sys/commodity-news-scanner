@@ -1,11 +1,28 @@
 {
-  "name":"SOYUZ GAGARIN CLOUD",
-  "short_name":"GAGARIN",
-  "description":"Monitor paper trading Gagarin",
-  "start_url":"/",
-  "display":"standalone",
-  "background_color":"#0b0f14",
-  "theme_color":"#0b0f14",
-  "orientation":"portrait",
-  "icons":[{"src":"/static/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+  "name": "Gagarin & Sputnik — Centro di Controllo",
+  "short_name": "Gagarin",
+  "description": "App personale per consultare Gagarin Trading e Sputnik Intelligence in modalità PAPER ONLY.",
+  "id": "/static/intelligence.html",
+  "start_url": "/static/intelligence.html",
+  "scope": "/static/",
+  "display": "standalone",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "background_color": "#090e17",
+  "theme_color": "#090e17",
+  "orientation": "portrait",
+  "categories": [
+    "finance",
+    "productivity"
+  ],
+  "icons": [
+    {
+      "src": "/static/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
 }
