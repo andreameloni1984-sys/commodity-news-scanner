@@ -26,14 +26,34 @@ def test_service_worker_never_caches_private_api_responses():
     assert "/static/intelligence.html" not in worker
 
 
-def test_dashboard_api_key_is_not_persisted_in_browser_storage():
+def test_dashboard_api_keys_are_not_persisted_in_browser_storage():
     html = (ROOT / "static" / "intelligence.html").read_text(encoding="utf-8")
+    aggressive = (ROOT / "static" / "aggressive.html").read_text(encoding="utf-8")
+    legacy_dashboard = (ROOT / "cloud_api.py").read_text(encoding="utf-8")
 
     assert 'id="apiKey" type="password"' in html
     assert 'autocomplete="off"' in html
     assert "localStorage" not in html
     assert "sessionStorage" not in html
     assert "$('apiKey').value='';" in html
+
+    assert 'id="key" type="password"' in aggressive
+    assert 'autocomplete="off"' in aggressive
+    assert "localStorage" not in aggressive
+    assert "sessionStorage" not in aggressive
+    assert "pagehide" in aggressive
+
+    # The unused legacy inline dashboard must not reintroduce browser key storage.
+    assert "localStorage" not in legacy_dashboard
+    assert "sessionStorage" not in legacy_dashboard
+
+
+def test_every_static_html_application_requires_a_private_session():
+    cloud_api = (ROOT / "cloud_api.py").read_text(encoding="utf-8")
+
+    assert 'request.url.path.startswith("/static/") and request.url.path.lower().endswith(".html")' in cloud_api
+    assert '_valid_app_session(request.cookies.get(_APP_COOKIE))' in cloud_api
+    assert 'return RedirectResponse("/login", status_code=303)' in cloud_api
 
 
 def test_inline_dashboard_javascript_parses():
