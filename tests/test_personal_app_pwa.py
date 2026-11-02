@@ -26,6 +26,17 @@ def test_service_worker_never_caches_private_api_responses():
     assert "/static/intelligence.html" not in worker
 
 
+
+def test_dashboard_api_key_is_not_persisted_in_browser_storage():
+    html = (ROOT / "static" / "intelligence.html").read_text(encoding="utf-8")
+
+    assert 'id="apiKey" type="password"' in html
+    assert 'autocomplete="off"' in html
+    assert "localStorage" not in html
+    assert "sessionStorage" not in html
+    assert "$('apiKey').value='';" in html
+
+
 def test_inline_dashboard_javascript_parses():
     import re
     import shutil
