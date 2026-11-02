@@ -106,7 +106,7 @@ def test_telegram_marks_forex_as_context_and_excludes_it_from_pick(monkeypatch):
     assert received == [gold]
 
 
-def test_main_keeps_forex_in_analysis_but_scopes_governor_and_alerts_to_commodities():
+def test_main_scans_commodities_continuously_and_keeps_forex_auxiliary():
     import ast
     from pathlib import Path
 
@@ -114,12 +114,17 @@ def test_main_keeps_forex_in_analysis_but_scopes_governor_and_alerts_to_commodit
     tree = ast.parse(source)
     run_function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "run")
     run_source = ast.get_source_segment(source, run_function)
-    assert "filter_by_session(" in run_source
-    assert "enabled_commodities()" in run_source
+    assert "_select_run_universe()" in run_source
     assert "results = analyze_universe(" in run_source
     assert "decisions = evaluate_states(operational_results)" in run_source
     assert "for state in operational_results:" in run_source
     assert "format_watch_board(operational_results" in run_source
+
+    selector = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_select_run_universe")
+    selector_source = ast.get_source_segment(source, selector)
+    assert "enabled_commodities()" in selector_source
+    assert "filter_by_session(forex" in selector_source
+    assert "commodities + filter_by_session" in selector_source
 
 
 
