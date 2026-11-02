@@ -42,6 +42,13 @@ def _direction_from_state(state: Any) -> str:
         direction = str(getattr(state, field, "") or "").strip().upper()
         if direction in {"LONG", "SHORT"}:
             return direction
+    metadata = getattr(state, "metadata", {}) or {}
+    if isinstance(metadata, dict):
+        lubjanka = metadata.get("lubjanka", {})
+        if isinstance(lubjanka, dict):
+            direction = str(lubjanka.get("direction") or "").strip().upper()
+            if direction in {"LONG", "SHORT"}:
+                return direction
     closes = getattr(state, "closes", []) or []
     try:
         if len(closes) >= 2:
@@ -83,6 +90,7 @@ def _item_from_state(state: Any) -> dict:
         "closes": getattr(state, "closes", []),
         "highs": getattr(state, "highs", []),
         "lows": getattr(state, "lows", []),
+        "lubjanka": ((getattr(state, "metadata", {}) or {}).get("lubjanka") or {}),
     }
 
 
@@ -281,6 +289,46 @@ def format_aggressive_alerts(alerts: Iterable[dict]) -> str:
             float(item.get("confidence") or 0),
             "CONFERMATO" if item["trigger_confirmed"] else "IN ATTESA",
         ))
+        lubjanka = item.get("lubjanka")
+        if isinstance(lubjanka, dict) and lubjanka.get("status") == "INTERCEPTED":
+            event_names = [
+                str(event.get("interceptor"))
+                for event in lubjanka.get("events", [])
+                if isinstance(event, dict) and event.get("interceptor")
+            ]
+            strength = lubjanka.get("strength_atr")
+            try:
+                strength_text = "%.2f ATR" % float(strength)
+            except (TypeError, ValueError, OverflowError):
+                strength_text = "forza N/D"
+            close = lubjanka.get("last_close")
+            try:
+                close_number = float(close)
+                close_text = "%.6g" % close_number if math.isfinite(close_number) else "N/D"
+            except (TypeError, ValueError, OverflowError):
+                close_text = "N/D"
+            age = lubjanka.get("bar_age_seconds")
+            try:
+                age_number = float(age)
+                age_text = "%.0fs" % age_number if math.isfinite(age_number) and age_number >= 0 else "N/D"
+            except (TypeError, ValueError, OverflowError):
+                age_text = "N/D"
+            conflict = " | DIREZIONI IN CONFLITTO" if lubjanka.get("directional_conflict") else ""
+            lines.append(
+                "🛰️ LUBJANKA M5: %s %s | %s | %s | close %s | barra %s | %s | volume %s%s"
+                % (
+                    lubjanka.get("direction", "N/D"),
+                    lubjanka.get("stage", "N/D"),
+                    "+".join(event_names) or "INTERCETTORE",
+                    strength_text,
+                    close_text,
+                    age_text,
+                    lubjanka.get("provider") or "provider N/D",
+                    lubjanka.get("volume_proxy", "N/D"),
+                    conflict,
+                )
+            )
+            lines.append("OHLCV proxy, non DOM/footprint. Entry/SL/TP non generati da LUBJANKA.")
         lines.append("")
     lines.append("Nota: prezzi del provider Gagarin, non necessariamente coincidenti con bid/ask Trading 212.")
     lines.append("Spread e costi Trading 212: NON VERIFICATI; controllare i dettagli dello strumento nell'app.")
@@ -296,6 +344,18 @@ def _read_alert_state() -> dict:
 
 
 def _alert_signature(alert: dict) -> tuple:
+    lubjanka = alert.get("lubjanka") if isinstance(alert.get("lubjanka"), dict) else {}
+    # Persist as a scalar: nested tuples become lists after JSON round-trip
+    # and would otherwise make every unchanged alert look new on the next scan.
+    interceptors = "|".join(sorted(
+        ":".join((
+            str(event.get("interceptor") or ""),
+            str(event.get("direction") or ""),
+            str(event.get("stage") or ""),
+        ))
+        for event in lubjanka.get("events", [])
+        if isinstance(event, dict)
+    ))
     return (
         str(alert.get("symbol") or alert.get("commodity") or ""),
         str(alert.get("direction") or ""),
@@ -303,6 +363,9 @@ def _alert_signature(alert: dict) -> tuple:
         str(alert.get("pattern_analysis", {}).get("exit_action") or ""),
         bool(alert.get("pattern_analysis", {}).get("stop_invalidated")),
         bool(alert.get("pattern_analysis", {}).get("target_reached")),
+        str(lubjanka.get("direction") or ""),
+        str(lubjanka.get("stage") or ""),
+        interceptors,
     )
 
 

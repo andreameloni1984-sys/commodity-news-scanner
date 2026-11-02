@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from commodities.universe import Commodity
 from engine.state import SoyuzState
 from engine.data import load_data
+from engine.lubjanka import intercept_market
 from engine.regime import apply_regime
 from engine.structure import apply_structure
 from engine.setup import apply_setup
@@ -399,6 +400,11 @@ def analyze_one(commodity: Commodity) -> SoyuzState:
     )
 
     state = load_data(state, commodity)
+    # LUBJANKA observes completed M5 OHLCV bars independently; it never gates a trade.
+    state.metadata["lubjanka"] = intercept_market(
+        state.candles,
+        provider=getattr(state, "data_source", None),
+    )
     state = evaluate_pre_move(state)
     # Independent, auditable regime/momentum ensemble; ranking context only.
     state.metadata["forecast_ensemble"] = forecast_ensemble(state.candles)
