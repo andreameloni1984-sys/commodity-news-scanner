@@ -506,3 +506,13 @@
 - **Regression:** a test creates ten high-scoring ordinary candidates plus one low-scoring LUBJANKA false-breakout interception and verifies the early interception remains visible in the ten-item shortlist.
 - **Safety:** display ordering only. No detector thresholds, scores, direction, Governor, risk, entry/SL/TP, PAPER authorization, provider calls, Telegram transport or order execution changed.
 - **Mode:** PAPER ONLY. CI required before merge; no live Telegram delivery or production deployment claimed.
+
+
+## 2026-11-02 — Stop publishing PAPER journal CSVs from public GitHub workflows
+
+- **Finding:** both `.github/workflows/soyuz.yml` and `.github/workflows/gagarin-monitor.yml` granted `contents: write` and committed `paper_trade_log.csv` / `gagarin_feedback.csv` to the public repository after each run. The current `paper_trade_log.csv` is tracked on the public default branch; its contents were not opened or copied during this change.
+- **Implemented:** remove the CSV commit/push step from both workflows and reduce workflow repository permissions to `contents: read`. This prevents future scheduled/manual runs from publishing new journal rows to the public Git history.
+- **Regression:** replace the old persistence-step assertion with checks that both workflows use read-only repository permissions and contain no journal git-add/push step.
+- **Trade-off:** until private D1 persistence is deployed and verified, journal/feedback files produced on ephemeral GitHub runners will not survive between runs. This is an intentional privacy-first stopgap, not a claim that persistence is solved.
+- **Open risk:** the existing tracked `paper_trade_log.csv` and its historical Git versions remain accessible in the public repository/history. They must be backed up securely and then removed/purged in a separately planned, verified action; do not rewrite public Git history blindly.
+- **Safety:** no secret access, no database changes, no deployment, no paid service, no real orders.
