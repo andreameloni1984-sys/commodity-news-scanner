@@ -23,7 +23,7 @@ def test_service_worker_never_caches_private_api_responses():
     worker = (ROOT / "static" / "sw.js").read_text(encoding="utf-8")
 
     api_bypass = re.search(
-        r'if\\s*\\(\\s*url\\.pathname\\.startsWith\\(\\s*["\\\']/api/["\\\']\\s*\\)\\s*\\)\\s*return\\s*;',
+        r'if\s*\(\s*url\.pathname\.startsWith\("/api/"\)\s*\)\s*return\s*;',
         worker,
     )
     assert api_bypass is not None, "API requests must bypass the service worker cache handler"
