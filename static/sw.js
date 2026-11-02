@@ -1,6 +1,5 @@
 const CACHE_NAME = "gagarin-personal-app-v1";
 const APP_SHELL = [
-  "/static/intelligence.html",
   "/static/manifest.webmanifest",
   "/static/icon.svg"
 ];
@@ -23,7 +22,7 @@ self.addEventListener("fetch", event => {
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
-  // Never cache API responses, portfolio data, credentials, or analysis results.
+  // Never cache the authenticated dashboard HTML, API responses, portfolio data, credentials, or analysis results.
   if (url.pathname.startsWith("/api/")) return;
 
   if (APP_SHELL.includes(url.pathname)) {
