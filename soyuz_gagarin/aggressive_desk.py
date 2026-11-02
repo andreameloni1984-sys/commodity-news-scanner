@@ -52,7 +52,7 @@ def format_aggressive_desk(states: Iterable[Any]) -> str:
         lines.extend([
             f"{'🎯 SCELTA PRINCIPALE' if index == 1 else f'Alternativa {index}'}: {item['commodity']} — {item['direction']}",
             f"Score comparativo: {item['score']:.1f}/100 | movimento stimato: {item['expected_move_pct']:.2f}%",
-            f"Prezzo attuale: {item['price']:.6g}",
+            f"Prezzo attuale: {item['price']:.6g}" if item["price"] is not None else "Prezzo attuale: N/D",
             "Movimento 5m: " + (f"{item['move_5m_pct']:+.3f}%" if item.get("move_5m_pct") is not None else "N/D"),
             "Movimento 15m: " + (f"{item['move_15m_pct']:+.3f}%" if item.get("move_15m_pct") is not None else "N/D"),
             "Movimento 1h: " + (f"{item['move_1h_pct']:+.3f}%" if item.get("move_1h_pct") is not None else "N/D"),
