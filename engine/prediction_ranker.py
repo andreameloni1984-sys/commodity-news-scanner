@@ -100,7 +100,7 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
         quality = _num(getattr(state, "quality", 0))
         confidence = _num(getattr(state, "confidence", 0))
         expected_move = _num(getattr(state, "expected_move_pct", 0))
-        atr_pct = atr / price * 100 if atr > 0 else 0.0
+        atr_pct = atr / price * 100 if atr > 0 and price else 0.0
         if expected_move <= 0:
             expected_move = atr_pct * (1.0 + pre_move / 100.0)
         if expected_move <= 0:
