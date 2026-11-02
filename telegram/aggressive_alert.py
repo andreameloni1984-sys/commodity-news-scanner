@@ -36,17 +36,32 @@ def _number(value: Any) -> float | None:
         return None
 
 
+def _direction_from_state(state: Any) -> str:
+    for field in ("setup_direction", "opportunity_direction", "pre_move_direction",
+                  "structure_direction", "mtf_direction"):
+        direction = str(getattr(state, field, "") or "").strip().upper()
+        if direction in {"LONG", "SHORT"}:
+            return direction
+    closes = getattr(state, "closes", []) or []
+    try:
+        if len(closes) >= 2:
+            latest, previous = float(closes[-1]), float(closes[-2])
+            if latest > previous:
+                return "LONG"
+            if latest < previous:
+                return "SHORT"
+    except (TypeError, ValueError):
+        pass
+    return ""
+
+
 def _item_from_state(state: Any) -> dict:
     return {
         "commodity": getattr(state, "commodity", None) or getattr(state, "symbol", None) or "Strumento",
         "symbol": getattr(state, "symbol", None),
         # SoyuzState defaults setup_direction to the truthy string "NONE".
         # Do not let that placeholder mask a valid early opportunity direction.
-        "direction": (
-            str(getattr(state, "setup_direction", "") or "").upper()
-            if str(getattr(state, "setup_direction", "") or "").upper() in {"LONG", "SHORT"}
-            else str(getattr(state, "opportunity_direction", "") or "").upper()
-        ),
+        "direction": _direction_from_state(state),
         "probability": getattr(state, "probability", 0),
         "quality": getattr(state, "quality", 0),
         "confidence": getattr(state, "confidence", 0),
