@@ -88,3 +88,45 @@ def test_d1_event_journal_keeps_append_order_and_rejects_invalid_json():
             raise AssertionError("invalid JSON journal payload was accepted")
     finally:
         connection.close()
+
+
+
+def test_d1_paper_journal_deduplicates_stable_ids_and_allows_legacy_null_ids():
+    connection = sqlite3.connect(":memory:")
+    try:
+        connection.executescript(MIGRATION.read_text(encoding="utf-8"))
+        insert_stable = """
+            INSERT INTO gagarin_paper_trade_journal(signal_id, record, recorded_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(signal_id) DO NOTHING
+            RETURNING id
+        """
+        first = connection.execute(
+            insert_stable,
+            ("stable-1", json.dumps({"signal_id": "stable-1"}), "t1"),
+        ).fetchall()
+        duplicate = connection.execute(
+            insert_stable,
+            ("stable-1", json.dumps({"signal_id": "stable-1"}), "t2"),
+        ).fetchall()
+        assert len(first) == 1
+        assert duplicate == []
+
+        insert_legacy = """
+            INSERT INTO gagarin_paper_trade_journal(signal_id, record, recorded_at)
+            VALUES (NULL, ?, ?)
+        """
+        connection.execute(insert_legacy, (json.dumps({"signal_id": ""}), "t3"))
+        connection.execute(insert_legacy, (json.dumps({"signal_id": ""}), "t4"))
+
+        stable_count = connection.execute(
+            "SELECT COUNT(*) FROM gagarin_paper_trade_journal WHERE signal_id = ?",
+            ("stable-1",),
+        ).fetchone()[0]
+        legacy_count = connection.execute(
+            "SELECT COUNT(*) FROM gagarin_paper_trade_journal WHERE signal_id IS NULL"
+        ).fetchone()[0]
+        assert stable_count == 1
+        assert legacy_count == 2
+    finally:
+        connection.close()
