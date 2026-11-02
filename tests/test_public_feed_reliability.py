@@ -92,3 +92,33 @@ def test_gdelt_rejects_invalid_articles_envelope(monkeypatch):
 
     with pytest.raises(ValueError, match="articles field is not a list"):
         monitor._get_gdelt_items()
+
+
+
+def test_gdelt_invalid_json_exposes_only_bounded_response_metadata(monkeypatch):
+    import json
+    import pytest
+    import telegram.news_monitor as monitor
+
+    body = b"<html>upstream diagnostic PRIVATE_BODY_MARKER</html>"
+
+    def invalid_json(self):
+        raise json.JSONDecodeError("invalid upstream response", body.decode(), 0)
+
+    response = type("Response", (), {
+        "headers": {"Content-Type": "text/html; charset=utf-8"},
+        "content": body,
+        "status_code": 200,
+        "json": invalid_json,
+        "raise_for_status": lambda self: None,
+    })()
+    monkeypatch.setattr(monitor.requests, "get", lambda *args, **kwargs: response)
+
+    with pytest.raises(monitor.GDELTInvalidJSONError) as error:
+        monitor._get_gdelt_items()
+
+    assert error.value.safe_diagnostic == (
+        f"content_type=text/htmlcharsetutf-8,http_status=200,bytes={len(body)}"
+    )
+    assert "PRIVATE_BODY_MARKER" not in str(error.value)
+    assert "PRIVATE_BODY_MARKER" not in error.value.safe_diagnostic

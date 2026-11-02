@@ -37,6 +37,26 @@ GDELT_MIN_INTERVAL_SECONDS = max(900, int(os.getenv("GAGARIN_GDELT_MIN_INTERVAL_
 GDELT_TIMEOUT_SECONDS = max(5, int(os.getenv("GAGARIN_GDELT_TIMEOUT_SECONDS", "12")))
 PERMANENT_HTTP_BACKOFF_SECONDS = 6 * 60 * 60
 SOURCE_BACKOFF_MAX_SECONDS = 60 * 60
+
+
+class GDELTInvalidJSONError(ValueError):
+    """Invalid GDELT JSON with bounded, non-content diagnostic metadata."""
+
+    def __init__(self, content_type: Any, status_code: Any, content_length: int):
+        safe_content_type = re.sub(
+            r"[^A-Za-z0-9.+/_-]", "", str(content_type or "unknown")
+        )[:48] or "unknown"
+        safe_status = (
+            status_code
+            if isinstance(status_code, int) and 100 <= status_code <= 599
+            else "unknown"
+        )
+        safe_length = max(0, int(content_length))
+        self.safe_diagnostic = (
+            f"content_type={safe_content_type},"
+            f"http_status={safe_status},bytes={safe_length}"
+        )
+        super().__init__("GDELT response was not valid JSON")
 _SOURCE_FAILURES: dict[str, int] = {}
 _SOURCE_RETRY_AT: dict[str, float] = {}
 _SOURCE_LAST_SUCCESS: dict[str, float] = {}
@@ -408,9 +428,12 @@ def _source_failed(source: str, exc: Exception) -> int:
         _SOURCE_RETRY_AT[source] = time.monotonic() + delay
 
     status_text = f" HTTP={status}" if status is not None else ""
+    # Only emit explicitly curated metadata; never log an upstream response body.
+    safe_diagnostic = getattr(exc, "safe_diagnostic", "")
+    diagnostic_text = f" | {safe_diagnostic}" if safe_diagnostic else ""
     print(
         f"NEWS source failure | source={source} | error={type(exc).__name__}"
-        f"{status_text} | retry_in={delay}s",
+        f"{status_text}{diagnostic_text} | retry_in={delay}s",
         flush=True,
     )
     return delay
@@ -470,7 +493,23 @@ def _get_gdelt_items() -> list[dict[str, Any]]:
         timeout=GDELT_TIMEOUT_SECONDS,
     )
     response.raise_for_status()
-    payload = response.json()
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        # Record response metadata only. Do not expose or persist an upstream
+        # body that may contain arbitrary HTML, diagnostics or echoed queries.
+        headers = getattr(response, "headers", {}) or {}
+        content_type = headers.get("Content-Type", headers.get("content-type", "unknown"))
+        raw_body = getattr(response, "content", b"")
+        if isinstance(raw_body, (bytes, bytearray, memoryview)):
+            content_length = len(raw_body)
+        else:
+            content_length = len(str(raw_body).encode("utf-8", errors="replace"))
+        raise GDELTInvalidJSONError(
+            content_type,
+            getattr(response, "status_code", None),
+            content_length,
+        ) from exc
     if not isinstance(payload, dict):
         raise ValueError("GDELT response payload is not an object")
     rows = payload.get("articles", [])

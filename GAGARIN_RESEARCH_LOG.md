@@ -422,3 +422,22 @@
 - **Scope:** diagnostic validation only. No scoring, BIAS, Governor, entry, SL/TP, sizing, Telegram authorization or order behavior changed.
 - **Validation:** GitHub Actions is required on the updated PR head; no passing result is claimed until the run completes.
 - **Mode:** PAPER ONLY.
+
+
+## 2026-11-02 — Safe diagnostics for malformed GDELT JSON
+
+- **Finding:** the deployed NEWS monitor logged a generic `JSONDecodeError` when GDELT returned a non-JSON response. This did not stop the wider poll because the source-specific failure/backoff path already catches provider errors, but it did not identify whether the upstream response was HTML, another content type, or an unexpectedly empty payload.
+- **Implemented:** normalize JSON decoding failures into `GDELTInvalidJSONError` with only bounded metadata: sanitized content type, HTTP status (when valid), and response byte count. The source failure log includes this curated metadata.
+- **Privacy/safety:** the response body is never included in the exception message or log. Existing per-source cooldown and RSS fallback behavior is unchanged; no retry is added and no request frequency is increased.
+- **Files:** `telegram/news_monitor.py`; `tests/test_public_feed_reliability.py`.
+- **Commits:** implementation `0b62edbb58d18bc52b4a3330792b41be48144a94`; regression test `0d9448d664085cd912b3ddb2abf01456c38733ea`.
+- **Test:** new mocked regression asserts content-type/status/byte-count diagnostics and proves a body marker is not exposed. CI is pending; no test pass is claimed before Actions completes.
+- **Limits:** this improves diagnosis, not GDELT availability. HTTP 429, upstream invalid JSON, and source outages remain possible. No live feed quote, Telegram send, deployment or order is claimed.
+- **Mode:** PAPER/DEMO only.
+
+
+### CI follow-up — GDELT safe diagnostic test expectation
+
+- Initial PR run `41472174720`: integration suite reported **525 passed, 1 failed**. The failure was only the test's expected sanitized Content-Type string: the sanitizer correctly retained the MIME slash while removing the semicolon/space separator. Production implementation behaved as intended.
+- Corrected the expected value in test-only commit `853ec7bfb0c12002ce3b932b820b62ff15363150`.
+- The PR head now requires a fresh complete CI run. The initial run remains recorded as failed; it is not being represented as green.
