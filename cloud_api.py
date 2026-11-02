@@ -55,23 +55,16 @@ def _prune_login_failures(client_key: str, now: float):
     return attempts
 
 
-def _login_rate_limit_retry_after(client_key: str, now: float | None = None) -> int:
+def _begin_login_attempt(client_key: str, now: float | None = None) -> int:
+    """Atomically reserve an attempt; return seconds to wait, or zero if allowed."""
     current = time.monotonic() if now is None else float(now)
     key = str(client_key or "unknown")[:128]
     with _LOGIN_FAILURES_LOCK:
         attempts = _prune_login_failures(key, current)
-        if attempts is None or len(attempts) < _LOGIN_MAX_FAILED_ATTEMPTS:
-            return 0
-        return max(1, math.ceil(
-            _LOGIN_FAILURE_WINDOW_SECONDS - (current - attempts[0])
-        ))
-
-
-def _record_login_failure(client_key: str, now: float | None = None) -> None:
-    current = time.monotonic() if now is None else float(now)
-    key = str(client_key or "unknown")[:128]
-    with _LOGIN_FAILURES_LOCK:
-        attempts = _prune_login_failures(key, current)
+        if attempts is not None and len(attempts) >= _LOGIN_MAX_FAILED_ATTEMPTS:
+            return max(1, math.ceil(
+                _LOGIN_FAILURE_WINDOW_SECONDS - (current - attempts[0])
+            ))
         if attempts is None:
             if len(_LOGIN_FAILURES) >= _LOGIN_MAX_TRACKED_CLIENTS:
                 oldest_key = min(
@@ -81,7 +74,10 @@ def _record_login_failure(client_key: str, now: float | None = None) -> None:
                 _LOGIN_FAILURES.pop(oldest_key, None)
             attempts = deque()
             _LOGIN_FAILURES[key] = attempts
+        # Reserve before PBKDF2 verification so concurrent requests cannot all
+        # pass the limit check before their failures are recorded.
         attempts.append(current)
+        return 0
 
 
 def _clear_login_failures(client_key: str) -> None:
@@ -163,7 +159,7 @@ async def app_login(request: Request):
     except Exception:
         raise HTTPException(status_code=400, detail="Richiesta non valida")
     client_key = _login_client_key(request)
-    retry_after = _login_rate_limit_retry_after(client_key)
+    retry_after = _begin_login_attempt(client_key)
     if retry_after:
         raise HTTPException(
             status_code=429,
@@ -173,7 +169,6 @@ async def app_login(request: Request):
 
     password = payload.get("password", "") if isinstance(payload, dict) else ""
     if not isinstance(password, str) or not _verify_app_password(password):
-        _record_login_failure(client_key)
         raise HTTPException(status_code=401, detail="Password non corretta")
     _clear_login_failures(client_key)
     issued_at = int(time.time())
