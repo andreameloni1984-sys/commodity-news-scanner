@@ -9,8 +9,8 @@ def build_conditional_playbook(candles: Any, interception: dict, *, now_epoch: f
     if not isinstance(interception, dict) or interception.get("status") != "INTERCEPTED":
         return {"status": "UNAVAILABLE", "reason": "nessuna intercettazione LUBJANKA valida", "paper_only": True}
     direction = str(interception.get("direction") or "").upper()
-    if direction not in {"LONG", "SHORT"} or interception.get("directional_conflict"):
-        return {"status": "NO_PLAN", "reason": "direzione assente o intercettori in conflitto", "paper_only": True}
+    if direction not in {"LONG", "SHORT"}:
+        return {"status": "NO_PLAN", "reason": "direzione assente", "paper_only": True}
     if not isinstance(candles, (list, tuple)):
         return {"status": "UNAVAILABLE", "reason": "candele non disponibili", "paper_only": True}
     bars = []
@@ -54,6 +54,8 @@ def build_conditional_playbook(candles: Any, interception: dict, *, now_epoch: f
         return {"status": "UNAVAILABLE", "reason": "geometria rischio non valida", "paper_only": True}
     return {
         "status": "CONDITIONAL_PLAN", "direction": direction,
+        "directional_conflict": bool(interception.get("directional_conflict")),
+        "directions_detected": interception.get("directions_detected", [direction]),
         "interceptor": interception.get("primary_interceptor", "LUBJANKA"),
         "timeframe": "M5", "reference_close": latest["close"],
         "entry_trigger": round(entry, 8), "stop_loss": round(stop, 8),
@@ -62,5 +64,5 @@ def build_conditional_playbook(candles: Any, interception: dict, *, now_epoch: f
         "activation": activation, "invalidation": invalidation,
         "bar_age_seconds": round(age, 1), "atr_m5": round(atr, 8),
         "execution_status": "NOT_EXECUTED", "paper_only": True,
-        "note": "Piano condizionale OHLCV M5; non e un ordine e non sostituisce il Governor."
+        "note": ("CONFLITTO TRA INTERCETTORI: direzione primaria mostrata come ipotesi. " if interception.get("directional_conflict") else "") + "Piano condizionale OHLCV M5; non e un ordine e non sostituisce il Governor."
     }
