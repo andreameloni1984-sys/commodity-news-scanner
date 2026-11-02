@@ -265,6 +265,22 @@ def intercept_market(
             f"chiusura M5 oltre il massimo/minimo delle {_BREAKOUT_LOOKBACK} candele precedenti",
         ))
 
+    # A failed range sweep is a directional rejection: price trades beyond a
+    # prior boundary intrabar, then the completed candle closes back inside.
+    # It is an observation only; no order-flow/DOM evidence is inferred.
+    if latest["high"] > prior_high and latest["close"] < prior_high:
+        rejection = (latest["high"] - prior_high) / atr
+        events.append(_event(
+            "FALSE_BREAKOUT", "SHORT", "EARLY_SETUP", rejection,
+            f"massimo oltre il range delle {_BREAKOUT_LOOKBACK} M5 precedenti, chiusura rientrata sotto il massimo",
+        ))
+    if latest["low"] < prior_low and latest["close"] > prior_low:
+        rejection = (prior_low - latest["low"]) / atr
+        events.append(_event(
+            "FALSE_BREAKOUT", "LONG", "EARLY_SETUP", rejection,
+            f"minimo sotto il range delle {_BREAKOUT_LOOKBACK} M5 precedenti, chiusura rientrata sopra il minimo",
+        ))
+
     last_timestamp = int(latest["timestamp"])
     base = {
         "name": "LUBJANKA",
@@ -290,11 +306,11 @@ def intercept_market(
             "direction": "NO_DIRECTION",
             "stage": "NONE",
             "events": [],
-            "reason": "nessun movimento iniziale, momentum o breakout rilevato sulle ultime M5 chiuse",
+            "reason": "nessun movimento iniziale, momentum, breakout o falso breakout rilevato sulle ultime M5 chiuse",
         }
 
     stage_rank = {"EARLY_BIAS": 1, "EARLY_SETUP": 2}
-    type_rank = {"BREAKOUT": 3, "MOMENTUM": 2, "EARLY_MOVE": 1}
+    type_rank = {"FALSE_BREAKOUT": 4, "BREAKOUT": 3, "MOMENTUM": 2, "EARLY_MOVE": 1}
     events.sort(
         key=lambda item: (
             stage_rank.get(item["stage"], 0),

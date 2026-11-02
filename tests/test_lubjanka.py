@@ -39,6 +39,42 @@ def test_lubjanka_intercepts_early_move_momentum_and_breakout_long():
     assert not any(key in result for key in ("entry", "stop", "tp1", "tp2", "tp3"))
 
 
+
+def test_lubjanka_intercepts_failed_upside_breakout_as_short():
+    candles = make_bars("flat")
+    candles[-1]["high"] = 100.4
+    result = intercept_market(candles, now_epoch=candles[-1]["timestamp"] + 301)
+    event = next(item for item in result["events"] if item["interceptor"] == "FALSE_BREAKOUT")
+    assert event["direction"] == "SHORT"
+    assert event["stage"] == "EARLY_SETUP"
+    assert result["direction"] == "SHORT"
+    assert result["primary_interceptor"] == "FALSE_BREAKOUT"
+
+
+def test_lubjanka_intercepts_failed_downside_breakout_as_long():
+    candles = make_bars("flat")
+    candles[-1]["low"] = 99.6
+    result = intercept_market(candles, now_epoch=candles[-1]["timestamp"] + 301)
+    event = next(item for item in result["events"] if item["interceptor"] == "FALSE_BREAKOUT")
+    assert event["direction"] == "LONG"
+    assert event["stage"] == "EARLY_SETUP"
+    assert result["direction"] == "LONG"
+
+
+def test_lubjanka_marks_two_sided_range_sweep_as_directional_conflict():
+    candles = make_bars("flat")
+    candles[-1]["high"] = 100.4
+    candles[-1]["low"] = 99.6
+    result = intercept_market(candles, now_epoch=candles[-1]["timestamp"] + 301)
+    false_breakouts = [
+        item for item in result["events"]
+        if item["interceptor"] == "FALSE_BREAKOUT"
+    ]
+    assert {item["direction"] for item in false_breakouts} == {"LONG", "SHORT"}
+    assert result["directional_conflict"] is True
+    assert result["directions_detected"] == ["LONG", "SHORT"]
+
+
 def test_lubjanka_intercepts_short_direction():
     candles = make_bars("down")
     result = intercept_market(candles, now_epoch=candles[-1]["timestamp"] + 301)

@@ -61,6 +61,13 @@ def test_aggressive_telegram_alert_displays_lubjanka_interceptor():
     assert "Entry/SL/TP non generati da LUBJANKA" in message
 
 
+def test_aggressive_telegram_alert_displays_false_breakout():
+    message = format_aggressive_alert([candidate("FALSE_BREAKOUT")])
+    assert "LUBJANKA M5" in message
+    assert "FALSE_BREAKOUT" in message
+    assert "OHLCV proxy" in message
+
+
 def test_new_lubjanka_interceptor_changes_alert_signature(monkeypatch, tmp_path):
     import telegram.aggressive_alert as module
 
