@@ -132,9 +132,9 @@ document.getElementById('login').addEventListener('submit',async e=>{e.preventDe
 
 @app.middleware("http")
 async def require_private_dashboard(request: Request, call_next):
-    # Static assets remain available to the browser, but the dashboard HTML itself
-    # is never served without a valid signed, HttpOnly session cookie.
-    if request.url.path == "/static/intelligence.html":
+    # Static assets remain public, but every HTML application under /static
+    # requires the same signed, HttpOnly session used by the private dashboard.
+    if request.url.path.startswith("/static/") and request.url.path.lower().endswith(".html"):
         if not _valid_app_session(request.cookies.get(_APP_COOKIE)):
             return RedirectResponse("/login", status_code=303)
     return await call_next(request)
@@ -700,13 +700,11 @@ small{color:#7f8a97}
 <div class="card" style="border:2px solid #f5b942"><div class="big">⚡ AGGRESSIVE PAPER</div><div class="muted">Conto separato · capitale iniziale €100 · rischio per operazione più alto. Aperture e chiusure simulate su SL/TP.</div><div class="row"><span>Disponibile</span><b id="agg-cash">€100,00</b></div><div class="row"><span>Posizioni aperte</span><b id="agg-open">0</b></div><div class="row"><span>Operazioni chiuse</span><b id="agg-closed">0</b></div><div class="row"><span>P/L non realizzato</span><b id="agg-unrealized">€0,00</b></div><div class="row"><span>P/L realizzato</span><b id="agg-realized">€0,00</b></div><div class="row"><span>Equity</span><b id="agg-equity">€100,00</b></div><div id="agg-positions" class="muted">Nessuna posizione aggressiva aperta.</div><div id="agg-history" class="muted"></div></div><div id="content"></div>
 <script>
 const keyEl=document.getElementById('key');
-keyEl.value=localStorage.getItem('gagarin_key')||'';
 function esc(v){return String(v??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function money(v){return v==null?'—':Number(v).toLocaleString('it-IT',{maximumFractionDigits:6});}
 async function run(){
  const key=keyEl.value.trim(); if(!key){alert('Inserisci la Cloud API Key');return;}
- localStorage.setItem('gagarin_key',key);
- const s=document.getElementById('status'); s.textContent='Analisi in corso…';
+  const s=document.getElementById('status'); s.textContent='Analisi in corso…';
  try{
   const r=await fetch('/api/run',{method:'POST',headers:{'X-API-Key':key}});
   const d=await r.json(); if(!r.ok) throw new Error(d.detail||'Errore');
