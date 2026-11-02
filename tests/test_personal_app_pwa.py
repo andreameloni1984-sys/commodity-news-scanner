@@ -100,7 +100,7 @@ def test_ios_home_screen_icon_is_png_and_cached():
         and item.get("type") == "image/png"
         for item in manifest["icons"]
     )
-    assert icon.startswith(b"\\x89PNG\\r\\n\\x1a\\n")
+    assert icon[:8] == bytes([137, 80, 78, 71, 13, 10, 26, 10])
     assert struct.unpack(">II", icon[16:24]) == (180, 180)
     assert '"/static/apple-touch-icon.png"' in worker
     assert "gagarin-personal-app-v2" in worker
