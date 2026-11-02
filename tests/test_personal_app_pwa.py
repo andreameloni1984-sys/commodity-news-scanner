@@ -26,7 +26,6 @@ def test_service_worker_never_caches_private_api_responses():
     assert "/static/intelligence.html" not in worker
 
 
-
 def test_dashboard_api_key_is_not_persisted_in_browser_storage():
     html = (ROOT / "static" / "intelligence.html").read_text(encoding="utf-8")
 
@@ -47,13 +46,13 @@ def test_inline_dashboard_javascript_parses():
     scripts = [
         script
         for script in re.findall(
-            r"<script\\b[^>]*>(.*?)</script>", html, flags=re.IGNORECASE | re.DOTALL
+            r"<script\b[^>]*>(.*?)</script>", html, flags=re.IGNORECASE | re.DOTALL
         )
         if script.strip()
     ]
 
     assert scripts
-    assert r"\\n$('logout')" not in html
+    assert r"\n$('logout')" not in html
 
     node = shutil.which("node")
     if node:
