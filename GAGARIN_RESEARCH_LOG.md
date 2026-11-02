@@ -476,3 +476,13 @@
 - **Regression coverage:** all static HTML paths must be covered by the private-session middleware; both current dashboard pages and the legacy inline dashboard must contain no localStorage/sessionStorage API-key persistence.
 - **Validation:** implementation is on a fresh branch from main. GitHub Actions CI is required before merge; no test result or production deployment is claimed in this entry.
 - **Security boundary:** manifest, icons and service worker remain publicly fetchable as PWA shell assets; private HTML requires the signed HttpOnly cookie; API routes continue to require `CLOUD_API_KEY`. No secrets were read, changed, or committed. PAPER ONLY; no broker or order action.
+
+
+### Final CI and merge verification — private HTML/API-key hardening (2026-11-02)
+
+- **PR:** #144 merged into `main` as squash commit `8829d4b26dadc18c185a468deb0c53e7072df5c6`.
+- **Final PR head:** `e93354cb02d4d9778acc0d236f18208505c1576e`; base was current `main` `79c2ba9957303bd330b3cd5b6191d20aec564bbc`, with zero commits behind.
+- **GitHub Actions:** all five required workflows succeeded: Gagarin Integration **545 passed**, Public Event Brain **86 passed**, NEWS Alert **72 passed**, PAPER **26 passed**, Execution Layer **3 passed**. Total **732 tests passed**. PAPER smoke test returned the expected `PAPER_WATCH / ASSET_NOT_IN_UNIVERSE` for its deliberately unconfigured sample asset.
+- **Main readback:** middleware now checks every `/static/*.html` path; `static/aggressive.html` and the legacy inline dashboard contain no `localStorage` or `sessionStorage` API-key persistence; the regression tests are present on main.
+- **Production limit:** no Render workspace was selected for this run, so no post-merge deployment, live /login, logout, protected-route HTTP, or PWA-install verification is claimed. This is a repository/CI security fix, not proof that the running service has received it.
+- **Safety:** no secret values were read or changed; manifest, icons and service worker remain public app-shell assets; API routes still require `CLOUD_API_KEY`. PAPER ONLY; no broker/order action.
