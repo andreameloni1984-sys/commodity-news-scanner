@@ -6,7 +6,10 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+# Paper journals are private operational data. Do not commit them to this public repository.
+# Persistence will be re-enabled only after private D1 storage is deployed and verified.
 
 concurrency:
   group: gagarin-feedback-state
@@ -79,28 +82,3 @@ jobs:
 
       - name: Run Gagarin analysis, paper journal, feedback and Telegram alerts
         run: python main.py
-
-      - name: Persist Gagarin paper journal and feedback across GitHub runners
-        if: always()
-        run: |
-          files=()
-          for file in gagarin_feedback.csv paper_trade_log.csv; do
-            if [ -f "$file" ]; then
-              files+=("$file")
-            fi
-          done
-          if [ "${#files[@]}" -eq 0 ]; then
-            echo "No local journal/feedback CSV produced; PostgreSQL may be active or this run recorded no entries."
-            exit 0
-          fi
-          git config user.name "Gagarin Paper Bot"
-          git config user.email "gagarin-paper-bot@users.noreply.github.com"
-          git add -- "${files[@]}"
-          if git diff --cached --quiet; then
-            echo "Gagarin paper journal and feedback unchanged."
-            exit 0
-          fi
-          git commit -m "chore: persist Gagarin paper journal and feedback"
-          git fetch origin main
-          git rebase origin/main
-          git push origin HEAD:main
