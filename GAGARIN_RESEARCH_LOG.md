@@ -355,3 +355,12 @@
 - **Main readback:** verified `engine/data.py` rejects timezone-naive ISO timestamps by default, keeps numeric epochs and explicit offsets, and passes `timezone.utc` only in the Twelve Data parser whose request explicitly sets `timezone=UTC`. Verified all three regression tests and this research entry are present on `main`.
 - **Post-merge status:** the connector returned no separate status contexts for merge commit `5b83b2842ed8804f2a0c7393b54c99d8005e52ac`; the five successful runs above are PR-head validation, not a post-merge runtime/deploy test.
 - **Safety:** no live provider polling, Telegram message, Render deployment, broker action or order was performed. PAPER ONLY.
+
+
+## 2026-11-02 — Rebase login throttling onto current main
+
+- Rebased the isolated per-client login throttle from the stale PR #129 onto current main after PR #130's PWA test fix.
+- Policy: at most five login attempts per client in a rolling 15-minute window; the next request receives HTTP 429 with Retry-After. Failed attempts remain counted; successful login clears that client's window. Uses monotonic time, atomic reservation before PBKDF2, bounded in-memory storage (1,024 clients), and ignores caller-supplied X-Forwarded-For.
+- Scope is authentication only: no trading logic, score, Governor, providers, Telegram, broker, or PAPER permissions changed.
+- Limitation: best-effort per-process throttle; counters reset on restart and are not shared across instances. It is not a distributed WAF/rate limiter.
+- Validation is pending on the new PR head; do not merge until all required checks pass.
