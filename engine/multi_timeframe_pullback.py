@@ -31,7 +31,9 @@ def _epoch(value: Any) -> int | None:
             parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
         except ValueError:
             return None
-        if parsed.tzinfo is None:
+        # The diagnostic contract uses whole-second candle-close epochs.
+        # Reject fractional ISO notation instead of silently truncating it.
+        if parsed.tzinfo is None or "." in raw or "," in raw:
             return None
         return int(parsed.timestamp())
     return None
