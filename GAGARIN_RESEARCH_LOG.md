@@ -389,3 +389,15 @@
 - Limits/open: Render environment values were not read or changed; deployment, login/logout, API-key authentication, Sputnik handoff and Telegram delivery are not verified live. The Render workspace has not been explicitly confirmed for connector operations. The PWA still lacks a dedicated iOS PNG icon. No paid service, public private-data hosting, or live trading was enabled.
 - Safety: no credentials were generated, read, logged or committed; no trading strategy, score, Governor, entry/SL/TP or PAPER authorization changed.
 - Research note: Freqtrade's current Lookahead Analysis compares a full backtest against isolated signal backtests to detect indicator/entry/exit changes, but can only validate signals that actually trigger; this caveat must be preserved when adapting it to GAGARIN. Reference: https://www.freqtrade.io/en/stable/lookahead-analysis/
+
+
+## 2026-11-02 — Dedicated iOS home-screen PNG icon
+
+- **Finding:** the private PWA linked `apple-touch-icon` to an SVG only. iOS home-screen installation needs a dedicated raster touch icon for reliable presentation.
+- **Implemented:** add `static/apple-touch-icon.png` at 180×180, update the HTML touch-icon link and web manifest, add the PNG to the service-worker App Shell, and bump the cache version to v2 so installed clients fetch the new asset.
+- **Files:** `static/apple-touch-icon.png`, `static/intelligence.html`, `static/manifest.webmanifest`, `static/sw.js`, `tests/test_personal_app_pwa.py`.
+- **Commits:** initial asset `ec0620412a24d4bf77bfcaa6faa7d9f08bf61871`; manifest `363ecb199b816483e675be823a8c6f60e61bd0a3`; HTML `3cab3e75bb50f938439b144d8193a5fee123a3c5`; service worker `61efe419c2f5513ebfea954b5f08a9fc669715a2`; test `14cf031297c718eab05233a39e1ac8311396ac3e`; antialias asset refinement `b4e5bc4b66e5f4d91407774566292e15738703b0`.
+- **Validation:** local PNG inspection confirmed signature and 180×180 dimensions. GitHub Actions on final code/test commit `b4e5bc4b66e5f4d91407774566292e15738703b0`: SOYUZ GAGARIN Tests run `41438331105` SUCCESS; Public Event Brain `41438330919` SUCCESS; PAPER `41438330941` SUCCESS; NEWS Alert `41438330945` SUCCESS; Execution Layer `41438330949` SUCCESS. Regression checks the PNG signature/dimensions, manifest entry, iOS link and App Shell cache entry.
+- **Safety:** the service worker still bypasses `/api/` and authenticated dashboard HTML. No credentials, private API responses, trading logic, Governor, PAPER authorization, or orders changed.
+- **Limitations:** no physical iPhone installation test yet. The Render dashboard login remains HTTP 503 because at least one of `APP_PASSWORD_HASH` or `APP_SESSION_SECRET` is not configured; database persistence is disabled because `DATABASE_URL` is absent. The PR is not deployed until merged and deployed separately.
+- **Mode:** PAPER ONLY.
