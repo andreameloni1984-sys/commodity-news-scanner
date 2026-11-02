@@ -757,7 +757,7 @@ def run():
 
             if signal_results:
                 delivered = send_telegram(
-                    format_signal_board(signal_results)
+                    format_signal_board(operational_results)
                 )
                 if not delivered:
                     print("❌ TELEGRAM DELIVERY FAILED: signal message was not accepted by Telegram.")
