@@ -497,3 +497,12 @@
 - Validation: workflow diff checked for both cadence values; CI pending on PR. No production Render setting changed and no live trade signal or Telegram delivery is claimed.
 - SPUTNIK comparison: `.github/workflows/trump_tracker.yml` already schedules the main public-event monitor every five minutes (`2-59/5`); no redundant schedule change was made there.
 - Safety: PAPER ONLY; no orders sent.
+
+
+## 2026-11-02 — Keep early LUBJANKA interceptions visible in Telegram shortlist
+
+- **Finding:** the aggressive Telegram alert builder returns at most ten directional candidates. Sorting mainly by probability and quality could push a valid LUBJANKA interception with incomplete scores out of the message when ten higher-scoring ordinary candidates were present.
+- **Implemented:** risk warnings remain first, confirmed entries second, then detected LUBJANKA interceptions ahead of ordinary possible/observation candidates. Probability and quality remain tie-breakers within each priority.
+- **Regression:** a test creates ten high-scoring ordinary candidates plus one low-scoring LUBJANKA false-breakout interception and verifies the early interception remains visible in the ten-item shortlist.
+- **Safety:** display ordering only. No detector thresholds, scores, direction, Governor, risk, entry/SL/TP, PAPER authorization, provider calls, Telegram transport or order execution changed.
+- **Mode:** PAPER ONLY. CI required before merge; no live Telegram delivery or production deployment claimed.
