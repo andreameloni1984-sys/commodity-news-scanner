@@ -339,3 +339,19 @@
 - **Safety:** no provider, symbol mapping, price, ATR, entry/SL/TP, risk threshold, Governor, or PAPER authorization changed. No network quote, Telegram send, deployment, or order was performed.
 - **Open:** confirm CI; inspect actual BiQuote timestamp shape in a controlled read-only provider response before considering any explicit timezone exception; verify free/independent same-contract futures sources; build the 100+ real-setup out-of-sample journal with spread/fees/slippage.
 - **References:** Qlib repository and data-handler architecture: https://github.com/microsoft/qlib and https://github.com/microsoft/qlib/blob/main/qlib/data/dataset/handler.py; Qlib point-in-time database documentation: https://qlib.readthedocs.io/en/latest/advanced/PIT.html.
+
+
+### CI and merge follow-up — strict provider timestamp provenance (2026-11-02)
+
+- **PR:** #123 merged into `main` as squash commit `5b83b2842ed8804f2a0c7393b54c99d8005e52ac`.
+- **Final PR head:** `82076cc17b14d42c265d000f0873b1a2b5c3d49d`.
+- **GitHub Actions:** all five workflows completed SUCCESS on the final PR head:
+  - Gagarin NEWS alert run `41376208332`: 71 passed.
+  - Execution Layer run `41376208540`: 3 passed.
+  - PAPER run `41376208452`: 26 passed.
+  - GAGARIN integration run `41376208663`: 492 passed.
+  - Public Event Brain run `41376208416`: 85 passed.
+  - Total reported across workflows: 677 passing test executions (suites may overlap; not a count of unique tests).
+- **Main readback:** verified `engine/data.py` rejects timezone-naive ISO timestamps by default, keeps numeric epochs and explicit offsets, and passes `timezone.utc` only in the Twelve Data parser whose request explicitly sets `timezone=UTC`. Verified all three regression tests and this research entry are present on `main`.
+- **Post-merge status:** the connector returned no separate status contexts for merge commit `5b83b2842ed8804f2a0c7393b54c99d8005e52ac`; the five successful runs above are PR-head validation, not a post-merge runtime/deploy test.
+- **Safety:** no live provider polling, Telegram message, Render deployment, broker action or order was performed. PAPER ONLY.
