@@ -318,6 +318,21 @@ def format_signal_board(results: Iterable[object]) -> str:
             f"   RR {_fmt(getattr(state, 'rr1', None), 2)} | {_rule_label(state)}"
         )
 
+    early_plans = [
+        state for state in results
+        if state not in signals
+        and isinstance((getattr(state, "metadata", {}) or {}).get("lubjanka_playbook"), dict)
+        and (getattr(state, "metadata", {}) or {}).get("lubjanka_playbook", {}).get("status") == "CONDITIONAL_PLAN"
+    ]
+    if early_plans:
+        lines += ["", "LUBJANKA — PIANI CONDIZIONALI M5 (NON ESEGUITI)"]
+        for state in early_plans[:3]:
+            plan = (getattr(state, "metadata", {}) or {}).get("lubjanka_playbook", {})
+            lines.append(
+                f"{state.commodity} {plan['direction']} | trigger {plan['entry_trigger']} | "
+                f"SL {plan['stop_loss']} | TP1 {plan['take_profit_1']} | TP2 {plan['take_profit_2']} "
+                f"| {plan['activation']}"
+            )
     lines += [
         "",
         "Solo le opportunità più forti. Score = combinazione di confluence, quality e confidence.",
