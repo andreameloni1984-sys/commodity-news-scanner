@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 
@@ -21,6 +22,15 @@ def test_personal_dashboard_is_configured_as_installable_pwa():
 def test_service_worker_never_caches_private_api_responses():
     worker = (ROOT / "static" / "sw.js").read_text(encoding="utf-8")
 
-    assert 'url.pathname.startsWith("/api/")' in worker
-    assert "Never cache API responses" in worker
-    assert "/static/intelligence.html" not in worker
+    api_bypass = re.search(
+        r'if\\s*\\(\\s*url\\.pathname\\.startsWith\\(\\s*["\\\']/api/["\\\']\\s*\\)\\s*\\)\\s*return\\s*;',
+        worker,
+    )
+    assert api_bypass is not None, "API requests must bypass the service worker cache handler"
+
+    first_cache_handler = worker.find("event.respondWith")
+    assert first_cache_handler >= 0
+    assert api_bypass.end() < first_cache_handler, (
+        "The private API bypass must run before any cache-backed response handler"
+    )
+    assert '"/static/intelligence.html"' not in worker
