@@ -4,6 +4,7 @@ from commodities.universe import Commodity
 from engine.state import SoyuzState
 from engine.data import load_data
 from engine.lubjanka import intercept_market
+from engine.lubjanka_playbook import build_conditional_playbook
 from engine.regime import apply_regime
 from engine.structure import apply_structure
 from engine.setup import apply_setup
@@ -404,6 +405,10 @@ def analyze_one(commodity: Commodity) -> SoyuzState:
     state.metadata["lubjanka"] = intercept_market(
         state.candles,
         provider=getattr(state, "data_source", None),
+    )
+    # Conditional M5 plan; observation only, never Governor authorization.
+    state.metadata["lubjanka_playbook"] = build_conditional_playbook(
+        state.candles, state.metadata["lubjanka"]
     )
     state = evaluate_pre_move(state)
     # Independent, auditable regime/momentum ensemble; ranking context only.

@@ -189,13 +189,18 @@ def format_watch(state) -> str:
 def format_watch_board(results: Iterable[object], min_score: float = 45.0) -> str:
     """Board of near-threshold setups."""
     results = list(results or [])
+    def has_lubjanka_plan(state):
+        meta = getattr(state, "metadata", {}) or {}
+        plan = meta.get("lubjanka_playbook", {}) if isinstance(meta, dict) else {}
+        return isinstance(plan, dict) and plan.get("status") == "CONDITIONAL_PLAN"
+
     candidates = [
         s for s in results
         if not _is_signal(s)
-        and _direction(s) in {"LONG", "SHORT"}
-        and _opportunity_score(s) >= min_score
+        and ((_direction(s) in {"LONG", "SHORT"} and _opportunity_score(s) >= min_score)
+             or has_lubjanka_plan(s))
     ]
-    candidates.sort(key=_opportunity_score, reverse=True)
+    candidates.sort(key=lambda s: (has_lubjanka_plan(s), _opportunity_score(s)), reverse=True)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     lines = [
@@ -218,6 +223,15 @@ def format_watch_board(results: Iterable[object], min_score: float = 45.0) -> st
             f"{i}. {state.commodity} — BIAS {status['bias']} | SETUP {status['setup']}\n"
             f"   TRADE PAPER {status['trade_paper']} | {_rule_label(state)}"
         )
+        meta = getattr(state, "metadata", {}) or {}
+        plan = meta.get("lubjanka_playbook", {}) if isinstance(meta, dict) else {}
+        if isinstance(plan, dict) and plan.get("status") == "CONDITIONAL_PLAN":
+            lines.append(
+                f"   LUBJANKA {plan['direction']} / {plan['interceptor']} — {plan['activation']}\n"
+                f"   Entry trigger {plan['entry_trigger']} | SL {plan['stop_loss']} | "
+                f"TP1 {plan['take_profit_1']} ({plan['rr_tp1']}R) | TP2 {plan['take_profit_2']} ({plan['rr_tp2']}R)\n"
+                f"   Invalidazione: {plan['invalidation']} | M5 age {plan['bar_age_seconds']}s"
+            )
 
     lines += ["", "⚠️ Solo monitoraggio. Non è un segnale di entrata."]
     return "\n".join(lines)
@@ -304,6 +318,21 @@ def format_signal_board(results: Iterable[object]) -> str:
             f"   RR {_fmt(getattr(state, 'rr1', None), 2)} | {_rule_label(state)}"
         )
 
+    early_plans = [
+        state for state in results
+        if state not in signals
+        and isinstance((getattr(state, "metadata", {}) or {}).get("lubjanka_playbook"), dict)
+        and (getattr(state, "metadata", {}) or {}).get("lubjanka_playbook", {}).get("status") == "CONDITIONAL_PLAN"
+    ]
+    if early_plans:
+        lines += ["", "LUBJANKA — PIANI CONDIZIONALI M5 (NON ESEGUITI)"]
+        for state in early_plans[:3]:
+            plan = (getattr(state, "metadata", {}) or {}).get("lubjanka_playbook", {})
+            lines.append(
+                f"{state.commodity} {plan['direction']} | trigger {plan['entry_trigger']} | "
+                f"SL {plan['stop_loss']} | TP1 {plan['take_profit_1']} | TP2 {plan['take_profit_2']} "
+                f"| {plan['activation']}"
+            )
     lines += [
         "",
         "Solo le opportunità più forti. Score = combinazione di confluence, quality e confidence.",
