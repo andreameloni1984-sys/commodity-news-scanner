@@ -516,3 +516,14 @@
 - **Trade-off:** until private D1 persistence is deployed and verified, journal/feedback files produced on ephemeral GitHub runners will not survive between runs. This is an intentional privacy-first stopgap, not a claim that persistence is solved.
 - **Open risk:** the existing tracked `paper_trade_log.csv` and its historical Git versions remain accessible in the public repository/history. They must be backed up securely and then removed/purged in a separately planned, verified action; do not rewrite public Git history blindly.
 - **Safety:** no secret access, no database changes, no deployment, no paid service, no real orders.
+
+## 2026-11-03 — Route Gagarin PAPER trade journal to private D1
+
+- **Finding:** PR #152 correctly stopped publishing `paper_trade_log.csv` to the public repository, but the runner-local CSV then became ephemeral. The D1 adapter in PR #150 persisted state and event-journal records but did not yet persist the separate PAPER entry journal.
+- **Implemented on** `architecture/no-render-cloudflare-free`: add `gagarin_paper_trade_journal` to the SQLite/D1 migration; add D1 append/read functions; route `paper_trade_journal.record_entries()` to D1 only when `GAGARIN_STORAGE_BACKEND=d1` is explicitly selected. In D1 mode the local CSV is not read or written. If D1 is unavailable, the write raises and fails closed instead of silently falling back to an ephemeral runner file.
+- **Idempotency:** stable non-empty `signal_id` values use a unique key and `ON CONFLICT DO NOTHING RETURNING id`; legacy rows without a stable ID are stored with SQL NULL and retain the previous non-deduplicated behavior. JSON payloads are validated before insertion.
+- **REST parameter correction:** preserve JSON null and numeric values in D1 bound parameters rather than coercing every parameter to text.
+- **Files:** `migrations/d1/0001_initial.sql`, `state_store.py`, `paper_trade_journal.py`, `tests/test_state_store_d1.py`, `tests/test_paper_trade_journal_d1.py`.
+- **Tests added:** D1 insert idempotency, SQL NULL signal identity, read ordering/limit bounds, D1-mode CSV isolation, and fail-closed behavior when D1 is unavailable.
+- **Limits:** no live D1 database or credentials were used; the GitHub Actions workflows do not yet select D1 or pass Cloudflare secrets. This feature is opt-in and not active in production. Historical public CSV recovery/migration and the separate feedback CSV remain open. Do not add credentials or enable the D1 backend until the private database migration and backup/restore are verified.
+- **Safety:** no Render, no paid services, no public CSV push, no real orders. PAPER only.

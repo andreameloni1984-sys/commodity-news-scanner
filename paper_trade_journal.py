@@ -261,9 +261,13 @@ def record_entries(results):
     - registra solo PAPER_ENTRY/PAPER_SIGNAL o final_decision == ENTRY;
     - non duplica lo stesso segnale sulla stessa candela/timeframe.
     """
-    # Migrate even on scans with no new entries, so the tracked historical
-    # journal is repaired and persisted on the next GitHub Actions run.
-    _ensure_journal_schema(JOURNAL_FILE)
+    # D1 mode never reads or writes the runner-local CSV. If D1 is selected
+    # but unavailable, the write fails closed instead of silently losing data.
+    from state_store import append_paper_trade_rows, storage_backend
+
+    use_d1 = storage_backend() == "d1"
+    if not use_d1:
+        _ensure_journal_schema(JOURNAL_FILE)
 
     entries = []
     for state in results:
@@ -280,7 +284,7 @@ def record_entries(results):
     if not entries:
         return 0
 
-    seen = _existing_signal_ids(JOURNAL_FILE)
+    seen = set() if use_d1 else _existing_signal_ids(JOURNAL_FILE)
     new_rows = []
     timestamp = datetime.now(timezone.utc).isoformat()
 
@@ -330,6 +334,8 @@ def record_entries(results):
     if not new_rows:
         return 0
 
-    _append_rows_atomically(JOURNAL_FILE, new_rows)
+    if use_d1:
+        return append_paper_trade_rows(new_rows)
 
+    _append_rows_atomically(JOURNAL_FILE, new_rows)
     return len(new_rows)
