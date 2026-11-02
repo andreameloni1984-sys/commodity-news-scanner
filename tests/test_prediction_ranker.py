@@ -47,13 +47,30 @@ class PredictionRankerTests(unittest.TestCase):
         self.assertEqual(ranked[0]["move_15m_pct"], 0.6)
         self.assertIsNone(ranked[0]["entry"])
 
-    def test_still_ignores_missing_price_or_direction(self):
-        self.assertEqual(rank_predictions([state("A", price=0),
-                                           state("C", setup_direction="NONE",
-                                                 structure_direction="NONE",
-                                                 mtf_direction="NONE",
-                                                 pre_move_direction="NONE",
-                                                 opportunity_direction="NONE")]), [])
+    def test_keeps_directional_candidate_without_price_but_ignores_no_direction(self):
+        ranked = rank_predictions([state("A", price=0),
+                                   state("C", setup_direction="NONE",
+                                         structure_direction="NONE",
+                                         mtf_direction="NONE",
+                                         pre_move_direction="NONE",
+                                         opportunity_direction="NONE")])
+        self.assertEqual(len(ranked), 1)
+        self.assertEqual(ranked[0]["commodity"], "A")
+        self.assertIsNone(ranked[0]["price"])
+        self.assertIsNone(ranked[0]["entry"])
+        self.assertIsNone(ranked[0]["stop"])
+
+    def test_ranks_momentum_without_quote_or_atr(self):
+        ranked = rank_predictions([state(
+            "ARGENTO", price=0, atr=0, move_5m_pct=-0.25,
+            entry=None, stop=None, tp1=None, tp2=None, tp3=None,
+            setup_direction="NONE", structure_direction="NONE",
+            mtf_direction="NONE", pre_move_direction="NONE",
+            opportunity_direction="NONE",
+        )])
+        self.assertEqual(len(ranked), 1)
+        self.assertEqual(ranked[0]["direction"], "SHORT")
+        self.assertIsNone(ranked[0]["price"])
 
     def test_message_returns_single_best_pick(self):
         message = format_best_prediction([state("WTI"), state("GOLD", pre_move_score=10)])
