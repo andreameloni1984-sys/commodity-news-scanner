@@ -36,17 +36,32 @@ def _number(value: Any) -> float | None:
         return None
 
 
+def _direction_from_state(state: Any) -> str:
+    for field in ("setup_direction", "opportunity_direction", "pre_move_direction",
+                  "structure_direction", "mtf_direction"):
+        direction = str(getattr(state, field, "") or "").strip().upper()
+        if direction in {"LONG", "SHORT"}:
+            return direction
+    closes = getattr(state, "closes", []) or []
+    try:
+        if len(closes) >= 2:
+            latest, previous = float(closes[-1]), float(closes[-2])
+            if latest > previous:
+                return "LONG"
+            if latest < previous:
+                return "SHORT"
+    except (TypeError, ValueError):
+        pass
+    return ""
+
+
 def _item_from_state(state: Any) -> dict:
     return {
         "commodity": getattr(state, "commodity", None) or getattr(state, "symbol", None) or "Strumento",
         "symbol": getattr(state, "symbol", None),
         # SoyuzState defaults setup_direction to the truthy string "NONE".
         # Do not let that placeholder mask a valid early opportunity direction.
-        "direction": (
-            str(getattr(state, "setup_direction", "") or "").upper()
-            if str(getattr(state, "setup_direction", "") or "").upper() in {"LONG", "SHORT"}
-            else str(getattr(state, "opportunity_direction", "") or "").upper()
-        ),
+        "direction": _direction_from_state(state),
         "probability": getattr(state, "probability", 0),
         "quality": getattr(state, "quality", 0),
         "confidence": getattr(state, "confidence", 0),
@@ -109,17 +124,24 @@ def _valid_levels(item: dict) -> bool:
 
 def _stage(item: dict) -> str | None:
     direction = item["direction"]
-    if direction not in {"LONG", "SHORT"} or not item["live"] or _number(item.get("price")) is None:
+    if direction not in {"LONG", "SHORT"}:
         return None
     try:
-        age = float(item.get("data_age_seconds"))
         probability = float(item.get("probability") or 0)
         quality = float(item.get("quality") or 0)
         confidence = float(item.get("confidence") or 0)
     except (TypeError, ValueError):
-        return None
-    if not math.isfinite(age) or age < 0 or age > LIVE_MAX_AGE_SECONDS:
-        return None
+        probability = quality = confidence = 0.0
+    # Do not hide market direction because a quote or score is missing.
+    age_value = item.get("data_age_seconds")
+    try:
+        age = float(age_value)
+    except (TypeError, ValueError):
+        age = None
+    item["quote_fresh"] = (
+        item["live"] and age is not None and math.isfinite(age)
+        and 0 <= age <= LIVE_MAX_AGE_SECONDS
+    )
     # The pattern/exit result must affect the decision, not merely decorate
     # the Telegram message. Use closed OHLC candles for patterns and a live
     # provider quote for stop/target checks.
@@ -163,7 +185,7 @@ def _stage(item: dict) -> str | None:
     # even if the trigger and final-entry decision are not confirmed yet.
     if scores_ok:
         return "POSSIBILE"
-    return None
+    return "OSSERVAZIONE"
 
 
 def find_aggressive_alerts(states: Iterable[Any]) -> list[dict]:
@@ -187,7 +209,7 @@ def find_aggressive_alerts(states: Iterable[Any]) -> list[dict]:
         -float(x.get("probability") or 0),
         -float(x.get("quality") or 0),
     ))
-    return found[:3]
+    return found[:10]
 
 
 def format_aggressive_alert(states: Iterable[Any]) -> str:
@@ -218,10 +240,15 @@ def format_aggressive_alerts(alerts: Iterable[dict]) -> str:
             "PROFITTO": "💰 TARGET RAGGIUNTO — valutare presa profitto/protezione del residuo",
             "CONFERMATA": "🟢 CONFERMATA",
             "POSSIBILE": "🟡 POSSIBILE OPPORTUNITÀ — in attesa di conferma",
+            "OSSERVAZIONE": "🔎 DIREZIONE RILEVATA — dati/punteggi ancora incompleti",
         }.get(item["stage"], item["stage"])
         lines.append("STATO: %s" % status_label)
         price = _number(item.get("price"))
         lines.append("Quotazione provider: %.6g (valuta da verificare per strumento)" % price if price is not None else "Quotazione: N/D")
+        lines.append("Stato dati: %s | freschezza: %s" % (
+            "LIVE" if item["live"] else "NON LIVE/ASSENTE",
+            "RECENTE" if item.get("quote_fresh") else "NON VERIFICATA/OBSOLETA",
+        ))
         try:
             age_value = float(item.get("data_age_seconds"))
             lines.append("Età prezzo provider: %.0f s" % age_value if math.isfinite(age_value) and age_value >= 0 else "Età prezzo provider: NON VERIFICATA")
