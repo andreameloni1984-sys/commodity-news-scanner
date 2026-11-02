@@ -355,3 +355,14 @@
 - **Main readback:** verified `engine/data.py` rejects timezone-naive ISO timestamps by default, keeps numeric epochs and explicit offsets, and passes `timezone.utc` only in the Twelve Data parser whose request explicitly sets `timezone=UTC`. Verified all three regression tests and this research entry are present on `main`.
 - **Post-merge status:** the connector returned no separate status contexts for merge commit `5b83b2842ed8804f2a0c7393b54c99d8005e52ac`; the five successful runs above are PR-head validation, not a post-merge runtime/deploy test.
 - **Safety:** no live provider polling, Telegram message, Render deployment, broker action or order was performed. PAPER ONLY.
+
+
+## 2026-11-02 — Strengthen the private API service-worker cache regression
+
+- **Finding:** the main-branch integration run 41380291573 had 503 passing tests and one failure because tests/test_personal_app_pwa.py required an exact comment substring (Never cache API responses). The service worker already returned early for /api/ before its cache-backed handler; the failure was a brittle comment assertion, not evidence that API responses were being cached.
+- **Implemented:** replaced the exact-comment assertion with a structural regression check: the /api/ early-return must exist and must appear before the first event.respondWith cache handler. The test also keeps /static/intelligence.html out of the service worker.
+- **Files:** tests/test_personal_app_pwa.py; this log.
+- **Code/test commit:** f4a1120855182770d61e6a9a45426d08aa304f8b. An earlier intermediate commit 34166a8beee530dccd3031623fed56567a20baa6 was superseded after readback exposed an over-escaped regex; the final commit above was read back and contains the corrected pattern.
+- **CI on final PR head:** PR #128, commit f4a1120855182770d61e6a9a45426d08aa304f8b; all five workflows completed SUCCESS. GAGARIN integration run 41393186629: 504 passed. Execution Layer 41393186653, NEWS alert 41393186652, Public Event Brain 41393186611, and PAPER 41393186520: SUCCESS.
+- **Scope/safety:** test and documentation only. No service-worker runtime behavior, market data, strategy, score, Governor, entry/SL/TP, PAPER authorization, Telegram send, deployment, or broker action changed.
+- **Open:** PR #128 remains draft and unmerged; verify the final branch head after any further edits. The successful CI is PR-head validation, not proof of production deployment or live Telegram delivery. PAPER ONLY.
