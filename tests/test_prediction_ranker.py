@@ -35,8 +35,19 @@ class PredictionRankerTests(unittest.TestCase):
         self.assertEqual(ranked[0]["direction"], "LONG")
         self.assertGreater(ranked[0]["score"], ranked[1]["score"])
 
-    def test_ignores_states_without_price_or_atr_or_direction(self):
-        self.assertEqual(rank_predictions([state("A", price=0), state("B", atr=0),
+    def test_keeps_directional_candidate_when_atr_is_missing(self):
+        ranked = rank_predictions([state(
+            "WTI", atr=0, closes=[100.0, 100.2, 100.4, 100.6],
+            move_5m_pct=0.2, move_15m_pct=0.6, move_1h_pct=None,
+        )])
+        self.assertEqual(len(ranked), 1)
+        self.assertEqual(ranked[0]["commodity"], "WTI")
+        self.assertEqual(ranked[0]["move_5m_pct"], 0.2)
+        self.assertEqual(ranked[0]["move_15m_pct"], 0.6)
+        self.assertIsNone(ranked[0]["entry"])
+
+    def test_still_ignores_missing_price_or_direction(self):
+        self.assertEqual(rank_predictions([state("A", price=0),
                                            state("C", setup_direction="NONE",
                                                  structure_direction="NONE",
                                                  mtf_direction="NONE",
