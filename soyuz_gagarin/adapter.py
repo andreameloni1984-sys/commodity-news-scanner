@@ -14,6 +14,7 @@ from typing import Iterable
 from .engine import GagarinEngine
 from .commodity_trade_plan import build_commodity_bracket
 from engine.systematic_forecast import systematic_forecast
+from engine.multi_timeframe_pullback import multi_timeframe_pullback
 from .models import Candidate, MarketSnapshot
 
 
@@ -143,6 +144,21 @@ def evaluate_states(states: Iterable[object]):
                 "decision_impact": "DIAGNOSTIC_ONLY",
                 "reason": type(exc).__name__,
             }
+        # Optional 15m/5m pullback overlay. It runs only when the producer
+        # supplies completed OHLC bars for both timeframes and remains diagnostic.
+        timeframe_data = meta.get("timeframe_ohlc", {})
+        if isinstance(timeframe_data, dict) and ("15m" in timeframe_data or "5m" in timeframe_data):
+            meta["multi_timeframe_pullback"] = multi_timeframe_pullback(
+                candles_15m=timeframe_data.get("15m"),
+                candles_5m=timeframe_data.get("5m"),
+            )
+        else:
+            meta["multi_timeframe_pullback"] = {
+                "status": "NOT_PROVIDED",
+                "direction": "NEUTRAL",
+                "decision_impact": "DIAGNOSTIC_ONLY",
+            }
+
         explicit_gates = meta.get("operational_gates", {})
         if not isinstance(explicit_gates, dict):
             explicit_gates = {}
