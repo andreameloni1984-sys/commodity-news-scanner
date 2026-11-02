@@ -297,9 +297,17 @@ _SILV_SPOT_CACHE: Dict[str, Any] = {}
 # TIME
 # ============================================================
 
-def _parse_time(value: Any) -> Optional[float]:
+def _parse_time(
+    value: Any,
+    *,
+    assume_timezone=None,
+) -> Optional[float]:
     """
-    Convert provider timestamp into UTC epoch seconds.
+    Convert a provider timestamp into UTC epoch seconds.
+
+    ISO timestamps must carry an explicit UTC marker or offset unless the
+    caller supplies a timezone guaranteed by that provider's request contract.
+    Numeric epoch timestamps are already absolute and need no timezone.
     """
 
     try:
@@ -319,10 +327,10 @@ def _parse_time(value: Any) -> Optional[float]:
 
         dt = datetime.fromisoformat(text)
 
-        if dt.tzinfo is None:
-            dt = dt.replace(
-                tzinfo=timezone.utc
-            )
+        if dt.tzinfo is None or dt.utcoffset() is None:
+            if assume_timezone is None:
+                return None
+            dt = dt.replace(tzinfo=assume_timezone)
 
         return dt.astimezone(
             timezone.utc
@@ -343,13 +351,15 @@ def _normalize(
     low: Any,
     close: Any,
     volume: Any = 0,
+    *,
+    assume_timezone=None,
 ) -> Optional[Dict[str, float]]:
     """
     Normalize one provider candle.
     """
 
     try:
-        ts = _parse_time(timestamp)
+        ts = _parse_time(timestamp, assume_timezone=assume_timezone)
 
         if ts is None:
             return None
@@ -1029,6 +1039,8 @@ def _fetch_twelve_symbol(
                 "volume",
                 0,
             ),
+            # The request above explicitly asks Twelve Data for timezone=UTC.
+            assume_timezone=timezone.utc,
         )
 
         if candle:

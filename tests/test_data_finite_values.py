@@ -2,10 +2,11 @@
 
 import math
 import time
+from datetime import datetime, timezone
 
 import pytest
 
-from engine.data import MIN_CANDLES_REQUIRED, _normalize, _validate_candles
+from engine.data import MIN_CANDLES_REQUIRED, _normalize, _parse_time, _validate_candles
 
 
 @pytest.mark.parametrize(
@@ -102,3 +103,30 @@ def test_validate_candles_rejects_negative_volume():
     assert error is None
     assert len(cleaned) == MIN_CANDLES_REQUIRED
     assert all(row["volume"] >= 0 for row in cleaned)
+
+
+def test_parse_time_rejects_timezone_naive_provider_timestamps():
+    assert _parse_time("2026-11-02T03:00:00") is None
+    assert _parse_time("2026-11-02") is None
+
+
+def test_parse_time_normalizes_explicit_timezone_and_epoch_values():
+    expected = datetime(2026, 11, 2, 3, 0, tzinfo=timezone.utc).timestamp()
+
+    assert _parse_time("2026-11-02T03:00:00Z") == expected
+    assert _parse_time("2026-11-02T05:00:00+02:00") == expected
+    assert _parse_time(expected) == expected
+
+
+def test_naive_timestamp_is_accepted_only_with_provider_timezone_contract():
+    timestamp = "2026-11-02T03:00:00"
+    expected = datetime(2026, 11, 2, 3, 0, tzinfo=timezone.utc).timestamp()
+
+    assert _normalize(timestamp, 100, 102, 99, 101) is None
+    assert _parse_time(timestamp, assume_timezone=timezone.utc) == expected
+
+    candle = _normalize(
+        timestamp, 100, 102, 99, 101, assume_timezone=timezone.utc
+    )
+    assert candle is not None
+    assert candle["timestamp"] == expected
