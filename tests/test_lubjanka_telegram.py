@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from telegram.aggressive_alert import format_aggressive_alert, run_aggressive_alert
+from telegram.aggressive_alert import find_aggressive_alerts, format_aggressive_alert, run_aggressive_alert
 
 
 def candidate(interceptor):
@@ -73,3 +73,19 @@ def test_new_lubjanka_interceptor_changes_alert_signature(monkeypatch, tmp_path)
     assert run_aggressive_alert([candidate("BREAKOUT")]) is True
     assert len(sent) == 2
     assert "BREAKOUT" in sent[-1]
+
+
+
+def test_lubjanka_direction_is_used_when_other_bias_fields_are_missing():
+    item = candidate("EARLY_MOVE")
+    item.setup_direction = None
+    item.opportunity_direction = None
+    item.closes = [100, 100, 100, 100, 100]
+    item.stop = 101.0
+    item.tp1 = 99.8
+    item.metadata["lubjanka"]["direction"] = "SHORT"
+    item.metadata["lubjanka"]["events"][0]["direction"] = "SHORT"
+
+    alerts = find_aggressive_alerts([item])
+    assert len(alerts) == 1
+    assert alerts[0]["direction"] == "SHORT"
