@@ -42,6 +42,13 @@ def _direction_from_state(state: Any) -> str:
         direction = str(getattr(state, field, "") or "").strip().upper()
         if direction in {"LONG", "SHORT"}:
             return direction
+    metadata = getattr(state, "metadata", {}) or {}
+    if isinstance(metadata, dict):
+        lubjanka = metadata.get("lubjanka", {})
+        if isinstance(lubjanka, dict):
+            direction = str(lubjanka.get("direction") or "").strip().upper()
+            if direction in {"LONG", "SHORT"}:
+                return direction
     closes = getattr(state, "closes", []) or []
     try:
         if len(closes) >= 2:
