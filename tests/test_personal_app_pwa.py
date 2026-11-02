@@ -24,3 +24,37 @@ def test_service_worker_never_caches_private_api_responses():
     assert 'url.pathname.startsWith("/api/")' in worker
     assert "Never cache API responses" in worker
     assert "/static/intelligence.html" not in worker
+
+
+def test_inline_dashboard_javascript_parses():
+    import re
+    import shutil
+    import subprocess
+    import tempfile
+
+    html = (ROOT / "static" / "intelligence.html").read_text(encoding="utf-8")
+    scripts = [
+        script
+        for script in re.findall(
+            r"<script\b[^>]*>(.*?)</script>", html, flags=re.IGNORECASE | re.DOTALL
+        )
+        if script.strip()
+    ]
+
+    assert scripts
+    assert r"\n$('logout')" not in html
+
+    node = shutil.which("node")
+    if node:
+        for script in scripts:
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".js", encoding="utf-8"
+            ) as source:
+                source.write(script)
+                source.flush()
+                subprocess.run(
+                    [node, "--check", source.name],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
