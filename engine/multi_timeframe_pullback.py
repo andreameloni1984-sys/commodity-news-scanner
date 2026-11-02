@@ -20,7 +20,7 @@ def _epoch(value: Any) -> int | None:
         return None
     if isinstance(value, (int, float)):
         number = float(value)
-        if not math.isfinite(number) or number <= 0:
+        if not math.isfinite(number) or number <= 0 or not number.is_integer():
             return None
         return int(number)
     if isinstance(value, str):
