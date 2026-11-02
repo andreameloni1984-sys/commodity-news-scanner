@@ -33,7 +33,7 @@ def _d1_config() -> tuple[str, str, str]:
     return account_id, database_id, api_token
 
 
-def _d1_query(sql: str, params: list[Any] | None = None) -> list[dict[str, Any]]:
+def _d1_query(sql: str, params: list[str] | None = None) -> list[dict[str, Any]]:
     """Execute one parameterized D1 REST query. Writes are never auto-retried."""
     import requests
 
@@ -44,7 +44,7 @@ def _d1_query(sql: str, params: list[Any] | None = None) -> list[dict[str, Any]]
     )
     body: dict[str, Any] = {"sql": sql}
     if params is not None:
-        body["params"] = list(params)
+        body["params"] = [str(value) for value in params]
 
     try:
         response = requests.post(
@@ -222,15 +222,22 @@ def append_paper_trade_rows(records: list[dict[str, Any]]) -> int:
         encoded = json.dumps(record, ensure_ascii=False, allow_nan=False, default=str)
         raw_signal_id = str(record.get("signal_id") or "").strip()
         signal_id = raw_signal_id or None
-        rows = _d1_query(
+        if signal_id is None:
+            sql = """
+                INSERT INTO gagarin_paper_trade_journal(signal_id, record, recorded_at)
+                VALUES (NULL, ?, ?)
+                RETURNING id
             """
-            INSERT INTO gagarin_paper_trade_journal(signal_id, record, recorded_at)
-            VALUES (?, ?, ?)
-            ON CONFLICT(signal_id) DO NOTHING
-            RETURNING id
-            """,
-            [signal_id, encoded, _utc_now()],
-        )
+            params = [encoded, _utc_now()]
+        else:
+            sql = """
+                INSERT INTO gagarin_paper_trade_journal(signal_id, record, recorded_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(signal_id) DO NOTHING
+                RETURNING id
+            """
+            params = [signal_id, encoded, _utc_now()]
+        rows = _d1_query(sql, params)
         inserted += len(rows)
     return inserted
 
@@ -243,7 +250,7 @@ def load_paper_trade_rows(limit: int = 20000) -> list[dict[str, Any]] | None:
     bounded_limit = max(1, min(int(limit), 100000))
     rows = _d1_query(
         "SELECT record FROM gagarin_paper_trade_journal ORDER BY id DESC LIMIT ?",
-        [bounded_limit],
+        [str(bounded_limit)],
     )
     records: list[dict[str, Any]] = []
     for row in rows:
