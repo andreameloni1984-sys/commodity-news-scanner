@@ -355,3 +355,14 @@
 - **Main readback:** verified `engine/data.py` rejects timezone-naive ISO timestamps by default, keeps numeric epochs and explicit offsets, and passes `timezone.utc` only in the Twelve Data parser whose request explicitly sets `timezone=UTC`. Verified all three regression tests and this research entry are present on `main`.
 - **Post-merge status:** the connector returned no separate status contexts for merge commit `5b83b2842ed8804f2a0c7393b54c99d8005e52ac`; the five successful runs above are PR-head validation, not a post-merge runtime/deploy test.
 - **Safety:** no live provider polling, Telegram message, Render deployment, broker action or order was performed. PAPER ONLY.
+
+
+## 2026-11-02 — Public Telegram strategy study: 15m/5m pullback diagnostic
+
+- Studied the public `budhafiidii/signal-bot` description: higher-timeframe setup, lower-timeframe confirmation, EMA alignment, pullback entry and outcome tracking. Its repository has no LICENSE file at the time checked, so no source code was copied.
+- Implemented an independent diagnostic in `engine/multi_timeframe_pullback.py`: completed 15m and 5m OHLC inputs, EMA20/50/200 alignment, ATR-normalized EMA200 pullback touch, explicit insufficient/malformed-data states.
+- Integrated optional metadata input `timeframe_ohlc` in `soyuz_gagarin/adapter.py` and exposed the diagnostic in `telegram/signals.py`. If the producer does not supply both timeframes, status is `NOT_PROVIDED`; no candles or signals are fabricated.
+- Added unit tests for aligned LONG, opposing timeframes, insufficient history and malformed OHLC.
+- Safety boundary: `DIAGNOSTIC_ONLY`; does not alter candidate scores, BIAS, Governor, gates, trigger, entry, SL, TP, position sizing or PAPER authorization. No broker orders.
+- Verification: commits are on research branch `research/telegram-public-bot-audit-20261102`; CI status must be checked before merge. No runtime data producer has yet been verified to populate `timeframe_ohlc`, so Telegram may display `NOT_PROVIDED` until a genuine source integration is completed.
+- Next: inspect CI, then verify whether any current provider supplies timestamp-aligned completed 15m and 5m OHLC for the same contract; do not substitute spot for futures.
