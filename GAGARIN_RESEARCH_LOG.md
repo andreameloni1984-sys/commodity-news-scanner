@@ -412,3 +412,13 @@
 - Adapter records the result in `metadata.multi_timeframe_pullback`; Telegram shows its diagnostic state. Missing provider data is explicitly `NOT_PROVIDED`.
 - Safety: diagnostic only; does not change scores, BIAS, Governor, gates, trigger, entry, SL, TP, sizing or PAPER authorization. No orders.
 - Limitation: no production provider has yet been verified to supply the required timestamped exact-contract 15m/5m payload. This is not a live-data or performance claim.
+
+
+## 2026-11-02 — Reject fractional ISO timestamps in MTF diagnostic
+
+- **Finding:** numeric fractional epochs were rejected, but ISO-8601 timestamps with fractional seconds were passed through `datetime.fromisoformat` and truncated by `int(parsed.timestamp())`. This could silently turn a sub-second timestamp into a whole-second candle close.
+- **Change:** reject fractional-second notation (dot or comma) in ISO timestamp strings; retain timezone-aware whole-second timestamps.
+- **Regression:** add an ISO fractional timestamp case to `tests/test_multi_timeframe_pullback.py`.
+- **Scope:** diagnostic validation only. No scoring, BIAS, Governor, entry, SL/TP, sizing, Telegram authorization or order behavior changed.
+- **Validation:** GitHub Actions is required on the updated PR head; no passing result is claimed until the run completes.
+- **Mode:** PAPER ONLY.
