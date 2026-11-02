@@ -13,6 +13,7 @@ from typing import Iterable
 
 from .engine import GagarinEngine
 from .commodity_trade_plan import build_commodity_bracket
+from engine.systematic_forecast import systematic_forecast
 from .models import Candidate, MarketSnapshot
 
 
@@ -124,6 +125,24 @@ def evaluate_states(states: Iterable[object]):
         reasons = reasons_for_bracket
 
         meta = _metadata(state)
+        # Independent systematic-futures research overlay. It is diagnostic
+        # only: never changes scores, gates, setup direction or risk levels.
+        try:
+            meta["systematic_forecast"] = systematic_forecast(
+                closes=getattr(state, "closes", None),
+                highs=getattr(state, "highs", None),
+                lows=getattr(state, "lows", None),
+                atr=atr,
+                regime=str(getattr(state, "regime", "UNKNOWN")),
+            )
+        except Exception as exc:
+            meta["systematic_forecast"] = {
+                "status": "ERROR",
+                "direction": "NEUTRAL",
+                "score": None,
+                "decision_impact": "DIAGNOSTIC_ONLY",
+                "reason": type(exc).__name__,
+            }
         explicit_gates = meta.get("operational_gates", {})
         if not isinstance(explicit_gates, dict):
             explicit_gates = {}
