@@ -324,3 +324,18 @@
 - **Validation:** documentation-only entry; no GAGARIN code changed and no tests run in this entry. Latest existing GAGARIN CI evidence remains the five successful PR #122 workflows recorded above; production runtime and a new post-merge CI run remain unverified.
 - **Next priority:** build a diagnostic-only commodity cost schema from verified contract specifications and actual quote provenance, then validate against real historical paper fills before it affects any signal or Governor. PAPER ONLY.
 - **References:** https://github.com/TauricResearch/TradingAgents ; https://www.freqtrade.io/en/latest/backtesting/ .
+
+
+## 2026-11-02 — Reject ambiguous provider timestamps in GAGARIN market-data ingestion
+
+- **Audit finding:** `engine/data.py::_parse_time()` silently assigned UTC to every ISO timestamp without an offset. That creates an unverified absolute time and can misstate candle ordering/freshness. The shared normalizer is used by the Twelve Data legacy parser, BiQuote, and Yahoo; Yahoo supplies numeric epoch timestamps, while SILV/Narwhal reference timestamps are expected to carry explicit UTC/offset metadata.
+- **Implemented:** ISO timestamps without an explicit timezone are now rejected by default. Numeric epoch timestamps and ISO strings with `Z` or a numeric offset remain accepted and normalized to UTC. A caller may supply an explicit timezone only when guaranteed by that provider request contract; the Twelve Data request explicitly sets `timezone=UTC`, so that legacy parser passes `timezone.utc`. No implicit timezone is applied to BiQuote, SILV DATA, or Narwhal.
+- **Regression coverage:** added tests for naive datetime/date rejection, UTC and +02:00 normalization, numeric epoch preservation, default candle rejection, and the explicit Twelve Data UTC exception.
+- **Public project studied:** Microsoft Qlib. Its point-in-time data design preserves the version of information available at a historical decision time to avoid look-ahead/data leakage. That principle reinforces keeping source timestamps explicit in GAGARIN. Qlib is MIT-licensed and broad/ML-oriented; no dependency or code was imported because this targeted ingestion guard fits the existing engine.
+- **Files:** `engine/data.py`; `tests/test_data_finite_values.py`; this log.
+- **Code commit:** `ef9e013e380d8a46ae9100cda1c432e9402167a2`.
+- **Regression-test commit:** `a92481230b033cbae4845093f025fdb6eb5dcd42`.
+- **Validation:** committed on branch `fix/gagarin-reject-naive-provider-timestamps-20261102`; local execution and GitHub Actions are not yet verified. Do not treat the change as merged or active on main until CI passes and the PR is integrated.
+- **Safety:** no provider, symbol mapping, price, ATR, entry/SL/TP, risk threshold, Governor, or PAPER authorization changed. No network quote, Telegram send, deployment, or order was performed.
+- **Open:** confirm CI; inspect actual BiQuote timestamp shape in a controlled read-only provider response before considering any explicit timezone exception; verify free/independent same-contract futures sources; build the 100+ real-setup out-of-sample journal with spread/fees/slippage.
+- **References:** Qlib repository and data-handler architecture: https://github.com/microsoft/qlib and https://github.com/microsoft/qlib/blob/main/qlib/data/dataset/handler.py; Qlib point-in-time database documentation: https://qlib.readthedocs.io/en/latest/advanced/PIT.html.
