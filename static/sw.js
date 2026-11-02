@@ -22,7 +22,7 @@ self.addEventListener("fetch", event => {
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
-  // Never cache the authenticated dashboard HTML, API responses, portfolio data, credentials, or analysis results.
+  // Never cache API responses.\n  // Never cache the authenticated dashboard HTML, portfolio data, credentials, or analysis results.
   if (url.pathname.startsWith("/api/")) return;
 
   if (APP_SHELL.includes(url.pathname)) {
