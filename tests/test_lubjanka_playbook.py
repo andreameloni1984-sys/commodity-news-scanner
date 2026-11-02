@@ -32,11 +32,14 @@ def test_long_playbook_has_ordered_levels():
     assert plan["status"] == "CONDITIONAL_PLAN"
     assert plan["stop_loss"] < plan["entry_trigger"] < plan["take_profit_1"] < plan["take_profit_2"]
 
-def test_conflicting_interceptors_never_create_a_plan():
+def test_conflicting_interceptors_keep_primary_direction_visible():
     candles = bars("down")
     plan = build_conditional_playbook(candles, {"status": "INTERCEPTED", "direction": "SHORT",
         "directional_conflict": True}, now_epoch=candles[-1]["timestamp"] + 301)
-    assert plan["status"] == "NO_PLAN"
+    assert plan["status"] == "CONDITIONAL_PLAN"
+    assert plan["direction"] == "SHORT"
+    assert plan["directional_conflict"] is True
+    assert "CONFLITTO" in plan["note"]
 
 def test_stale_bars_never_create_a_plan():
     candles = bars("down")
