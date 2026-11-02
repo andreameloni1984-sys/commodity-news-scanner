@@ -135,6 +135,14 @@ class MultiTimeframePullbackTests(unittest.TestCase):
         )
         self.assertEqual(result["timeframe_5m"]["status"], "INVALID_TIMESTAMP")
 
+    def test_fractional_iso_timestamp_is_rejected_without_truncation(self):
+        lower = source("5m")
+        lower["candles"][-1]["timestamp"] = "2027-01-15T08:00:00.500Z"
+        result = multi_timeframe_pullback(
+            candles_15m=source("15m"), candles_5m=lower, now_epoch=NOW,
+        )
+        self.assertEqual(result["timeframe_5m"]["status"], "INVALID_TIMESTAMP")
+
     def test_insufficient_history_is_rejected(self):
         lower = source("5m")
         lower["candles"] = bars("5m", count=50)
