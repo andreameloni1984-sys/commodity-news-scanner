@@ -2,7 +2,7 @@ name: Gagarin Paper Monitor (GitHub Actions)
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -34,7 +34,7 @@ jobs:
       MAX_ENTRY_STOP_ATR: "2.5"
       SL_STRUCTURE_BUFFER_ATR: "0.15"
       SL_MIN_ATR: "0.80"
-      MONITOR_INTERVAL_MINUTES: "15"
+      MONITOR_INTERVAL_MINUTES: "5"
       POLITICAL_IMPACT_ENABLED: "1"
       US_PRESIDENT_IMPACT_ENABLED: "1"
       ELECTION_IMPACT_ENABLED: "1"

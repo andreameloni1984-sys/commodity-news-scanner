@@ -486,3 +486,14 @@
 - **Main readback:** middleware now checks every `/static/*.html` path; `static/aggressive.html` and the legacy inline dashboard contain no `localStorage` or `sessionStorage` API-key persistence; the regression tests are present on main.
 - **Production limit:** no Render workspace was selected for this run, so no post-merge deployment, live /login, logout, protected-route HTTP, or PWA-install verification is claimed. This is a repository/CI security fix, not proof that the running service has received it.
 - **Safety:** no secret values were read or changed; manifest, icons and service worker remain public app-shell assets; API routes still require `CLOUD_API_KEY`. PAPER ONLY; no broker/order action.
+
+
+## 2026-11-02 — Increase Gagarin scheduled market scan cadence to five minutes
+
+- Finding: LUBJANKA evaluates completed M5 candles, but the scheduled GitHub Actions monitor was triggered every 15 minutes. A short-lived M5 move could form and fade between scans.
+- Implemented on branch `feat/gagarin-five-minute-interception-scan-20261102`: changed the scheduled monitor cron from every 15 minutes to every 5 minutes and aligned `MONITOR_INTERVAL_MINUTES` to `5`.
+- Scope: only the scheduled Gagarin monitor workflow; no strategy thresholds, data-provider settings, Governor, PAPER authorization, or order behavior changed.
+- Limits: this increases scheduled run frequency threefold and therefore increases provider request volume. It does not guarantee a scan exactly on each five-minute boundary because GitHub Actions scheduling can be delayed. Provider rate limits and actual workflow duration must be observed before claiming uninterrupted five-minute coverage. Public repository hosted-runner usage is not a guarantee of provider capacity.
+- Validation: workflow diff checked for both cadence values; CI pending on PR. No production Render setting changed and no live trade signal or Telegram delivery is claimed.
+- SPUTNIK comparison: `.github/workflows/trump_tracker.yml` already schedules the main public-event monitor every five minutes (`2-59/5`); no redundant schedule change was made there.
+- Safety: PAPER ONLY; no orders sent.
