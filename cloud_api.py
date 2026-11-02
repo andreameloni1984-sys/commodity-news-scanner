@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import os
 import hashlib
+from collections import deque
 import hmac
 import time
 from datetime import datetime, timezone
@@ -26,6 +27,67 @@ app = FastAPI(title="SOYUZ GAGARIN CLOUD", version="1.0")
 # Private dashboard authentication. Configure both secrets on Render.
 _APP_SESSION_TTL = 12 * 60 * 60
 _APP_COOKIE = "gagarin_session"
+
+# Best-effort per-client throttle for the single-password personal dashboard.
+# The bounded in-process store avoids a new dependency or persistent credential data.
+_LOGIN_FAILURE_WINDOW_SECONDS = 15 * 60
+_LOGIN_MAX_FAILED_ATTEMPTS = 5
+_LOGIN_MAX_TRACKED_CLIENTS = 1024
+_LOGIN_FAILURES: dict[str, deque[float]] = {}
+_LOGIN_FAILURES_LOCK = Lock()
+
+
+def _login_client_key(request: Request) -> str:
+    client = getattr(request, "client", None)
+    host = getattr(client, "host", None)
+    return str(host or "unknown")[:128]
+
+
+def _prune_login_failures(client_key: str, now: float):
+    attempts = _LOGIN_FAILURES.get(client_key)
+    if attempts is None:
+        return None
+    while attempts and now - attempts[0] >= _LOGIN_FAILURE_WINDOW_SECONDS:
+        attempts.popleft()
+    if not attempts:
+        _LOGIN_FAILURES.pop(client_key, None)
+        return None
+    return attempts
+
+
+def _login_rate_limit_retry_after(client_key: str, now: float | None = None) -> int:
+    current = time.monotonic() if now is None else float(now)
+    key = str(client_key or "unknown")[:128]
+    with _LOGIN_FAILURES_LOCK:
+        attempts = _prune_login_failures(key, current)
+        if attempts is None or len(attempts) < _LOGIN_MAX_FAILED_ATTEMPTS:
+            return 0
+        return max(1, math.ceil(
+            _LOGIN_FAILURE_WINDOW_SECONDS - (current - attempts[0])
+        ))
+
+
+def _record_login_failure(client_key: str, now: float | None = None) -> None:
+    current = time.monotonic() if now is None else float(now)
+    key = str(client_key or "unknown")[:128]
+    with _LOGIN_FAILURES_LOCK:
+        attempts = _prune_login_failures(key, current)
+        if attempts is None:
+            if len(_LOGIN_FAILURES) >= _LOGIN_MAX_TRACKED_CLIENTS:
+                oldest_key = min(
+                    _LOGIN_FAILURES,
+                    key=lambda item: _LOGIN_FAILURES[item][-1],
+                )
+                _LOGIN_FAILURES.pop(oldest_key, None)
+            attempts = deque()
+            _LOGIN_FAILURES[key] = attempts
+        attempts.append(current)
+
+
+def _clear_login_failures(client_key: str) -> None:
+    key = str(client_key or "unknown")[:128]
+    with _LOGIN_FAILURES_LOCK:
+        _LOGIN_FAILURES.pop(key, None)
 
 
 def _verify_app_password(password: str, encoded: str | None = None) -> bool:
@@ -100,9 +162,20 @@ async def app_login(request: Request):
         payload = await request.json()
     except Exception:
         raise HTTPException(status_code=400, detail="Richiesta non valida")
+    client_key = _login_client_key(request)
+    retry_after = _login_rate_limit_retry_after(client_key)
+    if retry_after:
+        raise HTTPException(
+            status_code=429,
+            detail="Troppi tentativi. Riprova più tardi.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
     password = payload.get("password", "") if isinstance(payload, dict) else ""
     if not isinstance(password, str) or not _verify_app_password(password):
+        _record_login_failure(client_key)
         raise HTTPException(status_code=401, detail="Password non corretta")
+    _clear_login_failures(client_key)
     issued_at = int(time.time())
     response = JSONResponse({"ok": True})
     response.set_cookie(
