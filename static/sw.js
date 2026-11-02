@@ -1,7 +1,8 @@
-const CACHE_NAME = "gagarin-personal-app-v1";
+const CACHE_NAME = "gagarin-personal-app-v2";
 const APP_SHELL = [
   "/static/manifest.webmanifest",
-  "/static/icon.svg"
+  "/static/icon.svg",
+  "/static/apple-touch-icon.png"
 ];
 
 self.addEventListener("install", event => {

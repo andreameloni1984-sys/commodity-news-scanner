@@ -19,6 +19,12 @@
   ],
   "icons": [
     {
+      "src": "/static/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
       "src": "/static/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",

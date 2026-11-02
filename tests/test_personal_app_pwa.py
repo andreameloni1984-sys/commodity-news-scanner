@@ -82,3 +82,25 @@ def test_private_dashboard_environment_example_documents_secrets_without_values(
     assert "secrets.token_urlsafe(48)" in env_example
     assert "200000..2000000" in env_example
     assert "hosting Environment UI" in env_example
+
+
+def test_ios_home_screen_icon_is_png_and_cached():
+    import struct
+
+    manifest = json.loads((ROOT / "static" / "manifest.webmanifest").read_text(encoding="utf-8"))
+    html = (ROOT / "static" / "intelligence.html").read_text(encoding="utf-8")
+    worker = (ROOT / "static" / "sw.js").read_text(encoding="utf-8")
+    icon_path = ROOT / "static" / "apple-touch-icon.png"
+    icon = icon_path.read_bytes()
+
+    assert '<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">' in html
+    assert any(
+        item.get("src") == "/static/apple-touch-icon.png"
+        and item.get("sizes") == "180x180"
+        and item.get("type") == "image/png"
+        for item in manifest["icons"]
+    )
+    assert icon[:8] == bytes([137, 80, 78, 71, 13, 10, 26, 10])
+    assert struct.unpack(">II", icon[16:24]) == (180, 180)
+    assert '"/static/apple-touch-icon.png"' in worker
+    assert "gagarin-personal-app-v2" in worker
