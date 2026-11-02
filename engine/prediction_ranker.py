@@ -66,12 +66,30 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
 
         live = bool(getattr(state, "live", False))
         data_ok = bool(getattr(state, "data_ok", False))
+        closes = getattr(state, "closes", []) or []
         price = _num(getattr(state, "price", 0))
+        if price <= 0 and closes:
+            price = _num(closes[-1])
         atr = _num(getattr(state, "atr", 0))
-        # A directional ranking without a valid price and volatility scale is
-        # not comparable; fail closed rather than inventing a candidate.
-        if price <= 0 or atr <= 0:
+        # Ranking is a market-observation task: ATR is useful for trade levels,
+        # but its absence must not hide a visible directional move. Execution
+        # levels remain unavailable until the existing risk layer can calculate them.
+        if price <= 0:
             continue
+
+        def _return_pct(steps: int) -> float | None:
+            if len(closes) <= steps:
+                return None
+            prior = _num(closes[-1 - steps])
+            latest = _num(closes[-1])
+            return round((latest / prior - 1.0) * 100.0, 3) if prior > 0 and latest > 0 else None
+
+        move_5m = getattr(state, "move_5m_pct", None)
+        move_15m = getattr(state, "move_15m_pct", None)
+        move_1h = getattr(state, "move_1h_pct", None)
+        if move_5m is None: move_5m = _return_pct(1)
+        if move_15m is None: move_15m = _return_pct(3)
+        if move_1h is None: move_1h = _return_pct(12)
 
         pre_move = _num(getattr(state, "pre_move_score", 0))
         opportunity = _num(getattr(state, "opportunity_score", 0))
@@ -128,6 +146,9 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
             "score": round(score, 1),
             "expected_move_pct": round(expected_move, 3),
             "price": price,
+            "move_5m_pct": move_5m,
+            "move_15m_pct": move_15m,
+            "move_1h_pct": move_1h,
             "entry": getattr(state, "entry", None),
             "stop": getattr(state, "stop", None),
             "tp1": getattr(state, "tp1", None),
