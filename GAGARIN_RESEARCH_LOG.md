@@ -401,3 +401,14 @@
 - **Safety:** the service worker still bypasses `/api/` and authenticated dashboard HTML. No credentials, private API responses, trading logic, Governor, PAPER authorization, or orders changed.
 - **Limitations:** no physical iPhone installation test yet. The Render dashboard login remains HTTP 503 because at least one of `APP_PASSWORD_HASH` or `APP_SESSION_SECRET` is not configured; database persistence is disabled because `DATABASE_URL` is absent. The PR is not deployed until merged and deployed separately.
 - **Mode:** PAPER ONLY.
+
+
+## 2026-11-02 — Timestamp- and contract-aligned 15m/5m pullback diagnostic
+
+- Implemented an independent, dependency-free MTF overlay on branch `research/gagarin-mtf-timestamp-contract-20261102`.
+- Both 15m and 5m inputs now require completed OHLC bars with UTC close timestamps, the same provider, symbol, explicit futures contract, expiry, currency and unit.
+- Rejects spot/CFD basis, missing or naive timestamps, non-monotonic/misaligned timestamps, stale/future bars, incomplete candles, malformed OHLC, insufficient history and mismatched latest 15m/5m endpoints.
+- Allows finite negative historical futures prices (including historical WTI settlements); ATR must remain positive.
+- Adapter records the result in `metadata.multi_timeframe_pullback`; Telegram shows its diagnostic state. Missing provider data is explicitly `NOT_PROVIDED`.
+- Safety: diagnostic only; does not change scores, BIAS, Governor, gates, trigger, entry, SL, TP, sizing or PAPER authorization. No orders.
+- Limitation: no production provider has yet been verified to supply the required timestamped exact-contract 15m/5m payload. This is not a live-data or performance claim.
