@@ -48,12 +48,14 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
         if direction == "NONE":
             # Always produce a directional candidate when the current market
             # series supplies momentum; this is a lower-evidence fallback.
+            move5 = _num(getattr(state, "move_5m_pct", 0))
+            move15 = _num(getattr(state, "move_15m_pct", 0))
+            move1h = _num(getattr(state, "move_1h_pct", 0))
             move24 = _num(getattr(state, "move_24h_pct", 0))
             move4 = _num(getattr(state, "move_4h_pct", 0))
-            if move24 != 0:
-                direction = "LONG" if move24 > 0 else "SHORT"
-            elif move4 != 0:
-                direction = "LONG" if move4 > 0 else "SHORT"
+            momentum = next((value for value in (move5, move15, move1h, move4, move24) if value != 0), 0.0)
+            if momentum != 0:
+                direction = "LONG" if momentum > 0 else "SHORT"
             else:
                 closes = getattr(state, "closes", []) or []
                 try:
@@ -75,7 +77,7 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
         # but its absence must not hide a visible directional move. Execution
         # levels remain unavailable until the existing risk layer can calculate them.
         if price <= 0:
-            continue
+            price = None
 
         def _return_pct(steps: int) -> float | None:
             if len(closes) <= steps:
@@ -102,7 +104,13 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
         if expected_move <= 0:
             expected_move = atr_pct * (1.0 + pre_move / 100.0)
         if expected_move <= 0:
-            expected_move = abs(_num(getattr(state, "move_24h_pct", 0))) or abs(_num(getattr(state, "move_4h_pct", 0)))
+            expected_move = max(
+                abs(_num(getattr(state, "move_5m_pct", 0))),
+                abs(_num(getattr(state, "move_15m_pct", 0))),
+                abs(_num(getattr(state, "move_1h_pct", 0))),
+                abs(_num(getattr(state, "move_4h_pct", 0))),
+                abs(_num(getattr(state, "move_24h_pct", 0))),
+            )
 
         score = 0.0
         reasons = []
@@ -185,7 +193,7 @@ def format_best_prediction(states: Iterable[Any], profile: str = "AGGRESSIVE") -
         f"SCELTA #1: {best['commodity']} ({best['symbol']}) — {best['direction']}",
         f"SCORE PREVISIONE: {best['score']:.1f}/100 (indice comparativo, NON probabilità)",
         f"MOVIMENTO ATTESO DAL MODELLO: circa {best['expected_move_pct']:.2f}%",
-        f"PREZZO: {best['price']:.6g}",
+        f"PREZZO: {best['price']:.6g}" if best["price"] is not None else "PREZZO: N/D",
         f"ENTRY: {best['entry']:.6g}" if best['entry'] is not None else "ENTRY: non disponibile",
         f"STOP LOSS: {best['stop']:.6g}" if best['stop'] is not None else "STOP LOSS: non disponibile",
         f"TAKE PROFIT 1: {best['tp1']:.6g}" if best['tp1'] is not None else "TAKE PROFIT 1: non disponibile",
