@@ -64,6 +64,20 @@ def _is_operational_state(state) -> bool:
     return str(getattr(state, "symbol", "") or "").strip().upper() in OPERATIONAL_SYMBOLS
 
 
+def _select_run_universe(now=None):
+    """Scan every enabled commodity on every cycle; keep FX session-scoped."""
+    enabled = enabled_commodities()
+    commodities = [
+        item for item in enabled
+        if str(getattr(item, "category", "") or "").strip().lower() != "forex"
+    ]
+    forex = [
+        item for item in enabled
+        if str(getattr(item, "category", "") or "").strip().lower() == "forex"
+    ]
+    return commodities + filter_by_session(forex, now=now, on_demand=False)
+
+
 # ============================================================
 # HEADER
 # ============================================================
@@ -566,9 +580,9 @@ def run():
     # UNIVERSE
     # --------------------------------------------------------
 
-    instruments = filter_by_session(
-        enabled_commodities(), on_demand=False
-    )
+    # Commodities are scanned continuously: time-of-day is not a reason to
+    # hide a market move. Only auxiliary FX remains restricted to its windows.
+    instruments = _select_run_universe()
     operational_instruments = [
         item for item in instruments
         if str(getattr(item, "symbol", "")).strip().upper() in OPERATIONAL_SYMBOLS
