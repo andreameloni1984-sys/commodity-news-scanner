@@ -38,7 +38,8 @@ def compare_trend_strategies(closes, *, breakout_period=20, fast_period=10, slow
     prices = _valid(closes)
     if not prices:
         return {"status": "NO_DATA", "direction": "UNKNOWN", "votes": {},
-                "available": 0, "paper_only": True}
+                "available": 0, "paper_only": True, "execution_allowed": False,
+                "note": "Invalid or missing price history; no signal generated."}
 
     votes = {}
     if len(prices) >= breakout_period + 1:
