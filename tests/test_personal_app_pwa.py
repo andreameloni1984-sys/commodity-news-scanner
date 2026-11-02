@@ -47,13 +47,13 @@ def test_inline_dashboard_javascript_parses():
     scripts = [
         script
         for script in re.findall(
-            r"<script\b[^>]*>(.*?)</script>", html, flags=re.IGNORECASE | re.DOTALL
+            r"<script\\b[^>]*>(.*?)</script>", html, flags=re.IGNORECASE | re.DOTALL
         )
         if script.strip()
     ]
 
     assert scripts
-    assert r"\n$('logout')" not in html
+    assert r"\\n$('logout')" not in html
 
     node = shutil.which("node")
     if node:
@@ -69,3 +69,17 @@ def test_inline_dashboard_javascript_parses():
                     capture_output=True,
                     text=True,
                 )
+
+
+def test_private_dashboard_environment_example_documents_secrets_without_values():
+    env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
+    lines = [line.strip() for line in env_example.splitlines()]
+
+    for name in ("APP_PASSWORD_HASH", "APP_SESSION_SECRET", "CLOUD_API_KEY"):
+        assignments = [line for line in lines if line.startswith(f"{name}=")]
+        assert assignments == [f"{name}="]
+
+    assert "getpass.getpass" in env_example
+    assert "secrets.token_urlsafe(48)" in env_example
+    assert "200000..2000000" in env_example
+    assert "hosting Environment UI" in env_example
