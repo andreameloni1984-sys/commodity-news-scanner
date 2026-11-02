@@ -441,3 +441,16 @@
 - Initial PR run `41472174720`: integration suite reported **525 passed, 1 failed**. The failure was only the test's expected sanitized Content-Type string: the sanitizer correctly retained the MIME slash while removing the semicolon/space separator. Production implementation behaved as intended.
 - Corrected the expected value in test-only commit `853ec7bfb0c12002ce3b932b820b62ff15363150`.
 - The PR head now requires a fresh complete CI run. The initial run remains recorded as failed; it is not being represented as green.
+
+
+## 2026-11-02 — Add LUBJANKA M5 signal interceptors
+
+- **Finding:** the existing Gagarin scan surfaces broad 4h/24h opportunity context and directional observations, but it does not independently label the first short-horizon move, momentum expansion and close beyond a recent range.
+- **Implemented:** new pure diagnostic module `engine/lubjanka.py` with three independent interceptors: `EARLY_MOVE`, `MOMENTUM` and `BREAKOUT`. It uses the existing 5-minute OHLCV candles, computes a local true-range reference, ignores the still-forming bar, and records source, last completed bar timestamp/age, last close, ATR, range-expansion and volume proxies.
+- **Integration:** `engine/gagarin.py` stores the result in `state.metadata["lubjanka"]`. `telegram/aggressive_alert.py` displays intercepted events and includes interceptor identity in alert deduplication, so a newly detected interceptor can trigger a changed alert even when the broader directional stage is unchanged.
+- **Tests added:** `tests/test_lubjanka.py` covers LONG/SHORT interception, EARLY_MOVE/MOMENTUM/BREAKOUT, flat-market no-signal, incomplete-bar exclusion, stale data, non-monotonic timestamps, malformed OHLC and finite negative historical futures prices. `tests/test_lubjanka_telegram.py` covers Telegram display and alert-signature changes.
+- **Safety:** diagnostic only; no change to setup direction, scores, Governor, risk, entry/SL/TP, PAPER authorization or order execution. LUBJANKA does not generate execution levels. Volume is an OHLCV proxy, not DOM/footprint.
+- **Branch:** `feat/gagarin-lubjanka-interceptors-20261102`.
+- **Commits:** module `8a2d0d0dcb37f8d2aeaa42accd1642c52eb457fd`; detector tests `f27f3fc046d6ec065ece927f7f80f3dc8d2d68cd`; Telegram tests `a88d75201b23456646df9fca9d2ec5d3210a6f8b`; engine integration `9ab6aa576ec6c271dd5bd2d88ba386096798a71c`; Telegram integration `c0a7822d4a541b6675860072e1567470becc13e3`.
+- **Verification:** CI pending at branch creation; no live market data, backtest performance, Render deployment or Telegram delivery is claimed.
+- **Next:** run focused and full CI, inspect signal output on real fresh M5 data, then add the separate SPUTNIK event-impact interceptor only after this module is validated.
