@@ -26,7 +26,6 @@ def test_service_worker_never_caches_private_api_responses():
     assert "/static/intelligence.html" not in worker
 
 
-
 def test_dashboard_api_key_is_not_persisted_in_browser_storage():
     html = (ROOT / "static" / "intelligence.html").read_text(encoding="utf-8")
 
@@ -69,3 +68,17 @@ def test_inline_dashboard_javascript_parses():
                     capture_output=True,
                     text=True,
                 )
+
+
+def test_private_dashboard_environment_example_documents_secrets_without_values():
+    env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
+    lines = [line.strip() for line in env_example.splitlines()]
+
+    for name in ("APP_PASSWORD_HASH", "APP_SESSION_SECRET", "CLOUD_API_KEY"):
+        assignments = [line for line in lines if line.startswith(f"{name}=")]
+        assert assignments == [f"{name}="]
+
+    assert "getpass.getpass" in env_example
+    assert "secrets.token_urlsafe(48)" in env_example
+    assert "200000..2000000" in env_example
+    assert "hosting Environment UI" in env_example
