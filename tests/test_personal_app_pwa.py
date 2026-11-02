@@ -23,4 +23,4 @@ def test_service_worker_never_caches_private_api_responses():
 
     assert 'url.pathname.startsWith("/api/")' in worker
     assert "Never cache API responses" in worker
-    assert "/static/intelligence.html" in worker
+    assert "/static/intelligence.html" not in worker
