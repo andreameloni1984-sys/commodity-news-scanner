@@ -589,8 +589,8 @@ def run_analysis(x_api_key: str | None = Header(default=None)):
 
 
 @app.get("/")
-def dashboard():
-    if _valid_app_session(None):
+def dashboard(request: Request):
+    if _valid_app_session(request.cookies.get(_APP_COOKIE)):
         return RedirectResponse("/static/intelligence.html")
     return RedirectResponse("/login", status_code=303)
 
