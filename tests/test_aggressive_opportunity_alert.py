@@ -48,10 +48,23 @@ def test_opportunity_direction_is_used_when_setup_direction_is_placeholder_none(
     assert alerts[0]["stage"] == "POSSIBILE"
 
 
-def test_no_alert_without_live_price_or_direction():
-    assert find_aggressive_alerts([candidate(live=False)]) == []
-    assert find_aggressive_alerts([candidate(price=None)]) == []
-    assert find_aggressive_alerts([candidate(setup_direction=None, opportunity_direction=None)]) == []
+def test_direction_remains_visible_without_live_price_or_scores():
+    alerts = find_aggressive_alerts([candidate(live=False, price=None, data_age_seconds=None)])
+    assert len(alerts) == 1
+    assert alerts[0]["stage"] == "POSSIBILE"
+    assert alerts[0]["price"] is None
+
+    alerts = find_aggressive_alerts([candidate(probability=0, quality=0, confidence=0)])
+    assert len(alerts) == 1
+    assert alerts[0]["stage"] == "OSSERVAZIONE"
+
+
+def test_direction_can_be_derived_from_recent_closes():
+    alerts = find_aggressive_alerts([candidate(
+        setup_direction=None, opportunity_direction=None, closes=[2700, 2701, 2702]
+    )])
+    assert len(alerts) == 1
+    assert alerts[0]["direction"] == "LONG"
 
 
 
