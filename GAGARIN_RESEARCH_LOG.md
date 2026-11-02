@@ -434,3 +434,10 @@
 - **Test:** new mocked regression asserts content-type/status/byte-count diagnostics and proves a body marker is not exposed. CI is pending; no test pass is claimed before Actions completes.
 - **Limits:** this improves diagnosis, not GDELT availability. HTTP 429, upstream invalid JSON, and source outages remain possible. No live feed quote, Telegram send, deployment or order is claimed.
 - **Mode:** PAPER/DEMO only.
+
+
+### CI follow-up — GDELT safe diagnostic test expectation
+
+- Initial PR run `41472174720`: integration suite reported **525 passed, 1 failed**. The failure was only the test's expected sanitized Content-Type string: the sanitizer correctly retained the MIME slash while removing the semicolon/space separator. Production implementation behaved as intended.
+- Corrected the expected value in test-only commit `853ec7bfb0c12002ce3b932b820b62ff15363150`.
+- The PR head now requires a fresh complete CI run. The initial run remains recorded as failed; it is not being represented as green.
