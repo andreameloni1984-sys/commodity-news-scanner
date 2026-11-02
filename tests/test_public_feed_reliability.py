@@ -118,7 +118,7 @@ def test_gdelt_invalid_json_exposes_only_bounded_response_metadata(monkeypatch):
         monitor._get_gdelt_items()
 
     assert error.value.safe_diagnostic == (
-        f"content_type=texthtmlcharsetutf-8,http_status=200,bytes={len(body)}"
+        f"content_type=text/htmlcharsetutf-8,http_status=200,bytes={len(body)}"
     )
     assert "PRIVATE_BODY_MARKER" not in str(error.value)
     assert "PRIVATE_BODY_MARKER" not in error.value.safe_diagnostic
