@@ -26,7 +26,7 @@ class MultiTimeframePullbackTests(unittest.TestCase):
             candles_5m=rising_bars(last_low_offset=0.1),
         )
         self.assertEqual(result["direction"], "LONG")
-        self.assertEqual(result["setup"], "PULLBACK_CONFIRMED")
+        self.assertEqual(result["setup"], "TREND_ALIGNED_WAITING_PULLBACK")
         self.assertEqual(result["decision_impact"], "DIAGNOSTIC_ONLY")
 
     def test_opposing_timeframes_do_not_create_direction(self):
