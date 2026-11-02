@@ -37,7 +37,8 @@ class PredictionRankerTests(unittest.TestCase):
 
     def test_keeps_directional_candidate_when_atr_is_missing(self):
         ranked = rank_predictions([state(
-            "WTI", atr=0, closes=[100.0, 100.2, 100.4, 100.6],
+            "WTI", atr=0, entry=None, stop=None, tp1=None, tp2=None, tp3=None,
+            closes=[100.0, 100.2, 100.4, 100.6],
             move_5m_pct=0.2, move_15m_pct=0.6, move_1h_pct=None,
         )])
         self.assertEqual(len(ranked), 1)
