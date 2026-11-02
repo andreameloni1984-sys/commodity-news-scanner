@@ -134,6 +134,7 @@ def format_signal(state) -> str:
         "",
         f"🌐 Regime: {getattr(state, 'regime', 'UNKNOWN')}",
         f"🧮 Systematic (diagnostico): {_systematic_label(state)}",
+        f"⏱️ MTF 15m/5m: {((metadata.get('multi_timeframe_pullback') or {}).get('setup') or (metadata.get('multi_timeframe_pullback') or {}).get('status') or 'N/D')} ({(metadata.get('multi_timeframe_pullback') or {}).get('direction', 'NEUTRAL')})",
         f"🏗 Structure: {getattr(state, 'structure', 'UNKNOWN')}",
         f"🎯 Setup: {getattr(state, 'setup', 'NONE')}",
         f"⚡ Trigger: {getattr(state, 'trigger', 'NONE')}",
