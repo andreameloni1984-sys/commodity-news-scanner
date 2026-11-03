@@ -534,3 +534,12 @@
 - Updated that assertion only in commit `bad113a29bd3faf14d5b9dabc4413e20c08b2712`. No runtime code change was needed.
 - Other observed PR workflows on the original head: PAPER SUCCESS, NEWS Alert SUCCESS, Public Event Brain SUCCESS; Execution Layer was still in progress at the time of inspection.
 - A new full integration run is required on the corrected head before merge. The MQL bridge is source-checked only; no MetaEditor compiler is available.
+
+
+### Post-merge verification — 2026-11-03
+
+- PR #153 was merged by squash into `main` as `ab548c8da53a3ea3dc33c5891dc61e483bb4137b`.
+- Corrected-head integration run `41551959993`: **560 passed in 2.16s**.
+- Additional workflows on the corrected head all completed SUCCESS: PAPER `41551959887`, NEWS Alert `41551959985`, Public Event Brain `41551959934`, Execution Layer `41551959845`.
+- The first integration attempt's single stale documentation assertion was corrected before the successful final run.
+- Read-back/deployment distinction: source changes are merged on GitHub; no backend deployment, external endpoint request, Telegram send, MT5 execution, or Cloudflare setup was performed. MetaEditor compilation remains unverified.
