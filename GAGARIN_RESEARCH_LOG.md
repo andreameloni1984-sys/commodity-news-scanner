@@ -592,3 +592,11 @@
 - Removed only the hourly schedule from `.github/workflows/day-research.yml`; retained `workflow_dispatch` so the snapshot can still be regenerated deliberately. No research content, signal logic, scoring, thresholds, or risk settings changed.
 - Expected effect: stop up to 14 redundant scheduled GitHub Actions runs per day for this static snapshot job. This is a workflow-run reduction, not a claimed trading or market-data improvement.
 - PAPER ONLY; no deployment, live data request, Telegram message, or order.
+
+
+## 2026-11-03 — Remove pip self-upgrade from daily driver fetch
+
+- The daily `fetch-drivers.yml` job already uses `setup-python` with pip caching and installs its sole runtime dependency, `requests`.
+- Removed the unconditional pip self-upgrade; kept the daily schedule, manual trigger, EIA/FRED configuration, dependency installation, and driver collection unchanged.
+- This removes one unnecessary package-index operation from the daily job. No data-source calls, market logic, or driver mapping changed.
+- PAPER ONLY; no deployment or orders.
