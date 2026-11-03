@@ -610,3 +610,15 @@
 - Kept `AGRI_SYMBOLS`, explicit Yahoo futures mappings, active Yahoo/FX routing, and all market-basis checks.
 - This reduces dead code and removes an unused paid-provider credential surface; it does not reduce current quote latency or change the active data route.
 - PAPER ONLY; no provider substitution, strategy change, deployment, or orders.
+
+
+## 2026-11-03 — Remove unreachable Working's speculative-T helper
+
+- **Audit baseline:** GAGARIN main at `842890b63fbbd2c4dddea2bf4e9fd5dc2cbb2df3`. The only repository code-search hit for `working_t`, `working_t_note`, `engine.working_t`, `from engine.working_t`, and `import engine.working_t` was the module itself. No open PR targeted this file.
+- **Reachability checks:** `main.py` imports the operational pipeline through `engine.gagarin`; `engine/__init__.py` is empty. Searches for common dynamic loading/discovery patterns (`importlib`, `pkgutil.iter_modules`, `__import__`, `spec_from_file_location`) found no repository use. No workflow, test, scheduler or Telegram entrypoint referenced the module.
+- **Removed:** `engine/working_t.py` (98 lines), a standalone paper-only implementation of Working's speculative-T index with `working_t_note()` and `annotate()`. It was explicitly documented as a research note, not a rule; it had no caller, no COT data handoff, and no path into `final_decision`, risk, journaling or Telegram.
+- **Regression:** extended `tests/test_main_runner_import.py` to import the production runner and `engine.gagarin.analyze_universe`, and assert the operational import graph does not load `engine.working_t`. The full PR CI must pass before the removal is considered verified.
+- **Cost/benefit:** removes one unreachable Python module (98 lines) from the engine package. No provider request, polling cycle, dependency, execution time or signal latency is saved; those benefits are not claimed. The benefit is a smaller runtime namespace and less misleading dead code.
+- **Research reviewed:** Freqtrade's DataProvider/data-download documentation favors cached, incremental candle retrieval and explicit freshness rather than repeated fetches; LEAN describes a modular engine with pluggable data/brokerage components; Backtrader documents separate broker simulation and slippage assumptions. VectorBT's current repository uses Apache-2.0 with Commons Clause; Freqtrade is GPL-3.0 and LEAN is Apache-2.0. No third-party code was copied or incorporated.
+- **Preserved scope:** no changes to data providers, active universe, source freshness, event ingestion, LUBJANKA, Telegram, Governor, direction, score, entry, SL/TP, sizing, journal/feedback, or PAPER-only execution. The separate COT and hedging-pressure research paths were not modified.
+- **Safety:** draft PR only. No merge, deployment, workflow dispatch, secrets/Render changes, live provider call, Telegram send, broker connection or order. PAPER ONLY.
