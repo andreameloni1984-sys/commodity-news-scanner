@@ -21,6 +21,7 @@ nessun ordine reale viene eseguito.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import time
 
 from commodities.universe import (
     enabled_commodities,
@@ -567,6 +568,8 @@ def _print_feedback(results, operational_results=None):
 
 def run():
 
+    run_started = time.perf_counter()
+    print("⏱️ RUN START UTC:", datetime.now(timezone.utc).isoformat(), flush=True)
     _print_header()
 
     # --------------------------------------------------------
@@ -633,11 +636,13 @@ def run():
     # GAGARIN ENGINE
     # --------------------------------------------------------
 
+    analysis_started = time.perf_counter()
     try:
 
         results = analyze_universe(
             instruments
         )
+        print(f"⏱️ STAGE ANALYSIS: {(time.perf_counter() - analysis_started) * 1000.0:.0f}ms", flush=True)
 
     except Exception as exc:
 
@@ -653,6 +658,8 @@ def run():
         )
 
         return 1
+
+    print(f"⏱️ STAGE ANALYSIS+DATA COMPLETE: {(time.perf_counter() - analysis_started) * 1000.0:.0f}ms", flush=True)
 
     # --------------------------------------------------------
     # CANONICAL GAGARIN GOVERNOR
@@ -736,9 +743,11 @@ def run():
     # FEEDBACK
     # --------------------------------------------------------
 
+    feedback_started = time.perf_counter()
     feedback_ok = _print_feedback(
         results, operational_results
     )
+    print(f"⏱️ STAGE FEEDBACK: {(time.perf_counter() - feedback_started) * 1000.0:.0f}ms", flush=True)
 
     # --------------------------------------------------------
     # TELEGRAM
@@ -762,6 +771,7 @@ def run():
         )
     ]
 
+    telegram_started = time.perf_counter()
     if TELEGRAM_ENABLED:
 
         print("📨 TELEGRAM")
@@ -807,6 +817,8 @@ def run():
             "📨 TELEGRAM: DISABLED"
         )
 
+    print(f"⏱️ STAGE TELEGRAM: {(time.perf_counter() - telegram_started) * 1000.0:.0f}ms", flush=True)
+
     # A failed feedback write/summary must not leave a green monitor run.
     # Telegram processing above is still allowed; the workflow's always()
     # persistence step can then save any local CSV before the job fails.
@@ -825,6 +837,7 @@ def run():
     print(
         "✅ SOYUZ GAGARIN RUN COMPLETED"
     )
+    print(f"⏱️ TOTAL RUN: {(time.perf_counter() - run_started) * 1000.0:.0f}ms", flush=True)
 
     print("=" * 72)
 
