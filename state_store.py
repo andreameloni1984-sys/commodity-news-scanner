@@ -69,9 +69,18 @@ def _d1_query(sql: str, params: list[str] | None = None) -> list[dict[str, Any]]
         raise RuntimeError("Cloudflare D1 returned an invalid result envelope")
 
     rows: list[dict[str, Any]] = []
+    statement = sql.lstrip().split(None, 1)[0].upper() if sql.strip() else ""
+    requires_write_confirmation = statement in {"INSERT", "UPDATE", "DELETE", "REPLACE"}
     for item in results:
-        if not isinstance(item, dict) or item.get("success") is False:
+        if not isinstance(item, dict):
+            raise RuntimeError("Cloudflare D1 returned an invalid statement result")
+        statement_success = item.get("success")
+        if statement_success is False:
             raise RuntimeError("Cloudflare D1 reported a statement failure")
+        if statement_success is not None and not isinstance(statement_success, bool):
+            raise RuntimeError("Cloudflare D1 returned an invalid statement status")
+        if requires_write_confirmation and statement_success is not True:
+            raise RuntimeError("Cloudflare D1 did not confirm write statement success")
         statement_rows = item.get("results", [])
         if not isinstance(statement_rows, list):
             raise RuntimeError("Cloudflare D1 returned invalid rows")
