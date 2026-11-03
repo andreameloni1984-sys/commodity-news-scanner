@@ -659,12 +659,11 @@ def run():
 
         return 1
 
-    print(f"⏱️ STAGE ANALYSIS+DATA COMPLETE: {(time.perf_counter() - analysis_started) * 1000.0:.0f}ms", flush=True)
-
     # --------------------------------------------------------
     # CANONICAL GAGARIN GOVERNOR
     # --------------------------------------------------------
 
+    governor_started = time.perf_counter()
     operational_results = [
         state for state in results if _is_operational_state(state)
     ]
@@ -713,6 +712,7 @@ def run():
             print("  EXECUTION ERROR " + str(getattr(state, "symbol", "")) + ": " + type(exc).__name__ + ": " + str(exc))
     if not execution_results:
         print("  No execution decisions.")
+    print(f"⏱️ STAGE DECISION+EXECUTION: {(time.perf_counter() - governor_started) * 1000.0:.0f}ms", flush=True)
     print()
 
     # --------------------------------------------------------
