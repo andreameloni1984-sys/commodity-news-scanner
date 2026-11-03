@@ -564,3 +564,13 @@
 - Added a regression assertion that the scheduled runner does not receive Sifting or Trading 212 Invest credentials.
 - This complements the 15-minute cadence correction. No analysis modules, directional logic, entry thresholds, risk controls, Telegram configuration, or PAPER-only authorization were removed.
 - PAPER ONLY; no deployment, broker connection, or real orders.
+
+
+## 2026-11-03 — Remove duplicate scheduled aggressive full-universe scan
+
+- Audit: `.github/workflows/aggressive-alert.yml` independently ran `engine.gagarin.analyze_universe(operational_commodities())` every hour and sent entry/reversal Telegram alerts. The main Gagarin monitor already runs the same core engine across the operational universe and sends operational Telegram alerts on its own schedule.
+- Cleanup: removed only the aggressive workflow's hourly cron. Kept `workflow_dispatch`, the aggressive formatter, tests, and manual run path available for intentional diagnostics.
+- Rationale: avoid a second overlapping provider-heavy full-universe analysis and potential duplicate alerts. This is a schedule-level cleanup; it does not remove the aggressive strategy code or alter its scoring/risk logic.
+- Regression: added a test that the aggressive workflow remains manually triggerable and has no scheduled trigger.
+- Expected savings: one complete aggressive full-universe scan per hour and its associated provider requests, plus reduced duplicate alert risk. Exact request count and runtime savings are not measured yet.
+- PAPER ONLY; no live orders, secret changes, deployment or Render changes.
