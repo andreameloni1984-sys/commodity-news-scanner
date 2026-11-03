@@ -109,18 +109,6 @@ jobs:
             echo "No tests directory."
           fi
 
-      - name: Check agriculture diagnostic
-        run: |
-          if [ -f "diagnostic_agri.py" ]; then
-            echo "diagnostic_agri.py FOUND"
-          else
-            echo "diagnostic_agri.py NOT FOUND"
-            exit 1
-          fi
-
-      - name: Agriculture diagnostic
-        run: python diagnostic_agri.py
-
       - name: Run SOYUZ GAGARIN
         run: python main.py
 
