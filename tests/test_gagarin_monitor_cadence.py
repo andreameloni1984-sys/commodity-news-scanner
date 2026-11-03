@@ -15,8 +15,8 @@ class TestGagarinMonitorCadence(unittest.TestCase):
 
     def test_monitor_does_not_inject_unused_or_out_of_scope_credentials(self):
         text = WORKFLOW.read_text(encoding="utf-8")
-        self.assertNotRegex(text, r"(?m)^\\s*SIFTING_API_KEY:")
-        self.assertNotRegex(text, r"(?m)^\\s*T212_API_(?:KEY|SECRET):")
+        self.assertNotRegex(text, r"(?m)^\s*SIFTING_API_KEY:")
+        self.assertNotRegex(text, r"(?m)^\s*T212_API_(?:KEY|SECRET):")
 
     def test_monitor_remains_paper_only(self):
         text = WORKFLOW.read_text(encoding="utf-8")
