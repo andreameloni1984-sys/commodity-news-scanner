@@ -583,3 +583,12 @@
 - Verified on main: the full monitor cron is `*/15 * * * *` and `MONITOR_INTERVAL_MINUTES=15`.
 - Verified on main: `aggressive-alert.yml` retains `workflow_dispatch` and has no schedule trigger.
 - This is a GitHub source merge, not proof of Render deployment, a live quote, Telegram signal delivery, or trading performance.
+
+
+## 2026-11-03 — Stop hourly runs of static day-research notes
+
+- Audit of `engine/day_research.py`: the job serializes the in-repository `NOTES` dictionary into `data/day_research.json`. It performs no external data fetch, no new market observation, no backtest, and does not feed `final_decision`.
+- The existing snapshot's notes match the script's fixed dictionary and its timestamp is preserved when content is unchanged. Re-running it hourly therefore does not create new research evidence.
+- Removed only the hourly schedule from `.github/workflows/day-research.yml`; retained `workflow_dispatch` so the snapshot can still be regenerated deliberately. No research content, signal logic, scoring, thresholds, or risk settings changed.
+- Expected effect: stop up to 14 redundant scheduled GitHub Actions runs per day for this static snapshot job. This is a workflow-run reduction, not a claimed trading or market-data improvement.
+- PAPER ONLY; no deployment, live data request, Telegram message, or order.
