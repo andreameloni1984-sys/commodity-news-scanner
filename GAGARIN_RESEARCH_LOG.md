@@ -580,3 +580,13 @@
 - **Regression coverage:** missing, false, and non-boolean write status are rejected; a read response without statement-level `success` remains accepted.
 - **Limits:** mocked API responses only; no live Cloudflare database, token, deployment, or data migration was used. CI must validate this PR head before any merge or D1 activation.
 - **Safety:** D1 remains opt-in; no workflow secrets were added, no Render or paid service was used, and no real orders were placed. PAPER only.
+
+
+## 2026-11-03 — Fail closed on malformed D1 feedback snapshots
+
+- **Finding:** the D1 feedback reader treated any non-list stored value, and lists containing non-object rows, as an empty journal. A later forecast/outcome write could therefore replace an unreadable durable snapshot and silently discard recoverable data.
+- **Implemented on** `migration/d1-private-paper-journal-20261103`: an absent D1 key still means an empty journal; a valid list of object rows is accepted; a malformed D1 value now reports storage unavailable so the existing fail-closed path stops before merge or overwrite. The previous PostgreSQL compatibility behavior is unchanged.
+- **Files:** `engine/feedback.py`, `tests/test_feedback_d1.py`, this research log.
+- **Regression coverage:** object instead of list, scalar instead of list, and mixed valid/malformed row lists must fail closed; no D1 save or runner-local CSV fallback is allowed.
+- **Validation:** GitHub Actions CI pending on the updated PR head. No live D1 database, credentials, migration, or deployment was used.
+- **Safety:** no secret values read or written; D1 remains opt-in; no Render, paid service, public data publication, or real order execution. PAPER only.
