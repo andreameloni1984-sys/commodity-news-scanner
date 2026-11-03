@@ -600,3 +600,13 @@
 - Removed the unconditional pip self-upgrade; kept the daily schedule, manual trigger, EIA/FRED configuration, dependency installation, and driver collection unchanged.
 - This removes one unnecessary package-index operation from the daily job. No data-source calls, market logic, or driver mapping changed.
 - PAPER ONLY; no deployment or orders.
+
+
+## 2026-11-03 — Remove disabled Twelve Data legacy implementation
+
+- The active execution route has explicitly excluded Twelve Data for the full active universe; `_try_provider()` returns a hard-disabled result before any network call.
+- Repository-wide reference search found the old Twelve Data catalog, symbol resolver, candle fetch helpers, API-key config value and their associated test hooks only in `engine/data.py`, `config.py`, and one routing test. No active workflow or other module calls them.
+- Removed those unreachable legacy fetch/catalog helpers and the unused API-key configuration. Kept the explicit hard-disable branch and strengthened its test to fail if any HTTP request is attempted.
+- Kept `AGRI_SYMBOLS`, explicit Yahoo futures mappings, active Yahoo/FX routing, and all market-basis checks.
+- This reduces dead code and removes an unused paid-provider credential surface; it does not reduce current quote latency or change the active data route.
+- PAPER ONLY; no provider substitution, strategy change, deployment, or orders.
