@@ -5,6 +5,7 @@ import unittest
 
 WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "gagarin-monitor.yml"
 AGGRESSIVE_WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "aggressive-alert.yml"
+SOYUZ_WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "soyuz.yml"
 
 
 class TestGagarinMonitorCadence(unittest.TestCase):
@@ -19,6 +20,11 @@ class TestGagarinMonitorCadence(unittest.TestCase):
         self.assertNotRegex(text, r"(?m)^\s*SIFTING_API_KEY:")
         self.assertNotRegex(text, r"(?m)^\s*T212_API_(?:KEY|SECRET):")
 
+    def test_manual_soyuz_does_not_inject_unused_sifting_credential(self):
+        text = SOYUZ_WORKFLOW.read_text(encoding="utf-8")
+        self.assertNotIn("SIFTING_API_KEY:", text)
+        self.assertIn('PAPER_TRADING_ONLY: "1"', text)
+        self.assertIn("run: python main.py", text)
     def test_aggressive_alert_is_manual_only_to_avoid_duplicate_full_scans(self):
         text = AGGRESSIVE_WORKFLOW.read_text(encoding="utf-8")
         self.assertRegex(text, r"(?m)^\s*workflow_dispatch:\s*$")

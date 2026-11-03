@@ -583,3 +583,14 @@
 - Verified on main: the full monitor cron is `*/15 * * * *` and `MONITOR_INTERVAL_MINUTES=15`.
 - Verified on main: `aggressive-alert.yml` retains `workflow_dispatch` and has no schedule trigger.
 - This is a GitHub source merge, not proof of Render deployment, a live quote, Telegram signal delivery, or trading performance.
+
+
+## 2026-11-03 — Remove the remaining unused SIFTING_API_KEY injection from manual SOYUZ
+
+- **Main baseline:** `dea2eb8177fe2e3cabb3d91485c949c865804ec6`; checked current open PRs before updating the existing cleanup PR #110. No duplicate PR was created.
+- **Runtime/entrypoint audit:** the current scheduled monitor `.github/workflows/gagarin-monitor.yml` already has no SIFTING mapping. Exact repository code search on main finds `SIFTING_API_KEY` only in the monitor regression test and `.github/workflows/soyuz.yml`; no Python runtime consumer or configuration reader exists. The manual SOYUZ workflow executes `python main.py`.
+- **Cleanup:** removed only the unused `SIFTING_API_KEY` environment mapping from `.github/workflows/soyuz.yml`. The GitHub secret itself is not read, altered or deleted. Kept Trading 212 mappings and all runtime code untouched because they are outside this verified cleanup.
+- **Regression:** extended `tests/test_gagarin_monitor_cadence.py` to assert the manual SOYUZ workflow no longer injects SIFTING_API_KEY, while preserving `PAPER_TRADING_ONLY=1` and the `python main.py` entrypoint.
+- **Cost/benefit:** removes one unused secret-to-process environment injection. No external request, runtime duration, or dependency saving is claimed; the secret remains in GitHub settings and is not changed.
+- **Limits:** this does not remove a provider implementation or secret from GitHub; it only stops passing the unused variable to the manual workflow. No Render configuration, deployment, Telegram send, broker action or order was performed.
+- **Validation:** targeted pytest and all PR CI workflows must pass on the rebased head before review. PAPER ONLY.
