@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import state_store
 from engine import feedback
 
 
@@ -123,4 +124,38 @@ def test_d1_feedback_write_failure_does_not_create_local_csv(monkeypatch, tmp_pa
     with pytest.raises(RuntimeError, match="refusing runner-local CSV fallback"):
         feedback.record_forecasts([_state()])
 
+    assert not (tmp_path / "gagarin_feedback.csv").exists()
+
+
+
+@pytest.mark.parametrize(
+    "stored_value",
+    [
+        {"unexpected": "object"},
+        "not-a-list",
+        [{"signal_id": "valid-row"}, "malformed-row"],
+    ],
+)
+def test_d1_feedback_malformed_snapshot_fails_closed_without_overwrite(
+    monkeypatch, tmp_path, stored_value
+):
+    _select_d1(monkeypatch, tmp_path)
+    monkeypatch.setattr(state_store, "ensure_schema", lambda: True)
+    monkeypatch.setattr(state_store, "load_state", lambda key: stored_value)
+    attempted_saves = []
+    monkeypatch.setattr(
+        feedback,
+        "_save_durable_rows",
+        lambda rows: attempted_saves.append(rows) or True,
+    )
+    monkeypatch.setattr(
+        feedback,
+        "_write_csv_rows",
+        lambda *args, **kwargs: pytest.fail("malformed D1 data must not fall back to CSV"),
+    )
+
+    with pytest.raises(RuntimeError, match="D1 feedback storage unavailable"):
+        feedback.load_feedback()
+
+    assert attempted_saves == []
     assert not (tmp_path / "gagarin_feedback.csv").exists()
