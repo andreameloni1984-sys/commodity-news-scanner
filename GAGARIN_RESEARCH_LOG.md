@@ -560,3 +560,13 @@
 - Recreated the opt-in D1 state, event-journal and PAPER-journal adapter on top of the latest `main` after the no-Render endpoint hardening and LUBJANKA direction-preservation commits. This avoids merging a branch that is two commits behind and keeps those mainline changes intact.
 - No D1 credentials, database, deployment, or production workflow selection were used. The backend remains opt-in; migration and restore are still pending.
 - Validation is pending on this rebased branch. The earlier PR #150 CI was not treated as proof for the new branch head.
+
+
+## 2026-11-03 — Route feedback journal through the opt-in Cloudflare D1 backend
+
+- **Finding:** the D1 migration in PR #154 covered state, event history and the PAPER entry journal, but `engine/feedback.py` selected durable storage only when `DATABASE_URL` existed. With `GAGARIN_STORAGE_BACKEND=d1`, feedback outcomes would therefore continue to use the runner-local CSV and would not survive a GitHub Actions runner replacement.
+- **Implemented on** `migration/d1-private-paper-journal-20261103`: feedback backend selection now follows `state_store.storage_backend()`; D1 stores the feedback snapshot through the existing parameterized `gagarin_state` adapter under `gagarin_feedback_rows`.
+- **Fail-closed behavior:** when D1 is explicitly selected but unavailable, feedback reads/writes raise a clear storage error rather than silently creating or using an ephemeral CSV. The existing PostgreSQL recovery behavior remains unchanged.
+- **Historical merge:** when a local feedback CSV exists during the first D1 read, its rows are merged by stable `signal_id` using the existing freshness rule and saved to D1 before being returned.
+- **Regression tests:** D1 forecast persistence without CSV writes; migration of a local historical row into durable state; D1-unavailable read failure; D1 write failure without local CSV fallback.
+- **Limits:** tests use mocked durable-state functions and no credentials or network. A live D1 database, migration, backup/restore and workflow secret configuration remain unverified. No private history was copied to GitHub, no paid service or Render was used, and no broker action occurred. PAPER only.
