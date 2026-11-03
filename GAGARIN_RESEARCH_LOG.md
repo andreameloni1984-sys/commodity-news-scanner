@@ -570,3 +570,13 @@
 - **Historical merge:** when a local feedback CSV exists during the first D1 read, its rows are merged by stable `signal_id` using the existing freshness rule and saved to D1 before being returned.
 - **Regression tests:** D1 forecast persistence without CSV writes; migration of a local historical row into durable state; D1-unavailable read failure; D1 write failure without local CSV fallback.
 - **Limits:** tests use mocked durable-state functions and no credentials or network. A live D1 database, migration, backup/restore and workflow secret configuration remain unverified. No private history was copied to GitHub, no paid service or Render was used, and no broker action occurred. PAPER only.
+
+
+## 2026-11-03 — Require explicit confirmation for D1 writes
+
+- **Finding:** Cloudflare's D1 API schema marks each statement's `success` field optional. The adapter previously rejected only `success: false`; a malformed or incomplete write response with no statement-level success could therefore be treated as a completed write.
+- **Implemented on** `migration/d1-private-paper-journal-20261103`: D1 mutation statements (`INSERT`, `UPDATE`, `DELETE`, `REPLACE`) now require an explicit boolean `success: true` for every returned statement. Explicit failure and malformed status values are rejected. Read queries retain compatibility with the documented optional statement-level status, while still rejecting explicit failures.
+- **Files:** `state_store.py`; `tests/test_state_store_d1.py`.
+- **Regression coverage:** missing, false, and non-boolean write status are rejected; a read response without statement-level `success` remains accepted.
+- **Limits:** mocked API responses only; no live Cloudflare database, token, deployment, or data migration was used. CI must validate this PR head before any merge or D1 activation.
+- **Safety:** D1 remains opt-in; no workflow secrets were added, no Render or paid service was used, and no real orders were placed. PAPER only.
