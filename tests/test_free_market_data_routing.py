@@ -150,12 +150,11 @@ def test_quote_provenance_metadata_is_complete_without_fabricated_bid_ask(monkey
     assert metadata["quote_price"] == state.price
 
 
-def test_twelve_data_provider_is_hard_disabled_even_if_called_directly(monkeypatch):
+def test_twelve_data_provider_is_hard_disabled_before_any_http_request(monkeypatch):
     def forbidden(*args, **kwargs):
-        raise AssertionError("A paid/unverified provider must never be called.")
+        raise AssertionError("Disabled Twelve Data routing must not perform HTTP requests.")
 
-    monkeypatch.setattr(data, "_fetch_twelve", forbidden)
-    monkeypatch.setattr(data, "_fetch_twelve_agriculture", forbidden)
+    monkeypatch.setattr(data, "_request_json", forbidden)
 
     candles, error, provider_symbol = data._try_provider(
         SoyuzState(commodity="Oro", symbol="XAU/USD"),

@@ -52,16 +52,6 @@ IBKR_GATEWAY_URL = os.getenv("IBKR_GATEWAY_URL", "https://localhost:5000/v1/api"
 IBKR_VERIFY_TLS = os.getenv("IBKR_VERIFY_TLS", "0") == "1"
 
 # ------------------------------------------------------------
-# MARKET DATA
-# ------------------------------------------------------------
-
-TWELVE_DATA_API_KEY = os.getenv(
-    "TWELVE_DATA_API_KEY",
-    ""
-).strip()
-
-
-# ------------------------------------------------------------
 # GAGARIN — AGGRESSIVE OPERATIONAL GATES
 # ------------------------------------------------------------
 # Lower thresholds widen the candidate funnel. They do not bypass
