@@ -574,3 +574,12 @@
 - Regression: added a test that the aggressive workflow remains manually triggerable and has no scheduled trigger.
 - Expected savings: one complete aggressive full-universe scan per hour and its associated provider requests, plus reduced duplicate alert risk. Exact request count and runtime savings are not measured yet.
 - PAPER ONLY; no live orders, secret changes, deployment or Render changes.
+
+
+## 2026-11-03 — Post-merge verification: duplicate scan cleanup
+
+- PR #157 merged to main as `6038ad1f2f16689067a4c54e5c59492f276f6ac8`.
+- All five PR-head GitHub Actions workflows completed SUCCESS on the exact final PR head `d0ab950275cb366ee91c2d75bcc7de9393785d63`.
+- Verified on main: the full monitor cron is `*/15 * * * *` and `MONITOR_INTERVAL_MINUTES=15`.
+- Verified on main: `aggressive-alert.yml` retains `workflow_dispatch` and has no schedule trigger.
+- This is a GitHub source merge, not proof of Render deployment, a live quote, Telegram signal delivery, or trading performance.
