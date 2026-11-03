@@ -1,3 +1,10 @@
+## 2026-11-03 — Add per-instrument analysis latency telemetry
+
+- Added monotonic timing metadata around each instrument's data fetch and complete analysis, plus the full-universe analysis duration.
+- Gagarin's existing data summary now prints fetch, engine, and universe durations so scheduled-run logs can identify whether time is spent retrieving candles or processing indicators/intelligence.
+- Instrumentation is observational only: no provider, schedule, scoring, threshold, setup, trigger, risk, Telegram, or PAPER ONLY behavior changed.
+- This creates measurements for subsequent latency diagnosis; it does not itself make the bot faster or prove the 15-minute schedule is the only source of signal delay.
+
 # GAGARIN — Research and implementation log
 
 ## 2026-10-26 — Validate Telegram entry, stop and target levels
