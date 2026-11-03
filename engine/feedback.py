@@ -304,15 +304,32 @@ def update_open_outcomes(results, path=FEEDBACK_FILE):
     return changed
 
 
+def _selected_storage_backend():
+    """Return the explicitly selected durable backend without exposing credentials."""
+    try:
+        from state_store import storage_backend as selected_backend
+        return selected_backend()
+    except Exception:
+        return "disabled"
+
+
 def _durable_store_enabled(path):
-    return Path(path) == FEEDBACK_FILE and bool(os.getenv("DATABASE_URL", "").strip())
+    return Path(path) == FEEDBACK_FILE and _selected_storage_backend() in {"postgres", "d1"}
+
 
 def storage_backend():
     """Describe feedback persistence without exposing credentials."""
-    if not os.getenv("DATABASE_URL", "").strip():
-        return "LOCAL_CSV_NO_DATABASE_URL"
-    rows = _load_durable_rows()
-    return "POSTGRES" if rows is not None else "LOCAL_CSV_DATABASE_UNAVAILABLE"
+    backend = _selected_storage_backend()
+    if backend in {"postgres", "d1"}:
+        rows = _load_durable_rows()
+        if rows is not None:
+            return backend.upper()
+        if backend == "d1":
+            return "D1_UNAVAILABLE"
+        return "LOCAL_CSV_DATABASE_UNAVAILABLE"
+    if os.getenv("DATABASE_URL", "").strip():
+        return "LOCAL_CSV_DATABASE_UNAVAILABLE"
+    return "LOCAL_CSV_NO_DATABASE_URL"
 
 
 def _load_durable_rows():
@@ -321,7 +338,15 @@ def _load_durable_rows():
         if not ensure_schema():
             return None
         rows = load_state("gagarin_feedback_rows")
-        return rows if isinstance(rows, list) else []
+        if rows is None:
+            return []
+        if isinstance(rows, list) and all(isinstance(row, dict) for row in rows):
+            return rows
+        # A malformed D1 snapshot must never be interpreted as an empty journal:
+        # the next write could otherwise overwrite recoverable durable data.
+        if _selected_storage_backend() == "d1":
+            return None
+        return []
     except Exception:
         return None
 
@@ -391,14 +416,22 @@ def _merge_feedback_rows(durable_rows, local_rows):
 
 def _write_rows(rows, path):
     path = Path(path)
-    if _durable_store_enabled(path) and _save_durable_rows(rows):
+    backend = _selected_storage_backend() if path == FEEDBACK_FILE else "disabled"
+    if backend == "d1":
+        if not _save_durable_rows(rows):
+            raise RuntimeError(
+                "D1 feedback persistence unavailable; refusing runner-local CSV fallback"
+            )
+        return
+    if backend == "postgres" and _save_durable_rows(rows):
         return
     _write_csv_rows(rows, path)
 
 
 def load_feedback(path=FEEDBACK_FILE):
     path = Path(path)
-    if _durable_store_enabled(path):
+    backend = _selected_storage_backend() if path == FEEDBACK_FILE else "disabled"
+    if backend in {"postgres", "d1"}:
         durable_rows = _load_durable_rows()
         if durable_rows is not None:
             local_rows = []
@@ -407,10 +440,17 @@ def load_feedback(path=FEEDBACK_FILE):
                     local_rows = list(csv.DictReader(file))
             merged = _merge_feedback_rows(durable_rows, local_rows)
             if merged != durable_rows and not _save_durable_rows(merged):
-                # Keep the merged snapshot available for the workflow's
-                # repository-backed fallback if PostgreSQL is temporarily down.
+                if backend == "d1":
+                    raise RuntimeError(
+                        "D1 feedback migration unavailable; refusing runner-local CSV fallback"
+                    )
+                # Preserve the existing PostgreSQL recovery path.
                 _write_csv_rows(merged, path)
             return merged
+        if backend == "d1":
+            raise RuntimeError(
+                "D1 feedback storage unavailable; refusing runner-local CSV fallback"
+            )
     if not path.exists():
         return []
     with path.open("r", newline="", encoding="utf-8") as file:
