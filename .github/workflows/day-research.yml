@@ -1,9 +1,8 @@
 name: DAY RESEARCH
 
 on:
-  schedule:
-    # ogni ora dalle 07:00 alle 20:00 ora di Roma (05:00-18:00 UTC in inverno)
-    - cron: "0 5-18 * * *"
+  # The script only serializes the fixed NOTES dictionary; it does not collect
+  # fresh market data or test hypotheses. Run it only when explicitly requested.
   workflow_dispatch:
 
 permissions:
