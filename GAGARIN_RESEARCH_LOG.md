@@ -592,3 +592,16 @@
 - Removed only the hourly schedule from `.github/workflows/day-research.yml`; retained `workflow_dispatch` so the snapshot can still be regenerated deliberately. No research content, signal logic, scoring, thresholds, or risk settings changed.
 - Expected effect: stop up to 14 redundant scheduled GitHub Actions runs per day for this static snapshot job. This is a workflow-run reduction, not a claimed trading or market-data improvement.
 - PAPER ONLY; no deployment, live data request, Telegram message, or order.
+
+
+
+## 2026-11-03 — Remove redundant pip self-upgrade from driver snapshot workflow
+
+- Audit: `.github/workflows/fetch-drivers.yml` runs daily at 07:00 UTC (and manually), sets up Python 3.11 with `actions/setup-python@v5` and pip caching, then installs only the existing `requests` runtime dependency before calling `engine/fetch_drivers.py`.
+- Cleanup: removed only the explicit `python -m pip install --upgrade pip` command. The workflow continues to install `requests`, fetch the driver snapshot, and commit only `data/driver_snapshot.json` when it changes.
+- Rationale: the self-upgrade is not an application dependency; it adds a separate package-manager/index resolution operation to each daily execution. The setup-python pip cache remains enabled.
+- Benefit limit: one explicit pip self-upgrade operation removed per scheduled/manual invocation. Exact HTTP requests and wall-clock savings were not measured; no speed or market-data improvement is claimed.
+- Regression: `tests/test_fetch_drivers_workflow_install.py` checks the daily/manual triggers, Python/pip cache, retained requests install and snapshot entrypoint/write scope, and absence of pip self-upgrade.
+- Safety: no data source, API key, secret, schedule, driver calculation, commit target, signal, score, risk, Governor, Telegram path or PAPER authorization changed. No workflow was manually dispatched; no external provider was contacted and no deployment or order was made.
+- Research principle: follow the established lightweight CI/runtime setup pattern of installing declared application dependencies directly instead of upgrading the package manager on every run; this is an operational simplification, not a trading-system feature.
+- Status: draft PR for CI review only. PAPER ONLY.
