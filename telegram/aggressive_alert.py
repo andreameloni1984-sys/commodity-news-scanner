@@ -326,14 +326,20 @@ def format_aggressive_alerts(alerts: Iterable[dict]) -> str:
             except (TypeError, ValueError, OverflowError):
                 close_text = "N/D"
             age = lubjanka.get("bar_age_seconds")
+            close_age = lubjanka.get("bar_close_age_seconds")
             try:
                 age_number = float(age)
                 age_text = "%.0fs" % age_number if math.isfinite(age_number) and age_number >= 0 else "N/D"
             except (TypeError, ValueError, OverflowError):
                 age_text = "N/D"
+            try:
+                close_age_number = float(close_age)
+                close_age_text = "%.0fs" % close_age_number if math.isfinite(close_age_number) and close_age_number >= 0 else "N/D"
+            except (TypeError, ValueError, OverflowError):
+                close_age_text = "N/D"
             conflict = " | DIREZIONI IN CONFLITTO" if lubjanka.get("directional_conflict") else ""
             lines.append(
-                "🛰️ LUBJANKA M5: %s %s | %s | %s | close %s | barra %s | %s | volume %s%s"
+                "🛰️ LUBJANKA M5: %s %s | %s | %s | close %s | età apertura %s | chiusa da %s | %s | volume %s%s"
                 % (
                     lubjanka.get("direction", "N/D"),
                     lubjanka.get("stage", "N/D"),
@@ -341,6 +347,7 @@ def format_aggressive_alerts(alerts: Iterable[dict]) -> str:
                     strength_text,
                     close_text,
                     age_text,
+                    close_age_text,
                     lubjanka.get("provider") or "provider N/D",
                     lubjanka.get("volume_proxy", "N/D"),
                     conflict,
