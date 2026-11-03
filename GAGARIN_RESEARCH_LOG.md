@@ -598,5 +598,5 @@
 - **Implemented on** `migration/d1-private-paper-journal-20261103`: every returned row must be a JSON object; any non-object row now raises a sanitized adapter error instead of being filtered out. No retry or partial result is returned.
 - **Files:** `state_store.py`, `tests/test_state_store_d1.py`, this research log.
 - **Regression:** a mixed response containing one valid object and one malformed scalar must fail closed.
-- **Validation:** CI pending on the current PR head. Tests are mocked; no live D1 database, credential, migration, or deployment was used.
+- **Validation:** PR head `06a096eac4dfda181e351b031b91235b1841000c` passed all six workflows: GAGARIN 585, PAPER 26, NEWS Alert 72, Public Event Brain 86, Execution Layer 3, and trade-plan 34. The regression is included in the 585-test suite. Tests are mocked; no live D1 database, credential, migration, or deployment was used.
 - **Safety:** no secrets read or added; D1 remains opt-in; no Render changes, paid services, public private-data publication, or real orders. PAPER only.
