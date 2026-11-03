@@ -555,3 +555,12 @@
 - Research comparison: Freqtrade's official exchange implementation tracks per-pair OHLCV refresh/poll timestamps and configurable candle-lag grace; its docs warn that exchange request limits constrain history fetches. This supports treating freshness and rate capacity as measured constraints, not assuming a five-minute schedule is sustainable.
 - Open items: GDELT 429 source cooldowns need review; the Render NEWS listener's last successful polling heartbeat is not proven by the empty recent-log window. Reconsider a five-minute lightweight LUBJANKA-only scan only after provider request budgets, freshness and successful heartbeat are measured independently of the full NEWS monitor.
 - Mode: PAPER ONLY. No broker orders.
+
+
+## 2026-11-03 — Remove unused credentials from the Gagarin scheduled runner
+
+- The scheduled `main.py` monitor does not call the Sifting integration or the separate Trading 212 Invest command flow. Removed their secret-to-environment mappings from this workflow only; Trading 212 Invest code and other workflows are untouched.
+- Kept the optional Narwhal reference mapping because it is part of the market-data adapter and may be configured independently.
+- Added a regression assertion that the scheduled runner does not receive Sifting or Trading 212 Invest credentials.
+- This complements the 15-minute cadence correction. No analysis modules, directional logic, entry thresholds, risk controls, Telegram configuration, or PAPER-only authorization were removed.
+- PAPER ONLY; no deployment, broker connection, or real orders.
