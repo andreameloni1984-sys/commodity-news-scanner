@@ -2,7 +2,7 @@ name: Gagarin Paper Monitor (GitHub Actions)
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "*/15 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -29,7 +29,7 @@ jobs:
       T212_API_KEY: ${{ secrets.T212_API_KEY }}
       T212_API_SECRET: ${{ secrets.T212_API_SECRET }}
       PAPER_TRADING_ONLY: "1"
-      # Soglie abbassate per test / più alert
+      # Existing authorization thresholds are intentionally unchanged.
       MIN_ENTRY_PROBABILITY: "40"
       MIN_ENTRY_QUALITY: "30"
       MIN_ENTRY_CONFIDENCE: "35"
@@ -37,7 +37,8 @@ jobs:
       MAX_ENTRY_STOP_ATR: "2.5"
       SL_STRUCTURE_BUFFER_ATR: "0.15"
       SL_MIN_ATR: "0.80"
-      MONITOR_INTERVAL_MINUTES: "5"
+      # Full provider-heavy monitor stays at 15m until rate-limit capacity is verified.
+      MONITOR_INTERVAL_MINUTES: "15"
       POLITICAL_IMPACT_ENABLED: "1"
       US_PRESIDENT_IMPACT_ENABLED: "1"
       ELECTION_IMPACT_ENABLED: "1"
