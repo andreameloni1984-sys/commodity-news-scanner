@@ -127,3 +127,16 @@ def test_lubjanka_allows_finite_negative_historical_futures_prices():
     result = intercept_market(candles, now_epoch=candles[-1]["timestamp"] + 301)
     assert result["status"] == "INTERCEPTED"
     assert result["direction"] == "SHORT"
+
+
+def test_lubjanka_reports_age_since_bar_open_and_close_separately():
+    candles = make_bars("up")
+    result = intercept_market(
+        candles,
+        now_epoch=candles[-1]["timestamp"] + 342,
+        provider="BIQUOTE",
+    )
+
+    assert result["status"] == "INTERCEPTED"
+    assert result["bar_age_seconds"] == 342.0
+    assert result["bar_close_age_seconds"] == 42.0
