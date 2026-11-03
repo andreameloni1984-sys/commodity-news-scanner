@@ -602,7 +602,41 @@ def confirm_sputnik_catalysts(payload: dict, x_api_key: str | None = Header(defa
 
 @app.get("/health")
 def health():
+    # Liveness only: process is serving requests, not proof that private
+    # dashboard authentication or durable storage is configured.
     return {"status": "ok", "service": "gagarin-cloud", "mode": "PAPER ONLY"}
+
+
+def _cloud_readiness_snapshot(environ=None, persistence_ready=None):
+    """Report Cloud API prerequisites without exposing secret values.
+
+    This is deliberately narrower than whole-platform readiness: it does not
+    claim that the PWA, market feeds, Telegram polling, or Sputnik bridge work.
+    """
+    env = os.environ if environ is None else environ
+    db_ready = _DB_READY if persistence_ready is None else bool(persistence_ready)
+    checks = {
+        "dashboard_auth_secrets_present": bool(
+            str(env.get("APP_PASSWORD_HASH", "")).strip()
+            and str(env.get("APP_SESSION_SECRET", "")).strip()
+        ),
+        "cloud_api_key_present": bool(str(env.get("CLOUD_API_KEY", "")).strip()),
+        "persistence_ready": db_ready,
+    }
+    ready = all(checks.values())
+    return {
+        "service": "gagarin-cloud",
+        "scope": "cloud_api_prerequisites_only",
+        "mode": "PAPER ONLY",
+        "ready": ready,
+        "checks": checks,
+    }, (200 if ready else 503)
+
+
+@app.get("/ready")
+def readiness():
+    payload, status_code = _cloud_readiness_snapshot()
+    return JSONResponse(payload, status_code=status_code)
 
 
 @app.post("/api/monitor")
