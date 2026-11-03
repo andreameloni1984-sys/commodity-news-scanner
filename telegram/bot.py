@@ -109,16 +109,25 @@ def send_telegram(message: str) -> bool:
     text = str(message)
     chunks = [text[i:i + 4000] for i in range(0, len(text), 4000)] or [""]
     for chunk in chunks:
+        send_started = time.monotonic()
         ok, data = _api("sendMessage", {
             "chat_id": TELEGRAM_CHAT_ID,
             "text": chunk,
             "disable_web_page_preview": True,
         })
+        send_duration_ms = (time.monotonic() - send_started) * 1000.0
         message_id = _confirmed_message_id(data) if ok else None
         if message_id is None:
-            print("Telegram SEND NOT CONFIRMED | missing/invalid message_id", flush=True)
+            error = str(data.get("description", "missing/invalid message_id"))[:180]
+            print(
+                f"Telegram SEND NOT CONFIRMED | api_roundtrip={send_duration_ms:.0f}ms | error={error}",
+                flush=True,
+            )
             return False
-        print(f"Telegram SEND CONFIRMED | message_id={message_id}", flush=True)
+        print(
+            f"Telegram SEND CONFIRMED | message_id={message_id} | api_roundtrip={send_duration_ms:.0f}ms",
+            flush=True,
+        )
     return True
 
 def _reply(chat_id, text: str, reply_markup: Optional[dict] = None) -> bool:
