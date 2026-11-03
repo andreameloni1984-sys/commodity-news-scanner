@@ -245,3 +245,27 @@ def test_d1_reads_accept_documented_optional_statement_success(monkeypatch):
     )
 
     assert state_store._d1_query("SELECT value FROM gagarin_state") == [{"value": "ok"}]
+
+
+
+def test_d1_query_rejects_non_object_rows_in_read_response(monkeypatch):
+    configure_d1(monkeypatch)
+    monkeypatch.setattr(
+        requests,
+        "post",
+        lambda *args, **kwargs: FakeResponse(
+            {
+                "success": True,
+                "result": [
+                    {
+                        "results": [{"value": "valid"}, "malformed-row"],
+                        "meta": {},
+                    }
+                ],
+                "errors": [],
+            }
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="malformed row"):
+        state_store._d1_query("SELECT value FROM gagarin_state")
