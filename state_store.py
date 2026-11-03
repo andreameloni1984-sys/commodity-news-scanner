@@ -84,7 +84,9 @@ def _d1_query(sql: str, params: list[str] | None = None) -> list[dict[str, Any]]
         statement_rows = item.get("results", [])
         if not isinstance(statement_rows, list):
             raise RuntimeError("Cloudflare D1 returned invalid rows")
-        rows.extend(row for row in statement_rows if isinstance(row, dict))
+        if any(not isinstance(row, dict) for row in statement_rows):
+            raise RuntimeError("Cloudflare D1 returned a malformed row")
+        rows.extend(statement_rows)
     return rows
 
 
