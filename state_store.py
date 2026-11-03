@@ -97,7 +97,9 @@ def append_event_journal(record: dict[str, Any]) -> bool:
                 )
         return True
     except Exception as exc:
-        print(f"EVENT journal database save failed | {type(exc).__name__}: {exc}", flush=True)
+        # Database exception messages can contain host, database, or connection
+        # details. Log only the exception class; never print the message/DSN.
+        print(f"EVENT journal database save failed | error_type={type(exc).__name__}", flush=True)
         return False
     finally:
         conn.close()
@@ -121,7 +123,8 @@ def load_event_journal(limit: int = 20000) -> list[dict[str, Any]] | None:
         records.reverse()
         return records
     except Exception as exc:
-        print(f"EVENT journal database read failed | {type(exc).__name__}: {exc}", flush=True)
+        # Keep read failures diagnosable without exposing driver/connection text.
+        print(f"EVENT journal database read failed | error_type={type(exc).__name__}", flush=True)
         return None
     finally:
         conn.close()
