@@ -121,7 +121,7 @@ def test_active_code_and_environment_example_have_no_render_endpoint_default():
         assert "onrender.com" not in source.lower()
         assert "Render" not in source
 
-    assert 'os.getenv("GAGARIN_CLOUD_URL", "")' in cloud_monitor_source
+    assert 'env.get("GAGARIN_CLOUD_URL", "")' in cloud_monitor_source
     assert 'input string BridgeURL = "";' in mt5_source
     assert "INIT_PARAMETERS_INCORRECT" in mt5_source
     assert "GAGARIN_CLOUD_URL=" in env_example
