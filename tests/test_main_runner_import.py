@@ -66,3 +66,13 @@ def test_data_summary_prints_provider_attempts_and_fallback_reason(capsys):
     assert "YAHOO:STALE@614s" in output
     assert "TWELVE_DATA:SYMBOL_UNAVAILABLE" in output
     assert "NO_FRESH_PROVIDER_AVAILABLE" in output
+
+
+def test_core_engine_import_graph_does_not_load_unreachable_working_t_note():
+    import sys
+    import main
+    from engine.gagarin import analyze_universe
+
+    assert callable(main.run)
+    assert callable(analyze_universe)
+    assert "engine.working_t" not in sys.modules
