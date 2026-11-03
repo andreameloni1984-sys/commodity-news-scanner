@@ -622,3 +622,15 @@
 - **Research reviewed:** Freqtrade's DataProvider/data-download documentation favors cached, incremental candle retrieval and explicit freshness rather than repeated fetches; LEAN describes a modular engine with pluggable data/brokerage components; Backtrader documents separate broker simulation and slippage assumptions. VectorBT's current repository uses Apache-2.0 with Commons Clause; Freqtrade is GPL-3.0 and LEAN is Apache-2.0. No third-party code was copied or incorporated.
 - **Preserved scope:** no changes to data providers, active universe, source freshness, event ingestion, LUBJANKA, Telegram, Governor, direction, score, entry, SL/TP, sizing, journal/feedback, or PAPER-only execution. The separate COT and hedging-pressure research paths were not modified.
 - **Safety:** draft PR only. No merge, deployment, workflow dispatch, secrets/Render changes, live provider call, Telegram send, broker connection or order. PAPER ONLY.
+
+
+### Final CI verification — PR #166
+
+- Tested code head: `7143ce14a04010eff26e8a5c411e14fa02f46073`.
+- `SOYUZ GAGARIN Tests`: **565 passed in 2.69s** (run `41678652690`).
+- `Gagarin NEWS alert tests`: **72 passed in 0.69s** (run `41678652735`).
+- `Gagarin Public Event Brain Tests`: **86 passed in 0.71s** (run `41678652675`).
+- `SOYUZ GAGARIN PAPER`: **26 passed in 0.19s** plus PAPER smoke output `paper_only=True`, `decision=PAPER_WATCH`, `reason=ASSET_NOT_IN_UNIVERSE` (run `41678652941`).
+- `Gagarin Execution Layer Tests`: **3 passed in 0.02s** (run `41678652893`).
+- All five PR workflows completed **SUCCESS** on the exact tested head. Specialized suites overlap the full integration suite, so their counts are reported separately rather than summed as unique tests.
+- No live data, Telegram send, deployment, broker operation or order was performed. PR remains draft and unmerged.
