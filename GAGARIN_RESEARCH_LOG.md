@@ -590,3 +590,13 @@
 - **Regression coverage:** object instead of list, scalar instead of list, and mixed valid/malformed row lists must fail closed; no D1 save or runner-local CSV fallback is allowed.
 - **Validation:** GitHub Actions CI pending on the updated PR head. No live D1 database, credentials, migration, or deployment was used.
 - **Safety:** no secret values read or written; D1 remains opt-in; no Render, paid service, public data publication, or real order execution. PAPER only.
+
+
+## 2026-11-03 — Reject malformed rows in D1 REST read responses
+
+- **Finding:** the D1 adapter validated that `results` was a list but silently discarded non-object elements. A malformed provider response could therefore be mistaken for a valid, shorter result set and later drive an incomplete state/journal decision.
+- **Implemented on** `migration/d1-private-paper-journal-20261103`: every returned row must be a JSON object; any non-object row now raises a sanitized adapter error instead of being filtered out. No retry or partial result is returned.
+- **Files:** `state_store.py`, `tests/test_state_store_d1.py`, this research log.
+- **Regression:** a mixed response containing one valid object and one malformed scalar must fail closed.
+- **Validation:** CI pending on the current PR head. Tests are mocked; no live D1 database, credential, migration, or deployment was used.
+- **Safety:** no secrets read or added; D1 remains opt-in; no Render changes, paid services, public private-data publication, or real orders. PAPER only.
