@@ -21,8 +21,8 @@ class TestGagarinMonitorCadence(unittest.TestCase):
 
     def test_aggressive_alert_is_manual_only_to_avoid_duplicate_full_scans(self):
         text = AGGRESSIVE_WORKFLOW.read_text(encoding="utf-8")
-        self.assertRegex(text, r"(?m)^\\s*workflow_dispatch:\\s*$")
-        self.assertNotRegex(text, r"(?m)^\\s*schedule:")
+        self.assertRegex(text, r"(?m)^\s*workflow_dispatch:\s*$")
+        self.assertNotRegex(text, r"(?m)^\s*schedule:")
 
     def test_monitor_remains_paper_only(self):
         text = WORKFLOW.read_text(encoding="utf-8")
