@@ -610,3 +610,13 @@
 - Kept `AGRI_SYMBOLS`, explicit Yahoo futures mappings, active Yahoo/FX routing, and all market-basis checks.
 - This reduces dead code and removes an unused paid-provider credential surface; it does not reduce current quote latency or change the active data route.
 - PAPER ONLY; no provider substitution, strategy change, deployment, or orders.
+
+
+## 2026-11-03 — Remove pip self-upgrade from Public Event Brain test workflow
+
+- Audit: `.github/workflows/public-event-brain-tests.yml` configures Python 3.12 with `actions/setup-python@v5`, then ran `python -m pip install --upgrade pip pytest requests`. The test job needs only the two test/runtime packages; the explicit pip self-upgrade is not an application dependency or a test requirement.
+- Implemented on branch `cleanup/remove-pip-self-upgrade-public-event-tests-20261103`: changed the install command to `python -m pip install pytest requests`. Preserved Python version, triggers, permissions, timeout, test selection and test execution.
+- Regression: added `tests/test_public_event_workflow_install.py` to assert that Python setup and both packages remain, the self-upgrade is absent, and the event-brain test command remains configured.
+- Cost/benefit: removes one explicit pip upgrade/version-resolution operation per Public Event Brain workflow run. This workflow has push and pull-request triggers, not a time-based schedule; actual run count, package-index request count and wall-clock savings are not measured.
+- Safety: no runtime provider, data source, polling cadence, event collection, catalyst, market signal, direction, score, Governor, risk, journal, Telegram runtime, PAPER authorization or order path changed. PAPER ONLY; no secrets, Render settings, live APIs, deployment, Telegram send, broker action or order.
+- Validation: PR CI must execute on the exact final head before any merge consideration.
