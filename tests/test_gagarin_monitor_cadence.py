@@ -25,6 +25,7 @@ class TestGagarinMonitorCadence(unittest.TestCase):
         self.assertNotIn("SIFTING_API_KEY:", text)
         self.assertIn('PAPER_TRADING_ONLY: "1"', text)
         self.assertIn("run: python main.py", text)
+
     def test_aggressive_alert_is_manual_only_to_avoid_duplicate_full_scans(self):
         text = AGGRESSIVE_WORKFLOW.read_text(encoding="utf-8")
         self.assertRegex(text, r"(?m)^\s*workflow_dispatch:\s*$")
