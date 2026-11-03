@@ -101,7 +101,7 @@ def test_private_dashboard_environment_example_documents_secrets_without_values(
     assert "getpass.getpass" in env_example
     assert "secrets.token_urlsafe(48)" in env_example
     assert "200000..2000000" in env_example
-    assert "hosting Environment UI" in env_example
+    assert "backend Environment UI" in env_example
 
 
 def test_ios_home_screen_icon_is_png_and_cached():
