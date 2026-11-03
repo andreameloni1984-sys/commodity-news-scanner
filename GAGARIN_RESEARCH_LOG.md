@@ -583,3 +583,16 @@
 - Verified on main: the full monitor cron is `*/15 * * * *` and `MONITOR_INTERVAL_MINUTES=15`.
 - Verified on main: `aggressive-alert.yml` retains `workflow_dispatch` and has no schedule trigger.
 - This is a GitHub source merge, not proof of Render deployment, a live quote, Telegram signal delivery, or trading performance.
+
+
+## 2026-11-03 — Remove the remaining unused SIFTING_API_KEY injection from manual SOYUZ
+
+- **Main baseline:** `dea2eb8177fe2e3cabb3d91485c949c865804ec6`; checked current open PRs before updating the existing cleanup PR #110. No duplicate PR was created.
+- **Runtime/entrypoint audit:** the current scheduled monitor `.github/workflows/gagarin-monitor.yml` already has no SIFTING mapping. Exact repository code search on main finds `SIFTING_API_KEY` only in the monitor regression test and `.github/workflows/soyuz.yml`; no Python runtime consumer or configuration reader exists. The manual SOYUZ workflow executes `python main.py`.
+- **Cleanup:** removed only the unused `SIFTING_API_KEY` environment mapping from `.github/workflows/soyuz.yml`. The GitHub secret itself is not read, altered or deleted. Kept Trading 212 mappings and all runtime code untouched because they are outside this verified cleanup.
+- **Regression:** extended `tests/test_gagarin_monitor_cadence.py` to assert the manual SOYUZ workflow no longer injects SIFTING_API_KEY, while preserving `PAPER_TRADING_ONLY=1` and the `python main.py` entrypoint.
+- **Cost/benefit:** removes one unused secret-to-process environment injection. No external request, runtime duration, or dependency saving is claimed; the secret remains in GitHub settings and is not changed.
+- **Limits:** this does not remove a provider implementation or secret from GitHub; it only stops passing the unused variable to the manual workflow. No Render configuration, deployment, Telegram send, broker action or order was performed.
+- **Validation:** on code/test head `ebf4f2951d4e2daabaf052ceee99aaae75f8a5cd`, all five PR workflows completed SUCCESS: Integration **565 passed in 2.77s**, PAPER **26 passed in 0.18s** plus SOYUZ paper smoke (`PAPER_WATCH`, `ASSET_NOT_IN_UNIVERSE`), NEWS Alert **72 passed in 0.57s**, Public Event Brain **86 passed in 0.63s**, Execution Layer **3 passed in 0.03s**. Total test count: **752 passed**. A subsequent whitespace-only test-file formatting fix and this log update are being pushed separately; the PR CI is rerun on the resulting head. No live quote, Telegram send, deployment, broker action or order was performed. PAPER ONLY.
+
+- **Final PR-head verification:** after the whitespace-only test formatting update, head `3109c3abe217e7cc4aea2740e71cf4e6300c7bfc` passed all five PR workflows: Integration **565 passed in 1.61s** (run `41658897073`), PAPER **26 passed in 0.15s** plus PAPER-only smoke (`PAPER_WATCH`, `ASSET_NOT_IN_UNIVERSE`; run `41658896314`), NEWS Alert **72 passed in 0.52s** (run `41658896380`), Public Event Brain **86 passed in 0.60s** (run `41658896297`), and Execution Layer **3 passed in 0.02s** (run `41658897054`). All five workflow conclusions were SUCCESS. No deployment or live operation was performed.
