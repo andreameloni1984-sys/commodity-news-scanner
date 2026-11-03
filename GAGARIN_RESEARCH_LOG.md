@@ -543,3 +543,15 @@
 - Additional workflows on the corrected head all completed SUCCESS: PAPER `41551959887`, NEWS Alert `41551959985`, Public Event Brain `41551959934`, Execution Layer `41551959845`.
 - The first integration attempt's single stale documentation assertion was corrected before the successful final run.
 - Read-back/deployment distinction: source changes are merged on GitHub; no backend deployment, external endpoint request, Telegram send, MT5 execution, or Cloudflare setup was performed. MetaEditor compilation remains unverified.
+
+
+## 2026-11-03 — Restore Gagarin provider-heavy monitor to 15-minute cadence
+
+- Finding: the default-branch .github/workflows/gagarin-monitor.yml had been changed to run every five minutes. Render logs for soyuz-gagarin-telegram-v2 recorded four GDELT HTTP 429 failures between 00:21:06Z and 00:22:09Z on 2026-11-03, with cooldowns of 900s and 1800s. A separate 10:34Z–11:34Z query returned no application logs, so uninterrupted monitor activity was not established.
+- Decision: restore the full provider-heavy scheduled monitor to every 15 minutes and set MONITOR_INTERVAL_MINUTES=15. The M5 LUBJANKA detector and its completed-candle semantics are unchanged; this changes only how often the full provider-heavy workflow is launched.
+- Safety: existing thresholds, provider configuration, Governor, PAPER authorization, entry/SL/TP logic and order behavior are unchanged. PAPER_TRADING_ONLY=1 remains enforced. No Render setting, service plan, database allowlist or secret was changed.
+- Regression: add tests/test_gagarin_monitor_cadence.py to assert the sole cron is */15 * * * *, the runtime interval is 15 minutes, and PAPER-only mode remains enabled.
+- Validation: branch-only change; GitHub Actions CI is required. No scheduled run, live quote, Telegram delivery or deployment is claimed.
+- Research comparison: Freqtrade's official exchange implementation tracks per-pair OHLCV refresh/poll timestamps and configurable candle-lag grace; its docs warn that exchange request limits constrain history fetches. This supports treating freshness and rate capacity as measured constraints, not assuming a five-minute schedule is sustainable.
+- Open items: GDELT 429 source cooldowns need review; the Render NEWS listener's last successful polling heartbeat is not proven by the empty recent-log window. Reconsider a five-minute lightweight LUBJANKA-only scan only after provider request budgets, freshness and successful heartbeat are measured independently of the full NEWS monitor.
+- Mode: PAPER ONLY. No broker orders.
