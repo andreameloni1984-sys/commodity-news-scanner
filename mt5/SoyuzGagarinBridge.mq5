@@ -1,6 +1,6 @@
 //+------------------------------------------------------------------+
 //| SOYUZ GAGARIN -> MT5 DEMO BRIDGE                                |
-//| Receives PAPER signals from the Gagarin Render endpoint.         |
+//| Receives PAPER signals from an explicitly configured Gagarin endpoint.         |
 //| Default: DISPLAY ONLY. No orders are sent unless the user        |
 //| explicitly enables demo execution AND the account is DEMO.      |
 //+------------------------------------------------------------------+
@@ -9,7 +9,7 @@
 
 #include <Trade/Trade.mqh>
 
-input string BridgeURL = "https://soyuz-gagarin-telegram-v2.onrender.com/mt5/paper";
+input string BridgeURL = "";
 input string BridgeKey = "";
 input int PollSeconds = 60;
 input bool EnableDemoExecution = false;
@@ -147,8 +147,20 @@ void ProcessSignal(string json)
 
 int OnInit()
 {
+   string configured_url = BridgeURL;
+   StringTrimLeft(configured_url);
+   StringTrimRight(configured_url);
+   if(configured_url == "" || StringFind(configured_url, "https://") != 0)
+   {
+      Print("GAGARIN BRIDGE DISABLED: configure an explicit HTTPS BridgeURL.");
+      return INIT_PARAMETERS_INCORRECT;
+   }
+
    if(BridgeKey == "")
-      Print("WARNING: BridgeKey is empty. Configure the shared bridge key.");
+   {
+      Print("GAGARIN BRIDGE DISABLED: BridgeKey is empty.");
+      return INIT_PARAMETERS_INCORRECT;
+   }
 
    EventSetTimer(MathMax(10, PollSeconds));
    return INIT_SUCCEEDED;

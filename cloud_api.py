@@ -24,7 +24,7 @@ from state_store import ensure_schema, load_state, save_state
 
 app = FastAPI(title="SOYUZ GAGARIN CLOUD", version="1.0")
 
-# Private dashboard authentication. Configure both secrets on Render.
+# Private dashboard authentication. Configure both secrets in the backend environment.
 _APP_SESSION_TTL = 12 * 60 * 60
 _APP_COOKIE = "gagarin_session"
 
@@ -144,7 +144,7 @@ async def require_private_dashboard(request: Request, call_next):
 def app_login_page():
     if not os.getenv("APP_PASSWORD_HASH") or not os.getenv("APP_SESSION_SECRET"):
         return HTMLResponse(
-            "<h2>Accesso privato non ancora configurato</h2><p>Imposta APP_PASSWORD_HASH e APP_SESSION_SECRET nelle variabili ambiente Render.</p>",
+            "<h2>Accesso privato non ancora configurato</h2><p>Imposta APP_PASSWORD_HASH e APP_SESSION_SECRET nelle variabili ambiente del backend privato.</p>",
             status_code=503,
         )
     return HTMLResponse(LOGIN_HTML)
@@ -197,7 +197,7 @@ PORTFOLIO = PaperPortfolio(100.0)
 AGGRESSIVE_PORTFOLIO = PaperPortfolio(100.0)
 FOREX_AGGRESSIVE_PORTFOLIO = PaperPortfolio(100.0)
 
-# Restore durable paper accounts at startup so Render restarts never reset them.
+# Restore durable paper accounts at startup so process restarts never reset them.
 try:
     _DB_READY = ensure_schema()
     if _DB_READY:
