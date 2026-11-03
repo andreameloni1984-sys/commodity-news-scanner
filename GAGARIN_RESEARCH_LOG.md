@@ -1,5 +1,28 @@
 # GAGARIN — Research and implementation log
 
+## 2026-11-03 — Remove unreachable Working's speculative-T helper
+
+- **Audit baseline:** GAGARIN main at `842890b63fbbd2c4dddea2bf4e9fd5dc2cbb2df3`. The only repository code-search hit for `working_t`, `working_t_note`, `engine.working_t`, `from engine.working_t`, and `import engine.working_t` was the module itself. No open PR targeted this file.
+- **Reachability checks:** `main.py` imports the operational pipeline through `engine.gagarin`; `engine/__init__.py` is empty. Searches for common dynamic loading/discovery patterns (`importlib`, `pkgutil.iter_modules`, `__import__`, `spec_from_file_location`) found no repository use. No workflow, test, scheduler or Telegram entrypoint referenced the module.
+- **Removed:** `engine/working_t.py` (97 code lines), a standalone paper-only implementation of Working's speculative-T index with `working_t_note()` and `annotate()`. It was explicitly documented as a research note, not a rule; it had no caller, no COT data handoff, and no path into `final_decision`, risk, journaling or Telegram.
+- **Regression:** extended `tests/test_main_runner_import.py` to import the production runner and `engine.gagarin.analyze_universe`, and assert the operational import graph does not load `engine.working_t`. The full PR CI must pass before the removal is considered verified.
+- **Cost/benefit:** removes one unreachable Python module (98 lines) from the engine package. No provider request, polling cycle, dependency, execution time or signal latency is saved; those benefits are not claimed. The benefit is a smaller runtime namespace and less misleading dead code.
+- **Research reviewed:** Freqtrade's DataProvider/data-download documentation favors cached, incremental candle retrieval and explicit freshness rather than repeated fetches; LEAN describes a modular engine with pluggable data/brokerage components; Backtrader documents separate broker simulation and slippage assumptions. VectorBT's current repository uses Apache-2.0 with Commons Clause; Freqtrade is GPL-3.0 and LEAN is Apache-2.0. No third-party code was copied or incorporated.
+- **Preserved scope:** no changes to data providers, active universe, source freshness, event ingestion, LUBJANKA, Telegram, Governor, direction, score, entry, SL/TP, sizing, journal/feedback, or PAPER-only execution. The separate COT and hedging-pressure research paths were not modified.
+- **Safety:** draft PR only. No merge, deployment, workflow dispatch, secrets/Render changes, live provider call, Telegram send, broker connection or order. PAPER ONLY.
+
+
+### Final CI verification — PR #166
+
+- Tested code head: `7143ce14a04010eff26e8a5c411e14fa02f46073`.
+- `SOYUZ GAGARIN Tests`: **565 passed in 2.69s** (run `41678652690`).
+- `Gagarin NEWS alert tests`: **72 passed in 0.69s** (run `41678652735`).
+- `Gagarin Public Event Brain Tests`: **86 passed in 0.71s** (run `41678652675`).
+- `SOYUZ GAGARIN PAPER`: **26 passed in 0.19s** plus PAPER smoke output `paper_only=True`, `decision=PAPER_WATCH`, `reason=ASSET_NOT_IN_UNIVERSE` (run `41678652941`).
+- `Gagarin Execution Layer Tests`: **3 passed in 0.02s** (run `41678652893`).
+- All five PR workflows completed **SUCCESS** on the exact tested head. Specialized suites overlap the full integration suite, so their counts are reported separately rather than summed as unique tests.
+- No live data, Telegram send, deployment, broker operation or order was performed. PR remains draft and unmerged.
+
 ## 2026-10-26 — Validate Telegram entry, stop and target levels
 
 - Finding: the news-to-setup path required non-null price/entry/SL/TP values but did not reject NaN/Infinity or levels ordered on the wrong side of entry. Such values could be formatted into a Telegram alert even though they were not actionable risk levels.
@@ -610,27 +633,3 @@
 - Kept `AGRI_SYMBOLS`, explicit Yahoo futures mappings, active Yahoo/FX routing, and all market-basis checks.
 - This reduces dead code and removes an unused paid-provider credential surface; it does not reduce current quote latency or change the active data route.
 - PAPER ONLY; no provider substitution, strategy change, deployment, or orders.
-
-
-## 2026-11-03 — Remove unreachable Working's speculative-T helper
-
-- **Audit baseline:** GAGARIN main at `842890b63fbbd2c4dddea2bf4e9fd5dc2cbb2df3`. The only repository code-search hit for `working_t`, `working_t_note`, `engine.working_t`, `from engine.working_t`, and `import engine.working_t` was the module itself. No open PR targeted this file.
-- **Reachability checks:** `main.py` imports the operational pipeline through `engine.gagarin`; `engine/__init__.py` is empty. Searches for common dynamic loading/discovery patterns (`importlib`, `pkgutil.iter_modules`, `__import__`, `spec_from_file_location`) found no repository use. No workflow, test, scheduler or Telegram entrypoint referenced the module.
-- **Removed:** `engine/working_t.py` (97 code lines), a standalone paper-only implementation of Working's speculative-T index with `working_t_note()` and `annotate()`. It was explicitly documented as a research note, not a rule; it had no caller, no COT data handoff, and no path into `final_decision`, risk, journaling or Telegram.
-- **Regression:** extended `tests/test_main_runner_import.py` to import the production runner and `engine.gagarin.analyze_universe`, and assert the operational import graph does not load `engine.working_t`. The full PR CI must pass before the removal is considered verified.
-- **Cost/benefit:** removes one unreachable Python module (98 lines) from the engine package. No provider request, polling cycle, dependency, execution time or signal latency is saved; those benefits are not claimed. The benefit is a smaller runtime namespace and less misleading dead code.
-- **Research reviewed:** Freqtrade's DataProvider/data-download documentation favors cached, incremental candle retrieval and explicit freshness rather than repeated fetches; LEAN describes a modular engine with pluggable data/brokerage components; Backtrader documents separate broker simulation and slippage assumptions. VectorBT's current repository uses Apache-2.0 with Commons Clause; Freqtrade is GPL-3.0 and LEAN is Apache-2.0. No third-party code was copied or incorporated.
-- **Preserved scope:** no changes to data providers, active universe, source freshness, event ingestion, LUBJANKA, Telegram, Governor, direction, score, entry, SL/TP, sizing, journal/feedback, or PAPER-only execution. The separate COT and hedging-pressure research paths were not modified.
-- **Safety:** draft PR only. No merge, deployment, workflow dispatch, secrets/Render changes, live provider call, Telegram send, broker connection or order. PAPER ONLY.
-
-
-### Final CI verification — PR #166
-
-- Tested code head: `7143ce14a04010eff26e8a5c411e14fa02f46073`.
-- `SOYUZ GAGARIN Tests`: **565 passed in 2.69s** (run `41678652690`).
-- `Gagarin NEWS alert tests`: **72 passed in 0.69s** (run `41678652735`).
-- `Gagarin Public Event Brain Tests`: **86 passed in 0.71s** (run `41678652675`).
-- `SOYUZ GAGARIN PAPER`: **26 passed in 0.19s** plus PAPER smoke output `paper_only=True`, `decision=PAPER_WATCH`, `reason=ASSET_NOT_IN_UNIVERSE` (run `41678652941`).
-- `Gagarin Execution Layer Tests`: **3 passed in 0.02s** (run `41678652893`).
-- All five PR workflows completed **SUCCESS** on the exact tested head. Specialized suites overlap the full integration suite, so their counts are reported separately rather than summed as unique tests.
-- No live data, Telegram send, deployment, broker operation or order was performed. PR remains draft and unmerged.
