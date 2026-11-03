@@ -14,7 +14,7 @@ WORKFLOW = (
 class TestFetchDriversWorkflowInstall(unittest.TestCase):
     def test_driver_fetch_keeps_daily_and_manual_triggers(self):
         text = WORKFLOW.read_text(encoding="utf-8")
-        self.assertRegex(text, r'(?m)^\s*- cron: "0 7 \\* \\* \\*"$')
+        self.assertIn('    - cron: "0 7 * * *"', text)
         self.assertRegex(text, r"(?m)^\s*workflow_dispatch:\s*$")
 
     def test_driver_fetch_installs_requests_without_self_upgrading_pip(self):
@@ -28,7 +28,7 @@ class TestFetchDriversWorkflowInstall(unittest.TestCase):
         text = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("python engine/fetch_drivers.py", text)
         self.assertIn("git add data/driver_snapshot.json", text)
-        self.assertIn('git push', text)
+        self.assertIn("git push", text)
 
 
 if __name__ == "__main__":
