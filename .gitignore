@@ -1,4 +1,5 @@
 # Private operational PAPER data must never be committed to the public repository.
 /paper_trade_log.csv
+/journal.csv
 /gagarin_feedback.csv
 /.paper_trade_log.csv.*.tmp
