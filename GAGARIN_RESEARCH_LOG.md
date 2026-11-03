@@ -526,3 +526,11 @@
 - Tests: new offline tests cover missing URL, insecure/credentialed/query/fragment URLs, explicit HTTPS request construction, redirect refusal, absence of the legacy host in active config, and the MT5 empty-default guard. CI must run on the PR before merge. MQL compilation was not available in this execution; the MT5 check is source-level only.
 - Limits: no endpoint was contacted, no API key was read, no deployment was performed, and no MT5 EA was run. This removes implicit Render fallbacks; it does not implement the Cloudflare Worker or activate the bridge.
 - Next: verify PR CI; then implement the Worker API contract and private D1 binding without migrating live data until a backup/export and restore path are tested. PAPER ONLY.
+
+
+### CI follow-up — provider-neutral setup copy
+
+- First PR integration run `41551882806` reported **559 passed, 1 failed**. The failure was an existing assertion in `tests/test_personal_app_pwa.py` that still required the literal phrase `hosting Environment UI`, while the provider-neutral .env copy correctly changed this to `backend Environment UI`.
+- Updated that assertion only in commit `bad113a29bd3faf14d5b9dabc4413e20c08b2712`. No runtime code change was needed.
+- Other observed PR workflows on the original head: PAPER SUCCESS, NEWS Alert SUCCESS, Public Event Brain SUCCESS; Execution Layer was still in progress at the time of inspection.
+- A new full integration run is required on the corrected head before merge. The MQL bridge is source-checked only; no MetaEditor compiler is available.
