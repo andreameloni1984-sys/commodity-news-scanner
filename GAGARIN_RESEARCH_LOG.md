@@ -617,3 +617,14 @@
 - Kept `AGRI_SYMBOLS`, explicit Yahoo futures mappings, active Yahoo/FX routing, and all market-basis checks.
 - This reduces dead code and removes an unused paid-provider credential surface; it does not reduce current quote latency or change the active data route.
 - PAPER ONLY; no provider substitution, strategy change, deployment, or orders.
+
+
+
+## 2026-11-03 — Remove pip self-upgrade from Gagarin integration-test workflow
+
+- Audit: `.github/workflows/gagarin-tests.yml` installs the repository's declared test/runtime dependencies and then runs the integration suite. The explicit pip self-upgrade is not required by the project test command; `actions/setup-python@v5` already provisions pip.
+- Cleanup: removed only the unconditional `python -m pip install --upgrade pip` operation. Kept Python 3.11, the requirements installation, push/pull-request triggers, and the full `python -m pytest -q` suite.
+- Regression: added `tests/test_gagarin_tests_workflow_install.py` to assert the dependency install and full test command remain while the self-upgrade is absent.
+- Cost/benefit: removes one package-index upgrade/resolution operation per workflow run. Exact network bytes and wall-clock savings are not measured.
+- Scope: CI setup only; no runtime code, providers, market data, signal generation, scoring, risk, Telegram, journal, schedule, or PAPER-only behavior changed.
+- PAPER ONLY; no deployment, secrets, live data request, Telegram send, broker action, order, or merge.
