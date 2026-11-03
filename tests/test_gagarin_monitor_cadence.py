@@ -31,6 +31,16 @@ class TestGagarinMonitorCadence(unittest.TestCase):
         self.assertRegex(text, r"(?m)^\s*workflow_dispatch:\s*$")
         self.assertNotRegex(text, r"(?m)^\s*schedule:")
 
+
+    def test_manual_soyuz_does_not_prefetch_agriculture_before_main(self):
+        text = SOYUZ_WORKFLOW.read_text(encoding="utf-8")
+        self.assertNotIn("diagnostic_agri.py", text)
+        self.assertNotIn("Agriculture diagnostic", text)
+        self.assertIn("run: python main.py", text)
+        self.assertIn('PAPER_TRADING_ONLY: "1"', text)
+        diagnostic = WORKFLOW.parents[2] / "diagnostic_agri.py"
+        self.assertTrue(diagnostic.is_file())
+
     def test_monitor_remains_paper_only(self):
         text = WORKFLOW.read_text(encoding="utf-8")
         self.assertRegex(text, r'(?m)^\s*PAPER_TRADING_ONLY:\s*"1"\s*$')
