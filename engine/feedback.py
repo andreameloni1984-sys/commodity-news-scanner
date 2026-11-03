@@ -338,7 +338,15 @@ def _load_durable_rows():
         if not ensure_schema():
             return None
         rows = load_state("gagarin_feedback_rows")
-        return rows if isinstance(rows, list) else []
+        if rows is None:
+            return []
+        if isinstance(rows, list) and all(isinstance(row, dict) for row in rows):
+            return rows
+        # A malformed D1 snapshot must never be interpreted as an empty journal:
+        # the next write could otherwise overwrite recoverable durable data.
+        if _selected_storage_backend() == "d1":
+            return None
+        return []
     except Exception:
         return None
 
