@@ -25,9 +25,6 @@ jobs:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       TELEGRAM_ENABLED: "1"
-      SIFTING_API_KEY: ${{ secrets.SIFTING_API_KEY }}
-      T212_API_KEY: ${{ secrets.T212_API_KEY }}
-      T212_API_SECRET: ${{ secrets.T212_API_SECRET }}
       PAPER_TRADING_ONLY: "1"
       # Existing authorization thresholds are intentionally unchanged.
       MIN_ENTRY_PROBABILITY: "40"
