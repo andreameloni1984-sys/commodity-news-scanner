@@ -207,3 +207,41 @@ def test_d1_paper_journal_loads_oldest_first_and_bounds_limit(monkeypatch):
     rows = state_store.load_paper_trade_rows(limit=999999)
     assert rows == [{"signal_id": "older"}, {"signal_id": "newer"}]
     assert requests_seen[0]["params"] == ["100000"]
+
+
+@pytest.mark.parametrize(
+    "statement_result",
+    [
+        {"results": [], "meta": {}},
+        {"success": False, "results": [], "meta": {}},
+        {"success": "true", "results": [], "meta": {}},
+    ],
+)
+def test_d1_writes_require_explicit_statement_success(monkeypatch, statement_result):
+    configure_d1(monkeypatch)
+    monkeypatch.setattr(
+        requests,
+        "post",
+        lambda *args, **kwargs: FakeResponse(
+            {"success": True, "result": [statement_result], "errors": []}
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="did not confirm write statement success|statement failure|invalid statement status"):
+        state_store._d1_query(
+            "INSERT INTO gagarin_state(state_key, state_value) VALUES (?, ?)",
+            ["paper-journal", "{}"],
+        )
+
+
+def test_d1_reads_accept_documented_optional_statement_success(monkeypatch):
+    configure_d1(monkeypatch)
+    monkeypatch.setattr(
+        requests,
+        "post",
+        lambda *args, **kwargs: FakeResponse(
+            {"success": True, "result": [{"results": [{"value": "ok"}], "meta": {}}], "errors": []}
+        ),
+    )
+
+    assert state_store._d1_query("SELECT value FROM gagarin_state") == [{"value": "ok"}]
