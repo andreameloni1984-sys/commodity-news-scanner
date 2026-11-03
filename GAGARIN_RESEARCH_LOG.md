@@ -617,3 +617,14 @@
 - Kept `AGRI_SYMBOLS`, explicit Yahoo futures mappings, active Yahoo/FX routing, and all market-basis checks.
 - This reduces dead code and removes an unused paid-provider credential surface; it does not reduce current quote latency or change the active data route.
 - PAPER ONLY; no provider substitution, strategy change, deployment, or orders.
+
+
+
+## 2026-11-03 — Remove pip self-upgrade from manual SOYUZ workflow
+
+- Audit: `.github/workflows/soyuz.yml` already provisions Python 3.11 with `actions/setup-python@v5` and pip caching, then installs `requirements.txt` (or the existing `requests` fallback). The separate pip self-upgrade is not required by the workflow's install, compile, test, diagnostic, or run commands.
+- Cleanup: removed only `python -m pip install --upgrade pip`. Kept the manual trigger, concurrency guard, secrets references, all environment values, dependency installation/fallback, compile step, tests, agriculture diagnostic, and `python main.py`.
+- Regression: added `tests/test_soyuz_workflow_install.py` to assert that dependencies, validation steps, and PAPER ONLY remain while the self-upgrade is absent.
+- Cost/benefit: removes one package-index upgrade/resolution operation per manual SOYUZ run. Exact network bytes and wall-clock savings are not measured.
+- Scope: CI/bootstrap only. No market-data requests, providers, polling, signal generation, scoring, Governor, risk, Telegram behavior, journal, or execution authorization changed.
+- PAPER ONLY; no deployment, secrets changes, live API call, Telegram send, broker action, order, or merge.
