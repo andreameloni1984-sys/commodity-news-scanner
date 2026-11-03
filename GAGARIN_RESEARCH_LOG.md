@@ -543,3 +543,16 @@
 - Additional workflows on the corrected head all completed SUCCESS: PAPER `41551959887`, NEWS Alert `41551959985`, Public Event Brain `41551959934`, Execution Layer `41551959845`.
 - The first integration attempt's single stale documentation assertion was corrected before the successful final run.
 - Read-back/deployment distinction: source changes are merged on GitHub; no backend deployment, external endpoint request, Telegram send, MT5 execution, or Cloudflare setup was performed. MetaEditor compilation remains unverified.
+
+
+## 2026-11-03 — Separate Cloud API liveness from readiness
+
+- Finding: `GET /health` always returned HTTP 200 while the private dashboard could still return HTTP 503 because `APP_PASSWORD_HASH` / `APP_SESSION_SECRET` were absent, and while PostgreSQL persistence was disabled (`_DB_READY=False`). A liveness response was therefore insufficient to establish whether the private Cloud API prerequisites were available.
+- Implemented on branch `feat/cloud-readiness-endpoint-20261103`: add `GET /ready`. It returns HTTP 503 until both dashboard-auth secrets are present, `CLOUD_API_KEY` is present, and the application has successfully initialized PostgreSQL. It exposes booleans only, never secret values. The response explicitly scopes itself to `cloud_api_prerequisites_only`; it does not claim PWA, data-feed, Telegram, bridge, or whole-platform readiness. `/health` remains a liveness endpoint.
+- Files: `cloud_api.py`; new `tests/test_cloud_readiness.py`.
+- Regression tests: missing dashboard auth, missing Cloud API key, disabled persistence, and all-prerequisites-present success; each test also checks that secret values are not returned.
+- Safety: the new endpoint is not configured as Render's health-check path, so missing user configuration cannot trigger a restart loop. No environment variable, secret, database allowlist, Render plan, deployment, provider, strategy threshold, Governor, PAPER permission, Telegram send, or broker order was changed.
+- Validation: the exact code/test head `4feb43b2afa46ee9af0d18498365e6d12384d902` passed all five PR workflows: integration **564 passed** (run `41635740151`), PAPER **26 passed** (`41635740095`), NEWS Alert **72 passed** (`41635740101`), Public Event Brain **86 passed** (`41635740067`), Execution Layer **3 passed** (`41635740121`); **751 tests total**. A subsequent documentation-only log commit records these results. No live `/ready` response or Render deployment is claimed.
+- Next: configure the required values privately in the backend and set `DATABASE_URL` to the existing Render Postgres Internal Database URL; then verify `/ready` and the authenticated dashboard without sharing any secret in chat.
+- Research: Freqtrade's official exchange implementation tracks per-pair OHLCV refresh and poll times and applies a late-candle grace window; its docs emphasize that exchange request budgets and candle pagination constrain polling. The applicable lesson is to distinguish liveness from readiness and measure data freshness/rate capacity. No Freqtrade dependency or code was imported.
+- Mode: PAPER ONLY.
