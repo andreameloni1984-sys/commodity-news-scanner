@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import time
 
 from commodities.universe import Commodity
 from engine.state import SoyuzState
@@ -394,13 +395,18 @@ def apply_sputnik_intelligence(state):
 
 
 def analyze_one(commodity: Commodity) -> SoyuzState:
+    analysis_started = time.perf_counter()
     state = SoyuzState(
         commodity=commodity.name,
         symbol=commodity.symbol,
         analysis_timestamp=datetime.now(timezone.utc).isoformat(),
     )
 
+    data_fetch_started = time.perf_counter()
     state = load_data(state, commodity)
+    state.metadata["data_fetch_duration_ms"] = round(
+        (time.perf_counter() - data_fetch_started) * 1000.0, 2
+    )
     # LUBJANKA observes completed M5 OHLCV bars independently; it never gates a trade.
     state.metadata["lubjanka"] = intercept_market(
         state.candles,
@@ -423,15 +429,25 @@ def analyze_one(commodity: Commodity) -> SoyuzState:
     state = apply_risk(state)
     state = apply_safety(state)
     state = annotate(state)
+    state.metadata["analysis_completed_at_utc"] = datetime.now(timezone.utc).isoformat()
+    state.metadata["analysis_duration_ms"] = round(
+        (time.perf_counter() - analysis_started) * 1000.0, 2
+    )
     return state
 
 
 def analyze_universe(commodities):
+    universe_started = time.perf_counter()
     results = []
     for commodity in commodities:
         results.append(analyze_one(commodity))
     stamp_energy(results)
     stamp_paper(results)
+    universe_duration_ms = round(
+        (time.perf_counter() - universe_started) * 1000.0, 2
+    )
+    for state in results:
+        state.metadata["universe_analysis_duration_ms"] = universe_duration_ms
     results.sort(
         key=lambda state: (
             state.final_decision == "ENTRY",
