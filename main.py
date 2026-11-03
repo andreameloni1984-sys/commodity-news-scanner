@@ -238,6 +238,19 @@ def _print_data_summary(results):
             f"provider={provider}"
         )
 
+        fetch_ms = metadata.get("data_fetch_duration_ms")
+        analysis_ms = metadata.get("analysis_duration_ms")
+        universe_ms = metadata.get("universe_analysis_duration_ms")
+        timing = []
+        if isinstance(fetch_ms, (int, float)):
+            timing.append(f"fetch={fetch_ms:.0f}ms")
+        if isinstance(analysis_ms, (int, float)):
+            timing.append(f"engine={analysis_ms:.0f}ms")
+        if isinstance(universe_ms, (int, float)):
+            timing.append(f"universe={universe_ms:.0f}ms")
+        if timing:
+            print("    └─ TIMING: " + " | ".join(timing))
+
         provider_checks = _format_provider_attempts(
             metadata.get("provider_attempts")
         )
