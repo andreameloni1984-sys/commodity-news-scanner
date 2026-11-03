@@ -289,6 +289,7 @@ def intercept_market(
         "last_bar_timestamp": last_timestamp,
         "last_bar_timestamp_utc": datetime.fromtimestamp(last_timestamp, timezone.utc).isoformat(),
         "bar_age_seconds": round(max(0.0, age), 1),
+        "bar_close_age_seconds": round(max(0.0, age - _INTERVAL_SECONDS), 1),
         "last_close": latest["close"],
         "atr_5m": round(atr, 8),
         "range_expansion_proxy": range_expansion,
