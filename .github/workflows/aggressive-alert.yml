@@ -1,8 +1,7 @@
 name: aggressive-alert
 
 on:
-  schedule:
-    - cron: "17 * * * *"
+  # Manual-only: the scheduled Gagarin monitor already scans the same full universe.
   workflow_dispatch:
 
 permissions:

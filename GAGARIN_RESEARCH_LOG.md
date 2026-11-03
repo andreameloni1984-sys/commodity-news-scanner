@@ -543,3 +543,34 @@
 - Additional workflows on the corrected head all completed SUCCESS: PAPER `41551959887`, NEWS Alert `41551959985`, Public Event Brain `41551959934`, Execution Layer `41551959845`.
 - The first integration attempt's single stale documentation assertion was corrected before the successful final run.
 - Read-back/deployment distinction: source changes are merged on GitHub; no backend deployment, external endpoint request, Telegram send, MT5 execution, or Cloudflare setup was performed. MetaEditor compilation remains unverified.
+
+
+## 2026-11-03 — Restore Gagarin provider-heavy monitor to 15-minute cadence
+
+- Finding: the default-branch .github/workflows/gagarin-monitor.yml had been changed to run every five minutes. Render logs for soyuz-gagarin-telegram-v2 recorded four GDELT HTTP 429 failures between 00:21:06Z and 00:22:09Z on 2026-11-03, with cooldowns of 900s and 1800s. The paired errors came from two Render instance IDs; current NEWS code polls RSS every 60s and enforces a per-process GDELT minimum interval of 900s. This proves source throttling and overlapping process-local cooldowns, not that the GitHub Actions cron caused the 429s. A separate 10:34Z–11:34Z query returned no application logs, so uninterrupted monitor activity was not established.
+- Decision: restore the full provider-heavy scheduled monitor to every 15 minutes and set MONITOR_INTERVAL_MINUTES=15. The M5 LUBJANKA detector and its completed-candle semantics are unchanged; this changes only how often the full provider-heavy workflow is launched.
+- Safety: existing thresholds, provider configuration, Governor, PAPER authorization, entry/SL/TP logic and order behavior are unchanged. PAPER_TRADING_ONLY=1 remains enforced. No Render setting, service plan, database allowlist or secret was changed.
+- Regression: add tests/test_gagarin_monitor_cadence.py to assert the sole cron is */15 * * * *, the runtime interval is 15 minutes, and PAPER-only mode remains enabled.
+- Validation: branch-only change; GitHub Actions CI is required. No scheduled run, live quote, Telegram delivery or deployment is claimed.
+- Research comparison: Freqtrade's official exchange implementation tracks per-pair OHLCV refresh/poll timestamps and configurable candle-lag grace; its docs warn that exchange request limits constrain history fetches. This supports treating freshness and rate capacity as measured constraints, not assuming a five-minute schedule is sustainable.
+- Open items: GDELT 429 source cooldowns need review; the Render NEWS listener's last successful polling heartbeat is not proven by the empty recent-log window. Reconsider a five-minute lightweight LUBJANKA-only scan only after provider request budgets, freshness and successful heartbeat are measured independently of the full NEWS monitor.
+- Mode: PAPER ONLY. No broker orders.
+
+
+## 2026-11-03 — Remove unused credentials from the Gagarin scheduled runner
+
+- The scheduled `main.py` monitor does not call the Sifting integration or the separate Trading 212 Invest command flow. Removed their secret-to-environment mappings from this workflow only; Trading 212 Invest code and other workflows are untouched.
+- Kept the optional Narwhal reference mapping because it is part of the market-data adapter and may be configured independently.
+- Added a regression assertion that the scheduled runner does not receive Sifting or Trading 212 Invest credentials.
+- This complements the 15-minute cadence correction. No analysis modules, directional logic, entry thresholds, risk controls, Telegram configuration, or PAPER-only authorization were removed.
+- PAPER ONLY; no deployment, broker connection, or real orders.
+
+
+## 2026-11-03 — Remove duplicate scheduled aggressive full-universe scan
+
+- Audit: `.github/workflows/aggressive-alert.yml` independently ran `engine.gagarin.analyze_universe(operational_commodities())` every hour and sent entry/reversal Telegram alerts. The main Gagarin monitor already runs the same core engine across the operational universe and sends operational Telegram alerts on its own schedule.
+- Cleanup: removed only the aggressive workflow's hourly cron. Kept `workflow_dispatch`, the aggressive formatter, tests, and manual run path available for intentional diagnostics.
+- Rationale: avoid a second overlapping provider-heavy full-universe analysis and potential duplicate alerts. This is a schedule-level cleanup; it does not remove the aggressive strategy code or alter its scoring/risk logic.
+- Regression: added a test that the aggressive workflow remains manually triggerable and has no scheduled trigger.
+- Expected savings: one complete aggressive full-universe scan per hour and its associated provider requests, plus reduced duplicate alert risk. Exact request count and runtime savings are not measured yet.
+- PAPER ONLY; no live orders, secret changes, deployment or Render changes.
