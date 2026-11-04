@@ -62,3 +62,29 @@ def test_reply_requires_message_id(monkeypatch):
         True, {"ok": True, "result": {}}
     ))
     assert bot._reply("12345", "reply") is False
+
+
+
+def test_send_telegram_logs_api_acceptance_not_device_delivery(monkeypatch, capsys):
+    monkeypatch.setattr(bot, "TELEGRAM_BOT_TOKEN", "test-token")
+    monkeypatch.setattr(bot, "TELEGRAM_CHAT_ID", "12345")
+    monkeypatch.setattr(
+        bot, "_api",
+        lambda *args, **kwargs: (True, {"ok": True, "result": {"message_id": 123}}),
+    )
+
+    assert bot.send_telegram("paper alert") is True
+    output = capsys.readouterr().out
+    assert "Telegram SEND API ACCEPTED | message_id=123" in output
+    assert "DELIVERED" not in output
+
+
+def test_reply_logs_api_acceptance_not_device_delivery(monkeypatch, capsys):
+    monkeypatch.setattr(bot, "_api", lambda *args, **kwargs: (
+        True, {"ok": True, "result": {"message_id": 456}}
+    ))
+
+    assert bot._reply("12345", "reply") is True
+    output = capsys.readouterr().out
+    assert "Telegram REPLY API ACCEPTED | message_id=456" in output
+    assert "DELIVERED" not in output
