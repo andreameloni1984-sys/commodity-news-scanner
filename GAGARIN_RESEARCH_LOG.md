@@ -617,3 +617,13 @@
 - Kept `AGRI_SYMBOLS`, explicit Yahoo futures mappings, active Yahoo/FX routing, and all market-basis checks.
 - This reduces dead code and removes an unused paid-provider credential surface; it does not reduce current quote latency or change the active data route.
 - PAPER ONLY; no provider substitution, strategy change, deployment, or orders.
+
+
+## 2026-11-04 — Rank early momentum acceleration in Gagarin
+
+- **Finding:** the prediction ranker already combined pre-move, opportunity, continuation, setup, regime and data-quality evidence, but did not distinguish a move whose short-horizon pace was accelerating from one whose pace was fading.
+- **Implemented on main:** add a bounded, transparent acceleration adjustment by comparing direction-adjusted 5-minute return pace with 15-minute return pace. Acceleration adds at most 8 ranking points; fading pace subtracts at most 4. The output exposes `momentum_acceleration_score` and a human-readable reason.
+- **Scope:** ranking only. It does not alter setup, trigger, risk, Governor, entry/SL/TP, thresholds, PAPER authorization, Telegram delivery, or order execution. Scores remain heuristic rankings, not calibrated probabilities.
+- **Regression coverage added:** accelerating momentum ranks above steady pace; fading momentum is penalized but the directional candidate remains visible.
+- **Commits:** `02b9065df47eac2b6f257ad4d16a30b16e2116c3` (implementation); `c43f5e61f682472b5fe958f0d96ee09f65f756d7` (tests).
+- **Verification:** tests have been added but have not been executed in this session; CI must pass before treating the change as validated in production. No deployment or live trade was performed.
