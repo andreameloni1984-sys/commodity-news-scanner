@@ -224,6 +224,17 @@ def format_watch_board(results: Iterable[object], min_score: float = 45.0) -> st
             f"   TRADE PAPER {status['trade_paper']} | {_rule_label(state)}"
         )
         meta = getattr(state, "metadata", {}) or {}
+        data_status = str(meta.get("data_status") or "").strip().upper() if isinstance(meta, dict) else ""
+        if data_status == "STALE":
+            quote_age = getattr(state, "data_age_seconds", None)
+            try:
+                quote_age_text = f"{float(quote_age):.0f}s" if quote_age is not None else "N/D"
+            except (TypeError, ValueError, OverflowError):
+                quote_age_text = "N/D"
+            lines.append(
+                f"   ⚠️ QUOTAZIONE STALE ({quote_age_text}) — "
+                "piano LUBJANKA mantenuto come osservazione, non come trigger aggiornato."
+            )
         plan = meta.get("lubjanka_playbook", {}) if isinstance(meta, dict) else {}
         if isinstance(plan, dict) and plan.get("status") == "CONDITIONAL_PLAN":
             lines.append(
