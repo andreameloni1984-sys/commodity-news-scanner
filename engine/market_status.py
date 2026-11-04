@@ -1,18 +1,17 @@
 """
-SOYUZ GAGARIN — MARKET STATUS v1.0
+SOYUZ GAGARIN — MARKET STATUS v1.1
 
-Determina se il mercato delle commodity è aperto o chiuso.
+Classifies regular market availability for the active commodity universe.
 
-IMPORTANTE:
-- MARKET_CLOSED non significa DATA_ERROR.
-- Quando il mercato è chiuso, l'ultima quotazione disponibile
-  non deve essere considerata un errore del provider.
-- Questo modulo NON autorizza ENTRY.
+MARKET_CLOSED is distinct from DATA_ERROR and from quote freshness:
+a closed market can legitimately have an old last candle.
+This module does not authorize entries or change trading rules.
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, time, timezone
+from zoneinfo import ZoneInfo
 
 
 # ============================================================
@@ -31,12 +30,33 @@ METALS = {
     "Palladio",
 }
 
+# Active GAGARIN grain futures use CBOT Globex regular sessions.
+# Other agriculture labels are retained for compatibility but do not
+# inherit this calendar unless their venue/session is explicitly mapped.
 AGRICULTURE = {
     "Riso",
     "Zucchero",
     "Cacao",
     "Caffè",
+    "Grano",
+    "Mais",
+    "Soia",
 }
+
+CHICAGO = ZoneInfo("America/Chicago")
+
+
+# ============================================================
+# TIME NORMALIZATION
+# ============================================================
+
+def _as_utc(timestamp: datetime | None = None) -> datetime:
+    if timestamp is None:
+        return datetime.now(timezone.utc)
+    if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+        # Naive timestamps in this module follow the documented UTC contract.
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
+    return timestamp.astimezone(timezone.utc)
 
 
 # ============================================================
@@ -44,17 +64,48 @@ AGRICULTURE = {
 # ============================================================
 
 def is_weekend(timestamp: datetime | None = None) -> bool:
+    """Return True for Saturday/Sunday UTC, independent of input timezone."""
+    return _as_utc(timestamp).weekday() >= 5
+
+
+# ============================================================
+# CBOT GRAIN FUTURES — REGULAR CME GLOBEX HOURS
+# ============================================================
+
+def _cbot_grains_open(timestamp: datetime) -> bool:
     """
-    Restituisce True durante sabato/domenica UTC.
+    Regular CBOT grain/oilseed Globex sessions in America/Chicago:
 
-    Per il nostro universo commodity è sufficiente come
-    primo livello di protezione weekend.
+    - Sunday-Friday: 19:00-07:45 CT
+    - Monday-Friday: 08:30-13:20 CT
+
+    Therefore Monday-Thursday evening sessions reopen at 19:00 CT.
+    Friday evening does not reopen; the next session begins Sunday 19:00 CT.
+    CME holiday/special-session overrides are not modeled here.
     """
+    local = timestamp.astimezone(CHICAGO)
+    weekday = local.weekday()  # Monday=0 ... Sunday=6
+    clock = local.time().replace(tzinfo=None)
 
-    if timestamp is None:
-        timestamp = datetime.now(timezone.utc)
+    if weekday == 5:  # Saturday
+        return False
 
-    return timestamp.weekday() >= 5
+    if weekday == 6:  # Sunday: weekly open at 19:00 CT
+        return clock >= time(19, 0)
+
+    # Monday-Friday overnight continuation from the previous 19:00 open.
+    if clock < time(7, 45):
+        return True
+
+    # Monday-Friday daytime session.
+    if time(8, 30) <= clock < time(13, 20):
+        return True
+
+    # Monday-Thursday evening session; Friday evening remains closed.
+    if weekday <= 3 and clock >= time(19, 0):
+        return True
+
+    return False
 
 
 # ============================================================
@@ -66,40 +117,21 @@ def get_market_status(
     timestamp: datetime | None = None,
 ) -> str:
     """
-    Restituisce:
+    Return OPEN or CLOSED for the regular weekly session.
 
-        OPEN
-        CLOSED
+    Active CBOT grains have a product-specific daily schedule.
+    Other commodity calendars remain unchanged (weekend check only).
 
-    Il parametro commodity viene mantenuto perché in futuro
-    possiamo aggiungere calendari specifici per ogni mercato.
+    CME holiday and exceptional session overrides are not represented;
+    callers must not interpret this regular-hours calendar as a holiday feed.
     """
+    instant = _as_utc(timestamp)
 
-    if timestamp is None:
-        timestamp = datetime.now(timezone.utc)
-
-    # --------------------------------------------------------
-    # WEEKEND
-    # --------------------------------------------------------
-
-    if is_weekend(timestamp):
+    if is_weekend(instant):
         return "CLOSED"
 
-    # --------------------------------------------------------
-    # FUTURE MARKET CALENDARS
-    # --------------------------------------------------------
-    #
-    # Qui inseriremo successivamente:
-    #
-    # - orari CME
-    # - pause giornaliere
-    # - festività USA
-    # - festività specifiche agricole
-    #
-    # Per ora nei giorni feriali consideriamo il mercato
-    # potenzialmente aperto e lasciamo al provider la
-    # verifica effettiva della disponibilità.
-    # --------------------------------------------------------
+    if commodity in AGRICULTURE and commodity in {"Grano", "Mais", "Soia"}:
+        return "OPEN" if _cbot_grains_open(instant) else "CLOSED"
 
     return "OPEN"
 
@@ -115,23 +147,19 @@ def classify_data_status(
     timestamp: datetime | None = None,
 ) -> str:
     """
-    Classifica lo stato del dato.
-
-    Priorità:
+    Classify data state in this priority order:
 
         DATA_ERROR
         MARKET_CLOSED
         LIVE
         STALE
-    """
 
+    Quote freshness remains separately available in provider metadata.
+    """
     if not data_ok:
         return "DATA_ERROR"
 
-    market_status = get_market_status(
-        commodity,
-        timestamp,
-    )
+    market_status = get_market_status(commodity, timestamp)
 
     if market_status == "CLOSED":
         return "MARKET_CLOSED"
@@ -147,16 +175,11 @@ def classify_data_status(
 # ============================================================
 
 def status_label(status: str) -> str:
-    """Etichetta compatta per log e Telegram."""
-
+    """Human-readable label for logs and Telegram."""
     labels = {
         "LIVE": "LIVE",
         "STALE": "STALE",
         "MARKET_CLOSED": "MARKET CLOSED",
         "DATA_ERROR": "DATA ERROR",
     }
-
-    return labels.get(
-        status,
-        status,
-    )
+    return labels.get(status, status)
