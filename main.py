@@ -253,8 +253,8 @@ def _print_data_summary(results):
             f"age={age:<10} provider={provider}"
         )
         print(
-            f"    └─ QUOTE: symbol={quote_symbol} market={market_type} "
-            f"expiry={contract_expiry} ts={quote_timestamp} "
+            f"    └─ QUOTE: quote_symbol={quote_symbol} market={market_type} "
+            f"expiry={contract_expiry} quote_ts={quote_timestamp} "
             f"price={price if price is not None else 'N/D'} "
             f"ATR={atr if atr is not None else 'N/D'}"
         )
