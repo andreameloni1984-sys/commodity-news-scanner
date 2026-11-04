@@ -331,7 +331,22 @@ def format_aggressive_alerts(alerts: Iterable[dict]) -> str:
                 age_text = "%.0fs" % age_number if math.isfinite(age_number) and age_number >= 0 else "N/D"
             except (TypeError, ValueError, OverflowError):
                 age_text = "N/D"
-            conflict = " | DIREZIONI IN CONFLITTO" if lubjanka.get("directional_conflict") else ""
+            gagarin_direction = str(item.get("direction") or "").strip().upper()
+            lubjanka_direction = str(lubjanka.get("direction") or "").strip().upper()
+            cross_direction_conflict = (
+                gagarin_direction in {"LONG", "SHORT"}
+                and lubjanka_direction in {"LONG", "SHORT"}
+                and gagarin_direction != lubjanka_direction
+            )
+            conflict_sources = []
+            if lubjanka.get("directional_conflict"):
+                conflict_sources.append("LUBJANKA")
+            if cross_direction_conflict:
+                conflict_sources.append("GAGARIN/LUBJANKA")
+            conflict = (
+                " | DIREZIONI IN CONFLITTO: " + ", ".join(conflict_sources)
+                if conflict_sources else ""
+            )
             lines.append(
                 "🛰️ LUBJANKA M5: %s %s | %s | %s | close %s | barra %s | %s | volume %s%s"
                 % (
