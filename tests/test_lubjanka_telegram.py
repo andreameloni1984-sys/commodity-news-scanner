@@ -123,3 +123,18 @@ def test_lubjanka_interception_is_not_dropped_by_telegram_top_ten_limit():
     assert any(item["symbol"] == "EARLY" for item in alerts)
     assert alerts[0]["symbol"] == "EARLY"
     assert alerts[0]["stage"] == "OSSERVAZIONE"
+
+def test_aggressive_alert_marks_conflicting_gagarin_and_lubjanka_directions():
+    item = candidate("EARLY_MOVE")
+    item.setup_direction = "LONG"
+    item.opportunity_direction = "LONG"
+    item.metadata["lubjanka"]["direction"] = "SHORT"
+    item.metadata["lubjanka"]["events"][0]["direction"] = "SHORT"
+    item.metadata["lubjanka"]["directional_conflict"] = False
+
+    message = format_aggressive_alert([item])
+
+    assert "Gold — LONG" in message
+    assert "LUBJANKA M5: SHORT" in message
+    assert "DIREZIONI IN CONFLITTO: GAGARIN/LUBJANKA" in message
+
