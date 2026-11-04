@@ -127,3 +127,28 @@ def test_delivery_formats_preanalyzed_candidates_without_reclassifying(monkeypat
     assert len(calls) == 1
     assert len(sent) == 1
     assert "POSSIBILE OPPORTUNITÀ" in sent[0]
+
+def test_aggressive_alert_marks_conflicting_gagarin_and_lubjanka_directions():
+    item = candidate()
+    item.setup_direction = "LONG"
+    item.opportunity_direction = "LONG"
+    item.metadata = {
+        "lubjanka": {
+            "status": "INTERCEPTED",
+            "direction": "SHORT",
+            "directional_conflict": False,
+            "stage": "EARLY_SETUP",
+            "strength_atr": 1.0,
+            "last_close": 2710,
+            "bar_age_seconds": 300,
+            "provider": "TEST",
+            "events": [{"interceptor": "EARLY_MOVE", "direction": "SHORT", "stage": "EARLY_SETUP"}],
+        }
+    }
+
+    message = format_aggressive_alert([item])
+
+    assert "Gold — LONG" in message
+    assert "LUBJANKA M5: SHORT" in message
+    assert "DIREZIONI IN CONFLITTO: GAGARIN/LUBJANKA" in message
+
