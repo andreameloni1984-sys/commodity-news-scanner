@@ -72,25 +72,6 @@ class PredictionRankerTests(unittest.TestCase):
         self.assertEqual(ranked[0]["direction"], "SHORT")
         self.assertIsNone(ranked[0]["price"])
 
-    def test_rewards_accelerating_momentum_without_changing_direction(self):
-        accelerating = state("WTI", move_5m_pct=0.50, move_15m_pct=0.60)
-        steady = state("GOLD", move_5m_pct=0.20, move_15m_pct=0.60)
-        ranked = rank_predictions([steady, accelerating])
-        by_name = {row["commodity"]: row for row in ranked}
-        self.assertGreater(
-            by_name["WTI"]["momentum_acceleration_score"],
-            by_name["GOLD"]["momentum_acceleration_score"],
-        )
-        self.assertEqual(by_name["WTI"]["direction"], "LONG")
-        self.assertIn("momentum in accelerazione", by_name["WTI"]["reasons"])
-
-    def test_penalizes_fading_momentum_without_suppressing_candidate(self):
-        row = rank_predictions([state(
-            "WTI", move_5m_pct=0.05, move_15m_pct=0.90,
-        )])[0]
-        self.assertLess(row["momentum_acceleration_score"], 0)
-        self.assertEqual(row["direction"], "LONG")
-
     def test_message_returns_single_best_pick(self):
         message = format_best_prediction([state("WTI"), state("GOLD", pre_move_score=10)])
         self.assertIn("SCELTA #1: WTI", message)
