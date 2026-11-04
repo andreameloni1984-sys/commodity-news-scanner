@@ -207,66 +207,57 @@ def _print_data_summary(results):
     for state in results:
 
         if state.data_age_seconds is not None:
-
-            age = (
-                f"{state.data_age_seconds:.1f}s"
-            )
-
+            age = f"{state.data_age_seconds:.1f}s"
         else:
-
-            age = "N/A"
+            age = "N/D"
 
         metadata = getattr(state, "metadata", {}) or {}
         if not isinstance(metadata, dict):
             metadata = {}
 
-        status = metadata.get(
-            "data_status",
-            "UNKNOWN",
-        )
-
+        status = metadata.get("data_status", "UNKNOWN")
         provider = (
-            state.data_source
-            if state.data_source
-            else "N/A"
+            metadata.get("execution_provider")
+            or metadata.get("quote_provider")
+            or getattr(state, "data_source", None)
+            or "N/D"
         )
+        logical_symbol = str(getattr(state, "symbol", "") or "N/D")
+        quote_symbol = (
+            metadata.get("execution_symbol")
+            or metadata.get("quote_symbol")
+            or metadata.get("resolved_symbol")
+            or "N/D"
+        )
+        market_type = (
+            metadata.get("execution_market_type")
+            or metadata.get("quote_market_type")
+            or "N/D"
+        )
+        quote_timestamp = (
+            metadata.get("quote_timestamp")
+            or metadata.get("last_bar_timestamp")
+            or "N/D"
+        )
+        contract_expiry = (
+            metadata.get("contract_expiry")
+            or metadata.get("execution_expiry")
+            or "N/D"
+        )
+        price = getattr(state, "price", None)
+        atr = getattr(state, "atr", None)
 
         print(
-            f"{state.commodity:<18} "
-            f"{status:<14} "
-            f"age={age:<10} "
-            f"provider={provider}"
+            f"{getattr(state, 'commodity', 'UNKNOWN'):<18} "
+            f"[{logical_symbol}] {status:<14} "
+            f"age={age:<10} provider={provider}"
         )
-
-        fetch_ms = metadata.get("data_fetch_duration_ms")
-        analysis_ms = metadata.get("analysis_duration_ms")
-        universe_ms = metadata.get("universe_analysis_duration_ms")
-        timing = []
-        if isinstance(fetch_ms, (int, float)):
-            timing.append(f"fetch={fetch_ms:.0f}ms")
-        if isinstance(analysis_ms, (int, float)):
-            timing.append(f"engine={analysis_ms:.0f}ms")
-        if isinstance(universe_ms, (int, float)):
-            timing.append(f"universe={universe_ms:.0f}ms")
-        if timing:
-            print("    └─ TIMING: " + " | ".join(timing))
-
-        provider_checks = _format_provider_attempts(
-            metadata.get("provider_attempts")
+        print(
+            f"  quote_symbol={quote_symbol} market={market_type} "
+            f"expiry={contract_expiry} quote_ts={quote_timestamp} "
+            f"price={price if price is not None else 'N/D'} "
+            f"ATR={atr if atr is not None else 'N/D'}"
         )
-        if provider_checks:
-            print(f"    └─ PROVIDER CHECKS: {provider_checks}")
-
-        fallback_reason = metadata.get("freshness_fallback_reason")
-        if fallback_reason:
-            print(f"    └─ FALLBACK REASON: {str(fallback_reason)[:80]}")
-
-    print()
-
-
-# ============================================================
-# GAGARIN RANKING
-# ============================================================
 
 def _print_ranking(results):
 
