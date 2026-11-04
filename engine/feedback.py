@@ -16,10 +16,12 @@ from pathlib import Path
 FEEDBACK_FILE = Path("gagarin_feedback.csv")
 FIELDS = [
     "signal_id", "timestamp_utc", "entry_bar_timestamp", "last_checked_timestamp",
-    "commodity", "symbol", "direction", "action", "timeframe",
+    "commodity", "symbol", "direction", "action", "signal_status", "timeframe",
     "probability", "quality", "confidence", "entry", "stop", "tp1", "tp2", "tp3",
-    "rr1", "rr2", "rr3", "stop_atr", "regime", "structure", "setup", "trigger",
-    "data_source", "data_status", "outcome", "r_multiple", "mfe_r", "mae_r", "bars_held",
+    "rr1", "rr2", "rr3", "stop_atr", "atr", "regime", "structure", "setup", "trigger",
+    "data_source", "data_status", "quote_timestamp", "quote_age_seconds", "quote_provider",
+    "quote_symbol", "market_type", "contract_month", "contract_expiry",
+    "outcome", "outcome_reason", "r_multiple", "mfe_r", "mae_r", "bars_held",
 ]
 
 
@@ -109,6 +111,35 @@ def _signal_record(state, now=None):
         "timeframe": str(_value(state, "timeframe")).strip().lower(),
         "bar_ts": bar_ts,
     }
+    quote_provider = (
+        metadata.get("quote_provider")
+        or metadata.get("provider")
+        or _value(state, "data_source")
+    )
+    quote_timestamp = (
+        metadata.get("quote_timestamp")
+        or metadata.get("last_bar_timestamp")
+        or metadata.get("last_bar_timestamp_utc")
+        or ""
+    )
+    quote_age_seconds = metadata.get("quote_age_seconds")
+    if quote_age_seconds is None:
+        quote_age_seconds = _value(state, "data_age_seconds")
+    quote_symbol = (
+        metadata.get("execution_symbol")
+        or metadata.get("quote_symbol")
+        or metadata.get("resolved_symbol")
+        or ""
+    )
+    market_type = (
+        metadata.get("execution_market_type")
+        or metadata.get("quote_market_type")
+        or metadata.get("market_type")
+        or ""
+    )
+    contract_month = metadata.get("contract_month") or ""
+    contract_expiry = metadata.get("contract_expiry") or metadata.get("expiry") or ""
+
     # Timeframe is part of forecast identity: identical levels on the same
     # candle can represent distinct 5m and 15m hypotheses and must not collide.
     key = "|".join(str(values[k]) for k in ("symbol", "direction", "timeframe", "entry", "stop", "tp1", "tp2", "tp3", "bar_ts"))
@@ -141,7 +172,17 @@ def _signal_record(state, now=None):
         "trigger": _value(state, "trigger"),
         "data_source": _value(state, "data_source"),
         "data_status": metadata.get("data_status", ""),
+        "quote_timestamp": quote_timestamp,
+        "quote_age_seconds": quote_age_seconds,
+        "quote_provider": quote_provider,
+        "quote_symbol": quote_symbol,
+        "market_type": market_type,
+        "contract_month": contract_month,
+        "contract_expiry": contract_expiry,
+        "atr": _value(state, "atr"),
+        "signal_status": values["action"],
         "outcome": "OPEN",
+        "outcome_reason": "",
         "r_multiple": "",
         "mfe_r": "",
         "mae_r": "",
@@ -222,9 +263,66 @@ def record_forecasts(results, path=FEEDBACK_FILE):
     return count
 
 
+def _market_contract_match(row, state):
+    """Require matching provider ticker/market and, for futures, explicit contract identity."""
+    metadata = _value(state, "metadata", {})
+    if not isinstance(metadata, dict):
+        metadata = {}
+
+    row_quote_symbol = str(row.get("quote_symbol") or "").strip().upper()
+    state_quote_symbol = str(
+        metadata.get("execution_symbol")
+        or metadata.get("quote_symbol")
+        or metadata.get("resolved_symbol")
+        or ""
+    ).strip().upper()
+    row_market_type = str(row.get("market_type") or "").strip().upper()
+    state_market_type = str(
+        metadata.get("execution_market_type")
+        or metadata.get("quote_market_type")
+        or metadata.get("market_type")
+        or ""
+    ).strip().upper()
+
+    if not row_quote_symbol or not state_quote_symbol:
+        return False, "QUOTE_SYMBOL_NOT_EXPOSED"
+    if not row_market_type or row_market_type in {"UNKNOWN", "N/A"}:
+        return False, "SIGNAL_MARKET_TYPE_NOT_EXPOSED"
+    if not state_market_type or state_market_type in {"UNKNOWN", "N/A"}:
+        return False, "CURRENT_MARKET_TYPE_NOT_EXPOSED"
+    if row_quote_symbol != state_quote_symbol:
+        return False, "QUOTE_SYMBOL_MISMATCH"
+    if row_market_type != state_market_type:
+        return False, "MARKET_TYPE_MISMATCH"
+
+    if "FUTURE" in row_market_type:
+        row_month = str(row.get("contract_month") or "").strip().upper()
+        state_month = str(metadata.get("contract_month") or "").strip().upper()
+        row_expiry = str(row.get("contract_expiry") or "").strip().upper()
+        state_expiry = str(
+            metadata.get("contract_expiry") or metadata.get("expiry") or ""
+        ).strip().upper()
+
+        if not (row_month or row_expiry) or not (state_month or state_expiry):
+            return False, "CONTRACT_IDENTITY_NOT_EXPOSED"
+        if row_month and state_month and row_month != state_month:
+            return False, "CONTRACT_MONTH_MISMATCH"
+        if row_expiry and state_expiry and row_expiry != state_expiry:
+            return False, "CONTRACT_EXPIRY_MISMATCH"
+
+        same_month = bool(row_month and state_month and row_month == state_month)
+        same_expiry = bool(row_expiry and state_expiry and row_expiry == state_expiry)
+        if not (same_month or same_expiry):
+            return False, "CONTRACT_IDENTITY_NOT_MATCHED"
+
+    return True, ""
+
+
 def update_open_outcomes(results, path=FEEDBACK_FILE):
     """
-    Update open signals from candles strictly after their entry bar.
+    Update open signals only from subsequent candles for the same quoted market
+    and exact futures contract. Missing/continuous-contract identity is recorded
+    as ESITO NON VERIFICABILE, never guessed from the logical commodity symbol.
     First barrier touched closes the paper signal. If SL and a TP are touched
     in the same candle, count SL first because intrabar order is unknowable.
     """
@@ -247,6 +345,20 @@ def update_open_outcomes(results, path=FEEDBACK_FILE):
     for row in rows:
         if row.get("outcome", "OPEN") != "OPEN":
             continue
+        row_market_type = str(row.get("market_type") or "").strip().upper()
+        row_has_contract = bool(
+            str(row.get("contract_month") or "").strip()
+            or str(row.get("contract_expiry") or "").strip()
+        )
+        if "FUTURE" in row_market_type and not row_has_contract:
+            row.update(
+                outcome="ESITO NON VERIFICABILE",
+                outcome_reason="CONTRACT_IDENTITY_NOT_EXPOSED",
+                last_checked_timestamp=datetime.now(timezone.utc).isoformat(),
+            )
+            changed += 1
+            continue
+
         symbol = str(row.get("symbol", "") or "").upper()
         timeframe = str(row.get("timeframe", "") or "").lower()
         state = states_by_key.get((symbol, timeframe))
@@ -258,6 +370,17 @@ def update_open_outcomes(results, path=FEEDBACK_FILE):
                 state = candidates[0]
         if state is None:
             continue
+
+        market_matches, reason = _market_contract_match(row, state)
+        if not market_matches:
+            row.update(
+                outcome="ESITO NON VERIFICABILE",
+                outcome_reason=reason,
+                last_checked_timestamp=datetime.now(timezone.utc).isoformat(),
+            )
+            changed += 1
+            continue
+
         side = str(row.get("direction", "")).upper()
         entry, stop = _number(row.get("entry")), _number(row.get("stop"))
         targets = [_number(row.get(f"tp{i}")) for i in (1, 2, 3)]
