@@ -123,3 +123,45 @@ def test_lubjanka_interception_is_not_dropped_by_telegram_top_ten_limit():
     assert any(item["symbol"] == "EARLY" for item in alerts)
     assert alerts[0]["symbol"] == "EARLY"
     assert alerts[0]["stage"] == "OSSERVAZIONE"
+
+
+
+def test_aggressive_alert_resends_when_trigger_or_risk_levels_change(monkeypatch, tmp_path):
+    import telegram.aggressive_alert as module
+
+    monkeypatch.setattr(module, "_STATE_FILE", tmp_path / "aggressive-alert-state.json")
+    sent = []
+    monkeypatch.setattr("telegram.bot.send_telegram", lambda message: sent.append(message) or True)
+
+    item = candidate("EARLY_MOVE")
+    assert run_aggressive_alert([item]) is True
+    assert run_aggressive_alert([item]) is False
+
+    # Same symbol, direction and stage: a newly confirmed trigger is a real
+    # state transition and must not be hidden by alert deduplication.
+    item.trigger_confirmed = True
+    assert run_aggressive_alert([item]) is True
+
+    # Updated calculated levels also represent a changed operational plan.
+    item.entry = 100.45
+    assert run_aggressive_alert([item]) is True
+
+    assert len(sent) == 3
+
+
+def test_aggressive_alert_resends_when_quote_becomes_fresh(monkeypatch, tmp_path):
+    import telegram.aggressive_alert as module
+
+    monkeypatch.setattr(module, "_STATE_FILE", tmp_path / "aggressive-alert-freshness-state.json")
+    sent = []
+    monkeypatch.setattr("telegram.bot.send_telegram", lambda message: sent.append(message) or True)
+
+    item = candidate("EARLY_MOVE")
+    assert run_aggressive_alert([item]) is True
+    assert run_aggressive_alert([item]) is False
+
+    item.live = True
+    item.data_age_seconds = 30.0
+    item.quote_timestamp = "2026-11-04T07:00:00+00:00"
+    assert run_aggressive_alert([item]) is True
+    assert len(sent) == 2
