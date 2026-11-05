@@ -1,6 +1,6 @@
 from engine.state import SoyuzState
 
-MIN_MTF_ALIGNMENT = 50.0
+MIN_MTF_ALIGNMENT = 35.0  # retained only for transitional/reversal setups
 
 def _reset_setup(state: SoyuzState) -> None:
     state.setup = "NONE"
@@ -14,7 +14,9 @@ def _trend_setup(state, side):
     pattern = "HH_HL" if side == "LONG" else "LH_LL"
     if state.structure != structure or state.regime != regime:
         return False
-    if state.mtf_direction != side or state.mtf_alignment < MIN_MTF_ALIGNMENT:
+    # MTF is context, not a mandatory gate for an already directional
+    # local trend. Explicit opposite MTF evidence remains a hard veto.
+    if state.mtf_direction in {"LONG", "SHORT"} and state.mtf_direction != side:
         return False
     quality = 30.0
     if state.structure_pattern == pattern: quality += 20.0
