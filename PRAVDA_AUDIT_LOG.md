@@ -257,3 +257,74 @@ Nessun nuovo outcome attribuibile. I prezzi BiQuote delle 09:08 UTC non possono 
 - Valutare outcome solo su candele successive dello stesso ticker e contratto, con sequenza SL prima / TP prima; altrimenti `ESITO NON VERIFICABILE`.
 
 **Esito passata 3:** nessun nuovo segnale di mercato e nessuna nuova entry; un nuovo smoke test BiQuote CFD 4/4 LIVE sul branch PR #195 e 572 test CI superati, entrambi reference/branch-only. Nessun merge/deploy, nessun ordine reale, nessuna modifica a strategia, filtri, score, rischio, secret o Render. PAPER ONLY.
+
+
+## Passata audit 4 — 2026-11-05 10:41 UTC
+
+**Metodo:** controllo incrementale rispetto alla passata 3. Verificati gli elenchi Actions filtrati per `event=schedule&branch=main`, i dettagli dei run più recenti, gli artifact endpoint, il workflow su `main`, lo stato persistito SPUTNIK, il journal GAGARIN e le PR interessate. Nessuna modifica a codice, strategia, filtri, score o rischio. Nessun merge/deploy.
+
+### SPUTNIK — run #275 presente, ma nessun nuovo segnale CFD dimostrabile
+
+- **Run:** [42010313054](https://github.com/andreameloni1984-sys/trump-trucker/actions/runs/42010313054), workflow `SPUTNIK`, evento `schedule`, branch `main`.
+- **Avvio:** 2026-11-05 10:23:31 UTC; job avviato 10:23:34 UTC e completato 10:23:44 UTC; conclusione SUCCESS.
+- **Step verificati dai metadati job:** test di regressione Telegram, esecuzione SPUTNIK Render-independent e persistenza stato tutti SUCCESS.
+- **Artifact:** 0. L'endpoint log ZIP non è leggibile tramite il connettore GitHub in questa passata; non è disponibile il testo completo della console.
+- **Persistenza:** il branch `main` è avanzato al commit [35e99494811e1e648df083e9069d857c5e4d4f3e](https://github.com/andreameloni1984-sys/trump-trucker/commit/35e99494811e1e648df083e9069d857c5e4d4f3e), messaggio `chore: persist Sputnik state`, 10:23:40 UTC. `sputnik_state.json` aggiornato alle 10:23:38.482 UTC.
+- **Contenuto stato:** `events={}`, `transactions={}`; 500 elementi `intelligence_history`, 667 `intelligence_items`; nessuna chiave `cfd_signal_history` o archivio CFD equivalente esposto. Il feed ha registrato una nuova lettura page-level di TRUTH_ARCHIVE, ma la pagina non ha permalink/data di pubblicazione individuale. L'ultimo item PUBLIC_RSS riconoscibile nello stato è il post Sunshine Protection Act (status 43487), pubblicato 2026-11-04 23:33:47 UTC e rilevato 2026-11-05 02:54:47.914 UTC; classificazione AI_TECH, non catalizzatore commodities.
+- **Conclusione segnale:** nessun nuovo segnale CFD può essere ricostruito dai dati persistiti di questo run. Non creo una firma-segnale. Non è però possibile affermare che non sia stato inviato alcun messaggio, perché manca il log console e il run non conserva artifact del payload. `telegram_update_offset=275590742` è un offset di polling, non prova di invio Telegram.
+- **Cadenza:** run #274 alle 02:54:42 UTC e #275 alle 10:23:31 UTC: intervallo 7h28m49s. Dopo #275 non risultano altri run SPUTNIK schedule/main fino alle 10:40:57 UTC. Il cron su main resta `2-59/5 * * * *`; i run di Telegram Polling non sono scansioni di mercato. Il run #275 corregge quindi l'affermazione della passata precedente secondo cui l'ultimo collector era ancora #274, ma conferma un'interruzione prolungata della cadenza programmata.
+- **Telegram:** nessun message_id di alert verificabile per il run #275; nessuna affermazione di consegna.
+
+### GAGARIN — nessuna nuova scansione di mercato dopo #155
+
+- **Ultimo run schedule/main:** [41995511121](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/41995511121), #155, avvio 2026-11-05 08:34:23 UTC, completato 08:34:48 UTC, SUCCESS.
+- **Job:** tutti gli step, compresa l'analisi, il paper journal, il feedback e gli alert Telegram, risultano SUCCESS nei metadati.
+- **Artifact:** 0. Non è disponibile un payload Telegram o un artifact journal allegato al run.
+- **Cadenza:** workflow `gagarin-monitor.yml` su main conferma cron `*/15 * * * *` e `MONITOR_INTERVAL_MINUTES=15`. Alle 10:40:57 UTC il run #155 aveva 2h06m34s; non risultano run schedule/main successivi. Il run precedente #154 è delle 01:43:36 UTC, quindi tra #154 e #155 ci sono 6h50m47s. Non attribuisco una causa ai run mancanti.
+- **Dati del run #155:** il registro della passata 3 riporta tutte le otto commodities stale (circa 601–633 secondi), nessuna entry e zero segnali/open/closed nel riepilogo feedback. Non è disponibile una nuova quotazione dello stesso contratto per valutare outcome.
+- **Journal su main:** `paper_trade_log.csv` contiene ancora una sola riga `LEGACY_IMPORT`, WTI LONG del 2026-10-08 16:23 UTC, entry 96.24, SL 89.37, TP1 103.11, TP2 106.55; ticker/contratto esatto, provider e timestamp della quotazione assenti. `gagarin_feedback.csv` e `gagarin_feedback.json` restituiscono 404. La riga legacy resta ESITO NON VERIFICABILE, non un trade validato.
+- **Outcome:** nessun nuovo trade dimostrato; nessun SL/TP verificabile.
+
+### Nuovo stato CI delle correzioni già esistenti
+
+**SPUTNIK PR #132 — correzione conflitto bias/tecnica**
+- [PR #132](https://github.com/andreameloni1984-sys/trump-trucker/pull/132), head SHA `3519e184c990d73626ab1fd3d79c35ae574db795`, resta OPEN e DRAFT, base `main`; non mergeata.
+- [Ranking tests run 42011007606](https://github.com/andreameloni1984-sys/trump-trucker/actions/runs/42011007606): SUCCESS, job completato 10:28:45 UTC.
+- [Telegram menu/CFD tests run 42011007490](https://github.com/andreameloni1984-sys/trump-trucker/actions/runs/42011007490): SUCCESS, job completato 10:28:49 UTC; include `test_sputnik_cfd.py`.
+- I primi tentativi sul commit precedente erano falliti (#42010917807 e #42010918387); dopo l'aggiunta del test per bias tecnico-only contro D-L-A opposto, entrambi i workflow sul nuovo SHA sono SUCCESS. La correzione resta solo sul branch PR e non è attiva su main.
+
+**GAGARIN PR #197 — handoff LUBJANKA visibile**
+- [PR #197](https://github.com/andreameloni1984-sys/commodity-news-scanner/pull/197), head SHA `20a21cfb4cfa76bb580f87e7e51a13f83bc29007`, OPEN e DRAFT; base `gagarin/biquote-cfd-reference-channel`, quindi stacked sulla PR #195, non direttamente su main.
+- [SOYUZ GAGARIN Tests #42010199219](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/42010199219): SUCCESS.
+- [Commodity trade-plan tests #42010199209](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/42010199209): SUCCESS.
+- [Gagarin Execution Layer Tests #42010199160](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/42010199160): SUCCESS.
+- Anche i run associati allo stesso head per Gagarin NEWS alert (#42010190563) e Execution push (#42010190392) sono SUCCESS. I workflow CI verificano codice e test; non costituiscono una scansione live né provano che LUBJANKA abbia intercettato un'opportunità reale.
+- La PR resta aperta/draft e non è stata distribuita.
+
+**GAGARIN PR #195 — feed CFD reference**
+- [BiQuote CFD Live Feed Check #41999838040](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/41999838040) resta l'ultimo smoke test consultato: SUCCESS, 4 strumenti XAUUSD/XAGUSD/USOIL/UKOIL, 120 barre M5 chiuse ciascuno, dato osservato alle 07:10 UTC. È un controllo storico delle 07:07–07:08 circa, non quotazione live alle 10:41 UTC.
+- PR #195 è ancora OPEN/DRAFT; BiQuote non è Trading 212 e non copre rame, grano, mais e soia.
+
+### Conteggio incrementale della passata
+
+| Voce | SPUTNIK | GAGARIN |
+|---|---:|---:|
+| Nuovi run di mercato esaminati | 1 | 0 (ultimo #155 riconfermato) |
+| Nuovi segnali CFD ricostruibili | 0 | 0 |
+| Nuovi trade eseguiti dimostrati | 0 | 0 |
+| Nuovi outcome SL/TP verificabili | 0 | 0 |
+| Nuovi outcome non verificabili | Nessun segnale ricostruibile | Nessuno |
+
+Il campione storico resta invariato: SPUTNIK run #267 e #269, più alert #274, non eseguiti/non verificabili; GAGARIN run #150/#155 senza entry operative e una riga legacy WTI non verificabile. Non calcolo win rate o rendimento.
+
+### Lacune e prossimo controllo
+
+1. Recuperare per SPUTNIK un log/artefatto leggibile del run #275 e verificare se abbia generato o inviato alert; lo stato persistito non conserva il payload CFD.
+2. Verificare la ripresa reale del cron SPUTNIK ogni 5 minuti e GAGARIN ogni 15 minuti; non confondere Telegram polling con scansione mercato.
+3. Verificare la persistenza privata dei journal GAGARIN; i file feedback non sono presenti su main e il run #155 non ha artifact.
+4. Mantenere i due alert GOLD storici come ESITO NON VERIFICABILE finché non esistono ticker, contratto/scadenza, provider/timestamp e barre successive coerenti.
+5. Rivedere PR #132 dopo eventuali ulteriori CI e merge esplicito; finché resta draft, la correzione del conflitto non è attiva su main.
+6. Rivedere PR #197 e #195 senza interpretare i test CI o lo smoke test BiQuote come prova di operatività CFD Trading 212.
+7. Aggiungere al registro solo nuove firme-segnale documentate; nessuna firma è stata creata per run #275 perché non è emerso un payload CFD.
+
+**Stato finale:** sola verifica e aggiornamento del registro documentale. Nessun codice modificato; nessuna modifica a strategia, filtri, score, rischio, segreti o Render; nessun merge/deploy; nessun ordine reale. PAPER ONLY.
