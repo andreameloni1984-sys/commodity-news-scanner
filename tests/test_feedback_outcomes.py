@@ -75,17 +75,23 @@ def test_target_outcome_and_r_metrics_are_recorded(tmp_path):
     assert summary["win_rate_pct"] == 100.0
 
 
-def test_same_bar_stop_and_target_is_scored_as_stop(tmp_path):
+def test_same_bar_stop_and_target_is_unverifiable_not_scored(tmp_path):
     path = tmp_path / "feedback.csv"
     append_signal(state([{"timestamp": 1000, "high": 101, "low": 99}]), path=path)
     s1 = state([
         {"timestamp": 1000, "high": 101, "low": 99},
+        # Both stop and target are inside this OHLC range; intrabar order is unknown.
         {"timestamp": 2000, "high": 104, "low": 97.5},
     ])
-    update_open_outcomes([s1], path=path)
+    assert update_open_outcomes([s1], path=path) == 1
     row = load_feedback(path)[0]
-    assert row["outcome"] == "STOP"
-    assert float(row["r_multiple"]) == -1.0
+    assert row["outcome"] == "ESITO NON VERIFICABILE"
+    assert row["outcome_reason"] == "SAME_CANDLE_SL_TP_AMBIGUITY"
+    assert row["r_multiple"] == ""
+    summary = summarize(path=path)
+    assert summary["closed"] == 0
+    assert summary["win_rate_pct"] is None
+    assert summary["outcomes"]["ESITO NON VERIFICABILE"] == 1
 
 
 def test_summary_breaks_down_per_asset_and_direction(tmp_path):
