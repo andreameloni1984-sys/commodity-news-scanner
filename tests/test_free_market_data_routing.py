@@ -194,18 +194,25 @@ def test_biquote_cfd_reference_is_separate_from_futures_execution(monkeypatch):
             "open": 99.0, "high": 101.0, "low": 98.0, "close": 100.0 + index * 0.01,
             "volume": 0, "isOpen": False,
         })
-    monkeypatch.setattr(
-        data, "_request_json",
-        lambda *args, **kwargs: ({"symbol": "XAUUSD", "bars": [opened, *closed]}, None),
-    )
+    def fake_request(url, params=None, **kwargs):
+        if url.endswith("/ohlc"):
+            return {"symbol": "XAUUSD", "bars": [opened, *closed]}, None
+        return {
+            "symbol": "XAUUSD", "bid": 100.28, "ask": 100.30, "mid": 100.29,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "quoteAgeSeconds": 1, "stale": False, "marketState": "open",
+            "source": "MetaTrader 5",
+        }, None
+    monkeypatch.setattr(data, "_request_json", fake_request)
     result = data._fetch_biquote_cfd_reference("XAU/USD")
     assert result["provider"] == "BIQUOTE"
     assert result["market_type"] == "CFD"
     assert result["status"] == "LIVE"
     assert result["price"] == 100.29
+    assert result["bid"] == 100.28 and result["ask"] == 100.30
+    assert result["spread"] == 0.02
     assert result["candles_count"] == data.MIN_CANDLES_REQUIRED
     assert result["execution_eligible"] is False
-    assert result["bid"] is None and result["ask"] is None
 
 
 def test_biquote_cfd_reference_failure_does_not_change_futures_route(monkeypatch):
@@ -214,7 +221,7 @@ def test_biquote_cfd_reference_failure_does_not_change_futures_route(monkeypatch
         lambda *args, **kwargs: (None, "HTTP_503"),
     )
     result = data._fetch_biquote_cfd_reference("WTI/USD")
-    assert result["status"] == "PROVIDER_ERROR"
+    assert result["status"] == "QUOTE_UNAVAILABLE"
     assert result["execution_eligible"] is False
     assert data.PROVIDER_ORDER["WTI/USD"] == ("YAHOO",)
     assert data.EXECUTION_MARKET_TYPES["WTI/USD"] == "FUTURES_CONTINUOUS"
