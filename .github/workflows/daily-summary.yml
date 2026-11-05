@@ -34,7 +34,7 @@ jobs:
           python - <<'PY'
           import os, json, urllib.request
           from telegram.signals import format_watch_board
-          from engine.feedback import summarize, format_summary
+          from engine.feedback import summarize, format_summary, storage_backend
 
           token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
           chat = os.getenv("TELEGRAM_CHAT_ID", "").strip()
@@ -42,17 +42,25 @@ jobs:
               print("Missing Telegram secrets")
               raise SystemExit(0)
 
-          # Feedback summary
+          # Read the same durable journal as the monitor. Never report a
+          # runner-local empty CSV as a verified zero-signal trading history.
           try:
-              fb = summarize()
-              fb_text = format_summary(fb)
+              backend = storage_backend()
+              if backend != "POSTGRES":
+                  fb_text = (
+                      "Feedback non disponibile: archivio persistente "
+                      f"non disponibile ({backend})"
+                  )
+              else:
+                  fb = summarize()
+                  fb_text = format_summary(fb)
           except Exception as e:
               fb_text = f"Feedback non disponibile: {e}"
 
           text = (
-              "🚀 **GAGARIN — RIEPILOGO GIORNALIERO**\n"
-              "━━━━━━━━━━━━━━━━━━━━\n\n"
-              f"{fb_text}\n\n"
+              "🚀 **GAGARIN — RIEPILOGO GIORNALIERO**\\n"
+              "━━━━━━━━━━━━━━━━━━━━\\n\\n"
+              f"{fb_text}\\n\\n"
               "Usa i pulsanti del bot per i dettagli in tempo reale."
           )
 
