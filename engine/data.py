@@ -783,6 +783,99 @@ def _fetch_biquote(
 
 
 # ============================================================
+# BIQUOTE CFD REFERENCE CHANNEL
+# ============================================================
+
+# These are broker CFD symbols, deliberately separate from the Yahoo
+# continuous-futures execution symbols above. BiQuote does not currently
+# document grain/maize/soybean contracts in its public commodity feed.
+BIQUOTE_CFD_REFERENCE_SYMBOLS = {
+    "XAU/USD": "XAUUSD",
+    "XAG/USD": "XAGUSD",
+    "WTI/USD": "USOIL",
+    "BRENT/USD": "UKOIL",
+}
+BIQUOTE_CFD_INTERVAL = "5m"
+BIQUOTE_CFD_MAX_AGE_SECONDS = 360.0
+
+
+def _fetch_biquote_cfd_reference(symbol: str):
+    """Fetch a separate CFD candle stream; never return it as futures execution."""
+    result = {
+        "provider": "BIQUOTE",
+        "market_type": "CFD",
+        "requested_instrument": symbol,
+        "symbol": BIQUOTE_CFD_REFERENCE_SYMBOLS.get(symbol),
+        "interval": BIQUOTE_CFD_INTERVAL,
+        "status": "NOT_COVERED",
+        "execution_eligible": False,
+        "bid": None,
+        "ask": None,
+        "volume_semantics": "NO_EXCHANGE_TRADED_VOLUME",
+        "candles": [],
+    }
+    biquote_symbol = BIQUOTE_CFD_REFERENCE_SYMBOLS.get(symbol)
+    if not biquote_symbol:
+        return result
+    if os.getenv("BIQUOTE_CFD_REFERENCE_ENABLED", "1").strip() != "1":
+        result["status"] = "DISABLED"
+        return result
+
+    payload, error = _request_json(
+        f"{BIQUOTE_BASE}/{biquote_symbol}/ohlc",
+        {"interval": BIQUOTE_CFD_INTERVAL, "limit": min(max(LOOKBACK, 120), 1000)},
+        retries=1,
+    )
+    if error:
+        result["status"] = "PROVIDER_ERROR"
+        result["error"] = str(error)[:240]
+        return result
+    if not isinstance(payload, dict) or not isinstance(payload.get("bars"), list):
+        result["status"] = "INVALID_RESPONSE"
+        return result
+
+    # The API prepends a still-forming candle. Only closed candles are
+    # admitted into the reference history used for comparisons.
+    closed_payload = dict(payload)
+    closed_payload["bars"] = [
+        row for row in payload["bars"]
+        if isinstance(row, dict) and row.get("isOpen") is not True
+    ]
+    candles, parse_error = _parse_biquote(closed_payload)
+    if parse_error or not candles:
+        result["status"] = "INVALID_OR_INSUFFICIENT_CANDLES"
+        result["error"] = str(parse_error or "NO_CLOSED_CANDLES")[:240]
+        return result
+
+    latest = candles[-1]
+    # openTime marks the start of a five-minute bar; freshness is measured
+    # from its expected close, not from the candle's opening timestamp.
+    bar_close_epoch = float(latest["timestamp"]) + 300.0
+    age_seconds = time.time() - bar_close_epoch
+    if age_seconds < -FUTURE_TIMESTAMP_TOLERANCE_SECONDS:
+        status = "FUTURE_TIMESTAMP"
+    elif age_seconds > BIQUOTE_CFD_MAX_AGE_SECONDS:
+        status = "STALE"
+    else:
+        status = "LIVE"
+
+    result.update({
+        "status": status,
+        "price": float(latest["close"]),
+        "quote_timestamp": datetime.fromtimestamp(
+            bar_close_epoch, tz=timezone.utc
+        ).isoformat(),
+        "age_seconds": round(max(0.0, age_seconds), 1),
+        "candles_count": len(candles),
+        "candles": candles[-60:],
+        "error": None,
+        "execution_eligible": False,
+        "note": "CFD reference only; never interchangeable with futures prices",
+    })
+    return result
+
+
+# ============================================================
 # YAHOO PARSER
 # ============================================================
 
@@ -2242,6 +2335,10 @@ def _finalize_with_narwhal_reference(state, candles, provider, error=None):
                     execution_timestamp=finalized.metadata.get("quote_timestamp"),
                 )
             )
+        finalized.metadata.setdefault("cfd_reference_quotes", {})
+        finalized.metadata["cfd_reference_quotes"]["BIQUOTE"] = (
+            _fetch_biquote_cfd_reference(finalized.symbol)
+        )
     return finalized
 
 
