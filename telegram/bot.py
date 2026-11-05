@@ -396,66 +396,41 @@ def _command_response(command: str) -> Optional[str]:
             "Gli avvisi automatici arrivano solo su nuovi segnali rilevanti o cambi di rischio/target; nessun messaggio di stato ripetitivo."
         )
 
-    if command_name in {"/aggressivo212", "/aggressive212"}:
+    if command_name in {"/aggressivo212", "/aggressive212", "/soft212", "/soft"}:
         try:
-            from soyuz_gagarin.aggressive_desk import format_aggressive_desk
-            from soyuz_gagarin.trading_profiles import get_profile
-            from engine.trading212 import build_manual_cfd_quote, format_manual_cfd_quote, parse_bid_ask
-            profile = get_profile("AGGRESSIVE")
-            results = _run_analysis()
-            if results is None:
-                return "Nessun risultato. Riprova con /analisi."
-            set_last_results(results)
-            desk = format_aggressive_desk(results)
-            try:
-                from cloud_api import FOREX_AGGRESSIVE_PORTFOLIO
-                fx = FOREX_AGGRESSIVE_PORTFOLIO.snapshot()
-                fx_lines = ["", "FX AGGRESSIVE", "Capitale: " + str(round(fx.get("equity", 100), 2)), "Aperte: " + str(len(fx.get("open_positions", [])))]
-                for p in fx.get("open_positions", [])[:5]:
-                    fx_lines.append(str(p.get("symbol")) + " " + str(p.get("direction")) + " entry " + str(p.get("entry")))
-                desk = desk + "\n" + "\n".join(fx_lines)
-            except Exception:
-                pass
-            if argument:
-                parts = argument.replace(",", ".").split()
-                if len(parts) >= 3:
-                    symbol = parts[0]
-                    bid, ask = parse_bid_ask(" ".join(parts[1:]))
-                    if bid is not None and ask is not None:
-                        quote = build_manual_cfd_quote(symbol, bid, ask)
-                        desk = desk + "\n\n" + format_manual_cfd_quote(quote)
-                    else:
-                        desk = desk + "\n\n212: bid/ask non validi. Esempio: /aggressivo212 WTI 78.10 78.13"
-                else:
-                    desk = desk + "\n\n212: usa simbolo bid ask. Esempio: /aggressivo212 WTI 78.10 78.13"
-            else:
-                desk = desk + "\n\n212 CFD: inserimento manuale solo per il paniere GAGARIN; nessun confronto con futures."
-            desk = desk + "\n\nProfilo: probabilita >= " + str(profile.min_probability) + ", qualita >= " + str(profile.min_quality) + ", rischio " + str(profile.risk_per_trade_pct) + "% per operazione, max " + str(profile.max_open_positions) + " posizioni."
-            try:
-                from research.intraday_windows import format_intraday_window_summary
-                desk = desk + "\n\n" + format_intraday_window_summary()
-            except Exception as exc:
-                desk = desk + "\n\nFasce orarie: dati non disponibili (" + type(exc).__name__ + ")."
-            return desk
-        except Exception as exc:
-            return "Errore reparto aggressive: " + type(exc).__name__ + ": " + str(exc)
+            from engine.trading212 import (
+                build_manual_cfd_quote,
+                format_manual_cfd_quote,
+                parse_bid_ask,
+            )
 
-    if command_name in {"/soft212", "/soft"}:
-        try:
-            from soyuz_gagarin.trading_profiles import get_profile
-            profile = get_profile("SOFT")
-            results = _run_analysis()
-            if results is None:
-                return "Nessun risultato. Riprova con /analisi."
-            set_last_results(results)
-            try:
-                from research.intraday_windows import format_intraday_window_summary
-                window_summary = format_intraday_window_summary()
-            except Exception as exc:
-                window_summary = "Fasce orarie: dati non disponibili (" + type(exc).__name__ + ")."
-            return _format_classifica(results) + "\n\n" + window_summary + "\n\nProfilo SOFT: probabilita >= " + str(profile.min_probability) + ", qualita >= " + str(profile.min_quality) + ", rischio " + str(profile.risk_per_trade_pct) + "%."
+            desk_name = (
+                "AGGRESSIVE"
+                if command_name in {"/aggressivo212", "/aggressive212"}
+                else "SOFT"
+            )
+            status = "\\n".join([
+                "TRADING 212 — CFD | GAGARIN",
+                "━━━━━━━━━━━━━━━━━━━━",
+                "Reparto: " + desk_name,
+                "Stato: BLOCCATO — FEED CFD TRADING 212 NON VERIFICATO",
+                "Motivo: mancano un'identità broker/simbolo/contratto/scadenza/valuta verificata e una serie storica CFD Trading 212 dello stesso strumento.",
+                "Nessuna analisi futures, quotazione BiQuote o altra serie viene usata per generare segnali o livelli CFD.",
+                "Entry / SL / TP: NON CALCOLATI.",
+                "Modalità: PAPER ONLY — nessun ordine.",
+            ])
+            if not argument:
+                return status
+            parts = argument.replace(",", ".").split()
+            if len(parts) != 3:
+                return status + "\\n\\nInserimento manuale: SIMBOLO BID ASK (es. WTI 78.10 78.13)."
+            bid, ask = parse_bid_ask(" ".join(parts[1:]))
+            if bid is None or ask is None:
+                return status + "\\n\\nBid/ask non validi: usa due prezzi positivi con ask >= bid."
+            quote = build_manual_cfd_quote(parts[0], bid, ask)
+            return status + "\\n\\n" + format_manual_cfd_quote(quote)
         except Exception as exc:
-            return "Errore soft: " + type(exc).__name__ + ": " + str(exc)
+            return "Errore reparto Trading 212 CFD: " + type(exc).__name__ + ": " + str(exc)
 
     if command_name == "/prezzo212":
         try:
