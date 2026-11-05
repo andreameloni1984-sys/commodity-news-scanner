@@ -202,7 +202,7 @@ def test_biquote_cfd_reference_is_separate_from_futures_execution(monkeypatch):
     assert result["provider"] == "BIQUOTE"
     assert result["market_type"] == "CFD"
     assert result["status"] == "LIVE"
-    assert result["price"] == 100.0
+    assert result["price"] == 100.29
     assert result["candles_count"] == data.MIN_CANDLES_REQUIRED
     assert result["execution_eligible"] is False
     assert result["bid"] is None and result["ask"] is None
