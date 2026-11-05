@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
     steps:
@@ -24,6 +25,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: Install feedback runtime dependencies
+        run: python -m pip install "requests>=2.31,<3" "psycopg[binary]>=3.2,<4"
 
       - name: Send summary
         run: |
@@ -46,9 +50,9 @@ jobs:
               fb_text = f"Feedback non disponibile: {e}"
 
           text = (
-              "🚀 **GAGARIN — RIEPILOGO GIORNALIERO**\n"
-              "━━━━━━━━━━━━━━━━━━━━\n\n"
-              f"{fb_text}\n\n"
+              "🚀 **GAGARIN — RIEPILOGO GIORNALIERO**\\n"
+              "━━━━━━━━━━━━━━━━━━━━\\n\\n"
+              f"{fb_text}\\n\\n"
               "Usa i pulsanti del bot per i dettagli in tempo reale."
           )
 
