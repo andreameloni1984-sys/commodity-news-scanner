@@ -492,10 +492,14 @@ def _print_paper_journal(results):
     backend = paper_journal_storage_backend()
     print(f"Paper journal persistence check: {backend}")
     print()
-    return journal_ok and (
-        backend == "POSTGRES"
-        or os.getenv("GAGARIN_PERSISTENCE_REQUIRED", "0").strip() != "1"
-    )
+    if not journal_ok:
+        return False
+    if (
+        os.getenv("GAGARIN_PERSISTENCE_REQUIRED", "0").strip() == "1"
+        and backend != "POSTGRES"
+    ):
+        return False
+    return True
 
 
 # ============================================================
@@ -571,10 +575,12 @@ def _print_feedback(results, operational_results=None):
     backend = feedback_storage_backend()
     print(f"Feedback persistence check: {backend}")
     print()
-    return (
-        backend == "POSTGRES"
-        or os.getenv("GAGARIN_PERSISTENCE_REQUIRED", "0").strip() != "1"
-    )
+    if (
+        os.getenv("GAGARIN_PERSISTENCE_REQUIRED", "0").strip() == "1"
+        and backend != "POSTGRES"
+    ):
+        return False
+    return True
 
 
 # ============================================================
