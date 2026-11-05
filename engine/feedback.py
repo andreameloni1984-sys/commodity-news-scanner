@@ -225,8 +225,8 @@ def record_forecasts(results, path=FEEDBACK_FILE):
 def update_open_outcomes(results, path=FEEDBACK_FILE):
     """
     Update open signals from candles strictly after their entry bar.
-    First barrier touched closes the paper signal. If SL and a TP are touched
-    in the same candle, count SL first because intrabar order is unknowable.
+    If one OHLC candle touches both SL and any TP, the intrabar sequence is
+    unknowable, so record ESITO NON VERIFICABILE without assigning realized R.
     """
     rows = load_feedback(path)
     if not rows:
@@ -286,6 +286,12 @@ def update_open_outcomes(results, path=FEEDBACK_FILE):
                 mae = min(mae, (entry - high) / risk)
                 stop_hit = high >= stop
                 hit_targets = [i for i, target in enumerate(targets) if low <= target]
+            if stop_hit and hit_targets:
+                # OHLC reveals that both barriers were inside this candle's
+                # range, but not which one traded first. Do not invent a loss
+                # or a win from an unknowable intrabar path.
+                row.update(outcome="ESITO NON VERIFICABILE", r_multiple="")
+                break
             if stop_hit:
                 row.update(outcome="STOP", r_multiple=-1.0)
                 break
