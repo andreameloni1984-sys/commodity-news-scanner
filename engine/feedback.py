@@ -330,8 +330,8 @@ def update_open_outcomes(results, path=FEEDBACK_FILE):
     Update open signals only from subsequent candles for the same quoted market
     and exact futures contract. Missing/continuous-contract identity is recorded
     as ESITO NON VERIFICABILE, never guessed from the logical commodity symbol.
-    First barrier touched closes the paper signal. If SL and a TP are touched
-    in the same candle, count SL first because intrabar order is unknowable.
+    If one OHLC candle touches both SL and any TP, the intrabar sequence is
+    unknowable, so record ESITO NON VERIFICABILE without assigning realized R.
     """
     rows = load_feedback(path)
     if not rows:
@@ -416,6 +416,15 @@ def update_open_outcomes(results, path=FEEDBACK_FILE):
                 mae = min(mae, (entry - high) / risk)
                 stop_hit = high >= stop
                 hit_targets = [i for i, target in enumerate(targets) if low <= target]
+            if stop_hit and hit_targets:
+                # OHLC shows both barriers inside this candle's range, but not
+                # which traded first. Do not infer a win or loss from this bar.
+                row.update(
+                    outcome="ESITO NON VERIFICABILE",
+                    outcome_reason="SAME_CANDLE_SL_TP_AMBIGUITY",
+                    r_multiple="",
+                )
+                break
             if stop_hit:
                 row.update(outcome="STOP", r_multiple=-1.0)
                 break
