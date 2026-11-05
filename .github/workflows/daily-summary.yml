@@ -50,9 +50,9 @@ jobs:
               fb_text = f"Feedback non disponibile: {e}"
 
           text = (
-              "🚀 **GAGARIN — RIEPILOGO GIORNALIERO**\\n"
-              "━━━━━━━━━━━━━━━━━━━━\\n\\n"
-              f"{fb_text}\\n\\n"
+              "🚀 **GAGARIN — RIEPILOGO GIORNALIERO**\n"
+              "━━━━━━━━━━━━━━━━━━━━\n\n"
+              f"{fb_text}\n\n"
               "Usa i pulsanti del bot per i dettagli in tempo reale."
           )
 
