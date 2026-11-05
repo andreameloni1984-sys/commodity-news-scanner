@@ -184,3 +184,76 @@
 6. Mantenere journal privato; non assumere attiva la persistenza D1 finché non c'è prova.
 
 **Esito della passata:** 1 nuovo alert SPUTNIK registrato ma non operativo e non verificabile; 0 nuove entry GAGARIN; 0 SL/TP verificati; nessun cambio di strategia, codice, rischio, secret, Render, merge o deploy. PAPER ONLY.
+
+
+## Passata audit 3 — 2026-11-05 09:36 UTC
+
+**Metodo:** controllo incrementale rispetto alla passata 2 (09:04 UTC). Consultati gli elenchi GitHub Actions filtrati per evento `schedule`, i log completi degli ultimi run di mercato, i workflow su `main`, gli stati delle PR e i job di test/feed. Nessuna nuova firma di segnale aggiunta: i run di mercato più recenti sono gli stessi già registrati. Nessun codice o logica operativa modificati.
+
+### Nuovi run di mercato: nessuno
+
+- **GAGARIN:** l'ultimo run schedulato del workflow `gagarin-monitor.yml` resta [#155 / 41995511121](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/41995511121), iniziato 2026-11-05 08:34:23 UTC e concluso 08:34:48 UTC. Al controllo delle 09:36 UTC non risultano run schedulati successivi del monitor. Il log completo conferma:
+  - `MONITOR_INTERVAL_MINUTES=15`, `PAPER_TRADING_ONLY=1`;
+  - universo 10 strumenti (8 commodities operative più EUR/USD e GBP/USD ausiliari);
+  - tutte le otto commodities Yahoo `STALE`: grano 625.1s, argento 605.2s, oro 606.0s, Brent 604.9s, WTI 601.6s, rame 608.4s, soia 632.5s, mais 615.3s;
+  - EUR/USD e GBP/USD BIQUOTE LIVE a 284.2s e 284.8s, ma non sono commodities né sostituti dei feed commodity;
+  - grano SHORT resta `PAPER_WATCH` con blocchi `LIVE_DATA_NOT_FRESH`, `TRIGGER_NOT_CONFIRMED`, `TRIGGER_DIRECTION_MISMATCH`, `RR1_FAIL`, `RR2_FAIL`, `RR_FAIL`, `FINAL_CONFLUENCE_FAIL`;
+  - nessuna entrata autorizzata; `Recorded entries=0`; feedback `signals=0 open=0 closed=0`; Telegram API acceptance del WATCH `message_id=3692`.
+  - Il messaggio WATCH dell'utente con grano/Brent/rame resta un'evidenza testuale già registrata, non un nuovo segnale e non un trade. I tre livelli non vengono rivalutati su feed di mercato diversi.
+- **SPUTNIK:** l'ultimo run schedulato del collector resta [#274 / 41958224831](https://github.com/andreameloni1984-sys/trump-trucker/actions/runs/41958224831), iniziato 2026-11-05 02:54:42 UTC e concluso 02:54:53 UTC. Al controllo delle 09:36 UTC non risultano run schedulati successivi. Il log completo conferma:
+  - SEC HTTP 403 con cooldown di 21,600 secondi;
+  - White House RSS `https://www.whitehouse.gov/feed/` HTTPError;
+  - OGE, WHITE_HOUSE e TRUTH_ARCHIVE con errori `OSError` ripetuti;
+  - 0 filing e 0 nuove operazioni documentate; 2 correlazioni pubbliche, di cui l'item Sunshine Protection Act non è catalizzatore direzionale per commodities;
+  - handoff SPUTNIK→GAGARIN disabilitato perché `GAGARIN_CLOUD_API_URL/API_KEY` non configurati;
+  - messaggi Telegram con ID 694, 695 e 696 risultano accettati dall'API nei log; questo prova l'accettazione API, non la consegna al dispositivo né un trade.
+  - L'alert GOLD LONG #274 resta `EARLY_SETUP / NOT_EXECUTED`, già registrato nella passata 2; nessuna nuova firma.
+- **Cadenza:** su `main`, GAGARIN resta configurato `*/15 * * * *` e SPUTNIK `2-59/5 * * * *`. L'assenza di nuovi run di mercato nei rispettivi intervalli dimostra che la cadenza effettiva non è rispettata o non è verificabile in questo periodo. I test CI e gli smoke test PR non sono scansioni di mercato.
+
+### Nuova evidenza feed CFD BiQuote — reference-only
+
+- [Run #41999838040](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/41999838040), workflow `biquote-cfd-live-check.yml`, PR #195, branch `gagarin/biquote-cfd-reference-channel`, head SHA `231b332b0ac923b21d06fee09b61e9f00acb0c27`, conclusione SUCCESS, 2026-11-05 09:07:50–09:08:04 UTC.
+- Il log ha verificato BiQuote health `healthy` e 4/4 simboli LIVE:
+  - XAUUSD bid 4131.501 / ask 4131.669 / mid 4131.585; quote timestamp 09:08:01 UTC; age 0s;
+  - XAGUSD bid 52.828 / ask 52.846 / mid 52.837; timestamp 09:08:01 UTC; age 1s;
+  - USOIL bid 87.574 / ask 87.584 / mid 87.579; timestamp 09:08:02 UTC; age 1s;
+  - UKOIL bid 94.540 / ask 94.552 / mid 94.546; timestamp 09:08:03 UTC; age 0s.
+  - Per ogni simbolo: 120 candele M5 chiuse; ultima barra chiusa 09:00 UTC.
+- Il push run [#41999827743](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/41999827743) e il PR run #41999838040 hanno stesso head SHA e stessa prova feed: deduplicati come una sola osservazione di feed, non come due campioni indipendenti.
+- Questi prezzi sono **BiQuote CFD reference**, non Trading 212. Non sono stati usati per assegnare outcome ai vecchi segnali Yahoo continuous futures: spot/CFD e futures non sono lo stesso strumento/contratto. Il canale copre ancora solo oro, argento, WTI e Brent; rame, grano, mais e soia restano scoperti.
+
+### Nuova verifica CI e stato PR
+
+- GAGARIN [PR #195](https://github.com/andreameloni1984-sys/commodity-news-scanner/pull/195): resta OPEN, DRAFT, non merged, mergeable; aggiornamento 09:18:41 UTC, head SHA `231b332b0ac923b21d06fee09b61e9f00acb0c27`. Il test run [#41999838187](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/41999838187) ha concluso SUCCESS con **572 test passati in 2.77s**. È CI sul branch, non deploy né validazione Trading 212.
+- GAGARIN PR #196 resta OPEN/DRAFT; PR #192 OPEN; PR #175 e #177 OPEN. Nessuna delle correzioni è attiva su `main` in questa verifica.
+- SPUTNIK [PR #131](https://github.com/andreameloni1984-sys/trump-trucker/pull/131) resta OPEN, non draft, mergeable. Propone di sostituire il feed White House predefinito con `https://www.whitehouse.gov/news/feed/`; i workflow ranking e item-intelligence del branch hanno concluso SUCCESS. La CI verifica configurazione/parser, **non** un HTTP 200 dal runner schedulato. Finché non integrata e verificata da un run successivo, il vecchio endpoint continua a essere quello su `main`.
+- SPUTNIK PR #111 e #129 restano OPEN e non integrate; la persistenza completa/deduplica degli snapshot automatici non è quindi dimostrata su `main`.
+
+### Outcome e statistiche incrementali
+
+| Categoria | Nuovi segnali | Trade eseguiti dimostrati | SL verificati | TP verificati | Outcome non verificabili |
+|---|---:|---:|---:|---:|---:|
+| SPUTNIK | 0 | 0 | 0 | 0 | 0 nuovi; GOLD LONG #274 resta 1 già registrato |
+| GAGARIN | 0 | 0 | 0 | 0 | 0 nuovi; WATCH già registrato, nessuna entry |
+| BiQuote smoke check | 0 segnali | 0 | 0 | 0 | Non è un campione di trade |
+
+Nessun nuovo outcome attribuibile. I prezzi BiQuote delle 09:08 UTC non possono determinare SL/TP dei segnali futures/continuous già registrati. Win rate, rendimento e backtest restano non calcolabili.
+
+### Difetti confermati / consegna agli altri reparti
+
+1. **GAGARIN:** run monitor fermo a #155 alle 08:34 UTC, pur avendo cron 15 minuti; otto feed commodities stale nel run. PR #177 (retry Yahoo) ancora non integrata. Il retry sullo stesso provider non sarebbe una fonte indipendente.
+2. **GAGARIN:** universo main ancora 10 strumenti, non solo gli otto commodities; PR #196 ancora draft.
+3. **GAGARIN:** journal privato non verificato. Workflow dichiara che i CSV non vengono committati e che la persistenza privata sarà riattivata solo dopo verifica D1; il run mostra zero entry e zero feedback.
+4. **SPUTNIK:** nessun collector schedulato dopo #274 alle 02:54 UTC, nonostante cron 5 minuti; feed OGE/White House/Truth Archive non disponibili nel run; SEC in cooldown 403; handoff a GAGARIN disabilitato per configurazione assente.
+5. **SPUTNIK:** PR #131 corregge l'URL White House sul branch ma manca ancora la prova live dal runner; PR #111/#129 per persistenza/deduplica non integrate.
+6. **Mercato/outcome:** i segnali GOLD/GC=F senza scadenza esatta e timestamp/age della quote non possono avere un outcome affidabile; nessun confronto con XAUUSD BiQuote o Trading 212 è ammesso.
+
+### Prossimo controllo
+
+- Cercare nuovi run scheduled di mercato, non contare test PR o smoke test come scansioni.
+- Aggiungere solo segnali con firma non già presente e tutti i campi di identità: ticker, provider, timestamp/age quote, mercato e scadenza.
+- Verificare un nuovo run SPUTNIK dopo eventuale integrazione PR #131 per confermare il feed White House direttamente dal runner.
+- Verificare la persistenza privata dei journal senza pubblicare CSV o accedere/modificare segreti.
+- Valutare outcome solo su candele successive dello stesso ticker e contratto, con sequenza SL prima / TP prima; altrimenti `ESITO NON VERIFICABILE`.
+
+**Esito passata 3:** nessun nuovo segnale di mercato e nessuna nuova entry; un nuovo smoke test BiQuote CFD 4/4 LIVE sul branch PR #195 e 572 test CI superati, entrambi reference/branch-only. Nessun merge/deploy, nessun ordine reale, nessuna modifica a strategia, filtri, score, rischio, secret o Render. PAPER ONLY.
