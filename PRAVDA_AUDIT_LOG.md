@@ -328,3 +328,53 @@ Il campione storico resta invariato: SPUTNIK run #267 e #269, più alert #274, n
 7. Aggiungere al registro solo nuove firme-segnale documentate; nessuna firma è stata creata per run #275 perché non è emerso un payload CFD.
 
 **Stato finale:** sola verifica e aggiornamento del registro documentale. Nessun codice modificato; nessuna modifica a strategia, filtri, score, rischio, segreti o Render; nessun merge/deploy; nessun ordine reale. PAPER ONLY.
+
+
+## PASSATA 5 — 2026-11-05 12:05 UTC
+
+### Perimetro e risultato incrementale
+Controllati gli elenchi GitHub Actions con filtro `branch=main&event=schedule`, i job e gli artifact dei run di mercato, i workflow YAML su `main`, i journal pubblici e lo stato delle PR. Non sono emerse nuove firme-segnale CFD da aggiungere allo storico dopo la passata 4. Nessun outcome SL/TP è verificabile in questa passata.
+
+### SPUTNIK
+- Ultimo run collector su `main`: [#275 / 42010313054](https://github.com/andreameloni1984-sys/trump-trucker/actions/runs/42010313054), avvio 2026-11-05 10:23:31 UTC, conclusione 10:23:45 UTC, SUCCESS.
+- Job: configurazione Telegram, regression tests, esecuzione SPUTNIK e persistenza stato tutti SUCCESS. Artifact del run: 0. Nessun payload CFD leggibile e nessun message_id di alert verificabile; il successo del job non prova da solo la consegna Telegram.
+- **Correzione alla passata 4:** il run API espone `head_sha=cbd9bdae...` come commit di checkout, ma la ricerca commit su `sputnik_state.json` conferma il commit di persistenza successivo [35e99494811e1e648df083e9069d857c5e4d4f3e](https://github.com/andreameloni1984-sys/trump-trucker/commit/35e99494811e1e648df083e9069d857c5e4d4f3e), datato 10:23:40 UTC. Quindi la persistenza dello stato del run #275 è dimostrata; resta assente un artifact leggibile del payload CFD/Telegram.
+- Run collector precedente #274: 02:54:42 UTC. Intervallo #274→#275: 7h28m49s, non coerente con il cron `2-59/5 * * * *`. Dopo #275 non risultano ulteriori run schedule/main fino al cutoff 12:05 UTC (1h41m29s senza nuovo collector).
+- Il run Telegram Polling #42004041198 delle 09:38:29 UTC è un workflow distinto e non viene contato come scansione di mercato.
+- Nessun nuovo segnale identificabile; non viene creata alcuna firma. Il precedente alert GOLD #274 resta NOT_EXECUTED / ESITO NON VERIFICABILE per mancanza di ticker/contratto e scadenza esatta, provider/timestamp della quotazione e barre successive compatibili.
+
+### GAGARIN
+- Ultimo run monitor su `main`: [#155 / 41995511121](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/41995511121), avvio 08:34:23 UTC, conclusione 08:34:48 UTC, SUCCESS; tutti gli step del job, incluso il comando di analisi/journal/feedback/alert, risultano SUCCESS. Artifact: 0.
+- Run precedente #154: 01:43:36 UTC; intervallo #154→#155: 6h50m47s. Dopo #155 non risultano nuovi run schedule/main fino alle 12:05 UTC (3h31m34s senza nuova scansione), benché `gagarin-monitor.yml` mantenga `*/15 * * * *` e `MONITOR_INTERVAL_MINUTES=15`.
+- Non risultano nuove entry ricostruibili né payload Telegram o artifact journal del run #155. La passata precedente ha documentato le otto commodities stale nel relativo output; questa verifica non dispone di nuove quotazioni dello stesso contratto per ricalcolare l'outcome.
+- `paper_trade_log.csv`: una sola riga LEGACY_IMPORT WTI LONG del 2026-10-08 16:23 UTC (entry 96.24, SL 89.37, TP1 103.11, TP2 106.55), senza ticker/contratto esatto, provider o timestamp della quotazione: ESITO NON VERIFICABILE.
+- `journal.csv`: righe del 2026-10-17 con esito "nessun segnale"; nessuna entry completa. Il file contiene anche strumenti legacy fuori dall'attuale paniere, da non trattare come segnali correnti.
+- `position.json`: stato legacy Heating Oil LONG aperto 2026-09-15; Heating Oil è fuori dal paniere corrente e il file non dimostra una posizione attuale. `commodities_monitor_state.json` è datato 2026-09-17 e riporta Benzina RBOB / BLOCKED, anch'esso legacy e fuori paniere.
+- `gagarin_feedback.csv` e `gagarin_feedback.json` non sono presenti su `main` (404). Il workflow monitor commenta esplicitamente che i journal sono dati operativi privati e che la persistenza sarà riattivata solo dopo deployment e verifica del database privato D1. La presenza di un riferimento a `DATABASE_URL` nel workflow non prova che D1 sia attivo o che il journal sia stato scritto lì.
+
+### Correzione stato PR già registrate
+- **GAGARIN PR #197:** lo stato è cambiato rispetto alla passata 4. [PR #197](https://github.com/andreameloni1984-sys/commodity-news-scanner/pull/197) è stata chiusa il 2026-11-05 11:37:26 UTC dall'owner, con `merged=false`. I test CI sul branch erano riusciti, ma la chiusura senza merge significa che l'handoff LUBJANKA descritto nella PR non è integrato in `main`. La precedente indicazione "OPEN/DRAFT" è superata.
+- **GAGARIN PR #195:** OPEN/DRAFT, non mergeata; base main. Il feed BiQuote resta un riferimento CFD separato, non Trading 212.
+- **GAGARIN PR #196:** OPEN/DRAFT, non mergeata.
+- **GAGARIN PR #192, #177, #175:** OPEN, non mergeate.
+- **SPUTNIK PR #132:** OPEN/DRAFT, non mergeata. I due workflow sul commit `3519e184c990d73626ab1fd3d79c35ae574db795` restano SUCCESS: [ranking tests #42011007606](https://github.com/andreameloni1984-sys/trump-trucker/actions/runs/42011007606) e [Telegram menu/CFD tests #42011007490](https://github.com/andreameloni1984-sys/trump-trucker/actions/runs/42011007490). La correzione del conflitto direzionale non è attiva su `main`.
+
+### Statistiche incrementali
+| Voce | SPUTNIK | GAGARIN |
+|---|---:|---:|
+| Nuovi run di mercato | 0 (run #275 riconfermato) | 0 (run #155 riconfermato) |
+| Nuove firme-segnale CFD | 0 | 0 |
+| Nuovi trade eseguiti dimostrati | 0 | 0 |
+| Nuovi SL/TP verificati | 0 | 0 |
+| Nuovi outcome non verificabili | 0 | 0 |
+
+Nessun win rate o rendimento calcolato. NOT_EXECUTED e WATCH non sono trade.
+
+### Lacune e prossimo controllo
+1. Verificare la ripresa effettiva dei cron SPUTNIK (5m) e GAGARIN (15m), usando solo run collector/monitor e non Telegram polling o CI.
+2. Recuperare payload e log di generazione/invio degli alert; il run #275 ha persistito lo stato ma non ha artifact leggibile del messaggio.
+3. Ottenere prova verificabile della persistenza privata GAGARIN senza pubblicare journal o segreti; allo stato attuale il repository pubblico non consente di controllarla.
+4. Mantenere i segnali storici senza outcome finché non sono disponibili identità esatta di mercato/contratto/scadenza, provider e timestamp quote, e barre successive dello stesso contratto.
+5. Tenere conto della chiusura non mergeata della PR #197; non considerare l'handoff LUBJANKA visibile attivo su main.
+
+**Stato finale:** sola verifica e aggiornamento del registro documentale. Nessun codice o configurazione applicativa modificati; nessuna strategia, filtro, score o rischio modificati; nessun merge/deploy, ordine reale, modifica segreti o intervento Render. PAPER ONLY.
