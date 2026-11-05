@@ -6,7 +6,7 @@ from engine.gagarin import build_lubjanka_handoff
 def _state(events, *, atr=2.0):
     return SimpleNamespace(
         metadata={
-            "lubjanka": {"status": "OK", "events": events},
+            "lubjanka": {"status": "INTERCEPTED" if events else "NO_INTERCEPT", "events": events},
             "quote_market_type": "FUTURES_CONTINUOUS",
         },
         candles=[{"timestamp": 1_800_000_000, "open": 100.0, "high": 103.0, "low": 99.0, "close": 101.0}],
