@@ -60,10 +60,14 @@ def _read_rows(path: Path) -> list[dict]:
     if not path.exists() or path.stat().st_size == 0:
         return []
     with path.open("r", newline="", encoding="utf-8") as file:
-        return [
-            {field: row.get(field) or "" for field in FIELDS}
-            for row in csv.DictReader(file)
-        ]
+        rows = []
+        for line_number, row in enumerate(csv.DictReader(file), start=2):
+            if None in row or any(value is None for value in row.values()):
+                raise ValueError(
+                    f"Malformed paper journal row {line_number}: column count mismatch"
+                )
+            rows.append({field: row.get(field) or "" for field in FIELDS})
+        return rows
 
 
 def _merge_rows(durable_rows: list[dict], local_rows: list[dict]) -> list[dict]:
