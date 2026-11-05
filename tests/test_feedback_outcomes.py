@@ -333,5 +333,6 @@ def test_daily_summary_reads_durable_feedback_and_discloses_backend():
     ).read_text(encoding="utf-8")
 
     assert "DATABASE_URL: ${{ secrets.DATABASE_URL }}" in workflow
+    assert "pip install -r requirements.txt" in workflow
     assert "storage_backend" in workflow
     assert "STORICO NON PERSISTENTE" in workflow
