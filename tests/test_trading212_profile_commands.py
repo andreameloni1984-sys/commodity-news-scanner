@@ -18,7 +18,7 @@ def test_trading212_profiles_fail_closed_without_invoking_futures_or_fx(monkeypa
         assert "BLOCCATO" in message
         assert "FEED CFD TRADING 212 NON VERIFICATO" in message
         assert "Entry / SL / TP: NON CALCOLATI." in message
-        assert "FX" not in message
+        assert "FX AGGRESSIVE" not in message
 
 
 def test_trading212_profile_manual_text_cannot_turn_into_a_futures_signal(monkeypatch):
