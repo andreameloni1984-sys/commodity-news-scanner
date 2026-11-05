@@ -457,10 +457,9 @@ def apply_trigger(
     # ========================================================
 
     if state.opportunity_type == "TREND_CONTINUATION":
-        if state.mtf_direction != state.setup_direction:
-            state.trigger = "NOT_CONFIRMED"
-            return state
-        if state.mtf_alignment < MIN_MTF_ALIGNMENT:
+        # MTF disagreement blocks; missing/weak MTF confirmation does not.
+        # The closed M5 momentum and subsequent risk checks remain mandatory.
+        if state.mtf_direction in {"LONG", "SHORT"} and state.mtf_direction != state.setup_direction:
             state.trigger = "NOT_CONFIRMED"
             return state
 
