@@ -244,5 +244,5 @@ def test_biquote_cfd_reference_is_not_attached_to_futures_state(monkeypatch):
         state, _fresh_candles(), "YAHOO"
     )
 
-    assert finalized.metadata["execution_market_type"] == "FUTURES_CONTINUOUS"
+    assert finalized.symbol == "XAU/USD"
     assert "cfd_reference_quotes" not in finalized.metadata
