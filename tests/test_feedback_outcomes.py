@@ -317,3 +317,6 @@ def test_database_recovery_merges_csv_fallback_without_losing_newer_outcomes(mon
     assert len(saved) == 1
     assert {row["signal_id"] for row in saved[0]} == {"db-only", "shared", "csv-only"}
 
+def test_feedback_storage_backend_does_not_claim_postgres_without_database_url(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    assert feedback.storage_backend() == "LOCAL_CSV_NO_DATABASE_URL"
