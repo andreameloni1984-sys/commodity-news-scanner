@@ -34,7 +34,6 @@ from config import (
 )
 
 from engine.gagarin import analyze_universe
-from engine.session_filter import filter_by_session
 
 from paper_trade_journal import (
     record_entries,
@@ -65,18 +64,13 @@ def _is_operational_state(state) -> bool:
 
 
 def _select_run_universe(now=None):
-    """Scan every enabled commodity on every cycle; keep FX session-scoped."""
-    enabled = enabled_commodities()
-    commodities = [
-        item for item in enabled
-        if str(getattr(item, "category", "") or "").strip().lower() != "forex"
-    ]
-    forex = [
-        item for item in enabled
-        if str(getattr(item, "category", "") or "").strip().lower() == "forex"
-    ]
-    return commodities + filter_by_session(forex, now=now, on_demand=False)
+    """Scan every enabled instrument on every scheduled cycle.
 
+    Session labels may describe liquidity windows, but they must not suppress
+    an otherwise valid Forex setup. Actual weekend/market-closed data status
+    remains enforced by the data and safety layers.
+    """
+    return enabled_commodities()
 
 # ============================================================
 # HEADER
