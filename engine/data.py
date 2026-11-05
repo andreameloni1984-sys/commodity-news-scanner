@@ -2399,10 +2399,6 @@ def _finalize_with_narwhal_reference(state, candles, provider, error=None):
                     execution_timestamp=finalized.metadata.get("quote_timestamp"),
                 )
             )
-        finalized.metadata.setdefault("cfd_reference_quotes", {})
-        finalized.metadata["cfd_reference_quotes"]["BIQUOTE"] = (
-            _fetch_biquote_cfd_reference(finalized.symbol)
-        )
     return finalized
 
 
