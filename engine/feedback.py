@@ -140,9 +140,16 @@ def _signal_record(state, now=None):
     contract_month = metadata.get("contract_month") or ""
     contract_expiry = metadata.get("contract_expiry") or metadata.get("expiry") or ""
 
-    # Timeframe is part of forecast identity: identical levels on the same
-    # candle can represent distinct 5m and 15m hypotheses and must not collide.
-    key = "|".join(str(values[k]) for k in ("symbol", "direction", "timeframe", "entry", "stop", "tp1", "tp2", "tp3", "bar_ts"))
+    # Include the resolved market identity: continuous futures tickers can
+    # represent different delivery contracts, and different providers/markets
+    # must not be deduplicated as though they were the same observation.
+    identity = (
+        values["symbol"], values["direction"], values["timeframe"],
+        values["entry"], values["stop"], values["tp1"], values["tp2"],
+        values["tp3"], values["bar_ts"], quote_provider, quote_symbol,
+        market_type, contract_month, contract_expiry,
+    )
+    key = "|".join(str(value) for value in identity)
     signal_id = hashlib.sha256(key.encode("utf-8")).hexdigest()[:20]
     return {
         "signal_id": signal_id,
