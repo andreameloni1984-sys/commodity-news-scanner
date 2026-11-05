@@ -56,7 +56,7 @@ class Commodity:
 
 
 # ============================================================
-# MAIN UNIVERSE (10 core)
+# MAIN UNIVERSE (8 core)
 # ============================================================
 #
 # Focus su strumenti rilevanti per le regole attive (energia shock + weekly)
@@ -65,9 +65,7 @@ class Commodity:
 # METALLI: Oro, Argento, Rame
 # ENERGY: WTI, Brent
 # AGRICOLTURA: Grano, Mais, Soia
-# Forex core: EUR/USD, GBP/USD (restano separati ma prioritari per day)
-#
-# Forex minori rimossi per ridurre rumore.
+# Nessun Forex, azione, indice o ETF nel paniere operativo.
 #
 # ============================================================
 
@@ -87,9 +85,6 @@ COMMODITIES = [
     Commodity(name="Mais", symbol="CORN/USD", category="Agriculture", unit="USD", priority=7),
     Commodity(name="Soia", symbol="SOYBEAN/USD", category="Agriculture", unit="USD", priority=8),
 
-    # CORE FOREX (day overlap prioritari)
-    Commodity(name="EUR/USD", symbol="EUR/USD", category="Forex", unit="USD", priority=9),
-    Commodity(name="GBP/USD", symbol="GBP/USD", category="Forex", unit="USD", priority=10),
 ]
 
 # ============================================================
@@ -303,7 +298,7 @@ if _UNIVERSE_ERRORS:
 
 
 def operational_commodities() -> list[Commodity]:
-    """Return the eight tradable commodity instruments; Forex remains auxiliary."""
+    """Return only the eight selected tradable commodity instruments."""
     return [
         commodity
         for commodity in enabled_commodities()
@@ -312,7 +307,7 @@ def operational_commodities() -> list[Commodity]:
 
 
 def auxiliary_commodities() -> list[Commodity]:
-    """Return enabled context instruments that must not generate standalone signals."""
+    """Return auxiliary instruments; the selected Gagarin universe currently has none."""
     return [
         commodity
         for commodity in enabled_commodities()
