@@ -441,6 +441,7 @@ def _print_operational(results):
 def _print_paper_journal(results):
 
     backend = paper_journal_storage_backend()
+    journal_ok = True
     print(f"Persistence backend: {backend}")
 
     print("🧪 PAPER JOURNAL")
@@ -478,6 +479,7 @@ def _print_paper_journal(results):
 
     except Exception as exc:
 
+        journal_ok = False
         print(
             "⚠️ PAPER JOURNAL ERROR"
         )
@@ -488,7 +490,7 @@ def _print_paper_journal(results):
         )
 
     print()
-    return (
+    return journal_ok and (
         backend == "POSTGRES"
         or os.getenv("GAGARIN_PERSISTENCE_REQUIRED", "0").strip() != "1"
     )
