@@ -187,6 +187,46 @@ def test_forecast_identity_includes_timeframe(tmp_path):
 
 
 
+
+def test_forecast_identity_includes_provider_and_exact_futures_contract(tmp_path):
+    path = tmp_path / "feedback.csv"
+    december = state([{"timestamp": 1000, "high": 101, "low": 99}])
+    december.metadata.update(
+        quote_provider="YAHOO",
+        quote_symbol="GC=F",
+        quote_market_type="FUTURES",
+        contract_month="2026-12",
+    )
+    february = state([{"timestamp": 1000, "high": 101, "low": 99}])
+    february.metadata.update(
+        quote_provider="YAHOO",
+        quote_symbol="GC=F",
+        quote_market_type="FUTURES",
+        contract_month="2027-02",
+    )
+
+    assert append_signal(december, path=path) is True
+    assert append_signal(february, path=path) is True
+    rows = load_feedback(path)
+    assert len(rows) == 2
+    assert len({row["signal_id"] for row in rows}) == 2
+    assert {row["contract_month"] for row in rows} == {"2026-12", "2027-02"}
+
+
+def test_forecast_identity_includes_quote_provider(tmp_path):
+    path = tmp_path / "feedback.csv"
+    yahoo = state([{"timestamp": 1000, "high": 101, "low": 99}])
+    yahoo.metadata.update(quote_provider="YAHOO")
+    alternate = state([{"timestamp": 1000, "high": 101, "low": 99}])
+    alternate.metadata.update(quote_provider="TWELVE_DATA")
+
+    assert append_signal(yahoo, path=path) is True
+    assert append_signal(alternate, path=path) is True
+    rows = load_feedback(path)
+    assert len(rows) == 2
+    assert len({row["signal_id"] for row in rows}) == 2
+
+
 def test_naive_iso_timestamp_is_interpreted_as_utc():
     naive = _timestamp("2026-10-21T08:00:00")
     aware = _timestamp("2026-10-21T08:00:00+00:00")
