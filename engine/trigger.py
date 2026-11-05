@@ -525,6 +525,15 @@ def apply_trigger(
 
         return state
 
+    # Explicit breakout/retest setups must satisfy their own level
+    # interaction. Never downgrade a failed level-based setup to generic
+    # momentum confirmation.
+    if state.breakout or state.retest:
+        state.trigger = "NOT_CONFIRMED"
+        state.trigger_direction = "NONE"
+        state.trigger_confirmed = False
+        return state
+
     if state.opportunity_type != "TREND_CONTINUATION":
         state.trigger = "MOMENTUM_CONFIRMATION"
         state.trigger_direction = state.setup_direction
