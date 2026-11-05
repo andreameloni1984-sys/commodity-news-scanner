@@ -186,21 +186,24 @@ def test_biquote_cfd_reference_is_separate_from_futures_execution(monkeypatch):
         "open": 100.0, "high": 102.0, "low": 99.0, "close": 101.0,
         "volume": 0, "isOpen": True,
     }
-    closed = {
-        "openTime": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now - 420)),
-        "open": 99.0, "high": 101.0, "low": 98.0, "close": 100.0,
-        "volume": 0, "isOpen": False,
-    }
+    closed = []
+    for index in range(data.MIN_CANDLES_REQUIRED):
+        open_time = now - 420 - (data.MIN_CANDLES_REQUIRED - index - 1) * 300
+        closed.append({
+            "openTime": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(open_time)),
+            "open": 99.0, "high": 101.0, "low": 98.0, "close": 100.0 + index * 0.01,
+            "volume": 0, "isOpen": False,
+        })
     monkeypatch.setattr(
         data, "_request_json",
-        lambda *args, **kwargs: ({"symbol": "XAUUSD", "bars": [opened, closed]}, None),
+        lambda *args, **kwargs: ({"symbol": "XAUUSD", "bars": [opened, *closed]}, None),
     )
     result = data._fetch_biquote_cfd_reference("XAU/USD")
     assert result["provider"] == "BIQUOTE"
     assert result["market_type"] == "CFD"
     assert result["status"] == "LIVE"
     assert result["price"] == 100.0
-    assert result["candles_count"] == 1
+    assert result["candles_count"] == data.MIN_CANDLES_REQUIRED
     assert result["execution_eligible"] is False
     assert result["bid"] is None and result["ask"] is None
 
