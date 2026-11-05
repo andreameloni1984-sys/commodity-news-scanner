@@ -402,7 +402,7 @@ def _command_response(command: str) -> Optional[str]:
             if command_name in {"/aggressivo212", "/aggressive212"}
             else "SOFT"
         )
-        return "\\n".join([
+        return "\n".join([
             "TRADING 212 — CFD | GAGARIN",
             "━━━━━━━━━━━━━━━━━━━━",
             "Reparto: " + desk_name,
