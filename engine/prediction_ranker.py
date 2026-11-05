@@ -112,22 +112,6 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
                 abs(_num(getattr(state, "move_24h_pct", 0))),
             )
 
-        # Reward *acceleration* rather than only an already-large move.
-        # move_5m and move_15m are cumulative returns, so compare their
-        # direction-adjusted per-minute pace. This is a ranking feature only.
-        momentum_acceleration_score = 0.0
-        acceleration_reason = None
-        if move_5m is not None and move_15m is not None:
-            pace_5m = direction_sign = (1.0 if direction == "LONG" else -1.0)
-            pace_5m *= _num(move_5m) / 5.0
-            pace_15m = direction_sign * _num(move_15m) / 15.0
-            if pace_5m > pace_15m and pace_5m > 0:
-                momentum_acceleration_score = min(8.0, (pace_5m - pace_15m) * 80.0)
-                acceleration_reason = "momentum in accelerazione"
-            elif pace_5m < pace_15m:
-                momentum_acceleration_score = -min(4.0, (pace_15m - pace_5m) * 40.0)
-                acceleration_reason = "momentum in rallentamento"
-
         score = 0.0
         reasons = []
         regime = str(getattr(state, "regime", "") or "").upper()
@@ -149,9 +133,6 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
         score += min(8, continuation * 0.08)
         score += min(5, quality * 0.05)
         score += min(5, confidence * 0.05)
-        score += momentum_acceleration_score
-        if acceleration_reason:
-            reasons.append(acceleration_reason)
         # Reward expected range only mildly: volatility is opportunity and risk.
         score += min(5, expected_move * 0.8)
         if live and data_ok:
@@ -171,7 +152,6 @@ def rank_predictions(states: Iterable[Any]) -> list[dict]:
             "symbol": str(getattr(state, "symbol", "") or ""),
             "direction": direction,
             "score": round(score, 1),
-            "momentum_acceleration_score": round(momentum_acceleration_score, 2),
             "expected_move_pct": round(expected_move, 3),
             "price": price,
             "move_5m_pct": move_5m,
