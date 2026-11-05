@@ -437,6 +437,57 @@ def _print_operational(results):
     print()
 
 
+
+
+# ============================================================
+# LUBJANKA EARLY OPPORTUNITIES
+# ============================================================
+
+def _print_lubjanka_watch(results):
+    """Print LUBJANKA observations separately from Governor-authorized entries."""
+    print("🛰️ LUBJANKA — MOVIMENTI INTERCETTATI (PAPER WATCH)")
+    print("-" * 72)
+    candidates = []
+    for state in results:
+        metadata = getattr(state, "metadata", {}) or {}
+        handoff = metadata.get("lubjanka_handoff", {})
+        if isinstance(handoff, dict) and handoff.get("status") == "EARLY_WATCH":
+            candidates.append((state, handoff))
+    if not candidates:
+        print("Nessun movimento direzionale intercettato con dati M5 utilizzabili.")
+        print("Le osservazioni LUBJANKA non autorizzano ordini e non sostituiscono il Governor.")
+        print()
+        return
+    for state, handoff in candidates:
+        print(
+            f"🟡 {state.commodity} — {handoff.get('direction')} "
+            f"| {handoff.get('timeframe', 'M5')} "
+            f"| {handoff.get('provider') or 'provider N/D'} "
+            f"| {handoff.get('market_type', 'market basis N/D')}"
+        )
+        for label, key in (
+            ("Riferimento", "entry_reference"),
+            ("SL", "stop_loss_reference"),
+            ("TP1", "take_profit_1_reference"),
+            ("TP2", "take_profit_2_reference"),
+        ):
+            value = handoff.get(key)
+            if isinstance(value, (int, float)):
+                print(f"    {label:<12} {value:.8g}")
+        rr1 = handoff.get("risk_reward_tp1")
+        rr2 = handoff.get("risk_reward_tp2")
+        if isinstance(rr1, (int, float)) and isinstance(rr2, (int, float)):
+            print(f"    R/R          TP1 {rr1:.1f} | TP2 {rr2:.1f}")
+        events = handoff.get("events") or []
+        labels = [
+            f"{event.get('interceptor')}:{event.get('stage')}"
+            for event in events if isinstance(event, dict)
+        ]
+        if labels:
+            print("    Evidenze     " + ", ".join(labels))
+        print("    PAPER WATCH — NON È UN SEGNALE DI ESECUZIONE")
+    print()
+
 # ============================================================
 # PAPER TRADE JOURNAL
 # ============================================================
@@ -721,6 +772,10 @@ def run():
     )
 
     _print_operational(
+        operational_results
+    )
+
+    _print_lubjanka_watch(
         operational_results
     )
 
