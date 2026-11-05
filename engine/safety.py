@@ -178,9 +178,13 @@ def apply_safety(
     #
     # ========================================================
 
-    if state.opportunity_type == "TREND_CONTINUATION" and state.setup_direction in {"LONG", "SHORT"}:
-        if state.mtf_direction != state.setup_direction:
-            blockers.append("MTF_DIRECTION_MISMATCH")
+    if (
+        state.opportunity_type == "TREND_CONTINUATION"
+        and state.setup_direction in {"LONG", "SHORT"}
+        and state.mtf_direction in {"LONG", "SHORT"}
+        and state.mtf_direction != state.setup_direction
+    ):
+        blockers.append("MTF_DIRECTION_MISMATCH")
 
     # ========================================================
     # 8. ENTRY
