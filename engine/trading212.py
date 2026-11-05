@@ -1,9 +1,9 @@
 """Manual Trading 212 CFD quote intake for GAGARIN.
 
-This module does not claim an official Trading 212 CFD API connection.
-Manual bid/ask values are displayed as broker-provided CFD observations only.
-They are never compared with Yahoo futures or BiQuote, and no entry/SL/TP
-is calculated without a verified same-contract CFD candle series.
+No official Trading 212 CFD API connection is claimed. Manual bid/ask values
+are displayed as broker-provided CFD observations only. They are never
+compared with Yahoo futures or BiQuote, and no entry/SL/TP is calculated
+without a verified same-contract CFD candle series.
 
 PAPER ONLY. No orders.
 """
@@ -100,19 +100,19 @@ def format_manual_cfd_quote(result: dict[str, Any]) -> str:
     status = result.get("status")
     if status == "UNSUPPORTED_INSTRUMENT":
         return (
-            "TRADING 212 — CFD QUOTE\\n"
+            "TRADING 212 — CFD QUOTE\n"
             "Strumento fuori dal paniere GAGARIN degli otto: "
             + str(result.get("requested_symbol") or "N/D")
         )
     if status == "INVALID_QUOTE":
         return (
-            "TRADING 212 — CFD QUOTE\\n"
+            "TRADING 212 — CFD QUOTE\n"
             "Bid/ask mancanti o non validi. Nessun prezzo associato."
         )
     if status != "MANUAL_QUOTE_ONLY":
-        return "TRADING 212 — CFD QUOTE\\nStato non valido."
+        return "TRADING 212 — CFD QUOTE\nStato non valido."
 
-    return "\\n".join([
+    return "\n".join([
         "TRADING 212 — CFD QUOTE (INSERIMENTO MANUALE)",
         "━━━━━━━━━━━━━━━━━━━━",
         "Broker: Trading 212 | Mercato: CFD | Modalità: PAPER ONLY",
@@ -157,68 +157,6 @@ def compare_price(
     }
 
 
-def compare_price(
-    symbol: str,
-    gagarin_price: Optional[float],
-    bid_212: Optional[float],
-    ask_212: Optional[float],
-) -> dict[str, Any]:
-    """Compare a Trading 212 bid/ask with the Gagarin reference price.
-
-    Returns a dict with mid price, spread, difference vs Gagarin, and a
-    verdict: ALIGNED, 212_CHEAPER, 212_EXPENSIVE, or INCOMPLETE.
-    """
-    if bid_212 is None or ask_212 is None:
-        return {
-            "symbol": symbol.upper(),
-            "verdict": "INCOMPLETE",
-            "reason": "bid o ask 212 mancanti",
-        }
-    if bid_212 <= 0 or ask_212 <= 0 or ask_212 < bid_212:
-        return {
-            "symbol": symbol.upper(),
-            "verdict": "INCOMPLETE",
-            "reason": "bid/ask 212 non validi",
-        }
-
-    mid_212 = (bid_212 + ask_212) / 2.0
-    spread_212 = ask_212 - bid_212
-    typical = TYPICAL_SPREAD.get(symbol.upper(), mid_212 * 0.0005)
-
-    if gagarin_price is None or gagarin_price <= 0:
-        return {
-            "symbol": symbol.upper(),
-            "mid_212": mid_212,
-            "spread_212": spread_212,
-            "gagarin_price": None,
-            "diff_pct": None,
-            "verdict": "NO_GAGARIN_PRICE",
-            "reason": "prezzo Gagarin non disponibile per il confronto",
-        }
-
-    diff = mid_212 - gagarin_price
-    diff_pct = diff / gagarin_price * 100.0
-
-    if abs(diff_pct) <= 0.05:
-        verdict = "ALIGNED"
-    elif diff_pct < 0:
-        verdict = "212_CHEAPER"
-    else:
-        verdict = "212_EXPENSIVE"
-
-    return {
-        "symbol": symbol.upper(),
-        "mid_212": round(mid_212, 6),
-        "spread_212": round(spread_212, 6),
-        "gagarin_price": gagarin_price,
-        "diff": round(diff, 6),
-        "diff_pct": round(diff_pct, 3),
-        "typical_spread": typical,
-        "spread_ok": spread_212 <= typical * 3,
-        "verdict": verdict,
-    }
-
-
 def format_comparison(result: dict[str, Any]) -> str:
     """Format a legacy comparison result without implying cross-market parity."""
     verdict = result.get("verdict")
@@ -232,15 +170,18 @@ def format_comparison(result: dict[str, Any]) -> str:
         lines.append(str(result.get("reason") or "Nessun confronto possibile."))
     else:
         lines.append("Confronto non disponibile.")
-    return "\\n".join(lines)
+    return "\n".join(lines)
 
 
 def parse_bid_ask(text: str) -> tuple[Optional[float], Optional[float]]:
-    """Parse 'bid ask' from a user message. Accepts '1.2345 1.2348' or '1,2345 1,2348'."""
+    """Parse two positive quote fields written with dot or decimal comma."""
     parts = text.replace(",", ".").split()
-    if len(parts) < 2:
+    if len(parts) != 2:
         return None, None
     try:
-        return float(parts[0]), float(parts[1])
+        bid, ask = float(parts[0]), float(parts[1])
     except ValueError:
         return None, None
+    if not all(math.isfinite(value) and value > 0 for value in (bid, ask)) or ask < bid:
+        return None, None
+    return bid, ask
