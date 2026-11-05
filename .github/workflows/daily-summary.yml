@@ -15,9 +15,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      DATABASE_URL: \${{ secrets.DATABASE_URL }}
-      TELEGRAM_BOT_TOKEN: \${{ secrets.TELEGRAM_BOT_TOKEN }}
-      TELEGRAM_CHAT_ID: \${{ secrets.TELEGRAM_CHAT_ID }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
     steps:
       - uses: actions/checkout@v4
 
@@ -58,9 +58,9 @@ jobs:
               fb_text = f"Feedback non disponibile: {e}"
 
           text = (
-              "🚀 **GAGARIN — RIEPILOGO GIORNALIERO**\n"
-              "━━━━━━━━━━━━━━━━━━━━\n\n"
-              f"{fb_text}\n\n"
+              "🚀 **GAGARIN — RIEPILOGO GIORNALIERO**\\n"
+              "━━━━━━━━━━━━━━━━━━━━\\n\\n"
+              f"{fb_text}\\n\\n"
               "Usa i pulsanti del bot per i dettagli in tempo reale."
           )
 
