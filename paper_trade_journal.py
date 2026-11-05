@@ -351,10 +351,10 @@ def record_entries(results):
         if canonical or legacy:
             entries.append((state, metadata if isinstance(metadata, dict) else {}))
 
+    existing_rows = _load_rows_for_append(JOURNAL_FILE)
     if not entries:
         return 0
 
-    existing_rows = _load_rows_for_append(JOURNAL_FILE)
     seen = {
         str(row.get("signal_id") or "").strip()
         for row in existing_rows
