@@ -461,7 +461,7 @@ def _command_response(command: str) -> Optional[str]:
         try:
             from engine.trading212 import build_manual_cfd_quote, format_manual_cfd_quote, parse_bid_ask
             if not argument:
-                return "212 CFD PREZZO MANUALE\\nIncolla: simbolo bid ask\\nEs: /prezzo212 WTI 78.10 78.13"
+                return "212 CFD PREZZO MANUALE\nIncolla: simbolo bid ask\nEs: /prezzo212 WTI 78.10 78.13"
             parts = argument.replace(",", ".").split()
             if len(parts) != 3:
                 return "Uso: /prezzo212 SIMBOLO BID ASK. Il simbolo broker, contratto, scadenza e valuta restano da verificare."
