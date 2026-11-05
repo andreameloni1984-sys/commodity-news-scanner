@@ -44,12 +44,12 @@ jobs:
           try:
               backend = storage_backend()
               fb = summarize()
-              fb_text = f"ARCHIVIO: {backend}\\n" + format_summary(fb)
+              fb_text = f"ARCHIVIO: {backend}\n" + format_summary(fb)
           except Exception as e:
               fb_text = f"Feedback non disponibile: {e}"
 
           if backend != "POSTGRES":
-              fb_text = "⚠️ STORICO NON PERSISTENTE — controllare DATABASE_URL\\n" + fb_text
+              fb_text = "⚠️ STORICO NON PERSISTENTE — controllare DATABASE_URL\n" + fb_text
 
           text = (
               "🚀 **GAGARIN — RIEPILOGO GIORNALIERO**\n"
