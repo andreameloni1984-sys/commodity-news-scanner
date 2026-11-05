@@ -800,42 +800,106 @@ BIQUOTE_CFD_MAX_AGE_SECONDS = 360.0
 
 
 def _fetch_biquote_cfd_reference(symbol: str):
-    """Fetch a separate CFD candle stream; never return it as futures execution."""
+    """Fetch a live CFD quote plus closed M5 candles; never use it as futures execution."""
+    biquote_symbol = BIQUOTE_CFD_REFERENCE_SYMBOLS.get(symbol)
     result = {
         "provider": "BIQUOTE",
         "market_type": "CFD",
         "requested_instrument": symbol,
-        "symbol": BIQUOTE_CFD_REFERENCE_SYMBOLS.get(symbol),
+        "symbol": biquote_symbol,
         "interval": BIQUOTE_CFD_INTERVAL,
-        "status": "NOT_COVERED",
+        "status": "NOT_COVERED" if not biquote_symbol else "QUOTE_UNAVAILABLE",
         "execution_eligible": False,
         "bid": None,
         "ask": None,
-        "volume_semantics": "NO_EXCHANGE_TRADED_VOLUME",
+        "price": None,
+        "spread": None,
+        "quote_timestamp": None,
+        "quote_age_seconds": None,
+        "market_state": None,
+        "candles_status": "NOT_CHECKED",
         "candles": [],
+        "volume_semantics": "NO_EXCHANGE_TRADED_VOLUME",
     }
-    biquote_symbol = BIQUOTE_CFD_REFERENCE_SYMBOLS.get(symbol)
     if not biquote_symbol:
         return result
     if os.getenv("BIQUOTE_CFD_REFERENCE_ENABLED", "1").strip() != "1":
         result["status"] = "DISABLED"
         return result
 
-    payload, error = _request_json(
+    # Tick endpoint is the source of the current CFD price and executable
+    # bid/ask context. allowStale=false asks BiQuote to reject old quotes.
+    tick, tick_error = _request_json(
+        f"{BIQUOTE_BASE}/{biquote_symbol}",
+        {"allowStale": "false"},
+        retries=1,
+    )
+    tick_valid = False
+    if isinstance(tick, dict) and not tick_error:
+        try:
+            bid = float(tick["bid"])
+            ask = float(tick["ask"])
+            mid = float(tick["mid"])
+            quote_age = float(tick.get("quoteAgeSeconds", 0))
+            quote_timestamp = tick.get("timestamp")
+            if not all(math.isfinite(v) and v > 0 for v in (bid, ask, mid)):
+                raise ValueError("INVALID_BID_ASK_MID")
+            if ask < bid or not bid <= mid <= ask:
+                raise ValueError("INVALID_SPREAD_ENVELOPE")
+            if not quote_timestamp:
+                raise ValueError("MISSING_QUOTE_TIMESTAMP")
+            parsed_time = datetime.fromisoformat(
+                str(quote_timestamp).replace("Z", "+00:00")
+            )
+            if parsed_time.tzinfo is None:
+                parsed_time = parsed_time.replace(tzinfo=timezone.utc)
+            age_from_timestamp = time.time() - parsed_time.timestamp()
+            if age_from_timestamp < -FUTURE_TIMESTAMP_TOLERANCE_SECONDS:
+                raise ValueError("FUTURE_QUOTE_TIMESTAMP")
+            if quote_age < 0 or quote_age > 300:
+                raise ValueError("STALE_QUOTE")
+            if tick.get("stale") is True:
+                raise ValueError("STALE_QUOTE")
+            market_state = str(tick.get("marketState") or "unknown").lower()
+            if market_state != "open":
+                result["status"] = "MARKET_CLOSED"
+            else:
+                tick_valid = True
+                result["status"] = "LIVE"
+            result.update({
+                "bid": bid,
+                "ask": ask,
+                "price": mid,
+                "spread": round(ask - bid, 10),
+                "quote_timestamp": parsed_time.astimezone(timezone.utc).isoformat(),
+                "quote_age_seconds": round(max(0.0, quote_age), 1),
+                "market_state": market_state,
+                "quote_source": tick.get("source"),
+            })
+        except (KeyError, TypeError, ValueError, OverflowError) as exc:
+            result["status"] = "INVALID_OR_STALE_QUOTE"
+            result["quote_error"] = str(exc)[:160]
+    else:
+        result["quote_error"] = str(tick_error or "INVALID_TICK_RESPONSE")[:240]
+
+    # Closed 5-minute candles supply technical history, never the live quote.
+    payload, candle_error = _request_json(
         f"{BIQUOTE_BASE}/{biquote_symbol}/ohlc",
         {"interval": BIQUOTE_CFD_INTERVAL, "limit": min(max(LOOKBACK, 120), 1000)},
         retries=1,
     )
-    if error:
-        result["status"] = "PROVIDER_ERROR"
-        result["error"] = str(error)[:240]
+    if candle_error:
+        result["candles_status"] = "PROVIDER_ERROR"
+        result["candles_error"] = str(candle_error)[:240]
+        if tick_valid:
+            result["status"] = "CANDLE_HISTORY_UNAVAILABLE"
         return result
     if not isinstance(payload, dict) or not isinstance(payload.get("bars"), list):
-        result["status"] = "INVALID_RESPONSE"
+        result["candles_status"] = "INVALID_RESPONSE"
+        if tick_valid:
+            result["status"] = "CANDLE_HISTORY_UNAVAILABLE"
         return result
 
-    # The API prepends a still-forming candle. Only closed candles are
-    # admitted into the reference history used for comparisons.
     closed_payload = dict(payload)
     closed_payload["bars"] = [
         row for row in payload["bars"]
@@ -843,35 +907,35 @@ def _fetch_biquote_cfd_reference(symbol: str):
     ]
     candles, parse_error = _parse_biquote(closed_payload)
     if parse_error or not candles:
-        result["status"] = "INVALID_OR_INSUFFICIENT_CANDLES"
-        result["error"] = str(parse_error or "NO_CLOSED_CANDLES")[:240]
+        result["candles_status"] = "INVALID_OR_INSUFFICIENT_CANDLES"
+        result["candles_error"] = str(parse_error or "NO_CLOSED_CANDLES")[:240]
+        if tick_valid:
+            result["status"] = "CANDLE_HISTORY_UNAVAILABLE"
         return result
 
     latest = candles[-1]
-    # openTime marks the start of a five-minute bar; freshness is measured
-    # from its expected close, not from the candle's opening timestamp.
     bar_close_epoch = float(latest["timestamp"]) + 300.0
-    age_seconds = time.time() - bar_close_epoch
-    if age_seconds < -FUTURE_TIMESTAMP_TOLERANCE_SECONDS:
-        status = "FUTURE_TIMESTAMP"
-    elif age_seconds > BIQUOTE_CFD_MAX_AGE_SECONDS:
-        status = "STALE"
+    candle_age = time.time() - bar_close_epoch
+    if candle_age < -FUTURE_TIMESTAMP_TOLERANCE_SECONDS:
+        result["candles_status"] = "FUTURE_TIMESTAMP"
+    elif candle_age > BIQUOTE_CFD_MAX_AGE_SECONDS:
+        result["candles_status"] = "STALE"
     else:
-        status = "LIVE"
-
+        result["candles_status"] = "LIVE"
     result.update({
-        "status": status,
-        "price": float(latest["close"]),
-        "quote_timestamp": datetime.fromtimestamp(
+        "candles": candles[-60:],
+        "candles_count": len(candles),
+        "candle_timestamp": datetime.fromtimestamp(
             bar_close_epoch, tz=timezone.utc
         ).isoformat(),
-        "age_seconds": round(max(0.0, age_seconds), 1),
-        "candles_count": len(candles),
-        "candles": candles[-60:],
-        "error": None,
+        "candle_age_seconds": round(max(0.0, candle_age), 1),
         "execution_eligible": False,
-        "note": "CFD reference only; never interchangeable with futures prices",
+        "note": "CFD quote and candles are reference-only; never interchangeable with futures prices",
     })
+    if tick_valid and result["candles_status"] == "LIVE":
+        result["status"] = "LIVE"
+    elif result["status"] == "LIVE":
+        result["status"] = "CANDLE_HISTORY_" + result["candles_status"]
     return result
 
 
