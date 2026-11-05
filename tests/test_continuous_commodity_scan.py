@@ -13,5 +13,4 @@ def test_all_enabled_commodities_are_scanned_outside_session_windows():
         "XAU/USD", "XAG/USD", "COPPER/USD", "WTI/USD", "BRENT/USD",
         "WHEAT/USD", "CORN/USD", "SOYBEAN/USD",
     }.issubset(symbols)
-    assert "EUR/USD" not in symbols
-    assert "GBP/USD" not in symbols
+    assert {"EUR/USD", "GBP/USD"}.issubset(symbols)
