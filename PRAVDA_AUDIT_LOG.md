@@ -1,7 +1,7 @@
 # PRAVDA — Registro audit verificabile (cross-repository)
 
 **Ambito:** SPUTNIK `andreameloni1984-sys/trump-trucker` e GAGARIN `andreameloni1984-sys/commodity-news-scanner`.  
-**Passata audit:** 2026-11-05, fino alle evidenze disponibili entro le 07:46 UTC.  
+**Registro incrementale:** ultima passata verificata 2026-11-05, fino alle evidenze disponibili entro le 14:00 UTC.  
 **Modalità:** sola lettura dei log, artefatti, journal, workflow e PR. Nessun codice, strategia, punteggio o rischio modificato. PAPER ONLY.
 
 ## Regole di identità e outcome
@@ -445,3 +445,57 @@ Campione SPUTNIK storico: alert CFD #267, #269, #274 e nuovo #275; tutti `NOT_EX
 6. Per qualsiasi outcome richiedere ticker/contratto/scadenza, provider e timestamp quote, poi barre successive dello stesso identico contratto; altrimenti `ESITO NON VERIFICABILE`.
 
 **Esito passata 6:** nuovo alert SPUTNIK GOLD LONG #275 ricostruito da log e invio API confermato (697 analisi, 698 CFD), ma in conflitto tecnico/D-L-A, `NOT_EXECUTED`, senza identità quote/contratto sufficiente; GAGARIN resta fermo all'ultima scansione #155, otto commodities stale e zero entry. Nessun outcome SL/TP verificato. Nessun codice, strategia, filtro, score o rischio modificati; nessun merge/deploy, ordine reale, modifica segreti o intervento Render. PAPER ONLY.
+
+
+## PASSATA 7 — 2026-11-05 14:00 UTC
+
+### Perimetro e metodo
+Verificati gli elenchi GitHub Actions su `main` filtrati per evento `schedule`, i job e gli artifact dei run più recenti, i workflow YAML, i journal pubblici, lo stato delle PR e i relativi workflow CI sui commit head. La passata 6 terminava alle 12:44:19 UTC. Questa passata termina alle 14:00 UTC. Nessuna modifica al codice applicativo, strategia, filtri, punteggi, rischio, segreti o Render.
+
+### SPUTNIK — nessun nuovo collector; nuovo riepilogo giornaliero distinto
+- Ultimo collector di mercato su `main`: [SPUTNIK #275 / 42010313054](https://github.com/andreameloni1984-sys/trump-trucker/actions/runs/42010313054), scheduled, 2026-11-05 10:23:31–10:23:45 UTC, SUCCESS. Job `127187355340`, tutti gli step riusciti, zero artifact. Non risultano collector SPUTNIK successivi entro il cutoff delle 14:00 UTC.
+- Il run #275 resta l'ultimo ciclo che ha prodotto l'alert GOLD LONG già registrato nella passata 6. La firma `PRAVDA-SPUTNIK-42010313054-GOLD-CONTINUOUS-FRONTMONTH-LONG-20261105T102340Z-4134.2002-4132.2287-4136.1717-4138.1432` è già presente: **nessuna nuova firma aggiunta**. I message_id 697 e 698 sono i due messaggi dello stesso ciclo, non due trade.
+- Nuovo run distinto: [SPUTNIK Daily Summary #8 / 42038806143](https://github.com/andreameloni1984-sys/trump-trucker/actions/runs/42038806143), evento `schedule`, 2026-11-05 13:46:53–13:47:03 UTC, SUCCESS. Job `127283850932`; step `Send summary` SUCCESS; zero artifact. Non è un collector e non è un nuovo segnale di mercato.
+- Il workflow `.github/workflows/daily-summary.yml` su main dichiara cron `0 6 * * *` (06:00 UTC). L'esecuzione osservata alle 13:46:53 UTC è molto più tarda dell'orario nominale. Il dato dimostra l'orario effettivo del run; non consente da solo di distinguere ritardo della coda GitHub da una diversa causa di scheduling.
+- Il codice del riepilogo carica `sputnik_state.json`, in caso di errore usa uno stato vuoto, poi invia il riepilogo. Il codice richiede `ok=true` e un `result.message_id` tramite `confirmed_message_id`, altrimenti solleva errore. Dato che lo step è SUCCESS, il workflow ha superato il controllo di accettazione API; tuttavia il message_id e il testo effettivo non sono ricostruibili dai metadati accessibili, e non c'è artifact. Questo non prova la consegna al dispositivo e non è un alert operativo.
+- Il run daily summary ha head SHA `35e99494811e1e648df083e9069d857c5e4d4f3e`, lo stesso commit di persistenza dello stato generale SPUTNIK. La persistenza generale non equivale alla presenza di uno storico CFD completo.
+- Cadenza collector: il cron `2-59/5 * * * *` resta configurato ogni 5 minuti, ma l'ultimo collector osservato è #275 alle 10:23:31 UTC. Il run daily summary #8 e il polling Telegram #36 non sono scansioni di mercato.
+
+### GAGARIN — nessuna nuova scansione di mercato
+- Ultimo monitor programmato su `main`: [GAGARIN #155 / 41995511121](https://github.com/andreameloni1984-sys/commodity-news-scanner/actions/runs/41995511121), 2026-11-05 08:34:23–08:34:48 UTC, SUCCESS. Job `127137579907`, step di analisi completato SUCCESS, zero artifact.
+- Nessun monitor GAGARIN successivo risulta nell'elenco delle esecuzioni `schedule` entro le 14:00 UTC. Il cron su main resta `*/15 * * * *`; l'assenza di nuovi run non dimostra che il codice abbia eseguito scansioni in background.
+- Le otto commodities del run #155 restano tutte stale, con età già registrate nella passata 6 (circa 601–633 secondi). Non riutilizzare quei prezzi/livelli come quotazioni attuali.
+- Il run #155 aveva zero entry registrate, zero segnali feedback, zero posizioni aperte e zero chiuse. Il WATCH grano non è un trade.
+- Journal pubblico ricontrollato: `paper_trade_log.csv` contiene solo la riga legacy WTI LONG del 2026-10-08 16:23 UTC (entry 96.24, SL 89.37, TP1 103.11, TP2 106.55), priva di ticker/contratto esatto, provider e timestamp della quotazione; outcome resta `ESITO NON VERIFICABILE`. `gagarin_feedback.csv` e `gagarin_feedback.json` non sono disponibili su main. Nessun nuovo segnale aggiunto.
+- Il workflow GAGARIN Daily Summary su main ha cron `15 6 * * *`; l'ultimo run scheduled visibile è #6 del 2026-11-04 14:30:14 UTC. Non risulta un riepilogo GAGARIN del 5 novembre entro il cutoff.
+- Difetto dimostrato nel codice del workflow GAGARIN Daily Summary: l'eccezione durante `sendMessage` viene stampata ma non rilanciata. Un futuro job potrebbe quindi concludersi SUCCESS anche se l'invio Telegram fallisce. È una lacuna di osservabilità della consegna, non prova che un messaggio specifico sia fallito. Nessuna modifica eseguita da PRAVDA.
+
+### PR e CI — stato aggiornato
+- **SPUTNIK PR #132**: OPEN/DRAFT, head `3519e184c990d73626ab1fd3d79c35ae574db795`, non mergeata; due workflow CI SUCCESS (#42011007490 e #42011007606). La correzione conflitto direzionale resta non attiva su main.
+- **SPUTNIK PR #111** snapshot CFD e deduplica: OPEN, non mergeata. **PR #129** persistenza su branch dedicato: OPEN, non mergeata.
+- **GAGARIN PR #154** migrazione journal privato D1: OPEN/DRAFT, `mergeable=false`; i sei workflow associati al suo head sono SUCCESS (#41575354830, #41575354831, #41575354837, #41575354834, #41575354851, #41575354839). Test riusciti non equivalgono a migrazione attiva: D1 privato non è dimostrato operativo.
+- **GAGARIN PR #192** exact-contract/outcome audit: OPEN, mergeable; sei workflow associati SUCCESS (#41981315318, #41981315378, #41981315414, #41981315376, #41981315423, #41981315298). Non integrata.
+- **GAGARIN PR #195** BiQuote reference: OPEN/DRAFT, mergeable; sei workflow associati SUCCESS, incluso BiQuote CFD Live Feed Check #41999838040. Non integrata; BiQuote non è Trading 212.
+- **GAGARIN PR #196** universo otto commodities: OPEN/DRAFT, mergeable; sette workflow associati SUCCESS (#41998421124, #41998421011, #41998420943, #41998421101, #41998420910, #41998420929, #41998420913). Non integrata.
+- **GAGARIN PR #177** fallback Yahoo stale: OPEN, mergeable; cinque workflow associati SUCCESS (#41986908178, #41986908147, #41986908164, #41986908169, #41986908174). Non integrata.
+- **GAGARIN PR #175** webhook/polling: OPEN, mergeable; cinque workflow associati SUCCESS (#41717697784, #41717697785, #41717697766, #41717697844, #41717697781). Non integrata.
+- **GAGARIN PR #197** handoff LUBJANKA: CLOSED, non merged. Non attivo su main.
+
+### Outcome e statistiche incrementali
+| Categoria | Nuovi segnali operativi | Trade eseguiti dimostrati | SL verificati | TP verificati |
+|---|---:|---:|---:|---:|
+| SPUTNIK collector #275 | 0 (alert già registrato in passata 6) | 0 | 0 | 0 |
+| SPUTNIK Daily Summary #8 | 0 (riepilogo, non segnale) | 0 | 0 | 0 |
+| GAGARIN monitor #155 | 0 entry nuove; 1 WATCH già registrato | 0 | 0 | 0 |
+
+Nessun nuovo outcome attribuibile. Gli alert SPUTNIK #267, #269, #274 e #275 restano `NOT_EXECUTED` e senza outcome verificabile; il WATCH GAGARIN non è trade; la riga WTI legacy resta non verificabile. Nessun win rate, rendimento o backtest calcolato.
+
+### Lacune e prossimo controllo
+1. Distinguere sempre SPUTNIK collector, Daily Summary e Telegram polling: solo il primo è scansione di mercato.
+2. Verificare la ripresa del collector SPUTNIK ogni 5 minuti e del monitor GAGARIN ogni 15 minuti; i run summary non sostituiscono scansioni.
+3. Recuperare payload, message_id e contenuto dei riepiloghi dai log quando accessibili; non inferire il contenuto dal solo SUCCESS.
+4. Segnalare al reparto GAGARIN la gestione silenziosa dell'errore Telegram nel Daily Summary e lo stato non mergeable della PR #154 D1; PRAVDA non modifica codice.
+5. Verificare se la persistenza privata D1 diventa operativa solo dopo integrazione e prova end-to-end, senza esporre CSV o segreti.
+6. Continuare a non attribuire SL/TP senza ticker, contratto/scadenza, provider e timestamp quote, più barre successive dello stesso identico contratto.
+
+**Esito passata 7:** nessun nuovo segnale operativo e nessun nuovo trade. SPUTNIK ha eseguito un Daily Summary #8 alle 13:46:53 UTC (step SUCCESS; codice richiede conferma API con message_id), ma l'ultimo collector resta #275 delle 10:23:31 UTC. GAGARIN resta all'ultimo monitor #155 delle 08:34:23 UTC, senza nuove scansioni. Nuova lacuna osservata: GAGARIN Daily Summary intercetta l'errore di invio senza fallire il job. PR #154 D1 è aperta, draft e non mergeable nonostante sei workflow CI SUCCESS. Nessun nuovo outcome SL/TP verificato. Nessun codice applicativo, strategia, filtro, score o rischio modificati; nessun merge/deploy, ordine reale, modifica segreti o intervento Render. PAPER ONLY.
