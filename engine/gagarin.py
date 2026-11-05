@@ -394,6 +394,97 @@ def apply_sputnik_intelligence(state):
         return state
 
 
+
+def build_lubjanka_handoff(state: SoyuzState) -> dict:
+    """Surface LUBJANKA observations as visible paper-watch candidates.
+
+    This is deliberately non-blocking and never authorizes execution. Levels
+    are indicative only and inherit the exact market basis of the input candles.
+    """
+    observation = (getattr(state, "metadata", {}) or {}).get("lubjanka", {})
+    if not isinstance(observation, dict) or observation.get("status") != "OK":
+        return {
+            "status": "UNAVAILABLE",
+            "reason": (observation or {}).get("reason", "LUBJANKA_DATA_UNAVAILABLE"),
+            "paper_only": True,
+            "execution_authorized": False,
+        }
+
+    events = observation.get("events") or []
+    directions = {
+        str(event.get("direction", "")).upper()
+        for event in events
+        if isinstance(event, dict)
+        and str(event.get("direction", "")).upper() in {"LONG", "SHORT"}
+    }
+    if not directions:
+        return {
+            "status": "NO_EARLY_MOVE",
+            "reason": "Nessun intercettore direzionale attivo",
+            "events": events,
+            "paper_only": True,
+            "execution_authorized": False,
+        }
+    if len(directions) > 1:
+        return {
+            "status": "DIRECTION_CONFLICT",
+            "reason": "Intercettori LUBJANKA discordanti: mostrare entrambe le evidenze, nessun livello unico",
+            "directions": sorted(directions),
+            "events": events,
+            "paper_only": True,
+            "execution_authorized": False,
+        }
+
+    direction = next(iter(directions))
+    candles = list(getattr(state, "candles", []) or [])
+    atr = float(getattr(state, "atr", 0.0) or 0.0)
+    if not candles or atr <= 0:
+        return {
+            "status": "OBSERVATION_ONLY",
+            "direction": direction,
+            "reason": "Prezzo o ATR M5 non disponibili: livelli non calcolati",
+            "events": events,
+            "paper_only": True,
+            "execution_authorized": False,
+        }
+
+    entry = float(candles[-1].get("close", 0.0) or 0.0)
+    if entry <= 0:
+        return {
+            "status": "OBSERVATION_ONLY",
+            "direction": direction,
+            "reason": "Ultima chiusura non valida: livelli non calcolati",
+            "events": events,
+            "paper_only": True,
+            "execution_authorized": False,
+        }
+
+    risk = atr
+    if direction == "LONG":
+        stop_loss, tp1, tp2 = entry - risk, entry + risk, entry + 2 * risk
+    else:
+        stop_loss, tp1, tp2 = entry + risk, entry - risk, entry - 2 * risk
+
+    metadata = getattr(state, "metadata", {}) or {}
+    return {
+        "status": "EARLY_WATCH",
+        "direction": direction,
+        "entry_reference": entry,
+        "stop_loss_reference": stop_loss,
+        "take_profit_1_reference": tp1,
+        "take_profit_2_reference": tp2,
+        "risk_reward_tp1": 1.0,
+        "risk_reward_tp2": 2.0,
+        "atr_reference": atr,
+        "timeframe": "M5",
+        "market_type": metadata.get("quote_market_type", metadata.get("execution_market_type", "UNVERIFIED")),
+        "provider": getattr(state, "data_source", None),
+        "events": events,
+        "paper_only": True,
+        "execution_authorized": False,
+        "note": "Pre-segnale osservativo: non è un ordine né un segnale Trading 212 verificato.",
+    }
+
 def analyze_one(commodity: Commodity) -> SoyuzState:
     analysis_started = time.perf_counter()
     state = SoyuzState(
@@ -416,6 +507,9 @@ def analyze_one(commodity: Commodity) -> SoyuzState:
     state.metadata["lubjanka_playbook"] = build_conditional_playbook(
         state.candles, state.metadata["lubjanka"]
     )
+    # Handoff LUBJANKA -> GAGARIN: make early moves visible without adding
+    # another gate or changing Governor/entry authorization.
+    state.metadata["lubjanka_handoff"] = build_lubjanka_handoff(state)
     state = evaluate_pre_move(state)
     # Independent, auditable regime/momentum ensemble; ranking context only.
     state.metadata["forecast_ensemble"] = forecast_ensemble(state.candles)
