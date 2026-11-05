@@ -226,3 +226,23 @@ def test_biquote_cfd_reference_failure_does_not_change_futures_route(monkeypatch
     assert result["execution_eligible"] is False
     assert data.PROVIDER_ORDER["WTI/USD"] == ("YAHOO",)
     assert data.EXECUTION_MARKET_TYPES["WTI/USD"] == "FUTURES_CONTINUOUS"
+
+
+def test_biquote_cfd_reference_is_not_attached_to_futures_state(monkeypatch):
+    def forbidden(*args, **kwargs):
+        raise AssertionError("BiQuote CFD reference must not be fetched by futures finalization.")
+
+    monkeypatch.setattr(data, "_fetch_biquote_cfd_reference", forbidden)
+    monkeypatch.setattr(data, "_fetch_narwhal_reference", lambda symbol: {"status": "DISABLED"})
+    monkeypatch.setattr(
+        data, "_fetch_silv_spot_reference",
+        lambda *args, **kwargs: {"status": "DISABLED"},
+    )
+
+    state = SoyuzState(commodity="Oro", symbol="XAU/USD")
+    finalized = data._finalize_with_narwhal_reference(
+        state, _fresh_candles(), "YAHOO"
+    )
+
+    assert finalized.metadata["execution_market_type"] == "FUTURES_CONTINUOUS"
+    assert "cfd_reference_quotes" not in finalized.metadata
