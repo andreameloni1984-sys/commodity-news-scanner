@@ -402,7 +402,7 @@ def build_lubjanka_handoff(state: SoyuzState) -> dict:
     are indicative only and inherit the exact market basis of the input candles.
     """
     observation = (getattr(state, "metadata", {}) or {}).get("lubjanka", {})
-    if not isinstance(observation, dict) or observation.get("status") != "OK":
+    if not isinstance(observation, dict) or observation.get("status") not in {"INTERCEPTED", "NO_INTERCEPT"}:
         return {
             "status": "UNAVAILABLE",
             "reason": (observation or {}).get("reason", "LUBJANKA_DATA_UNAVAILABLE"),
@@ -411,6 +411,14 @@ def build_lubjanka_handoff(state: SoyuzState) -> dict:
         }
 
     events = observation.get("events") or []
+    if observation.get("status") == "NO_INTERCEPT":
+        return {
+            "status": "NO_EARLY_MOVE",
+            "reason": observation.get("reason", "Nessun movimento iniziale rilevato"),
+            "events": [],
+            "paper_only": True,
+            "execution_authorized": False,
+        }
     directions = {
         str(event.get("direction", "")).upper()
         for event in events
