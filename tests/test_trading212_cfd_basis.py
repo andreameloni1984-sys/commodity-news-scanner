@@ -59,3 +59,36 @@ def test_telegram_prezzo212_does_not_run_gagarin_futures_analysis(monkeypatch):
 
     assert "TRADING 212 — CFD QUOTE" in message
     assert "Prezzo di riferimento CFD comparabile: N/D" in message
+
+
+def test_trading212_aggressive_and_soft_commands_never_run_futures_analysis(monkeypatch):
+    from telegram import bot
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Trading 212 CFD commands must not invoke futures analysis.")
+
+    monkeypatch.setattr(bot, "_run_analysis", forbidden)
+    monkeypatch.setattr(bot, "set_last_results", forbidden)
+
+    for command in ("/aggressivo212", "/soft212"):
+        message = bot._command_response(command)
+        assert "TRADING 212 — CFD | GAGARIN" in message
+        assert "BLOCCATO" in message
+        assert "Entry / SL / TP: NON CALCOLATI" in message
+
+
+def test_trading212_aggressive_manual_quote_path_stays_quote_only(monkeypatch):
+    from telegram import bot
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Manual CFD quote must not invoke futures analysis.")
+
+    monkeypatch.setattr(bot, "_run_analysis", forbidden)
+    monkeypatch.setattr(bot, "set_last_results", forbidden)
+
+    message = bot._command_response("/aggressivo212 WTI 78.10 78.13")
+
+    assert "TRADING 212 — CFD | GAGARIN" in message
+    assert "TRADING 212 — CFD QUOTE (INSERIMENTO MANUALE)" in message
+    assert "Contratto: NON VERIFICATO" in message
+    assert "Entry / SL / TP: NON CALCOLATI" in message
