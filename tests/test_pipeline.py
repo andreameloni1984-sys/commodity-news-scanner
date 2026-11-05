@@ -230,16 +230,17 @@ def test_setup_short():
     assert state.setup_quality > 0
 
 
-def test_setup_blocked_without_mtf():
+def test_trend_setup_allowed_without_mtf_confirmation():
     state = _prepare_directional_state("LONG")
 
     state.mtf_alignment = 0.0
+    state.mtf_direction = "NONE"
 
     apply_setup(state)
 
-    assert state.setup == "NONE"
-    assert state.setup_direction == "NONE"
-    assert state.setup_quality == 0.0
+    assert state.setup == "TREND_CONTINUATION"
+    assert state.setup_direction == "LONG"
+    assert state.setup_quality > 0.0
 
 
 # ============================================================
