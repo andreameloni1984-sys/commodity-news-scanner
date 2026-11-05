@@ -545,7 +545,6 @@ def apply_trigger(
     #
     # Se non abbiamo breakout/retest ma abbiamo:
     #
-    # - MTF forte
     # - momentum coerente
     # - struttura coerente
     #
@@ -557,15 +556,8 @@ def apply_trigger(
     # ========================================================
 
     if (
-        state.mtf_alignment
-        >= STRONG_MTF_ALIGNMENT
-        and state.structure_direction
-        == state.setup_direction
-        and state.structure
-        in {
-            "BULLISH",
-            "BEARISH",
-        }
+        state.structure_direction == state.setup_direction
+        and state.structure in {"BULLISH", "BEARISH"}
     ):
 
         state.trigger = (
