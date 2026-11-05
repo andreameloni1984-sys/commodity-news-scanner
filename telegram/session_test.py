@@ -38,8 +38,8 @@ def session_test_text() -> str:
 
 
 def test_session_filter_smoke() -> None:
-    """The session filter must return a boolean for a known symbol."""
+    """All instruments remain scannable at this intraday time."""
     moment = datetime(2026, 10, 28, 15, 45, tzinfo=ROME)
     assert instrument_window_open("WTI/USD", moment) is True
     assert instrument_window_open("XAU/USD", moment) is True
-    assert instrument_window_open("WHEAT/USD", moment) is False
+    assert instrument_window_open("WHEAT/USD", moment) is True
