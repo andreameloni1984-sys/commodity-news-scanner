@@ -21,6 +21,7 @@ nessun ordine reale viene eseguito.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import os
 
 from commodities.universe import (
     enabled_commodities,
@@ -37,6 +38,7 @@ from engine.gagarin import analyze_universe
 
 from paper_trade_journal import (
     record_entries,
+    storage_backend as paper_journal_storage_backend,
 )
 
 from engine.feedback import (
@@ -45,6 +47,7 @@ from engine.feedback import (
     summarize as summarize_feedback,
     format_summary as format_feedback_summary,
     update_open_outcomes,
+    storage_backend as feedback_storage_backend,
 )
 
 from telegram.bot import send_telegram
@@ -437,6 +440,9 @@ def _print_operational(results):
 
 def _print_paper_journal(results):
 
+    backend = paper_journal_storage_backend()
+    print(f"Persistence backend: {backend}")
+
     print("🧪 PAPER JOURNAL")
     print("-" * 72)
 
@@ -482,6 +488,10 @@ def _print_paper_journal(results):
         )
 
     print()
+    return (
+        backend == "POSTGRES"
+        or os.getenv("GAGARIN_PERSISTENCE_REQUIRED", "0").strip() != "1"
+    )
 
 
 # ============================================================
@@ -489,6 +499,9 @@ def _print_paper_journal(results):
 # ============================================================
 
 def _print_feedback(results, operational_results=None):
+
+    backend = feedback_storage_backend()
+    print(f"Feedback persistence backend: {backend}")
 
     print("🧪 SOYUZ FEEDBACK")
     print("-" * 72)
@@ -552,7 +565,10 @@ def _print_feedback(results, operational_results=None):
         return False
 
     print()
-    return True
+    return (
+        backend == "POSTGRES"
+        or os.getenv("GAGARIN_PERSISTENCE_REQUIRED", "0").strip() != "1"
+    )
 
 
 # ============================================================
@@ -722,7 +738,7 @@ def run():
     # PAPER JOURNAL
     # --------------------------------------------------------
 
-    _print_paper_journal(
+    paper_journal_ok = _print_paper_journal(
         operational_results
     )
 
@@ -804,6 +820,10 @@ def run():
     # A failed feedback write/summary must not leave a green monitor run.
     # Telegram processing above is still allowed; the workflow's always()
     # persistence step can then save any local CSV before the job fails.
+    if not paper_journal_ok:
+        print("❌ PAPER JOURNAL NOT DURABLE: check DATABASE_URL and PostgreSQL connectivity.")
+        return 1
+
     if not feedback_ok:
         print("❌ FEEDBACK INCOMPLETE: monitor run marked failed; journal must be checked.")
         return 1
