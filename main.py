@@ -489,6 +489,8 @@ def _print_paper_journal(results):
             f"{exc}"
         )
 
+    backend = paper_journal_storage_backend()
+    print(f"Paper journal persistence check: {backend}")
     print()
     return journal_ok and (
         backend == "POSTGRES"
@@ -566,6 +568,8 @@ def _print_feedback(results, operational_results=None):
         print()
         return False
 
+    backend = feedback_storage_backend()
+    print(f"Feedback persistence check: {backend}")
     print()
     return (
         backend == "POSTGRES"
