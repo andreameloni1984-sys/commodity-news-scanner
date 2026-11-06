@@ -6,7 +6,7 @@ Comandi principali:
     /classifica /setup /analisi /prezzo
     /segnali /top /guida /rischio
     /aggressivo212 /soft212 /prezzo212
-    /invest /invest_demo /invest_account /invest_orders /invest_buy /invest_auto
+    /invest_demo /invest_account /invest_orders (sola lettura)
 
 PAPER ONLY.
 """
@@ -24,14 +24,9 @@ from engine.decision_status import market_decision_status
 from engine.forex_session import filter_forex_for_session
 from commodities.universe import enabled_commodities, get_commodity_by_name
 from engine.invest import (
-    analyze_invest_universe,
-    format_invest_report,
     get_trading212_demo_status,
     format_account_status,
     format_pending_orders,
-    place_demo_order,
-    auto_buy_best_signal,
-    auto_buy_best_signal_budget,
 )
 from engine.daily_forecast import predict_today
 from soyuz_gagarin.adapter import evaluate_states
@@ -309,6 +304,14 @@ def _command_response(command: str) -> Optional[str]:
     # Manual position registration enables transition-only post-entry monitoring.
     # Prices are compared with Gagarin's provider feed; this is not a Trading 212 API.
     command_name = raw.split(maxsplit=1)[0].lower() if raw else ""
+    if command_name in {"/invest", "/invest_buy", "/invest_buy_value", "/invest_auto"}:
+        return (
+            "REPARTO INVEST AZIONARIO DISABILITATO — FUORI PERIMETRO GAGARIN.\n"
+            "GAGARIN è limitato alle otto commodities richieste.\n"
+            "Nessuna analisi azionaria o operazione di acquisto viene eseguita. "
+            "Il collegamento Invest resta disponibile soltanto in consultazione; "
+            "non è un feed CFD Trading 212."
+        )
     if command_name == "/monitora":
         parts = raw.split()
         if len(parts) < 6 or len(parts) > 8:
@@ -443,10 +446,6 @@ def _command_response(command: str) -> Optional[str]:
             "nessun segnale CFD viene generato."
         )
 
-    if command_name == "/invest":
-        signals = analyze_invest_universe()
-        return format_invest_report(signals)
-
     if command_name in {"/collegamento212", "/collegamento-invest-trading212"}:
         status = get_trading212_demo_status()
         return (
@@ -465,33 +464,6 @@ def _command_response(command: str) -> Optional[str]:
 
     if command_name == "/invest_orders":
         return format_pending_orders()
-
-    if command_name == "/invest_buy":
-        parts = argument.split()
-        if len(parts) < 2:
-            return "Uso: /invest_buy TICKER QTY\nEsempio: /invest_buy AAPL_US_EQ 1"
-        ticker = parts[0].upper()
-        try:
-            qty = float(parts[1])
-        except ValueError:
-            return "Quantità non valida."
-        return place_demo_order(ticker, qty)
-
-    if command_name == "/invest_buy_value":
-        parts = argument.split()
-        if len(parts) != 3:
-            return "Uso: /invest_buy_value TICKER SIMBOLO IMPORTO\nEsempio: /invest_buy_value NVDA_US_EQ NVDA 10"
-        ticker, symbol = parts[0].upper(), parts[1].upper()
-        try:
-            amount = float(parts[2])
-        except ValueError:
-            return "Importo non valido."
-        from engine.invest import place_demo_order_by_value
-        return place_demo_order_by_value(ticker, symbol, amount)
-
-    if command_name == "/invest_auto":
-        # Explicit user command: one guarded €10 order at most, INVEST DEMO only.
-        return auto_buy_best_signal_budget(amount=10.0, min_score=50.0)
 
     if command_name == "/classifica":
         # Always rebuild the manual ranking from the canonical enabled universe.
@@ -529,7 +501,7 @@ def _command_response(command: str) -> Optional[str]:
         return format_intraday_window_report()
 
     if command_name == "/status":
-        return "Bot attivo. PAPER ONLY. Sezione Invest disponibile."
+        return "Bot attivo. PAPER ONLY. Collegamento Invest disponibile in sola lettura."
 
     if command_name == "/ping":
         return "pong"
