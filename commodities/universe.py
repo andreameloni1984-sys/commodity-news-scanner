@@ -87,9 +87,10 @@ COMMODITIES = [
     Commodity(name="Mais", symbol="CORN/USD", category="Agriculture", unit="USD", priority=7),
     Commodity(name="Soia", symbol="SOYBEAN/USD", category="Agriculture", unit="USD", priority=8),
 
-    # CORE FOREX (day overlap prioritari)
-    Commodity(name="EUR/USD", symbol="EUR/USD", category="Forex", unit="USD", priority=9),
-    Commodity(name="GBP/USD", symbol="GBP/USD", category="Forex", unit="USD", priority=10),
+    # Forex is intentionally disabled: GAGARIN's active universe is the
+    # user's eight-commodity basket only.
+    Commodity(name="EUR/USD", symbol="EUR/USD", category="Forex", unit="USD", priority=9, enabled=False),
+    Commodity(name="GBP/USD", symbol="GBP/USD", category="Forex", unit="USD", priority=10, enabled=False),
 ]
 
 # ============================================================
