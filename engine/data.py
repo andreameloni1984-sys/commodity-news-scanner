@@ -28,8 +28,7 @@ COMMODITIES (8)
     BiQuote metal/energy CFD prices are not used as futures fallbacks.
     No paid-plan commodities endpoint is in the active route.
 
-AUXILIARY FX (2)
-    BiQuote FX spot → Yahoo FX spot fallback.
+No auxiliary FX instruments are retained in the operational data route.
 
 Twelve Data legacy helpers remain isolated from the active execution route.
 
@@ -126,8 +125,6 @@ BIQUOTE_SYMBOLS = {
     "XAG/USD": "XAGUSD",       # control/reference only; not futures execution
     "WTI/USD": "USOIL",        # CFD reference; not futures execution
     "BRENT/USD": "UKOIL",      # CFD reference; not futures execution
-    "EUR/USD": "EURUSD",
-    "GBP/USD": "GBPUSD",
 }
 
 
@@ -145,8 +142,6 @@ YAHOO_SYMBOLS = {
     "WHEAT/USD": "ZW=F",
     "CORN/USD": "ZC=F",
     "SOYBEAN/USD": "ZS=F",
-    "EUR/USD": "EURUSD=X",
-    "GBP/USD": "GBPUSD=X",
 }
 
 
@@ -180,8 +175,6 @@ EXECUTION_MARKET_TYPES = {
     "WHEAT/USD": "FUTURES_CONTINUOUS",
     "CORN/USD": "FUTURES_CONTINUOUS",
     "SOYBEAN/USD": "FUTURES_CONTINUOUS",
-    "EUR/USD": "FX_SPOT",
-    "GBP/USD": "FX_SPOT",
 }
 
 PROVIDER_MARKET_TYPES = {
@@ -193,8 +186,6 @@ PROVIDER_MARKET_TYPES = {
     "WHEAT/USD": {"YAHOO": "FUTURES_CONTINUOUS"},
     "CORN/USD": {"YAHOO": "FUTURES_CONTINUOUS"},
     "SOYBEAN/USD": {"YAHOO": "FUTURES_CONTINUOUS"},
-    "EUR/USD": {"BIQUOTE": "FX_SPOT", "YAHOO": "FX_SPOT"},
-    "GBP/USD": {"BIQUOTE": "FX_SPOT", "YAHOO": "FX_SPOT"},
 }
 
 INSTRUMENT_DATA_METADATA = {
@@ -206,8 +197,6 @@ INSTRUMENT_DATA_METADATA = {
     "WHEAT/USD": {"currency": "USD", "unit": "cent_per_bushel", "market_type": "FUTURES_CONTINUOUS"},
     "CORN/USD": {"currency": "USD", "unit": "cent_per_bushel", "market_type": "FUTURES_CONTINUOUS"},
     "SOYBEAN/USD": {"currency": "USD", "unit": "cent_per_bushel", "market_type": "FUTURES_CONTINUOUS"},
-    "EUR/USD": {"currency": "USD", "unit": "USD_per_EUR", "market_type": "FX_SPOT"},
-    "GBP/USD": {"currency": "USD", "unit": "USD_per_GBP", "market_type": "FX_SPOT"},
 }
 
 PROVIDER_ORDER = {
@@ -221,9 +210,6 @@ PROVIDER_ORDER = {
     "WHEAT/USD": ("YAHOO",),
     "CORN/USD": ("YAHOO",),
     "SOYBEAN/USD": ("YAHOO",),
-    # Both sources are FX spot. No paid/keyed provider is required.
-    "EUR/USD": ("BIQUOTE", "YAHOO"),
-    "GBP/USD": ("BIQUOTE", "YAHOO"),
 }
 
 
