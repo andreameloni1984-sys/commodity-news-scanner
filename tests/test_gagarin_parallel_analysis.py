@@ -1,4 +1,3 @@
-from concurrent.futures import ThreadPoolExecutor as RealThreadPoolExecutor
 from threading import Lock
 from time import sleep
 from types import SimpleNamespace
