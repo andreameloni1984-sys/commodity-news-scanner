@@ -18,7 +18,7 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from telegram.bot import _api, _command_response, _reply, telegram_diagnostic, telegram_menu
+from telegram.bot import _api, _command_response, _reply, telegram_diagnostic
 
 
 def get_updates(offset: int | None = None, timeout: int = 0) -> list[dict]:
@@ -72,7 +72,7 @@ def process_update(update: dict) -> bool:
     response = _command_response(text)
     if response:
         command_name = text.split("@", 1)[0].lower()
-        reply_markup = telegram_menu() if command_name in {"/start", "/help", "/menu"} else None
+        reply_markup = {"remove_keyboard": True} if command_name in {"/start", "/help", "/menu"} else None
         delivered = _reply(chat_id, response, reply_markup=reply_markup)
         print(f"Reply delivered: {delivered}", flush=True)
         return delivered
