@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   scan:
-    name: Inspect completed M5 candles (eight commodities)
+    name: Inspect completed M5 candles (seven commodities; silver excluded)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
