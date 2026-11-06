@@ -1,21 +1,16 @@
-name: restore-and-patch-bot
+name: restore-bot (retired)
 
 on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  patch:
+  retired:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GH_TOKEN || secrets.PAT || github.token}}
-          fetch-depth: 0
-      - name: Restore and patch bot.py
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.PAT || github.token}}
-          TOKEN: ${{ secrets.GH_TOKEN || secrets.PAT || github.token}}
-        run: python3 scripts/restore_and_patch_bot.py
+      - name: Refuse legacy direct-to-main mutation
+        run: |
+          echo "::error::DISABLED: legacy workflow can restore out-of-scope code or push directly to main. Use a reviewed pull request."
+          exit 1
