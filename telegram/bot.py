@@ -435,34 +435,13 @@ def _command_response(command: str) -> Optional[str]:
             return "Errore soft: " + type(exc).__name__ + ": " + str(exc)
 
     if command_name == "/prezzo212":
-        try:
-            from engine.trading212 import compare_price, format_comparison, parse_bid_ask
-            if not argument:
-                return "212 PREZZI\nIncolla: simbolo bid ask\nEs: /prezzo212 WTI 78.10 78.13"
-            parts = argument.split()
-            sym = parts[0].upper()
-            bid, ask = parse_bid_ask(" ".join(parts[1:]))
-            gprice = None
-            results = get_last_results()
-            if results:
-                for st in results:
-                    if str(getattr(st, "symbol", "")).upper() == sym:
-                        gprice = getattr(st, "price", None)
-                        break
-            if gprice is None:
-                try:
-                    results = _run_analysis()
-                    if results:
-                        set_last_results(results)
-                        for st in results:
-                            if str(getattr(st, "symbol", "")).upper() == sym:
-                                gprice = getattr(st, "price", None)
-                                break
-                except Exception:
-                    pass
-            return format_comparison(compare_price(sym, gprice, bid, ask))
-        except Exception as exc:
-            return "Errore 212: " + type(exc).__name__ + ": " + str(exc)
+        return (
+            "TRADING 212 CFD\\n"
+            "FEED NON COLLEGATO: la Public API ufficiale non espone quotazioni CFD.\\n"
+            "Contratto, scadenza e valuta non sono ancora verificati per il paniere.\\n"
+            "Nessun confronto tra prezzi manuali Trading 212 e futures GAGARIN; "
+            "nessun segnale CFD viene generato."
+        )
 
     if command_name == "/invest":
         signals = analyze_invest_universe()
