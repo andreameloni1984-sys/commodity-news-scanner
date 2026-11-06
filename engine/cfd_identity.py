@@ -201,6 +201,7 @@ class CFDQuoteSeriesIdentity:
     provider: str
     broker: str
     market_type: str
+    logical_symbol: str
     broker_symbol: str
     contract: str
     expiry: str
@@ -213,7 +214,9 @@ class CFDQuoteSeriesIdentity:
             raise ValueError("Quote series provider label must be TRADING212_CFD; feed origin is not authenticated here")
         if self.broker != TRADING212_BROKER or self.market_type != "CFD":
             raise ValueError("Quote series broker/market identity is not Trading 212 CFD")
-        for field in ("broker_symbol", "contract", "timeframe", "series_id"):
+        if self.logical_symbol not in GAGARIN_CFD_LOGICAL_SYMBOLS:
+            raise ValueError("Quote series logical_symbol is outside the eight-commodity Gagarin CFD universe")
+        for field in ("logical_symbol", "broker_symbol", "contract", "timeframe", "series_id"):
             _required_text(getattr(self, field), field)
         _verified_expiry(self.expiry, "quote-series expiry")
         currency = _required_text(self.currency, "quote-series currency")
@@ -257,7 +260,7 @@ def validate_same_cfd_series(
     )
     active_registry.require(instrument)
     series.validate()
-    fields = ("broker_symbol", "contract", "expiry", "currency")
+    fields = ("logical_symbol", "broker_symbol", "contract", "expiry", "currency")
     mismatches = [
         field for field in fields
         if getattr(instrument, field) != getattr(series, field)
