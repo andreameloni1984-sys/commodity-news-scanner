@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from threading import Lock
 from datetime import datetime, timezone
 import time
 
@@ -225,6 +226,7 @@ def calculate_quality(state: SoyuzState) -> SoyuzState:
 # Public-source intelligence bridge: news can adjust context, never bypass triggers/safety.
 # Embedded public-news intelligence: no runtime dependency on the separate SPUTNIK service.
 _GAGARIN_NEWS_CACHE = {"loaded_at": 0.0, "events": []}
+_GAGARIN_NEWS_CACHE_LOCK = Lock()
 
 
 def apply_sputnik_intelligence(state):
@@ -247,74 +249,76 @@ def apply_sputnik_intelligence(state):
         from engine.public_event_brain import classify as classify_public_intelligence
 
         now = time.time()
-        if now - float(_GAGARIN_NEWS_CACHE.get("loaded_at", 0.0)) > 300:
-            recent = []
-            journal_path = Path(os.getenv("GAGARIN_NEWS_JOURNAL_PATH", "data/news_event_journal.jsonl"))
-            cutoff = now - 72 * 3600
-            try:
-                if journal_path.exists():
-                    for line in journal_path.read_text(encoding="utf-8").splitlines()[-500:]:
-                        try:
-                            row = json.loads(line)
-                        except (json.JSONDecodeError, TypeError):
-                            continue
-                        if row.get("kind") != "NEWS_DETECTED" or not row.get("title"):
-                            continue
-                        stamp = row.get("first_seen_at") or row.get("published_at") or row.get("recorded_at")
-                        try:
-                            dt = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
-                            if dt.tzinfo is None:
-                                dt = dt.replace(tzinfo=timezone.utc)
-                            if dt.timestamp() < cutoff:
-                                continue
-                        except (TypeError, ValueError, OverflowError):
-                            continue
-                        recent.append({
-                            "event_id": str(row.get("event_id") or ""),
-                            "source": str(row.get("source") or "GAGARIN_NEWS_JOURNAL"),
-                            "title": str(row.get("title") or ""),
-                            "url": str(row.get("url") or ""),
-                            "detected_at": str(stamp or ""),
-                            "evidence": "LOCAL_NEWS_JOURNAL",
-                        })
-            except OSError:
-                pass
-
-            # Self-contained fallback: use Gagarin's own public-source collector,
-            # not the separate SPUTNIK service or its remote state endpoint.
-            if not recent:
+        # Parallel instrument scans share one news refresh per cache window.
+        with _GAGARIN_NEWS_CACHE_LOCK:
+            if now - float(_GAGARIN_NEWS_CACHE.get("loaded_at", 0.0)) > 300:
+                recent = []
+                journal_path = Path(os.getenv("GAGARIN_NEWS_JOURNAL_PATH", "data/news_event_journal.jsonl"))
+                cutoff = now - 72 * 3600
                 try:
-                    for item in fetch_news_items()[:80]:
-                        title = str(item.get("title") or "").strip()
-                        if not title:
-                            continue
-                        published = str(item.get("published_at") or "")
-                        try:
-                            dt = datetime.fromisoformat(published.replace("Z", "+00:00"))
-                            if dt.tzinfo is None:
-                                dt = dt.replace(tzinfo=timezone.utc)
-                            if dt.timestamp() < cutoff:
+                    if journal_path.exists():
+                        for line in journal_path.read_text(encoding="utf-8").splitlines()[-500:]:
+                            try:
+                                row = json.loads(line)
+                            except (json.JSONDecodeError, TypeError):
                                 continue
-                        except (TypeError, ValueError, OverflowError):
-                            continue
-                        recent.append({
-                            "event_id": str(item.get("url") or title),
-                            "source": str(item.get("source") or "PUBLIC_RSS"),
-                            "title": title,
-                            "url": str(item.get("url") or ""),
-                            "detected_at": published,
-                            "evidence": "PUBLIC_RSS_ITEM",
-                        })
-                except Exception:
+                            if row.get("kind") != "NEWS_DETECTED" or not row.get("title"):
+                                continue
+                            stamp = row.get("first_seen_at") or row.get("published_at") or row.get("recorded_at")
+                            try:
+                                dt = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
+                                if dt.tzinfo is None:
+                                    dt = dt.replace(tzinfo=timezone.utc)
+                                if dt.timestamp() < cutoff:
+                                    continue
+                            except (TypeError, ValueError, OverflowError):
+                                continue
+                            recent.append({
+                                "event_id": str(row.get("event_id") or ""),
+                                "source": str(row.get("source") or "GAGARIN_NEWS_JOURNAL"),
+                                "title": str(row.get("title") or ""),
+                                "url": str(row.get("url") or ""),
+                                "detected_at": str(stamp or ""),
+                                "evidence": "LOCAL_NEWS_JOURNAL",
+                            })
+                except OSError:
                     pass
 
-            # De-duplicate on event identity and title; newest/recent item wins.
-            deduped = {}
-            for item in recent:
-                key = item.get("event_id") or item.get("title")
-                deduped[str(key)] = item
-            _GAGARIN_NEWS_CACHE["events"] = list(deduped.values())[-100:]
-            _GAGARIN_NEWS_CACHE["loaded_at"] = now
+                # Self-contained fallback: use Gagarin's own public-source collector,
+                # not the separate SPUTNIK service or its remote state endpoint.
+                if not recent:
+                    try:
+                        for item in fetch_news_items()[:80]:
+                            title = str(item.get("title") or "").strip()
+                            if not title:
+                                continue
+                            published = str(item.get("published_at") or "")
+                            try:
+                                dt = datetime.fromisoformat(published.replace("Z", "+00:00"))
+                                if dt.tzinfo is None:
+                                    dt = dt.replace(tzinfo=timezone.utc)
+                                if dt.timestamp() < cutoff:
+                                    continue
+                            except (TypeError, ValueError, OverflowError):
+                                continue
+                            recent.append({
+                                "event_id": str(item.get("url") or title),
+                                "source": str(item.get("source") or "PUBLIC_RSS"),
+                                "title": title,
+                                "url": str(item.get("url") or ""),
+                                "detected_at": published,
+                                "evidence": "PUBLIC_RSS_ITEM",
+                            })
+                    except Exception:
+                        pass
+
+                # De-duplicate on event identity and title; newest/recent item wins.
+                deduped = {}
+                for item in recent:
+                    key = item.get("event_id") or item.get("title")
+                    deduped[str(key)] = item
+                _GAGARIN_NEWS_CACHE["events"] = list(deduped.values())[-100:]
+                _GAGARIN_NEWS_CACHE["loaded_at"] = now
 
         name = str(getattr(state, "commodity", "") or "").lower()
         symbol = str(getattr(state, "symbol", "") or "").upper()
