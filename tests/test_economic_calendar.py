@@ -59,3 +59,26 @@ def test_messages_due_daily_brief_at_0700_rome():
     due = messages_due([event], now=now)
     assert len(due) == 1
     assert due[0][0] == "daily"
+
+
+def test_calendar_compares_actual_forecast_and_previous():
+    event = {
+        "title": "CPI y/y", "currency": "USD", "impact": "HIGH",
+        "when": datetime(2026, 11, 10, 13, 30, tzinfo=timezone.utc),
+        "actual": "3.9%", "forecast": "3.8%", "previous": "3.7%",
+    }
+    message = format_calendar([event], now=datetime(2026, 11, 10, 13, 31, tzinfo=timezone.utc))
+    assert "Effettivo: 3.9%" in message
+    assert "Atteso: 3.8%" in message
+    assert "Precedente: 3.7%" in message
+    assert "sopra le attese" in message
+
+
+def test_calendar_does_not_invent_missing_actual():
+    event = {
+        "title": "CPI y/y", "currency": "USD", "impact": "HIGH",
+        "when": datetime(2026, 11, 10, 13, 30, tzinfo=timezone.utc),
+        "actual": "", "forecast": "3.8%", "previous": "3.7%",
+    }
+    message = format_calendar([event], now=datetime(2026, 11, 10, 13, 31, tzinfo=timezone.utc))
+    assert "Effettivo: non disponibile nel feed" in message
