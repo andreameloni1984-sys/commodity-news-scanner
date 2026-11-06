@@ -50,7 +50,6 @@ def build_demo_payload(decision: Decision) -> dict[str, Any]:
         ("liquidity_ok", "LIQUIDITY_FAIL"),
         ("volatility_ok", "VOLATILITY_FAIL"),
         ("regime_ok", "REGIME_FAIL"),
-        ("session_ok", "SESSION_FAIL"),
         ("curve_ok", "CURVE_FAIL"),
     )
     for field_name, error_code in required_gates:
