@@ -412,18 +412,19 @@ def apply_sputnik_intelligence(state):
 
 def analyze_one(commodity: Commodity) -> SoyuzState:
     analysis_started = time.perf_counter()
+    stage_timings = {}
     state = SoyuzState(
         commodity=commodity.name,
         symbol=commodity.symbol,
         analysis_timestamp=datetime.now(timezone.utc).isoformat(),
     )
 
-    data_fetch_started = time.perf_counter()
+    stage_started = time.perf_counter()
     state = load_data(state, commodity)
-    state.metadata["data_fetch_duration_ms"] = round(
-        (time.perf_counter() - data_fetch_started) * 1000.0, 2
-    )
+    stage_timings["data_fetch_ms"] = round((time.perf_counter() - stage_started) * 1000.0, 2)
+
     # LUBJANKA observes completed M5 OHLCV bars independently; it never gates a trade.
+    stage_started = time.perf_counter()
     state.metadata["lubjanka"] = intercept_market(
         state.candles,
         provider=getattr(state, "data_source", None),
@@ -432,19 +433,38 @@ def analyze_one(commodity: Commodity) -> SoyuzState:
     state.metadata["lubjanka_playbook"] = build_conditional_playbook(
         state.candles, state.metadata["lubjanka"]
     )
+    stage_timings["market_observation_ms"] = round((time.perf_counter() - stage_started) * 1000.0, 2)
+
+    stage_started = time.perf_counter()
     state = evaluate_pre_move(state)
     # Independent, auditable regime/momentum ensemble; ranking context only.
     state.metadata["forecast_ensemble"] = forecast_ensemble(state.candles)
+    stage_timings["forecast_ms"] = round((time.perf_counter() - stage_started) * 1000.0, 2)
+
+    stage_started = time.perf_counter()
     state = apply_sputnik_intelligence(state)
+    stage_timings["intelligence_ms"] = round((time.perf_counter() - stage_started) * 1000.0, 2)
+
+    stage_started = time.perf_counter()
     state = scan_market_opportunity(state)
     state = apply_regime(state)
     state = apply_structure(state)
     state = apply_setup(state)
     state = apply_trigger(state)
     state = calculate_quality(state)
+    stage_timings["technical_pipeline_ms"] = round((time.perf_counter() - stage_started) * 1000.0, 2)
+
+    stage_started = time.perf_counter()
     state = apply_risk(state)
     state = apply_safety(state)
+    stage_timings["risk_safety_ms"] = round((time.perf_counter() - stage_started) * 1000.0, 2)
+
+    stage_started = time.perf_counter()
     state = annotate(state)
+    stage_timings["annotation_ms"] = round((time.perf_counter() - stage_started) * 1000.0, 2)
+
+    state.metadata["stage_timings_ms"] = stage_timings
+    state.metadata["data_fetch_duration_ms"] = stage_timings["data_fetch_ms"]
     state.metadata["analysis_completed_at_utc"] = datetime.now(timezone.utc).isoformat()
     state.metadata["analysis_duration_ms"] = round(
         (time.perf_counter() - analysis_started) * 1000.0, 2
