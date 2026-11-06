@@ -840,7 +840,7 @@ def _fetch_biquote_cfd_reference(symbol: str):
             bid = float(tick["bid"])
             ask = float(tick["ask"])
             mid = float(tick["mid"])
-            quote_age = float(tick.get("quoteAgeSeconds", 0))
+            raw_quote_age = tick.get("quoteAgeSeconds")
             quote_timestamp = tick.get("timestamp")
             if not all(math.isfinite(v) and v > 0 for v in (bid, ask, mid)):
                 raise ValueError("INVALID_BID_ASK_MID")
@@ -856,7 +856,17 @@ def _fetch_biquote_cfd_reference(symbol: str):
             age_from_timestamp = time.time() - parsed_time.timestamp()
             if age_from_timestamp < -FUTURE_TIMESTAMP_TOLERANCE_SECONDS:
                 raise ValueError("FUTURE_QUOTE_TIMESTAMP")
-            if quote_age < 0 or quote_age > 300:
+            if age_from_timestamp > 300:
+                raise ValueError("STALE_QUOTE")
+            if raw_quote_age is None:
+                quote_age = max(0.0, age_from_timestamp)
+            else:
+                quote_age = float(raw_quote_age)
+                if not math.isfinite(quote_age) or quote_age < 0 or quote_age > 300:
+                    raise ValueError("STALE_QUOTE")
+            # Never let a provider-reported age override an older timestamp.
+            quote_age = max(quote_age, max(0.0, age_from_timestamp))
+            if quote_age > 300:
                 raise ValueError("STALE_QUOTE")
             if tick.get("stale") is True:
                 raise ValueError("STALE_QUOTE")

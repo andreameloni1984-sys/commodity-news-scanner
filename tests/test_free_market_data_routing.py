@@ -246,3 +246,34 @@ def test_biquote_cfd_reference_is_not_attached_to_futures_state(monkeypatch):
 
     assert finalized.symbol == "XAU/USD"
     assert "cfd_reference_quotes" not in finalized.metadata
+
+def test_biquote_cfd_reference_rejects_stale_timestamp_despite_missing_or_fresh_age(monkeypatch):
+    monkeypatch.setenv("BIQUOTE_CFD_REFERENCE_ENABLED", "1")
+    stale_timestamp = datetime.fromtimestamp(
+        time.time() - 301, tz=timezone.utc
+    ).isoformat()
+
+    for reported_age in ("MISSING", 1.0, float("nan")):
+        tick = {
+            "symbol": "XAUUSD",
+            "bid": 100.28,
+            "ask": 100.30,
+            "mid": 100.29,
+            "timestamp": stale_timestamp,
+            "stale": False,
+            "marketState": "open",
+        }
+        if reported_age != "MISSING":
+            tick["quoteAgeSeconds"] = reported_age
+
+        def fake_request(url, params=None, **kwargs):
+            if url.endswith("/ohlc"):
+                return None, "HTTP_503"
+            return tick, None
+
+        monkeypatch.setattr(data, "_request_json", fake_request)
+        result = data._fetch_biquote_cfd_reference("XAU/USD")
+
+        assert result["status"] == "INVALID_OR_STALE_QUOTE"
+        assert result["quote_error"] == "STALE_QUOTE"
+        assert result["execution_eligible"] is False
