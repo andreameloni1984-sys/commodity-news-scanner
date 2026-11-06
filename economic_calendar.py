@@ -104,7 +104,7 @@ def messages_due(events, now=None):
     imminent = []
     for event in events:
         minutes = (event["when"] - now.astimezone(timezone.utc)).total_seconds() / 60
-        if 0 <= minutes <= 15:
+        if 0 <= minutes < 15:
             imminent.append(event)
     if imminent:
         due.append(("pre_event", format_calendar(imminent, now=now).replace(
