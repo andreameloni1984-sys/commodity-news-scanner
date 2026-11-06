@@ -64,13 +64,25 @@ def _is_operational_state(state) -> bool:
 
 
 def _select_run_universe(now=None):
-    """Scan every enabled instrument on every scheduled cycle.
-
-    Session labels may describe liquidity windows, but they must not suppress
-    an otherwise valid Forex setup. Actual weekend/market-closed data status
-    remains enforced by the data and safety layers.
-    """
+    """Return only the enabled instruments in GAGARIN's selected commodity basket."""
     return enabled_commodities()
+
+
+def _universe_scope_status(instruments):
+    """Describe whether the selected eight-commodity universe is exact."""
+    symbols = {
+        str(getattr(item, "symbol", "")).strip().upper()
+        for item in instruments
+    }
+    missing = sorted(OPERATIONAL_SYMBOLS - symbols)
+    unexpected = sorted(symbols - OPERATIONAL_SYMBOLS)
+    if missing or unexpected:
+        return (
+            "UNIVERSE SCOPE WARNING: "
+            f"missing={','.join(missing) or 'none'}; "
+            f"unexpected={','.join(unexpected) or 'none'}"
+        )
+    return "UNIVERSE SCOPE: exactly the eight selected commodities; no Forex or auxiliary instruments."
 
 # ============================================================
 # HEADER
@@ -617,8 +629,7 @@ def run():
 
     print(
         f"Universe: {len(instruments)} strumenti analizzati "
-        f"({len(operational_instruments)} commodities operative, "
-        f"{len(auxiliary_instruments)} Forex ausiliari in finestra)"
+        f"({len(operational_instruments)} commodities operative)"
     )
 
     print()
