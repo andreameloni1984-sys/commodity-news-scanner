@@ -575,6 +575,7 @@ def _print_feedback(results, operational_results=None):
 
 def run():
 
+    run_started = time.perf_counter()
     _print_header()
 
     # --------------------------------------------------------
@@ -833,6 +834,7 @@ def run():
     print(
         "✅ SOYUZ GAGARIN RUN COMPLETED"
     )
+    print(f"⏱️ TOTAL RUN: {(time.perf_counter() - run_started) * 1000.0:.0f}ms")
 
     print("=" * 72)
 
