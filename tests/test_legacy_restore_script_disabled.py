@@ -17,6 +17,7 @@ def _run_script(relative_path):
 
 
 def test_legacy_restore_script_is_inert_and_cannot_write_to_main():
+    assert not (ROOT / "engine" / "trading212.py").exists()
     source = (ROOT / "scripts" / "restore_and_patch_bot.py").read_text(encoding="utf-8")
 
     for forbidden in (
