@@ -41,6 +41,7 @@ def _series(**overrides):
         "provider": "TRADING212_CFD",
         "broker": "TRADING212",
         "market_type": "CFD",
+        "logical_symbol": "WTI/USD",
         "broker_symbol": "TEST-WTI-2026-11-27",
         "contract": "WTI CFD 27 Nov 2026",
         "expiry": "2026-11-27",
@@ -113,6 +114,7 @@ def test_exact_trading212_cfd_series_can_be_bound_to_registry_approved_instrumen
 @pytest.mark.parametrize(
     "field,value",
     [
+        ("logical_symbol", "COPPER/USD"),
         ("broker_symbol", "WTI"),
         ("contract", "WTI CFD 04 Dec 2026"),
         ("expiry", "2026-12-04"),
@@ -127,6 +129,17 @@ def test_quote_series_with_different_contract_identity_is_rejected(field, value)
 
 
 @pytest.mark.parametrize("provider", ["BIQUOTE", "YAHOO", "YAHOO_FUTURES"])
+def test_registry_approved_instrument_must_match_quote_series_logical_symbol():
+    copper = _instrument(logical_symbol="COPPER/USD")
+    with pytest.raises(ValueError, match="logical_symbol"):
+        validate_same_cfd_series(copper, _series(), registry=_registry(copper))
+
+
+def test_quote_series_rejects_out_of_universe_logical_symbol():
+    with pytest.raises(ValueError, match="outside the eight-commodity"):
+        _series(logical_symbol="EUR/USD").validate()
+
+
 def test_independent_reference_and_futures_series_cannot_become_t212_cfd(provider):
     with pytest.raises(ValueError, match="provider label must be TRADING212_CFD"):
         validate_same_cfd_series(
