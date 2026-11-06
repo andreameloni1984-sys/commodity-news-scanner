@@ -45,7 +45,7 @@ def _required_text(value: str, field: str) -> str:
 
 def _verified_expiry(value: str, field: str) -> str:
     text = _required_text(value, field)
-    if not re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}", text):
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
         raise ValueError(f"{field} must use YYYY-MM-DD")
     try:
         date.fromisoformat(text)
