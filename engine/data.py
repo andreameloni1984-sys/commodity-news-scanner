@@ -2045,7 +2045,7 @@ def _fetch_silv_spot_reference(
     spec = SILV_SPOT_INSTRUMENTS.get(instrument)
     if spec is None:
         return result
-    if os.getenv("SILV_SPOT_REFERENCE_ENABLED", "1").strip() != "1":
+    if os.getenv("SILV_SPOT_REFERENCE_ENABLED", "0").strip() != "1":
         return _silv_reference_status("DISABLED", instrument)
 
     key, expected_symbol = spec
