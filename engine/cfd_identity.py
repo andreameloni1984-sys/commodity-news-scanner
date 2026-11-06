@@ -11,7 +11,7 @@ PAPER ONLY.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from hashlib import sha256
 import json
 import math
@@ -50,7 +50,7 @@ def _aware_utc_timestamp(value: str, field: str) -> datetime:
         raise ValueError(f"{field} must be an ISO-8601 timestamp") from exc
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise ValueError(f"{field} must include a UTC offset")
-    return parsed
+    return parsed.astimezone(timezone.utc)
 
 
 @dataclass(frozen=True)
@@ -181,7 +181,7 @@ def build_cfd_signal_id(
         "provider": series.provider,
         "series_id": series.series_id,
         "timeframe": series.timeframe,
-        "candle_timestamp": bar_time.astimezone().isoformat(),
+        "candle_timestamp": bar_time.isoformat(),
         "direction": side,
         "levels": normalized_levels,
     }
