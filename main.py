@@ -239,6 +239,19 @@ def _print_data_summary(results):
         timing = []
         if isinstance(fetch_ms, (int, float)):
             timing.append(f"fetch={fetch_ms:.0f}ms")
+        stage_timings = metadata.get("stage_timings_ms", {})
+        if isinstance(stage_timings, dict):
+            for key, label in (
+                ("market_observation_ms", "observe"),
+                ("forecast_ms", "forecast"),
+                ("intelligence_ms", "intel"),
+                ("technical_pipeline_ms", "technical"),
+                ("risk_safety_ms", "risk"),
+                ("annotation_ms", "annotate"),
+            ):
+                value = stage_timings.get(key)
+                if isinstance(value, (int, float)):
+                    timing.append(f"{label}={value:.0f}ms")
         if isinstance(analysis_ms, (int, float)):
             timing.append(f"engine={analysis_ms:.0f}ms")
         if isinstance(universe_ms, (int, float)):
