@@ -599,22 +599,15 @@ def run():
     # UNIVERSE
     # --------------------------------------------------------
 
-    # Commodities are scanned continuously: time-of-day is not a reason to
-    # hide a market move. Only auxiliary FX remains restricted to its windows.
+    # The active scan is restricted to the user's eight selected commodities.
+    # No Forex or auxiliary instruments are part of this run universe.
     instruments = _select_run_universe()
     operational_instruments = [
         item for item in instruments
         if str(getattr(item, "symbol", "")).strip().upper() in OPERATIONAL_SYMBOLS
     ]
-    auxiliary_instruments = [
-        item for item in instruments
-        if str(getattr(item, "symbol", "")).strip().upper() not in OPERATIONAL_SYMBOLS
-    ]
 
-    print(
-        "SESSION FILTER: 8 commodities operative; EUR/USD e GBP/USD restano ausiliari "
-        "e vengono analizzati nelle rispettive finestre (Europe/Rome)."
-    )
+    print(_universe_scope_status(instruments))
 
     if not instruments:
 
