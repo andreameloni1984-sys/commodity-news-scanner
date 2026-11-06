@@ -3,10 +3,12 @@ import pytest
 
 from engine.cfd_identity import (
     CFDInstrumentIdentity,
+    CFDInstrumentRegistry,
     CFDQuoteSeriesIdentity,
     CFDSignalLevels,
     GAGARIN_CFD_LOGICAL_SYMBOLS,
     build_cfd_signal_id,
+    load_verified_instrument_registry,
     validate_same_cfd_series,
 )
 
@@ -21,10 +23,17 @@ def _instrument(**overrides):
         "expiry": "2026-11-27",
         "currency": "USD",
         "verification_source": "TRADING_212_APP_SCREEN",
+        "verification_reference": "test-fixture:trading212-cfd-screen",
+        "verification_evidence_sha256": "a" * 64,
         "verified_at_utc": "2026-11-06T00:00:00Z",
     }
     values.update(overrides)
     return CFDInstrumentIdentity(**values)
+
+
+def _registry(instrument=None):
+    selected = instrument or _instrument()
+    return CFDInstrumentRegistry(records=(selected,))
 
 
 def _series(**overrides):
@@ -81,6 +90,8 @@ def test_logical_universe_contains_exactly_the_eight_selected_commodities():
         {"currency": "usd"},
         {"currency": "US"},
         {"verification_source": "BIQUOTE"},
+        {"verification_reference": ""},
+        {"verification_evidence_sha256": "not-a-sha256"},
         {"market_type": "FUTURES"},
     ],
 )
@@ -89,8 +100,14 @@ def test_unverified_or_out_of_scope_instrument_identity_is_rejected(changes):
         _instrument(**changes).validate()
 
 
-def test_exact_trading212_cfd_series_can_be_bound_to_verified_instrument():
-    validate_same_cfd_series(_instrument(), _series())
+def test_default_registry_is_empty_and_blocks_unreviewed_contracts():
+    assert load_verified_instrument_registry().records == ()
+    with pytest.raises(ValueError, match="reviewed Trading 212 CFD registry"):
+        validate_same_cfd_series(_instrument(), _series())
+
+
+def test_exact_trading212_cfd_series_can_be_bound_to_registry_approved_instrument():
+    validate_same_cfd_series(_instrument(), _series(), registry=_registry())
 
 
 @pytest.mark.parametrize(
@@ -104,13 +121,17 @@ def test_exact_trading212_cfd_series_can_be_bound_to_verified_instrument():
 )
 def test_quote_series_with_different_contract_identity_is_rejected(field, value):
     with pytest.raises(ValueError, match="identity mismatch"):
-        validate_same_cfd_series(_instrument(), _series(**{field: value}))
+        validate_same_cfd_series(
+            _instrument(), _series(**{field: value}), registry=_registry()
+        )
 
 
 @pytest.mark.parametrize("provider", ["BIQUOTE", "YAHOO", "YAHOO_FUTURES"])
 def test_independent_reference_and_futures_series_cannot_become_t212_cfd(provider):
     with pytest.raises(ValueError, match="official Trading 212 CFD feed"):
-        validate_same_cfd_series(_instrument(), _series(provider=provider))
+        validate_same_cfd_series(
+            _instrument(), _series(provider=provider), registry=_registry()
+        )
 
 
 def test_cfd_signal_id_is_namespaced_and_stable_for_same_verified_series():
@@ -119,8 +140,8 @@ def test_cfd_signal_id_is_namespaced_and_stable_for_same_verified_series():
         "candle_timestamp": "2026-11-06T00:05:00+00:00",
         "levels": _levels(),
     }
-    first = build_cfd_signal_id(_instrument(), _series(), **kwargs)
-    second = build_cfd_signal_id(_instrument(), _series(), **kwargs)
+    first = build_cfd_signal_id(_instrument(), _series(), registry=_registry(), **kwargs)
+    second = build_cfd_signal_id(_instrument(), _series(), registry=_registry(), **kwargs)
 
     assert first.startswith("T212CFD-")
     assert first == second
@@ -132,6 +153,7 @@ def test_cfd_signal_id_rejects_levels_from_another_series():
         build_cfd_signal_id(
             _instrument(),
             _series(),
+            registry=_registry(),
             direction="LONG",
             candle_timestamp="2026-11-06T00:05:00Z",
             levels=_levels(series_id="biquote-wti-m5"),
@@ -151,6 +173,7 @@ def test_cfd_signal_id_rejects_boolean_levels(changes):
         build_cfd_signal_id(
             _instrument(),
             _series(),
+            registry=_registry(),
             direction="LONG",
             candle_timestamp="2026-11-06T00:05:00Z",
             levels=_levels(**changes),
@@ -162,6 +185,7 @@ def test_cfd_signal_id_rejects_naive_candle_timestamp_and_missing_levels():
         build_cfd_signal_id(
             _instrument(),
             _series(),
+            registry=_registry(),
             direction="LONG",
             candle_timestamp="2026-11-06T00:05:00",
             levels=_levels(),
@@ -194,11 +218,12 @@ def test_cfd_signal_id_changes_when_verified_contract_expiry_changes():
         "candle_timestamp": "2026-11-06T00:10:00Z",
     }
     first = build_cfd_signal_id(
-        _instrument(), _series(), levels=_levels(), **kwargs
+        _instrument(), _series(), registry=_registry(), levels=_levels(), **kwargs
     )
     second = build_cfd_signal_id(
         next_contract,
         next_series,
+        registry=_registry(next_contract),
         levels=_levels(
             series_id="t212-cfd-wti-2026-12-04-m5",
             entry=78.10,
