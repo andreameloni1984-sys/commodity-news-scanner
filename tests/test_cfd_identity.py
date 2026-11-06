@@ -138,6 +138,25 @@ def test_cfd_signal_id_rejects_levels_from_another_series():
         )
 
 
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"entry": True},
+        {"stop_loss": True},
+        {"take_profits": (True, 79.40)},
+    ],
+)
+def test_cfd_signal_id_rejects_boolean_levels(changes):
+    with pytest.raises(ValueError, match="finite positive number"):
+        build_cfd_signal_id(
+            _instrument(),
+            _series(),
+            direction="LONG",
+            candle_timestamp="2026-11-06T00:05:00Z",
+            levels=_levels(**changes),
+        )
+
+
 def test_cfd_signal_id_rejects_naive_candle_timestamp_and_missing_levels():
     with pytest.raises(ValueError, match="UTC offset"):
         build_cfd_signal_id(

@@ -66,6 +66,10 @@ def _aware_utc_timestamp(value: str, field: str) -> datetime:
 
 
 def _positive_level(value: float, field: str) -> str:
+    # bool is a subclass of int in Python; float(True) == 1.0 would otherwise
+    # let a malformed flag masquerade as a valid CFD price level.
+    if isinstance(value, bool):
+        raise ValueError(f"{field} must be a finite positive number")
     try:
         number = float(value)
     except (TypeError, ValueError) as exc:
