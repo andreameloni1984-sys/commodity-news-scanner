@@ -121,6 +121,7 @@ def format_calendar(events, now=None):
         local = event["when"].astimezone(ROME)
         impact = "🔴" if event["impact"] == "HIGH" else "🟠"
         lines.append(f"{impact} {local:%a %d/%m %H:%M} — {event['currency']} — {event['title']}")
+        lines.append(_release_comparison(event))
     return "\n".join(lines)
 
 
