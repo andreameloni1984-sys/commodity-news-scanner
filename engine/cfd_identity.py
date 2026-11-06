@@ -1,9 +1,9 @@
 """Strict identity boundary for a future official Trading 212 CFD channel.
 
 This module does not fetch quotes, map broker tickers, calculate trade levels,
-or place orders. It only allows a quote series to be associated with a
-Trading 212 CFD instrument after the exact broker symbol, contract, expiry,
-and quote currency have been verified from the Trading 212 app.
+or place orders. It only binds already-computed levels to a verified Trading
+212 CFD candle series after exact broker symbol, contract, expiry, and currency
+matching.
 
 Yahoo futures and BiQuote reference data are intentionally rejected here.
 PAPER ONLY.
@@ -65,6 +65,16 @@ def _aware_utc_timestamp(value: str, field: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
+def _positive_level(value: float, field: str) -> str:
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field} must be a finite positive number") from exc
+    if not math.isfinite(number) or number <= 0:
+        raise ValueError(f"{field} must be a finite positive number")
+    return format(number, ".12g")
+
+
 @dataclass(frozen=True)
 class CFDInstrumentIdentity:
     """Verified identity copied from the Trading 212 CFD instrument screen."""
@@ -117,12 +127,36 @@ class CFDQuoteSeriesIdentity:
             raise ValueError("Quote series must come from the official Trading 212 CFD feed")
         if self.broker != TRADING212_BROKER or self.market_type != "CFD":
             raise ValueError("Quote series broker/market identity is not Trading 212 CFD")
-        for field in ("broker_symbol", "contract", "expiry", "currency", "timeframe", "series_id"):
+        for field in ("broker_symbol", "contract", "timeframe", "series_id"):
             _required_text(getattr(self, field), field)
         _verified_expiry(self.expiry, "quote-series expiry")
-        if len(self.currency) != 3 or not self.currency.isascii() or not self.currency.isalpha() or self.currency != self.currency.upper():
+        currency = _required_text(self.currency, "quote-series currency")
+        if len(currency) != 3 or not currency.isascii() or not currency.isalpha() or currency != currency.upper():
             raise ValueError("quote-series currency must be a three-letter uppercase ISO code")
         return self
+
+
+@dataclass(frozen=True)
+class CFDSignalLevels:
+    """Pre-calculated levels with explicit provenance to one CFD candle series."""
+
+    source_series_id: str
+    entry: float
+    stop_loss: float
+    take_profits: tuple[float, ...]
+
+    def validate_for(self, series: CFDQuoteSeriesIdentity) -> tuple[str, ...]:
+        source_id = _required_text(self.source_series_id, "source_series_id")
+        if source_id != series.series_id:
+            raise ValueError("CFD levels were not calculated from the matched Trading 212 CFD series")
+        if not self.take_profits:
+            raise ValueError("At least one take-profit level is required")
+        values = [
+            _positive_level(self.entry, "entry"),
+            _positive_level(self.stop_loss, "stop_loss"),
+        ]
+        values.extend(_positive_level(value, "take_profit") for value in self.take_profits)
+        return tuple(values)
 
 
 def validate_same_cfd_series(
@@ -147,33 +181,19 @@ def build_cfd_signal_id(
     *,
     direction: str,
     candle_timestamp: str,
-    entry: float,
-    stop_loss: float,
-    take_profits: tuple[float, ...],
+    levels: CFDSignalLevels,
 ) -> str:
-    """Create a namespaced CFD signal ID only after exact series validation.
+    """Create a namespaced CFD ID after exact series and levels provenance checks.
 
-    This is identity generation only; it does not calculate or authorize a
-    signal. Levels must already have been computed from the same CFD series.
+    Identity generation only: this function does not calculate or authorize a
+    signal. The caller must supply levels computed from the matched CFD series.
     """
     validate_same_cfd_series(instrument, series)
     side = _required_text(direction, "direction").upper()
     if side not in {"LONG", "SHORT"}:
         raise ValueError("direction must be LONG or SHORT")
     bar_time = _aware_utc_timestamp(candle_timestamp, "candle_timestamp")
-
-    levels = (entry, stop_loss, *tuple(take_profits))
-    if not take_profits:
-        raise ValueError("At least one take-profit level is required")
-    normalized_levels = []
-    for value in levels:
-        try:
-            number = float(value)
-        except (TypeError, ValueError) as exc:
-            raise ValueError("Signal levels must be finite positive numbers") from exc
-        if not math.isfinite(number) or number <= 0:
-            raise ValueError("Signal levels must be finite positive numbers")
-        normalized_levels.append(format(number, ".12g"))
+    normalized_levels = levels.validate_for(series)
 
     payload = {
         "broker": instrument.broker,
