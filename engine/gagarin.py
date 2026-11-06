@@ -318,15 +318,26 @@ def apply_sputnik_intelligence(state):
                     key = item.get("event_id") or item.get("title")
                     deduped[str(key)] = item
                 _GAGARIN_NEWS_CACHE["events"] = list(deduped.values())[-100:]
+                # Event classification depends only on the headline, not on the
+                # instrument. Compute it once per cache refresh instead of once
+                # per headline per commodity (up to 8x repeated work per scan).
+                _GAGARIN_NEWS_CACHE["classified_events"] = [
+                    {
+                        **item,
+                        "_classified": classify_event(str(item.get("title") or "")),
+                        "_intel": classify_public_intelligence(str(item.get("title") or "")),
+                    }
+                    for item in _GAGARIN_NEWS_CACHE["events"]
+                ]
                 _GAGARIN_NEWS_CACHE["loaded_at"] = now
 
         name = str(getattr(state, "commodity", "") or "").lower()
         symbol = str(getattr(state, "symbol", "") or "").upper()
         matches = []
-        for item in _GAGARIN_NEWS_CACHE.get("events", []):
+        for item in _GAGARIN_NEWS_CACHE.get("classified_events", []):
             title = str(item.get("title") or "")
-            classified = classify_event(title)
-            intel = classify_public_intelligence(title)
+            classified = item.get("_classified") or {}
+            intel = item.get("_intel") or {}
             assets = classified.get("assets") or []
             impact = classified.get("impact") or {}
             asset_match = False
