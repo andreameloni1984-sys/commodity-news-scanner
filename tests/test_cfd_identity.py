@@ -101,6 +101,16 @@ def test_unverified_or_out_of_scope_instrument_identity_is_rejected(changes):
         _instrument(**changes).validate()
 
 
+def test_expired_contract_identity_is_rejected():
+    with pytest.raises(ValueError, match="expiry must not be in the past"):
+        _instrument(expiry="2000-01-01").validate()
+
+
+def test_expired_quote_series_is_rejected():
+    with pytest.raises(ValueError, match="quote-series expiry must not be in the past"):
+        _series(expiry="2000-01-01").validate()
+
+
 def test_default_registry_is_empty_and_blocks_unreviewed_contracts():
     assert load_verified_instrument_registry().records == ()
     with pytest.raises(ValueError, match="reviewed Trading 212 CFD registry"):
