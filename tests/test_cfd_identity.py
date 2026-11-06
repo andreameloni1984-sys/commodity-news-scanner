@@ -4,6 +4,7 @@ import pytest
 from engine.cfd_identity import (
     CFDInstrumentIdentity,
     CFDQuoteSeriesIdentity,
+    CFDSignalLevels,
     GAGARIN_CFD_LOGICAL_SYMBOLS,
     build_cfd_signal_id,
     validate_same_cfd_series,
@@ -40,6 +41,17 @@ def _series(**overrides):
     }
     values.update(overrides)
     return CFDQuoteSeriesIdentity(**values)
+
+
+def _levels(series_id="t212-cfd-wti-2026-11-27-m5", **overrides):
+    values = {
+        "source_series_id": series_id,
+        "entry": 78.10,
+        "stop_loss": 77.70,
+        "take_profits": (78.90, 79.40),
+    }
+    values.update(overrides)
+    return CFDSignalLevels(**values)
 
 
 def test_logical_universe_contains_exactly_the_eight_selected_commodities():
@@ -105,9 +117,7 @@ def test_cfd_signal_id_is_namespaced_and_stable_for_same_verified_series():
     kwargs = {
         "direction": "LONG",
         "candle_timestamp": "2026-11-06T00:05:00+00:00",
-        "entry": 78.10,
-        "stop_loss": 77.70,
-        "take_profits": (78.90, 79.40),
+        "levels": _levels(),
     }
     first = build_cfd_signal_id(_instrument(), _series(), **kwargs)
     second = build_cfd_signal_id(_instrument(), _series(), **kwargs)
@@ -117,6 +127,17 @@ def test_cfd_signal_id_is_namespaced_and_stable_for_same_verified_series():
     assert first != "a1b2c3d4e5f607182930"
 
 
+def test_cfd_signal_id_rejects_levels_from_another_series():
+    with pytest.raises(ValueError, match="not calculated from the matched"):
+        build_cfd_signal_id(
+            _instrument(),
+            _series(),
+            direction="LONG",
+            candle_timestamp="2026-11-06T00:05:00Z",
+            levels=_levels(series_id="biquote-wti-m5"),
+        )
+
+
 def test_cfd_signal_id_rejects_naive_candle_timestamp_and_missing_levels():
     with pytest.raises(ValueError, match="UTC offset"):
         build_cfd_signal_id(
@@ -124,9 +145,7 @@ def test_cfd_signal_id_rejects_naive_candle_timestamp_and_missing_levels():
             _series(),
             direction="LONG",
             candle_timestamp="2026-11-06T00:05:00",
-            entry=78.10,
-            stop_loss=77.70,
-            take_profits=(78.90,),
+            levels=_levels(),
         )
 
     with pytest.raises(ValueError, match="take-profit"):
@@ -135,22 +154,11 @@ def test_cfd_signal_id_rejects_naive_candle_timestamp_and_missing_levels():
             _series(),
             direction="LONG",
             candle_timestamp="2026-11-06T00:05:00Z",
-            entry=78.10,
-            stop_loss=77.70,
-            take_profits=(),
+            levels=_levels(take_profits=()),
         )
 
 
 def test_cfd_signal_id_changes_when_verified_contract_expiry_changes():
-    kwargs = {
-        "direction": "SHORT",
-        "candle_timestamp": "2026-11-06T00:10:00Z",
-        "entry": 78.10,
-        "stop_loss": 78.50,
-        "take_profits": (77.70, 77.20),
-    }
-    first = build_cfd_signal_id(_instrument(), _series(), **kwargs)
-
     next_contract = _instrument(
         contract="WTI CFD 04 Dec 2026",
         expiry="2026-12-04",
@@ -162,6 +170,23 @@ def test_cfd_signal_id_changes_when_verified_contract_expiry_changes():
         broker_symbol="TEST-WTI-2026-12-04",
         series_id="t212-cfd-wti-2026-12-04-m5",
     )
-    second = build_cfd_signal_id(next_contract, next_series, **kwargs)
+    kwargs = {
+        "direction": "SHORT",
+        "candle_timestamp": "2026-11-06T00:10:00Z",
+    }
+    first = build_cfd_signal_id(
+        _instrument(), _series(), levels=_levels(), **kwargs
+    )
+    second = build_cfd_signal_id(
+        next_contract,
+        next_series,
+        levels=_levels(
+            series_id="t212-cfd-wti-2026-12-04-m5",
+            entry=78.10,
+            stop_loss=78.50,
+            take_profits=(77.70, 77.20),
+        ),
+        **kwargs,
+    )
 
     assert first != second
