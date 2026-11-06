@@ -612,10 +612,10 @@ def run():
     if not instruments:
 
         print(
-            "⏭️ SKIP: nessuno strumento previsto nella finestra oraria corrente."
+            "⏭️ SKIP: nessuna commodity abilitata nell'universo GAGARIN."
         )
         print(
-            "Run pianificato completato senza analisi; non è un errore del motore."
+            "Run pianificato completato senza analisi: verificare la configurazione dell'universo."
         )
 
         return 0
