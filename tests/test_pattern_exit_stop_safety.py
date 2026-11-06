@@ -66,7 +66,7 @@ def test_pattern_analysis_is_calculated_once_per_alert(monkeypatch):
 
     monkeypatch.setattr(aggressive_alert, "analyze_pattern_and_exit", counted)
     state = SimpleNamespace(
-        commodity="Test", symbol="TEST", setup_direction="LONG",
+        commodity="Gold", symbol="XAU/USD", setup_direction="LONG",
         opportunity_direction="LONG", probability=70, quality=60,
         confidence=60, trigger_confirmed=True, live=True,
         final_decision="PAPER_ENTRY", entry=100, stop=90, tp1=120,
