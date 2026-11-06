@@ -205,3 +205,61 @@ def test_morning_pick_never_passes_auxiliary_forex_to_governor(monkeypatch):
     assert received == [gold]
     assert "COMMODITY: Oro" in report
     assert "EUR/USD" not in report
+
+
+
+def test_enabled_universe_fails_closed_for_unapproved_instruments(monkeypatch):
+    import commodities.universe as universe
+
+    allowed = {
+        "XAU/USD", "XAG/USD", "COPPER/USD", "WTI/USD",
+        "BRENT/USD", "WHEAT/USD", "CORN/USD", "SOYBEAN/USD",
+    }
+    forbidden = [
+        universe.Commodity(name="Gas Naturale", symbol="NATGAS/USD", category="Energy"),
+        universe.Commodity(name="Heating Oil", symbol="HEATOIL/USD", category="Energy"),
+        universe.Commodity(name="Benzina", symbol="RBOB/USD", category="Energy"),
+        universe.Commodity(name="Palladio", symbol="XPD/USD", category="Metal"),
+        universe.Commodity(name="Platino", symbol="XPT/USD", category="Metal"),
+        universe.Commodity(name="Cacao", symbol="COCOA/USD", category="Agriculture"),
+        universe.Commodity(name="Caffe", symbol="COFFEE/USD", category="Agriculture"),
+        universe.Commodity(name="Zucchero", symbol="SUGAR/USD", category="Agriculture"),
+        universe.Commodity(name="Cotone", symbol="COTTON/USD", category="Agriculture"),
+        universe.Commodity(name="Riso", symbol="RICE/USD", category="Agriculture"),
+        universe.Commodity(name="Bestiame", symbol="LIVESTOCK/USD", category="Livestock"),
+        universe.Commodity(name="Legname", symbol="LUMBER/USD", category="Materials"),
+        universe.Commodity(name="EUR/USD", symbol="EUR/USD", category="Forex"),
+        universe.Commodity(name="GBP/USD", symbol="GBP/USD", category="Forex"),
+        universe.Commodity(name="SPY", symbol="SPY", category="ETF"),
+        universe.Commodity(name="QQQ", symbol="QQQ", category="ETF"),
+    ]
+    monkeypatch.setattr(universe, "COMMODITIES", [*universe.COMMODITIES, *forbidden])
+
+    assert {item.symbol for item in universe.enabled_commodities()} == allowed
+    assert {item.symbol for item in universe.operational_commodities()} == allowed
+    assert universe.get_symbols() == [item.symbol for item in universe.enabled_commodities()]
+    assert universe.universe_size() == 8
+    assert universe.get_commodity_by_name("Gas Naturale") is None
+    assert universe.get_commodity_by_symbol("EUR/USD") is None
+    assert universe.auxiliary_commodities() == []
+
+    errors = set(universe.validate_universe())
+    assert {f"UNAUTHORIZED_ENABLED_SYMBOL:{item.symbol}" for item in forbidden} <= errors
+
+
+def test_cloud_api_analysis_paths_use_only_the_gagarin_allowlist():
+    import ast
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parents[1] / "cloud_api.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    for function_name in ("_run_gagarin", "_run_sputnik_confirmation"):
+        function = next(
+            node for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == function_name
+        )
+        function_source = ast.get_source_segment(source, function)
+        assert "operational_commodities()" in function_source
+        assert "enabled_commodities()" not in function_source
+        assert "filter_forex_for_session" not in function_source
+    assert "filter_forex_for_session" not in source
