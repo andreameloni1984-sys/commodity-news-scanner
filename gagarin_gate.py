@@ -143,7 +143,6 @@ REQUIRED_OPERATIONAL_GATES = (
     ("liquidity_ok", "LIQUIDITY_FAIL"),
     ("volatility_ok", "VOLATILITY_FAIL"),
     ("regime_ok", "REGIME_FAIL"),
-    ("session_ok", "SESSION_FAIL"),
     ("curve_ok", "CURVE_FAIL"),
 )
 
