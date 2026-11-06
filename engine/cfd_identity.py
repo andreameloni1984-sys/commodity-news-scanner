@@ -15,6 +15,7 @@ from datetime import date, datetime, timezone
 from hashlib import sha256
 import json
 import math
+from pathlib import Path
 import re
 
 
@@ -91,9 +92,12 @@ class CFDInstrumentIdentity:
     expiry: str
     currency: str
     verification_source: str
+    verification_reference: str
+    verification_evidence_sha256: str
     verified_at_utc: str
 
     def validate(self) -> "CFDInstrumentIdentity":
+        """Validate field shape; registry membership is the approval boundary."""
         if self.broker != TRADING212_BROKER:
             raise ValueError("Only the Trading 212 broker identity is accepted")
         if self.market_type != "CFD":
@@ -108,8 +112,86 @@ class CFDInstrumentIdentity:
             raise ValueError("currency must be a three-letter uppercase ISO code")
         if self.verification_source != TRADING212_APP_SCREEN:
             raise ValueError("Identity must be verified from the Trading 212 app instrument screen")
+        _required_text(self.verification_reference, "verification_reference")
+        evidence_hash = _required_text(
+            self.verification_evidence_sha256, "verification_evidence_sha256"
+        )
+        if not re.fullmatch(r"[0-9a-f]{64}", evidence_hash):
+            raise ValueError(
+                "verification_evidence_sha256 must be a lowercase SHA-256 hex digest"
+            )
         _aware_utc_timestamp(self.verified_at_utc, "verified_at_utc")
         return self
+
+
+@dataclass(frozen=True)
+class CFDInstrumentRegistry:
+    """Allowlist of contract identities manually reviewed against app screenshots.
+
+    A syntactically valid identity is not approved by itself. Only an exact
+    record in this registry can be bound to a quote series or signal ID.
+    """
+
+    records: tuple[CFDInstrumentIdentity, ...] = ()
+
+    def validate(self) -> "CFDInstrumentRegistry":
+        if not isinstance(self.records, tuple):
+            raise ValueError("Registry records must be an immutable tuple")
+        seen = set()
+        for record in self.records:
+            if not isinstance(record, CFDInstrumentIdentity):
+                raise ValueError("Registry contains an invalid instrument record")
+            record.validate()
+            key = (
+                record.logical_symbol,
+                record.broker_symbol,
+                record.contract,
+                record.expiry,
+                record.currency,
+            )
+            if key in seen:
+                raise ValueError("Registry contains a duplicate CFD contract identity")
+            seen.add(key)
+        return self
+
+    def require(self, instrument: CFDInstrumentIdentity) -> None:
+        self.validate()
+        instrument.validate()
+        if instrument not in self.records:
+            raise ValueError(
+                "Instrument identity is not present in the reviewed Trading 212 CFD registry"
+            )
+
+
+def load_verified_instrument_registry(
+    path: str | Path | None = None,
+) -> CFDInstrumentRegistry:
+    """Load the manually reviewed contract allowlist; an empty registry blocks all CFD use."""
+    registry_path = (
+        Path(path)
+        if path is not None
+        else Path(__file__).with_name("trading212_cfd_contract_registry.json")
+    )
+    try:
+        payload = json.loads(registry_path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise ValueError(
+            "Reviewed Trading 212 CFD contract registry is unavailable; CFD use is blocked"
+        ) from exc
+    if not isinstance(payload, dict) or payload.get("schema_version") != 1:
+        raise ValueError("Unsupported Trading 212 CFD contract registry schema")
+    raw_records = payload.get("instruments")
+    if not isinstance(raw_records, list):
+        raise ValueError("Trading 212 CFD registry instruments must be a list")
+    records = []
+    for item in raw_records:
+        if not isinstance(item, dict):
+            raise ValueError("Trading 212 CFD registry contains a malformed record")
+        try:
+            records.append(CFDInstrumentIdentity(**item))
+        except TypeError as exc:
+            raise ValueError("Trading 212 CFD registry record has invalid fields") from exc
+    return CFDInstrumentRegistry(records=tuple(records)).validate()
 
 
 @dataclass(frozen=True)
@@ -166,9 +248,14 @@ class CFDSignalLevels:
 def validate_same_cfd_series(
     instrument: CFDInstrumentIdentity,
     series: CFDQuoteSeriesIdentity,
+    *,
+    registry: CFDInstrumentRegistry | None = None,
 ) -> None:
-    """Raise unless every identity field matches the verified instrument."""
-    instrument.validate()
+    """Raise unless the instrument is registry-approved and the series matches it."""
+    active_registry = (
+        registry if registry is not None else load_verified_instrument_registry()
+    )
+    active_registry.require(instrument)
     series.validate()
     fields = ("broker_symbol", "contract", "expiry", "currency")
     mismatches = [
@@ -186,13 +273,14 @@ def build_cfd_signal_id(
     direction: str,
     candle_timestamp: str,
     levels: CFDSignalLevels,
+    registry: CFDInstrumentRegistry | None = None,
 ) -> str:
     """Create a namespaced CFD ID after exact series and levels provenance checks.
 
     Identity generation only: this function does not calculate or authorize a
     signal. The caller must supply levels computed from the matched CFD series.
     """
-    validate_same_cfd_series(instrument, series)
+    validate_same_cfd_series(instrument, series, registry=registry)
     side = _required_text(direction, "direction").upper()
     if side not in {"LONG", "SHORT"}:
         raise ValueError("direction must be LONG or SHORT")
@@ -207,6 +295,10 @@ def build_cfd_signal_id(
         "contract": instrument.contract,
         "expiry": instrument.expiry,
         "currency": instrument.currency,
+        "verification_source": instrument.verification_source,
+        "verification_reference": instrument.verification_reference,
+        "verification_evidence_sha256": instrument.verification_evidence_sha256,
+        "verified_at_utc": instrument.verified_at_utc,
         "provider": series.provider,
         "series_id": series.series_id,
         "timeframe": series.timeframe,
