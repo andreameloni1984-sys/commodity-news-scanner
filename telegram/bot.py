@@ -407,15 +407,6 @@ def _command_response(command: str) -> Optional[str]:
                 return "Nessun risultato. Riprova con /analisi."
             set_last_results(results)
             desk = format_aggressive_desk(results)
-            try:
-                from cloud_api import FOREX_AGGRESSIVE_PORTFOLIO
-                fx = FOREX_AGGRESSIVE_PORTFOLIO.snapshot()
-                fx_lines = ["", "FX AGGRESSIVE", "Capitale: " + str(round(fx.get("equity", 100), 2)), "Aperte: " + str(len(fx.get("open_positions", [])))]
-                for p in fx.get("open_positions", [])[:5]:
-                    fx_lines.append(str(p.get("symbol")) + " " + str(p.get("direction")) + " entry " + str(p.get("entry")))
-                desk = desk + "\n" + "\n".join(fx_lines)
-            except Exception:
-                pass
             if argument:
                 bid, ask = parse_bid_ask(argument)
                 if bid is not None:
