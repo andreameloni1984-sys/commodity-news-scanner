@@ -306,8 +306,8 @@ def _command_response(command: str) -> Optional[str]:
     command_name = raw.split(maxsplit=1)[0].lower() if raw else ""
     if command_name in {"/invest", "/invest_buy", "/invest_buy_value", "/invest_auto"}:
         return (
-            "REPARTO INVEST AZIONARIO DISABILITATO — FUORI PERIMETRO GAGARIN.\\n"
-            "GAGARIN è limitato alle otto commodities richieste.\\n"
+            "REPARTO INVEST AZIONARIO DISABILITATO — FUORI PERIMETRO GAGARIN.\n"
+            "GAGARIN è limitato alle otto commodities richieste.\n"
             "Nessuna analisi azionaria o operazione di acquisto viene eseguita. "
             "Il collegamento Invest resta disponibile soltanto in consultazione; "
             "non è un feed CFD Trading 212."
