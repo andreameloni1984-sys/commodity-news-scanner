@@ -195,6 +195,7 @@ def test_cfd_signal_id_rejects_naive_candle_timestamp_and_missing_levels():
         build_cfd_signal_id(
             _instrument(),
             _series(),
+            registry=_registry(),
             direction="LONG",
             candle_timestamp="2026-11-06T00:05:00Z",
             levels=_levels(take_profits=()),
