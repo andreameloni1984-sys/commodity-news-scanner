@@ -1,9 +1,9 @@
 # ============================================================
 # SOYUZ GAGARIN v1.4
-# COMMODITY UNIVERSE (trimmed to 10 core)
+# COMMODITY UNIVERSE (fixed eight-commodity allowlist)
 # ============================================================
 #
-# Universo operativo principale, ridotto a 10-12 strumenti di interesse.
+# Universo operativo Gagarin: esclusivamente gli otto simboli autorizzati.
 #
 # IMPORTANTE:
 # I simboli qui sotto sono IDENTIFICATORI LOGICI.
@@ -87,6 +87,20 @@ COMMODITIES = [
 
 ]
 
+# Exact Gagarin universe. This is a scope allowlist, not a trading filter.
+GAGARIN_OPERATIONAL_SYMBOLS = frozenset(
+    {
+        "XAU/USD",
+        "XAG/USD",
+        "COPPER/USD",
+        "WTI/USD",
+        "BRENT/USD",
+        "WHEAT/USD",
+        "CORN/USD",
+        "SOYBEAN/USD",
+    }
+)
+
 # ============================================================
 # HELPERS
 # ============================================================
@@ -101,6 +115,7 @@ def enabled_commodities() -> list[Commodity]:
         commodity
         for commodity in COMMODITIES
         if commodity.enabled
+        and commodity.symbol.strip().upper() in GAGARIN_OPERATIONAL_SYMBOLS
     ]
 
 
@@ -117,7 +132,7 @@ def get_commodity_by_name(
         else ""
     )
 
-    for commodity in COMMODITIES:
+    for commodity in enabled_commodities():
 
         if (
             commodity.name.lower()
@@ -141,7 +156,7 @@ def get_commodity_by_symbol(
         else ""
     )
 
-    for commodity in COMMODITIES:
+    for commodity in enabled_commodities():
 
         if (
             commodity.symbol.upper()
@@ -160,7 +175,7 @@ def get_categories() -> list[str]:
 
     categories = []
 
-    for commodity in COMMODITIES:
+    for commodity in enabled_commodities():
 
         if commodity.category not in categories:
             categories.append(
@@ -258,6 +273,9 @@ def validate_universe() -> list[str]:
             commodity.symbol.strip().upper()
         )
 
+        if commodity.enabled and symbol_key not in GAGARIN_OPERATIONAL_SYMBOLS:
+            errors.append(f"UNAUTHORIZED_ENABLED_SYMBOL:{commodity.symbol}")
+
         if symbol_key in symbols:
 
             errors.append(
@@ -298,18 +316,10 @@ if _UNIVERSE_ERRORS:
 
 
 def operational_commodities() -> list[Commodity]:
-    """Return only the eight selected tradable commodity instruments."""
-    return [
-        commodity
-        for commodity in enabled_commodities()
-        if commodity.category.strip().lower() != "forex"
-    ]
+    """Return only enabled instruments in the exact eight-symbol Gagarin allowlist."""
+    return enabled_commodities()
 
 
 def auxiliary_commodities() -> list[Commodity]:
-    """Return auxiliary instruments; the selected Gagarin universe currently has none."""
-    return [
-        commodity
-        for commodity in enabled_commodities()
-        if commodity.category.strip().lower() == "forex"
-    ]
+    """Gagarin has no auxiliary instruments outside its fixed eight-symbol universe."""
+    return []
