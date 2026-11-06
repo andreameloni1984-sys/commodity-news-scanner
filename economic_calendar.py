@@ -58,18 +58,51 @@ def fetch_calendar(now=None, opener=None):
             when = when.astimezone(timezone.utc)
         except (TypeError, ValueError):
             continue
-        if when < now.astimezone(timezone.utc):
+        age_hours = (now.astimezone(timezone.utc) - when).total_seconds() / 3600
+        if age_hours > 24:
             continue
         events.append({
             "title": title,
             "currency": currency,
             "impact": impact,
             "when": when,
-            "forecast": str(item.get("forecast") or ""),
-            "previous": str(item.get("previous") or ""),
+            "actual": str(item.get("actual") or "").strip(),
+            "forecast": str(item.get("forecast") or "").strip(),
+            "previous": str(item.get("previous") or "").strip(),
         })
     return sorted(events, key=lambda event: event["when"])
 
+
+def _numeric_value(value):
+    """Parse common K/M/B suffixes; return None for ambiguous text."""
+    raw = str(value or "").strip().replace(",", "").replace("%", "")
+    multiplier = 1
+    if raw and raw[-1:].upper() in {"K", "M", "B"}:
+        multiplier = {"K": 1_000, "M": 1_000_000, "B": 1_000_000_000}[raw[-1].upper()]
+        raw = raw[:-1].strip()
+    try:
+        return float(raw) * multiplier
+    except (TypeError, ValueError):
+        return None
+
+def _release_comparison(event):
+    actual = event.get("actual", "")
+    forecast = event.get("forecast", "")
+    previous = event.get("previous", "")
+    if not actual:
+        return f"   Effettivo: non disponibile nel feed | Atteso: {forecast or 'N/D'} | Precedente: {previous or 'N/D'}"
+    if not forecast:
+        return f"   Effettivo: {actual} | Atteso: N/D | Precedente: {previous or 'N/D'}"
+    a, f = _numeric_value(actual), _numeric_value(forecast)
+    if a is None or f is None:
+        comparison = "confronto numerico non applicabile"
+    elif a > f:
+        comparison = "sopra le attese"
+    elif a < f:
+        comparison = "sotto le attese"
+    else:
+        comparison = "in linea con le attese"
+    return f"   Effettivo: {actual} | Atteso: {forecast} | Precedente: {previous or 'N/D'} — {comparison}"
 
 def format_calendar(events, now=None):
     now = now or datetime.now(timezone.utc)
@@ -88,8 +121,6 @@ def format_calendar(events, now=None):
         local = event["when"].astimezone(ROME)
         impact = "🔴" if event["impact"] == "HIGH" else "🟠"
         lines.append(f"{impact} {local:%a %d/%m %H:%M} — {event['currency']} — {event['title']}")
-        if event["forecast"] or event["previous"]:
-            lines.append(f"   Prev: {event['previous'] or 'N/D'} | Atteso: {event['forecast'] or 'N/D'}")
     return "\n".join(lines)
 
 
