@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from threading import Lock
 from datetime import datetime, timezone
 import time
 
@@ -225,6 +226,7 @@ def calculate_quality(state: SoyuzState) -> SoyuzState:
 # Public-source intelligence bridge: news can adjust context, never bypass triggers/safety.
 # Embedded public-news intelligence: no runtime dependency on the separate SPUTNIK service.
 _GAGARIN_NEWS_CACHE = {"loaded_at": 0.0, "events": []}
+_GAGARIN_NEWS_CACHE_LOCK = Lock()
 
 
 def apply_sputnik_intelligence(state):
@@ -247,82 +249,95 @@ def apply_sputnik_intelligence(state):
         from engine.public_event_brain import classify as classify_public_intelligence
 
         now = time.time()
-        if now - float(_GAGARIN_NEWS_CACHE.get("loaded_at", 0.0)) > 300:
-            recent = []
-            journal_path = Path(os.getenv("GAGARIN_NEWS_JOURNAL_PATH", "data/news_event_journal.jsonl"))
-            cutoff = now - 72 * 3600
-            try:
-                if journal_path.exists():
-                    for line in journal_path.read_text(encoding="utf-8").splitlines()[-500:]:
-                        try:
-                            row = json.loads(line)
-                        except (json.JSONDecodeError, TypeError):
-                            continue
-                        if row.get("kind") != "NEWS_DETECTED" or not row.get("title"):
-                            continue
-                        stamp = row.get("first_seen_at") or row.get("published_at") or row.get("recorded_at")
-                        try:
-                            dt = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
-                            if dt.tzinfo is None:
-                                dt = dt.replace(tzinfo=timezone.utc)
-                            if dt.timestamp() < cutoff:
-                                continue
-                        except (TypeError, ValueError, OverflowError):
-                            continue
-                        recent.append({
-                            "event_id": str(row.get("event_id") or ""),
-                            "source": str(row.get("source") or "GAGARIN_NEWS_JOURNAL"),
-                            "title": str(row.get("title") or ""),
-                            "url": str(row.get("url") or ""),
-                            "detected_at": str(stamp or ""),
-                            "evidence": "LOCAL_NEWS_JOURNAL",
-                        })
-            except OSError:
-                pass
-
-            # Self-contained fallback: use Gagarin's own public-source collector,
-            # not the separate SPUTNIK service or its remote state endpoint.
-            if not recent:
+        # Parallel instrument scans share one news refresh per cache window.
+        with _GAGARIN_NEWS_CACHE_LOCK:
+            if now - float(_GAGARIN_NEWS_CACHE.get("loaded_at", 0.0)) > 300:
+                recent = []
+                journal_path = Path(os.getenv("GAGARIN_NEWS_JOURNAL_PATH", "data/news_event_journal.jsonl"))
+                cutoff = now - 72 * 3600
                 try:
-                    for item in fetch_news_items()[:80]:
-                        title = str(item.get("title") or "").strip()
-                        if not title:
-                            continue
-                        published = str(item.get("published_at") or "")
-                        try:
-                            dt = datetime.fromisoformat(published.replace("Z", "+00:00"))
-                            if dt.tzinfo is None:
-                                dt = dt.replace(tzinfo=timezone.utc)
-                            if dt.timestamp() < cutoff:
+                    if journal_path.exists():
+                        for line in journal_path.read_text(encoding="utf-8").splitlines()[-500:]:
+                            try:
+                                row = json.loads(line)
+                            except (json.JSONDecodeError, TypeError):
                                 continue
-                        except (TypeError, ValueError, OverflowError):
-                            continue
-                        recent.append({
-                            "event_id": str(item.get("url") or title),
-                            "source": str(item.get("source") or "PUBLIC_RSS"),
-                            "title": title,
-                            "url": str(item.get("url") or ""),
-                            "detected_at": published,
-                            "evidence": "PUBLIC_RSS_ITEM",
-                        })
-                except Exception:
+                            if row.get("kind") != "NEWS_DETECTED" or not row.get("title"):
+                                continue
+                            stamp = row.get("first_seen_at") or row.get("published_at") or row.get("recorded_at")
+                            try:
+                                dt = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
+                                if dt.tzinfo is None:
+                                    dt = dt.replace(tzinfo=timezone.utc)
+                                if dt.timestamp() < cutoff:
+                                    continue
+                            except (TypeError, ValueError, OverflowError):
+                                continue
+                            recent.append({
+                                "event_id": str(row.get("event_id") or ""),
+                                "source": str(row.get("source") or "GAGARIN_NEWS_JOURNAL"),
+                                "title": str(row.get("title") or ""),
+                                "url": str(row.get("url") or ""),
+                                "detected_at": str(stamp or ""),
+                                "evidence": "LOCAL_NEWS_JOURNAL",
+                            })
+                except OSError:
                     pass
 
-            # De-duplicate on event identity and title; newest/recent item wins.
-            deduped = {}
-            for item in recent:
-                key = item.get("event_id") or item.get("title")
-                deduped[str(key)] = item
-            _GAGARIN_NEWS_CACHE["events"] = list(deduped.values())[-100:]
-            _GAGARIN_NEWS_CACHE["loaded_at"] = now
+                # Self-contained fallback: use Gagarin's own public-source collector,
+                # not the separate SPUTNIK service or its remote state endpoint.
+                if not recent:
+                    try:
+                        for item in fetch_news_items()[:80]:
+                            title = str(item.get("title") or "").strip()
+                            if not title:
+                                continue
+                            published = str(item.get("published_at") or "")
+                            try:
+                                dt = datetime.fromisoformat(published.replace("Z", "+00:00"))
+                                if dt.tzinfo is None:
+                                    dt = dt.replace(tzinfo=timezone.utc)
+                                if dt.timestamp() < cutoff:
+                                    continue
+                            except (TypeError, ValueError, OverflowError):
+                                continue
+                            recent.append({
+                                "event_id": str(item.get("url") or title),
+                                "source": str(item.get("source") or "PUBLIC_RSS"),
+                                "title": title,
+                                "url": str(item.get("url") or ""),
+                                "detected_at": published,
+                                "evidence": "PUBLIC_RSS_ITEM",
+                            })
+                    except Exception:
+                        pass
+
+                # De-duplicate on event identity and title; newest/recent item wins.
+                deduped = {}
+                for item in recent:
+                    key = item.get("event_id") or item.get("title")
+                    deduped[str(key)] = item
+                _GAGARIN_NEWS_CACHE["events"] = list(deduped.values())[-100:]
+                # Event classification depends only on the headline, not on the
+                # instrument. Compute it once per cache refresh instead of once
+                # per headline per commodity (up to 8x repeated work per scan).
+                _GAGARIN_NEWS_CACHE["classified_events"] = [
+                    {
+                        **item,
+                        "_classified": classify_event(str(item.get("title") or "")),
+                        "_intel": classify_public_intelligence(str(item.get("title") or "")),
+                    }
+                    for item in _GAGARIN_NEWS_CACHE["events"]
+                ]
+                _GAGARIN_NEWS_CACHE["loaded_at"] = now
 
         name = str(getattr(state, "commodity", "") or "").lower()
         symbol = str(getattr(state, "symbol", "") or "").upper()
         matches = []
-        for item in _GAGARIN_NEWS_CACHE.get("events", []):
+        for item in _GAGARIN_NEWS_CACHE.get("classified_events", []):
             title = str(item.get("title") or "")
-            classified = classify_event(title)
-            intel = classify_public_intelligence(title)
+            classified = item.get("_classified") or {}
+            intel = item.get("_intel") or {}
             assets = classified.get("assets") or []
             impact = classified.get("impact") or {}
             asset_match = False
@@ -397,18 +412,19 @@ def apply_sputnik_intelligence(state):
 
 def analyze_one(commodity: Commodity) -> SoyuzState:
     analysis_started = time.perf_counter()
+    stage_timings = {}
     state = SoyuzState(
         commodity=commodity.name,
         symbol=commodity.symbol,
         analysis_timestamp=datetime.now(timezone.utc).isoformat(),
     )
 
-    data_fetch_started = time.perf_counter()
+    stage_started = time.perf_counter()
     state = load_data(state, commodity)
-    state.metadata["data_fetch_duration_ms"] = round(
-        (time.perf_counter() - data_fetch_started) * 1000.0, 2
-    )
+    stage_timings["data_fetch_ms"] = round((time.perf_counter() - stage_started) * 1000.0, 2)
+
     # LUBJANKA observes completed M5 OHLCV bars independently; it never gates a trade.
+    stage_started = time.perf_counter()
     state.metadata["lubjanka"] = intercept_market(
         state.candles,
         provider=getattr(state, "data_source", None),
@@ -417,19 +433,38 @@ def analyze_one(commodity: Commodity) -> SoyuzState:
     state.metadata["lubjanka_playbook"] = build_conditional_playbook(
         state.candles, state.metadata["lubjanka"]
     )
+    stage_timings["market_observation_ms"] = round((time.perf_counter() - stage_started) * 1000.0, 2)
+
+    stage_started = time.perf_counter()
     state = evaluate_pre_move(state)
     # Independent, auditable regime/momentum ensemble; ranking context only.
     state.metadata["forecast_ensemble"] = forecast_ensemble(state.candles)
+    stage_timings["forecast_ms"] = round((time.perf_counter() - stage_started) * 1000.0, 2)
+
+    stage_started = time.perf_counter()
     state = apply_sputnik_intelligence(state)
+    stage_timings["intelligence_ms"] = round((time.perf_counter() - stage_started) * 1000.0, 2)
+
+    stage_started = time.perf_counter()
     state = scan_market_opportunity(state)
     state = apply_regime(state)
     state = apply_structure(state)
     state = apply_setup(state)
     state = apply_trigger(state)
     state = calculate_quality(state)
+    stage_timings["technical_pipeline_ms"] = round((time.perf_counter() - stage_started) * 1000.0, 2)
+
+    stage_started = time.perf_counter()
     state = apply_risk(state)
     state = apply_safety(state)
+    stage_timings["risk_safety_ms"] = round((time.perf_counter() - stage_started) * 1000.0, 2)
+
+    stage_started = time.perf_counter()
     state = annotate(state)
+    stage_timings["annotation_ms"] = round((time.perf_counter() - stage_started) * 1000.0, 2)
+
+    state.metadata["stage_timings_ms"] = stage_timings
+    state.metadata["data_fetch_duration_ms"] = stage_timings["data_fetch_ms"]
     state.metadata["analysis_completed_at_utc"] = datetime.now(timezone.utc).isoformat()
     state.metadata["analysis_duration_ms"] = round(
         (time.perf_counter() - analysis_started) * 1000.0, 2
