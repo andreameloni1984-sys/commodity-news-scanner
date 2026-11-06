@@ -1,6 +1,4 @@
 """Tests for the strict Trading 212 CFD instrument/series identity boundary."""
-from dataclasses import replace
-
 import pytest
 
 from engine.cfd_identity import (
@@ -17,7 +15,7 @@ def _instrument(**overrides):
         "broker": "TRADING212",
         "market_type": "CFD",
         "logical_symbol": "WTI/USD",
-        "broker_symbol": "OIL.BRENT.WTI.CONTRACT",
+        "broker_symbol": "TEST-WTI-2026-11-27",
         "contract": "WTI CFD 27 Nov 2026",
         "expiry": "2026-11-27",
         "currency": "USD",
@@ -67,6 +65,7 @@ def test_logical_universe_contains_exactly_the_eight_selected_commodities():
         {"contract": ""},
         {"expiry": ""},
         {"expiry": "27-11-2026"},
+        {"expiry": "20261127"},
         {"currency": "usd"},
         {"currency": "US"},
         {"verification_source": "BIQUOTE"},
@@ -155,7 +154,7 @@ def test_cfd_signal_id_changes_when_verified_contract_expiry_changes():
     next_contract = _instrument(
         contract="WTI CFD 04 Dec 2026",
         expiry="2026-12-04",
-        broker_symbol="OIL.WTI.DEC26",
+        broker_symbol="TEST-WTI-2026-12-04",
     )
     next_series = _series(
         contract="WTI CFD 04 Dec 2026",
