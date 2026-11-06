@@ -128,7 +128,7 @@ def test_quote_series_with_different_contract_identity_is_rejected(field, value)
 
 @pytest.mark.parametrize("provider", ["BIQUOTE", "YAHOO", "YAHOO_FUTURES"])
 def test_independent_reference_and_futures_series_cannot_become_t212_cfd(provider):
-    with pytest.raises(ValueError, match="official Trading 212 CFD feed"):
+    with pytest.raises(ValueError, match="provider label must be TRADING212_CFD"):
         validate_same_cfd_series(
             _instrument(), _series(provider=provider), registry=_registry()
         )
