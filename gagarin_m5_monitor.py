@@ -1,10 +1,9 @@
 """Lightweight five-minute LUBJANKA scan.
 
-Fetches Yahoo M5 candles for seven operational commodities. Silver is
-intentionally excluded from this high-frequency observation scan due to its
-volatility; the main Gagarin commodity universe is not changed.
-The runner skips the full analysis/news/provider chain, PAPER journal,
-Governor and execution layer. Findings are observations only.
+Fetches only Yahoo M5 candles for the seven explicitly approved scan instruments.
+Silver remains in the wider commodity universe but is intentionally excluded
+from this fast scan at the user's request. The full Gagarin pipeline, news,
+PAPER journal, Governor and execution layer are not invoked.
 """
 from __future__ import annotations
 
@@ -13,18 +12,35 @@ from engine.data import _fetch_yahoo
 from engine.lubjanka import intercept_market
 
 
-def _is_silver(commodity) -> bool:
-    symbol = str(getattr(commodity, "symbol", "")).upper().replace("/", "").replace("-", "")
-    name = str(getattr(commodity, "name", "")).strip().lower()
-    return symbol.startswith("XAG") or name in {"argento", "silver"}
+# Explicit allowlist: do not let unrelated or newly enabled instruments enter
+# the lightweight scan implicitly through operational_commodities().
+M5_SCAN_SYMBOLS = (
+    "XAU/USD",
+    "COPPER/USD",
+    "WTI/USD",
+    "BRENT/USD",
+    "WHEAT/USD",
+    "CORN/USD",
+    "SOYBEAN/USD",
+)
 
 
 def scan_universe():
-    """Fetch and inspect one M5 series for each of the seven scan instruments."""
+    """Fetch and inspect one M5 series per explicitly allowed instrument."""
+    by_symbol = {
+        commodity.symbol: commodity
+        for commodity in operational_commodities()
+    }
+    missing = [symbol for symbol in M5_SCAN_SYMBOLS if symbol not in by_symbol]
+    if missing:
+        raise RuntimeError(
+            "M5 scan symbols missing from operational universe: "
+            + ", ".join(missing)
+        )
+
     results = []
-    for commodity in operational_commodities():
-        if _is_silver(commodity):
-            continue
+    for symbol in M5_SCAN_SYMBOLS:
+        commodity = by_symbol[symbol]
         candles, error = _fetch_yahoo(commodity.symbol)
         observation = intercept_market(candles, provider="YAHOO")
         results.append({
@@ -39,7 +55,7 @@ def scan_universe():
 
 def main() -> int:
     print("GAGARIN — LIGHT M5 SCAN | OBSERVATION ONLY | PAPER ONLY")
-    print("Scope: 7 commodities (silver excluded) | source: Yahoo M5 candles only")
+    print("Scope: 7 instruments (silver excluded) | source: Yahoo M5 candles only")
     results = scan_universe()
     intercepted = 0
     for row in results:
