@@ -31,7 +31,7 @@ def _series(**overrides):
         "provider": "TRADING212_CFD",
         "broker": "TRADING212",
         "market_type": "CFD",
-        "broker_symbol": "OIL.BRENT.WTI.CONTRACT",
+        "broker_symbol": "TEST-WTI-2026-11-27",
         "contract": "WTI CFD 27 Nov 2026",
         "expiry": "2026-11-27",
         "currency": "USD",
@@ -159,7 +159,7 @@ def test_cfd_signal_id_changes_when_verified_contract_expiry_changes():
     next_series = _series(
         contract="WTI CFD 04 Dec 2026",
         expiry="2026-12-04",
-        broker_symbol="OIL.WTI.DEC26",
+        broker_symbol="TEST-WTI-2026-12-04",
         series_id="t212-cfd-wti-2026-12-04-m5",
     )
     second = build_cfd_signal_id(next_contract, next_series, **kwargs)
