@@ -15,6 +15,7 @@ from datetime import date, datetime, timezone
 from hashlib import sha256
 import json
 import math
+import re
 
 
 TRADING212_BROKER = "TRADING212"
@@ -40,6 +41,17 @@ def _required_text(value: str, field: str) -> str:
     if not isinstance(value, str) or not value or value != value.strip():
         raise ValueError(f"{field} is required and must not contain outer whitespace")
     return value
+
+
+def _verified_expiry(value: str, field: str) -> str:
+    text = _required_text(value, field)
+    if not re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}", text):
+        raise ValueError(f"{field} must use YYYY-MM-DD")
+    try:
+        date.fromisoformat(text)
+    except ValueError as exc:
+        raise ValueError(f"{field} must be a valid calendar date") from exc
+    return text
 
 
 def _aware_utc_timestamp(value: str, field: str) -> datetime:
@@ -76,13 +88,9 @@ class CFDInstrumentIdentity:
             raise ValueError("Instrument is outside the eight-commodity Gagarin CFD universe")
         _required_text(self.broker_symbol, "broker_symbol")
         _required_text(self.contract, "contract")
-        expiry = _required_text(self.expiry, "expiry")
-        try:
-            date.fromisoformat(expiry)
-        except ValueError as exc:
-            raise ValueError("expiry must be the verified contract date in YYYY-MM-DD form") from exc
+        _verified_expiry(self.expiry, "expiry")
         currency = _required_text(self.currency, "currency")
-        if len(currency) != 3 or not currency.isalpha() or currency != currency.upper():
+        if len(currency) != 3 or not currency.isascii() or not currency.isalpha() or currency != currency.upper():
             raise ValueError("currency must be a three-letter uppercase ISO code")
         if self.verification_source != TRADING212_APP_SCREEN:
             raise ValueError("Identity must be verified from the Trading 212 app instrument screen")
@@ -111,11 +119,8 @@ class CFDQuoteSeriesIdentity:
             raise ValueError("Quote series broker/market identity is not Trading 212 CFD")
         for field in ("broker_symbol", "contract", "expiry", "currency", "timeframe", "series_id"):
             _required_text(getattr(self, field), field)
-        try:
-            date.fromisoformat(self.expiry)
-        except ValueError as exc:
-            raise ValueError("quote-series expiry must use YYYY-MM-DD") from exc
-        if len(self.currency) != 3 or not self.currency.isalpha() or self.currency != self.currency.upper():
+        _verified_expiry(self.expiry, "quote-series expiry")
+        if len(self.currency) != 3 or not self.currency.isascii() or not self.currency.isalpha() or self.currency != self.currency.upper():
             raise ValueError("quote-series currency must be a three-letter uppercase ISO code")
         return self
 
