@@ -436,9 +436,9 @@ def _command_response(command: str) -> Optional[str]:
 
     if command_name == "/prezzo212":
         return (
-            "TRADING 212 CFD\\n"
-            "FEED NON COLLEGATO: la Public API ufficiale non espone quotazioni CFD.\\n"
-            "Contratto, scadenza e valuta non sono ancora verificati per il paniere.\\n"
+            "TRADING 212 CFD\n"
+            "FEED NON COLLEGATO: la Public API ufficiale non espone quotazioni CFD.\n"
+            "Contratto, scadenza e valuta non sono ancora verificati per il paniere.\n"
             "Nessun confronto tra prezzi manuali Trading 212 e futures GAGARIN; "
             "nessun segnale CFD viene generato."
         )
