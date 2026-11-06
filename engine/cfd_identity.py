@@ -1,9 +1,9 @@
 """Strict identity boundary for a future official Trading 212 CFD channel.
 
-This module does not fetch quotes, map broker tickers, calculate trade levels,
-or place orders. It only binds already-computed levels to a verified Trading
-212 CFD candle series after exact broker symbol, contract, expiry, and currency
-matching.
+This module does not fetch quotes, authenticate a data feed, map broker tickers,
+calculate trade levels, or place orders. It validates a manually reviewed
+instrument allowlist and checks claimed quote-series metadata. A provider label
+is not proof of feed origin; a trusted official adapter is still required.
 
 Yahoo futures and BiQuote reference data are intentionally rejected here.
 PAPER ONLY.
@@ -82,7 +82,7 @@ def _positive_level(value: float, field: str) -> str:
 
 @dataclass(frozen=True)
 class CFDInstrumentIdentity:
-    """Verified identity copied from the Trading 212 CFD instrument screen."""
+    """Candidate screen-derived identity; registry membership is required for approval."""
 
     broker: str
     market_type: str
@@ -196,7 +196,7 @@ def load_verified_instrument_registry(
 
 @dataclass(frozen=True)
 class CFDQuoteSeriesIdentity:
-    """Provenance attached to one homogeneous broker CFD candle series."""
+    """Claimed series metadata; this class does not authenticate the feed source."""
 
     provider: str
     broker: str
@@ -210,7 +210,7 @@ class CFDQuoteSeriesIdentity:
 
     def validate(self) -> "CFDQuoteSeriesIdentity":
         if self.provider != TRADING212_CFD_PROVIDER:
-            raise ValueError("Quote series must come from the official Trading 212 CFD feed")
+            raise ValueError("Quote series provider label must be TRADING212_CFD; feed origin is not authenticated here")
         if self.broker != TRADING212_BROKER or self.market_type != "CFD":
             raise ValueError("Quote series broker/market identity is not Trading 212 CFD")
         for field in ("broker_symbol", "contract", "timeframe", "series_id"):
@@ -251,7 +251,7 @@ def validate_same_cfd_series(
     *,
     registry: CFDInstrumentRegistry | None = None,
 ) -> None:
-    """Raise unless the instrument is registry-approved and the series matches it."""
+    """Require a registry-approved instrument and matching claimed series metadata."""
     active_registry = (
         registry if registry is not None else load_verified_instrument_registry()
     )
@@ -277,8 +277,9 @@ def build_cfd_signal_id(
 ) -> str:
     """Create a namespaced CFD ID after exact series and levels provenance checks.
 
-    Identity generation only: this function does not calculate or authorize a
-    signal. The caller must supply levels computed from the matched CFD series.
+    Identity generation only: this function does not authenticate the feed,
+    calculate or authorize a signal. A trusted adapter must supply levels from
+    the matched official CFD series.
     """
     validate_same_cfd_series(instrument, series, registry=registry)
     side = _required_text(direction, "direction").upper()
