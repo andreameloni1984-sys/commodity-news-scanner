@@ -17,7 +17,7 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from telegram.bot import _api, _command_response, _reply, telegram_diagnostic, _run_analysis, get_last_results, telegram_menu, send_telegram
+from telegram.bot import _api, _command_response, _reply, telegram_diagnostic, _run_analysis, get_last_results, send_telegram
 from telegram.news_monitor import news_monitor_loop
 from config import TELEGRAM_CHAT_ID
 from soyuz_gagarin.adapter import evaluate_states
@@ -249,7 +249,7 @@ def handle_update(update: dict) -> None:
         response = _command_response(text)
 
         if response:
-            reply_markup = telegram_menu() if command_name in {"/start", "/help", "/menu"} else None
+            reply_markup = {"remove_keyboard": True} if command_name in {"/start", "/help", "/menu"} else None
             delivered = _reply(chat_id, response, reply_markup=reply_markup)
             print(
                 "Telegram delivery | "
@@ -410,16 +410,8 @@ def main() -> None:
 
     print("🟢 Telegram webhook: ACTIVE", flush=True)
 
-    commands_ok, commands_data = _api("setMyCommands", {"commands": [
-        {"command": "aggressivo212", "description": "Profilo AGGRESSIVE 212"},
-        {"command": "soft212", "description": "Profilo SOFT 212"},
-        {"command": "collegamento212", "description": "Stato collegamento Invest Trading 212"},
-        {"command": "fasceorario", "description": "Statistiche delle tre fasce orarie"},
-        {"command": "monitora", "description": "Registra una posizione per avvisi di rischio"},
-        {"command": "posizioni", "description": "Elenca le posizioni monitorate"},
-        {"command": "smetti", "description": "Disattiva il monitor di una posizione"},
-    ]})
-    print(f"Telegram commands menu | configured={'YES' if commands_ok else 'NO'}", flush=True)
+    commands_ok, commands_data = _api("deleteMyCommands", {})
+    print("Telegram command menu removed | " + ("YES" if commands_ok else "NO"), flush=True)
 
     threading.Thread(
         target=news_monitor_loop,
@@ -443,8 +435,8 @@ def main() -> None:
     if TELEGRAM_CHAT_ID:
         welcome_sent = _reply(
             TELEGRAM_CHAT_ID,
-            "🚀 GAGARIN ONLINE\n🧪 PAPER/DEMO — nessun ordine reale.\n\nUsa uno dei tre pulsanti:\n• AGGRESSIVE 212\n• SOFT 212\n• COLLEGAMENTO INVEST TRADING212",
-            reply_markup=telegram_menu(),
+            "🚀 GAGARIN ONLINE\n🧪 PAPER/DEMO — nessun ordine reale.\nComandi testuali: /help, /analisi, /segnali, /classifica.",
+            reply_markup={"remove_keyboard": True},
         )
         print(
             "Telegram startup welcome | "
