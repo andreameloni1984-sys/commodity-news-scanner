@@ -3,7 +3,7 @@ from unittest.mock import patch
 from gagarin_m5_monitor import scan_universe
 
 
-def test_light_scan_fetches_only_eight_operational_commodities():
+def test_light_scan_excludes_silver_and_fetches_seven_other_commodities():
     commodities = [
         type("Commodity", (), {"name": name, "symbol": symbol})()
         for name, symbol in [
@@ -29,12 +29,15 @@ def test_light_scan_fetches_only_eight_operational_commodities():
     ) as intercept:
         rows = scan_universe()
 
-    assert len(rows) == 8
-    assert fetch.call_count == 8
-    assert intercept.call_count == 8
-    assert [call.args[0] for call in fetch.call_args_list] == [
-        item.symbol for item in commodities
+    expected_symbols = [
+        "XAU/USD", "COPPER/USD", "WTI/USD", "BRENT/USD",
+        "WHEAT/USD", "CORN/USD", "SOYBEAN/USD",
     ]
+    assert len(rows) == 7
+    assert fetch.call_count == 7
+    assert intercept.call_count == 7
+    assert [call.args[0] for call in fetch.call_args_list] == expected_symbols
+    assert "XAG/USD" not in [row["symbol"] for row in rows]
 
 
 def test_light_scan_does_not_generate_trade_levels_or_orders():
