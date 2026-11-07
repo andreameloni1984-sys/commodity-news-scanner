@@ -55,6 +55,18 @@ def _verified_expiry(value: str, field: str) -> str:
     return text
 
 
+def _validate_contract_expiry(contract_type: str, value: str | None, field: str) -> None:
+    """Require an explicit spot/no-expiry or expiring-future identity."""
+    kind = _required_text(contract_type, "contract_type")
+    if kind == "SPOT":
+        if value is not None:
+            raise ValueError(f"{field} must be None for SPOT")
+        return
+    if kind != "EXPIRING_FUTURE":
+        raise ValueError("contract_type must be SPOT or EXPIRING_FUTURE")
+    _verified_expiry(value, field)
+
+
 def _aware_utc_timestamp(value: str, field: str) -> datetime:
     text = _required_text(value, field)
     try:
@@ -89,7 +101,8 @@ class CFDInstrumentIdentity:
     logical_symbol: str
     broker_symbol: str
     contract: str
-    expiry: str
+    contract_type: str
+    expiry: str | None
     currency: str
     verification_source: str
     verification_reference: str
@@ -106,7 +119,7 @@ class CFDInstrumentIdentity:
             raise ValueError("Instrument is outside the eight-commodity Gagarin CFD universe")
         _required_text(self.broker_symbol, "broker_symbol")
         _required_text(self.contract, "contract")
-        _verified_expiry(self.expiry, "expiry")
+        _validate_contract_expiry(self.contract_type, self.expiry, "expiry")
         currency = _required_text(self.currency, "currency")
         if len(currency) != 3 or not currency.isascii() or not currency.isalpha() or currency != currency.upper():
             raise ValueError("currency must be a three-letter uppercase ISO code")
@@ -146,6 +159,7 @@ class CFDInstrumentRegistry:
                 record.logical_symbol,
                 record.broker_symbol,
                 record.contract,
+                record.contract_type,
                 record.expiry,
                 record.currency,
             )
@@ -204,7 +218,8 @@ class CFDQuoteSeriesIdentity:
     logical_symbol: str
     broker_symbol: str
     contract: str
-    expiry: str
+    contract_type: str
+    expiry: str | None
     currency: str
     timeframe: str
     series_id: str
@@ -216,9 +231,9 @@ class CFDQuoteSeriesIdentity:
             raise ValueError("Quote series broker/market identity is not Trading 212 CFD")
         if self.logical_symbol not in GAGARIN_CFD_LOGICAL_SYMBOLS:
             raise ValueError("Quote series logical_symbol is outside the eight-commodity Gagarin CFD universe")
-        for field in ("logical_symbol", "broker_symbol", "contract", "timeframe", "series_id"):
+        for field in ("logical_symbol", "broker_symbol", "contract", "contract_type", "timeframe", "series_id"):
             _required_text(getattr(self, field), field)
-        _verified_expiry(self.expiry, "quote-series expiry")
+        _validate_contract_expiry(self.contract_type, self.expiry, "quote-series expiry")
         currency = _required_text(self.currency, "quote-series currency")
         if len(currency) != 3 or not currency.isascii() or not currency.isalpha() or currency != currency.upper():
             raise ValueError("quote-series currency must be a three-letter uppercase ISO code")
@@ -260,7 +275,7 @@ def validate_same_cfd_series(
     )
     active_registry.require(instrument)
     series.validate()
-    fields = ("logical_symbol", "broker_symbol", "contract", "expiry", "currency")
+    fields = ("logical_symbol", "broker_symbol", "contract", "contract_type", "expiry", "currency")
     mismatches = [
         field for field in fields
         if getattr(instrument, field) != getattr(series, field)
@@ -297,6 +312,7 @@ def build_cfd_signal_id(
         "logical_symbol": instrument.logical_symbol,
         "broker_symbol": instrument.broker_symbol,
         "contract": instrument.contract,
+        "contract_type": instrument.contract_type,
         "expiry": instrument.expiry,
         "currency": instrument.currency,
         "verification_source": instrument.verification_source,
