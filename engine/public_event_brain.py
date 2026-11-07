@@ -18,7 +18,7 @@ def classify(text):
         domains.append("GEOPOLITICS")
     if any(k in value for k in ("oil", "crude", "brent", "wti", "opec", "petroleum")):
         domains.append("ENERGY")
-    if any(k in value for k in ("coffee", "cocoa", "cacao", "rice", "sugar", "wheat", "corn", "drought", "harvest")):
+    if any(k in value for k in ("wheat", "corn", "maize", "soybean", "soybeans", "soy", "usda", "wasde", "drought", "harvest", "crop progress")):
         domains.append("AGRICULTURE")
     if any(k in value for k in ("gold", "silver", "platinum", "palladium")):
         domains.append("METALS")
@@ -53,7 +53,7 @@ def classify(text):
         "RATES_MACRO": ["GOLD", "NASDAQ100", "USD"],
         "GEOPOLITICS": ["GOLD", "WTI", "BRENT", "DEFENSE"],
         "ENERGY": ["WTI", "BRENT"],
-        "AGRICULTURE": ["COFFEE", "COCOA", "RICE", "SUGAR", "WHEAT", "CORN"],
+        "AGRICULTURE": ["WHEAT", "CORN", "SOYBEAN"],
         "METALS": ["GOLD", "SILVER", "PLATINUM", "PALLADIUM"],
         "AI_TECH": ["NASDAQ100", "QQQ", "SEMICONDUCTORS"],
         "DATA_CENTERS": ["NASDAQ100", "QQQ", "SEMICONDUCTORS", "POWER_INFRASTRUCTURE"],
