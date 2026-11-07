@@ -22,6 +22,84 @@ from engine.feedback import _candles, _signal_record
 JOURNAL_FILE = Path("paper_trade_log.csv")
 
 
+def _durable_store_enabled(path: Path) -> bool:
+    return Path(path) == JOURNAL_FILE and bool(os.getenv("DATABASE_URL", "").strip())
+
+
+def _load_durable_rows():
+    try:
+        from state_store import ensure_schema, load_state
+        if not ensure_schema():
+            return None
+        rows = load_state("gagarin_paper_trade_rows")
+        return rows if isinstance(rows, list) else []
+    except Exception as exc:
+        print(f"PAPER journal database read failed | {type(exc).__name__}: {exc}", flush=True)
+        return None
+
+
+def _save_durable_rows(rows) -> bool:
+    try:
+        from state_store import ensure_schema, save_state
+        if not ensure_schema():
+            return False
+        return bool(save_state("gagarin_paper_trade_rows", rows))
+    except Exception as exc:
+        print(f"PAPER journal database save failed | {type(exc).__name__}: {exc}", flush=True)
+        return False
+
+
+def storage_backend() -> str:
+    """Report whether the PAPER trade journal is actually durable."""
+    if not os.getenv("DATABASE_URL", "").strip():
+        return "LOCAL_CSV_NO_DATABASE_URL"
+    return "POSTGRES" if _load_durable_rows() is not None else "LOCAL_CSV_DATABASE_UNAVAILABLE"
+
+
+def _read_rows(path: Path) -> list[dict]:
+    if not path.exists() or path.stat().st_size == 0:
+        return []
+    with path.open("r", newline="", encoding="utf-8") as file:
+        rows = []
+        for line_number, row in enumerate(csv.DictReader(file), start=2):
+            if None in row or any(value is None for value in row.values()):
+                raise ValueError(
+                    f"Malformed paper journal row {line_number}: column count mismatch"
+                )
+            rows.append({field: row.get(field) or "" for field in FIELDS})
+        return rows
+
+
+def _merge_rows(durable_rows: list[dict], local_rows: list[dict]) -> list[dict]:
+    """Merge runner-local recovery rows into PostgreSQL without duplicating signal IDs."""
+    merged = []
+    seen = set()
+    for row in list(durable_rows) + list(local_rows):
+        if not isinstance(row, dict):
+            continue
+        item = {field: row.get(field, "") for field in FIELDS}
+        signal_id = str(item.get("signal_id") or "").strip()
+        if signal_id:
+            if signal_id in seen:
+                continue
+            seen.add(signal_id)
+        merged.append(item)
+    return merged
+
+
+def _load_rows_for_append(path: Path) -> list[dict]:
+    local_rows = _read_rows(path)
+    if not _durable_store_enabled(path):
+        return local_rows
+    durable_rows = _load_durable_rows()
+    if durable_rows is None:
+        return local_rows
+    merged = _merge_rows(durable_rows, local_rows)
+    if merged != durable_rows:
+        _save_durable_rows(merged)
+    return merged
+
+
 _BASE_FIELDS = [
     "timestamp_utc",
     "commodity",
@@ -277,10 +355,15 @@ def record_entries(results):
         if canonical or legacy:
             entries.append((state, metadata if isinstance(metadata, dict) else {}))
 
+    existing_rows = _load_rows_for_append(JOURNAL_FILE)
     if not entries:
         return 0
 
-    seen = _existing_signal_ids(JOURNAL_FILE)
+    seen = {
+        str(row.get("signal_id") or "").strip()
+        for row in existing_rows
+        if str(row.get("signal_id") or "").strip()
+    }
     new_rows = []
     timestamp = datetime.now(timezone.utc).isoformat()
 
@@ -330,6 +413,15 @@ def record_entries(results):
     if not new_rows:
         return 0
 
-    _append_rows_atomically(JOURNAL_FILE, new_rows)
+    combined_rows = existing_rows + new_rows
+    if _durable_store_enabled(JOURNAL_FILE):
+        if _save_durable_rows(combined_rows):
+            # Keep a runner-local recovery snapshot; it is not treated as the
+            # authoritative store and is never committed to the public repo.
+            _write_rows_atomically(JOURNAL_FILE, combined_rows)
+        else:
+            _append_rows_atomically(JOURNAL_FILE, new_rows)
+    else:
+        _append_rows_atomically(JOURNAL_FILE, new_rows)
 
     return len(new_rows)

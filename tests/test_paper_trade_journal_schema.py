@@ -328,6 +328,7 @@ def test_manual_and_scheduled_workflows_do_not_publish_private_journals():
         )
         assert "contents: read" in source, workflow_name
         assert "contents: write" not in source, workflow_name
+        assert 'GAGARIN_PERSISTENCE_REQUIRED: "1"' in source, workflow_name
         assert "Persist Gagarin paper journal and feedback across GitHub runners" not in source
         assert "git push origin HEAD:main" not in source, workflow_name
         assert "git add --" not in source, workflow_name
@@ -353,3 +354,43 @@ def test_failed_atomic_append_preserves_existing_journal_and_cleans_temp_file(
 
     assert path.read_bytes() == original_bytes
     assert list(tmp_path.glob(".paper_trade_log.csv.*.tmp")) == []
+
+def test_paper_trade_journal_uses_postgres_and_deduplicates_across_runner_files(
+    monkeypatch, tmp_path
+):
+    path = tmp_path / "paper_trade_log.csv"
+    monkeypatch.setattr(journal, "JOURNAL_FILE", path)
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test.invalid/gagarin")
+
+    durable_rows = []
+    saved_snapshots = []
+
+    def load_rows():
+        return [dict(row) for row in durable_rows]
+
+    def save_rows(rows):
+        durable_rows[:] = [dict(row) for row in rows]
+        saved_snapshots.append([dict(row) for row in rows])
+        return True
+
+    monkeypatch.setattr(journal, "_durable_store_enabled", lambda _path: True)
+    monkeypatch.setattr(journal, "_load_durable_rows", load_rows)
+    monkeypatch.setattr(journal, "_save_durable_rows", save_rows)
+
+    state = _entry_state()
+    assert journal.record_entries([state]) == 1
+    assert len(durable_rows) == 1
+    assert durable_rows[0]["symbol"] == "XAU/USD"
+    assert durable_rows[0]["signal_id"]
+
+    # Simulate a fresh GitHub runner with no local CSV snapshot.
+    path.unlink()
+    assert journal.record_entries([state]) == 0
+    assert len(durable_rows) == 1
+    assert journal.storage_backend() == "POSTGRES"
+    assert len(saved_snapshots) == 1
+
+
+def test_paper_trade_journal_reports_missing_database_configuration(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    assert journal.storage_backend() == "LOCAL_CSV_NO_DATABASE_URL"
