@@ -57,6 +57,17 @@ def build_manual_cfd_quote(
             "requested_symbol": requested,
         }
 
+    # bool is an int subclass in Python; reject it explicitly so a malformed
+    # flag can never be interpreted as a valid price (True == 1.0).
+    if isinstance(bid_212, bool) or isinstance(ask_212, bool):
+        return {
+            "status": "INVALID_QUOTE",
+            "broker": "TRADING212",
+            "market_type": "CFD",
+            "requested_symbol": requested,
+            "logical_symbol": logical_symbol,
+        }
+
     try:
         bid = float(bid_212)
         ask = float(ask_212)
