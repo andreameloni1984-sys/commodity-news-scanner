@@ -28,15 +28,14 @@ jobs:
       - name: Send summary
         run: |
           python - <<'PY'
-          import os, json, urllib.request
-          from telegram.signals import format_watch_board
+          import os
+          from telegram.bot import _api, _confirmed_message_id
           from engine.feedback import summarize, format_summary
 
           token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
           chat = os.getenv("TELEGRAM_CHAT_ID", "").strip()
           if not token or not chat:
-              print("Missing Telegram secrets")
-              raise SystemExit(0)
+              raise SystemExit("Missing Telegram secrets; summary was not sent.")
 
           # Feedback summary
           try:
@@ -52,15 +51,15 @@ jobs:
               "Usa i pulsanti del bot per i dettagli in tempo reale."
           )
 
-          payload = json.dumps({"chat_id": chat, "text": text[:4000]}).encode()
-          req = urllib.request.Request(
-              f"https://api.telegram.org/bot{token}/sendMessage",
-              data=payload,
-              headers={"Content-Type": "application/json"},
-          )
-          try:
-              with urllib.request.urlopen(req, timeout=20) as r:
-                  print("Summary sent")
-          except Exception as e:
-              print(f"Send failed: {e}")
+          ok, response = _api("sendMessage", {
+              "chat_id": chat,
+              "text": text[:4000],
+          })
+          message_id = _confirmed_message_id(response) if ok else None
+          if message_id is None:
+              raise RuntimeError(
+                  "Telegram API did not confirm sendMessage: "
+                  "expected ok=true and result.message_id."
+              )
+          print(f"Telegram API ACCEPTED | message_id={message_id}")
           PY
