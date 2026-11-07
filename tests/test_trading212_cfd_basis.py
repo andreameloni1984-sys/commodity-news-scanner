@@ -59,3 +59,17 @@ def test_telegram_prezzo212_does_not_run_gagarin_futures_analysis(monkeypatch):
 
     assert "TRADING 212 — CFD QUOTE" in message
     assert "Prezzo di riferimento CFD comparabile: N/D" in message
+
+def test_aggressive_desk_routes_manual_cfd_quotes_to_dedicated_command(monkeypatch):
+    from telegram import bot
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("A manual CFD quote must not trigger the futures desk.")
+
+    monkeypatch.setattr(bot, "_run_analysis", forbidden)
+
+    message = bot._command_response("/aggressivo212 WTI 78.10 78.13")
+
+    assert "/prezzo212 SIMBOLO BID ASK" in message
+    assert "/prezzo212 WTI 78.10 78.13" in message
+    assert "motore futures GAGARIN" in message
