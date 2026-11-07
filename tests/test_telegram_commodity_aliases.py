@@ -65,10 +65,8 @@ def test_setup_formatter_distinguishes_pending_setup_from_no_setup():
     assert "Nessun risultato disponibile." in empty
 
 
-def test_monitora_usage_marks_prices_as_examples_not_live_quotes():
+def test_legacy_position_monitor_command_is_not_available():
     from telegram.bot import _command_response
 
-    response = _command_response("/monitora")
-    assert "NON quotazioni live" in response
-    assert "/analisi oro" in response
-    assert "Bid/Ask Trading 212" in response
+    assert _command_response("/monitora") is None
+    assert _command_response("/posizioni") is None
