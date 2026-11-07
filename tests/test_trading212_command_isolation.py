@@ -58,3 +58,33 @@ def test_t212_legacy_comparison_shim_never_uses_futures_reference():
     assert result["verdict"] == "NO_COMPARABLE_CFD_REFERENCE"
     assert result["gagarin_price"] is None
     assert result["diff_pct"] is None
+
+
+@pytest.mark.parametrize(
+    "symbol",
+    ["ORO", "ARGENTO", "RAME", "WTI", "BRENT", "GRANO", "MAIS", "SOIA"],
+)
+def test_t212_manual_quote_accepts_exactly_the_eight_selected_commodities(symbol):
+    result = build_manual_cfd_quote(symbol, 10.0, 10.1)
+    assert result["status"] == "MANUAL_QUOTE_ONLY"
+    assert result["broker"] == "TRADING212"
+    assert result["market_type"] == "CFD"
+    assert result["broker_symbol"] is None
+    assert result["contract"] is None
+    assert result["expiry"] is None
+    assert result["currency"] is None
+    assert result["entry"] is None
+    assert result["stop_loss"] is None
+    assert result["take_profit"] is None
+
+
+@pytest.mark.parametrize(
+    "bid,ask",
+    [(True, 78.13), (78.10, True), (False, 78.13), (78.10, False)],
+)
+def test_t212_manual_quote_rejects_boolean_prices(bid, ask):
+    result = build_manual_cfd_quote("WTI", bid, ask)
+    assert result["status"] == "INVALID_QUOTE"
+    assert result.get("entry") is None
+    assert result.get("stop_loss") is None
+    assert result.get("take_profit") is None
