@@ -310,11 +310,11 @@ def _command_response(command: str) -> Optional[str]:
 
     if command_name in {"/start", "/help", "/menu"}:
         return (
-            "🚀 GAGARIN — ANALISI DIREZIONALE\\n"
-            "🧪 PAPER ONLY — nessun ordine viene eseguito.\\n\\n"
-            "/classifica — direzione delle otto materie prime\\n"
-            "/analisi [materia prima] — analisi generale o singolo strumento\\n"
-            "/calendario — eventi macro rilevanti\\n"
+            "🚀 GAGARIN — ANALISI DIREZIONALE\n"
+            "🧪 PAPER ONLY — nessun ordine viene eseguito.\n\n"
+            "/classifica — direzione delle otto materie prime\n"
+            "/analisi [materia prima] — analisi generale o singolo strumento\n"
+            "/calendario — eventi macro rilevanti\n"
             "/status — stato del bot"
         )
 
