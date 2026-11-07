@@ -19,8 +19,6 @@ if ROOT_DIR not in sys.path:
 
 from telegram.bot import _api, _command_response, _reply, telegram_diagnostic, _run_analysis, telegram_menu, send_telegram
 from telegram.news_monitor import news_monitor_loop
-from soyuz_gagarin.adapter import evaluate_states
-from engine.cloud_api_status import attach_runtime_decision_metadata
 from config import TELEGRAM_CHAT_ID
 
 DEFAULT_PORT = 10000
@@ -64,19 +62,6 @@ def prepare_webhook() -> bool:
 
     print("Telegram WEBHOOK FAILED | URL_NOT_PERSISTING", flush=True)
     return False
-
-
-def run_directional_analysis():
-    """Run the selected commodity analysis and attach the canonical Governor result."""
-    states = _run_analysis(on_demand=False)
-    if not states:
-        return states
-    decisions = evaluate_states(states)
-    by_symbol = {decision.symbol: decision for decision in decisions}
-    for state in states:
-        decision = by_symbol.get(str(getattr(state, "symbol", "")).upper())
-        attach_runtime_decision_metadata(state, decision)
-    return states
 
 
 def handle_update(update: dict) -> None:
@@ -259,7 +244,7 @@ def main() -> None:
 
     threading.Thread(
         target=news_monitor_loop,
-        args=(send_telegram, run_directional_analysis),
+        args=(send_telegram, lambda: _run_analysis(on_demand=False)),
         name="gagarin-news-monitor",
         daemon=True,
     ).start()
