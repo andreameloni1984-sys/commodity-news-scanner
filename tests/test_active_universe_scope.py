@@ -146,7 +146,6 @@ def test_telegram_classifica_ignores_stale_cached_results(monkeypatch):
         ("COPPER/USD", "Rame"), ("WTI/USD", "Petrolio WTI"),
         ("BRENT/USD", "Petrolio Brent"), ("WHEAT/USD", "Grano"),
         ("CORN/USD", "Mais"), ("SOYBEAN/USD", "Soia"),
-        ("EUR/USD", "EUR/USD"), ("GBP/USD", "GBP/USD"),
     ]]
     monkeypatch.setattr(bot, "get_last_results", lambda: stale)
     calls = []
@@ -157,8 +156,9 @@ def test_telegram_classifica_ignores_stale_cached_results(monkeypatch):
     assert report.count("\n")  # a formatted report was returned
     assert "Legacy" not in report
     assert "21." not in report
-    assert "10. GBP/USD" in report
     assert "8. Soia" in report
+    assert "EUR/USD" not in report
+    assert "GBP/USD" not in report
 
 
 def test_morning_pick_never_passes_auxiliary_forex_to_governor(monkeypatch):
