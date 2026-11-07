@@ -588,7 +588,7 @@ def test_telegram_dashboard_menu_matches_gagarin_sections():
     menu = telegram_menu()
     labels = [button["text"] for row in menu["keyboard"] for button in row]
 
-    assert labels == ["📊 CLASSIFICA", "🛰 ANALISI"]
+    assert labels == ["📊 CLASSIFICA", "🛰 ANALISI", "📅 CALENDARIO"]
     assert menu["resize_keyboard"] is True
     assert menu["is_persistent"] is True
 
@@ -601,7 +601,7 @@ def test_telegram_start_uses_dashboard_keyboard():
 
     assert "GAGARIN" in text
     assert "PAPER ONLY" in text
-    assert "/classifica" in text and "/analisi" in text
+    assert "/classifica" in text and "/analisi" in text and "/calendario" in text
 
 
 
