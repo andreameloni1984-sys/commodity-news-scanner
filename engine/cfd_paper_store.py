@@ -15,6 +15,7 @@ import csv
 import hashlib
 import json
 import math
+import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,6 +32,8 @@ from engine.cfd_identity import (
 
 DEFAULT_CFD_JOURNAL_FILE = Path("gagarin_t212_cfd_paper_journal.csv")
 DEFAULT_CFD_FEEDBACK_FILE = Path("gagarin_t212_cfd_feedback.csv")
+CFD_JOURNAL_STATE_KEY = "gagarin_t212_cfd_paper_journal_rows"
+CFD_FEEDBACK_STATE_KEY = "gagarin_t212_cfd_feedback_rows"
 _FUTURES_STORE_NAMES = frozenset(
     {"gagarin_feedback.csv", "paper_journal.csv", "paper_trades.csv"}
 )
@@ -145,40 +148,158 @@ def _read_rows(path: Path, fields: tuple[str, ...]) -> list[dict[str, str]]:
         return list(reader)
 
 
+def _durable_store_enabled() -> bool:
+    return bool(os.getenv("DATABASE_URL", "").strip())
+
+
+def storage_backend() -> str:
+    """Report the CFD store backend without exposing database credentials."""
+    if not _durable_store_enabled():
+        return "LOCAL_CSV_EPHEMERAL"
+    try:
+        from state_store import ensure_schema
+        return "POSTGRES_AVAILABLE" if ensure_schema() else "DATABASE_UNAVAILABLE"
+    except Exception:
+        return "DATABASE_UNAVAILABLE"
+
+
+def _normalize_state_rows(
+    rows: Any,
+    fields: tuple[str, ...],
+) -> list[dict[str, str]]:
+    if rows is None:
+        return []
+    if not isinstance(rows, list):
+        raise RuntimeError("CFD durable state must contain a list of rows")
+    normalized: list[dict[str, str]] = []
+    for row in rows:
+        if not isinstance(row, Mapping):
+            raise RuntimeError("CFD durable state contains a non-object row")
+        normalized.append({
+            field: "" if row.get(field) is None else str(row.get(field, ""))
+            for field in fields
+        })
+    return normalized
+
+
+def _write_csv_rows(
+    path: Path,
+    fields: tuple[str, ...],
+    rows: list[Mapping[str, Any]],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="raise")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _write_csv_snapshot(
+    path: Path,
+    fields: tuple[str, ...],
+    rows: list[Mapping[str, Any]],
+) -> None:
+    try:
+        _write_csv_rows(path, fields, rows)
+    except OSError as exc:
+        # PostgreSQL is authoritative when configured; a local snapshot is only
+        # a recovery aid and must not turn a committed durable write into failure.
+        print(f"CFD PAPER local snapshot unavailable | {type(exc).__name__}: {exc}", flush=True)
+
+
+def _save_durable_rows(state_key: str, rows: list[Mapping[str, Any]]) -> None:
+    try:
+        from state_store import ensure_schema, save_state
+        if not ensure_schema():
+            raise RuntimeError("PostgreSQL schema is unavailable")
+        if not save_state(state_key, [dict(row) for row in rows]):
+            raise RuntimeError("PostgreSQL state write was not confirmed")
+    except Exception as exc:
+        raise RuntimeError(
+            f"CFD durable persistence failed for {state_key}; refusing ephemeral CSV fallback"
+        ) from exc
+
+
+def _load_rows(
+    path: Path,
+    fields: tuple[str, ...],
+    *,
+    state_key: str,
+    key_field: str,
+) -> list[dict[str, str]]:
+    local_rows = _read_rows(path, fields)
+    if not _durable_store_enabled():
+        return local_rows
+
+    try:
+        from state_store import ensure_schema, load_state
+        if not ensure_schema():
+            raise RuntimeError("PostgreSQL schema is unavailable")
+        durable_rows = _normalize_state_rows(load_state(state_key), fields)
+
+        # The durable rows win on duplicate IDs. A local snapshot may contain
+        # rows written during an earlier database outage, so merge missing IDs
+        # into PostgreSQL rather than discarding recoverable PAPER history.
+        merged = list(durable_rows)
+        known = {row.get(key_field, "") for row in durable_rows}
+        for row in local_rows:
+            key = row.get(key_field, "")
+            if key and key not in known:
+                merged.append(dict(row))
+                known.add(key)
+
+        if merged != durable_rows:
+            _save_durable_rows(state_key, merged)
+        _write_csv_snapshot(path, fields, merged)
+        return merged
+    except Exception as exc:
+        raise RuntimeError(
+            f"CFD durable store unavailable for {state_key}; refusing ephemeral CSV fallback"
+        ) from exc
+
+
+def _save_rows(
+    path: Path,
+    fields: tuple[str, ...],
+    rows: list[Mapping[str, Any]],
+    *,
+    state_key: str,
+) -> None:
+    if _durable_store_enabled():
+        _save_durable_rows(state_key, rows)
+        _write_csv_snapshot(path, fields, rows)
+        return
+    _write_csv_rows(path, fields, rows)
+
+
 def _append_unique(
     path: Path,
     fields: tuple[str, ...],
     row: Mapping[str, Any],
     *,
     key_field: str,
+    state_key: str,
 ) -> bool:
-    rows = _read_rows(path, fields)
+    rows = _load_rows(path, fields, state_key=state_key, key_field=key_field)
     key = str(row[key_field])
     if any(existing.get(key_field) == key for existing in rows):
         return False
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    write_header = not path.exists() or path.stat().st_size == 0
-    with path.open("a", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="raise")
-        if write_header:
-            writer.writeheader()
-        writer.writerow({field: row.get(field, "") for field in fields})
+    rows.append({field: str(row.get(field, "") or "") for field in fields})
+    _save_rows(path, fields, rows, state_key=state_key)
     return True
-
 
 def load_cfd_paper_journal(
     path: str | Path = DEFAULT_CFD_JOURNAL_FILE,
 ) -> list[dict[str, str]]:
     """Read only the dedicated CFD PAPER journal; never reads futures feedback."""
-    return _read_rows(_store_path(path, "journal_path"), JOURNAL_FIELDS)
+    return _load_rows(\n        _store_path(path, "journal_path"), JOURNAL_FIELDS,\n        state_key=CFD_JOURNAL_STATE_KEY, key_field="signal_id",\n    )
 
 
 def load_cfd_feedback(
     path: str | Path = DEFAULT_CFD_FEEDBACK_FILE,
 ) -> list[dict[str, str]]:
     """Read only the dedicated CFD feedback file."""
-    return _read_rows(_store_path(path, "feedback_path"), FEEDBACK_FIELDS)
+    return _load_rows(\n        _store_path(path, "feedback_path"), FEEDBACK_FIELDS,\n        state_key=CFD_FEEDBACK_STATE_KEY, key_field="feedback_id",\n    )
 
 
 def record_cfd_paper_signal(
@@ -275,7 +396,7 @@ def record_cfd_feedback(
     validate_same_cfd_series(instrument, series, registry=registry)
 
     matching = [
-        row for row in _read_rows(journal, JOURNAL_FIELDS)
+        row for row in _load_rows(\n            journal, JOURNAL_FIELDS,\n            state_key=CFD_JOURNAL_STATE_KEY, key_field="signal_id",\n        )
         if row.get("signal_id") == identifier
     ]
     if not matching:
