@@ -4,7 +4,7 @@ from telegram.bot import _command_response, telegram_menu
 def test_telegram_menu_contains_only_directional_commands():
     menu = telegram_menu()
     labels = [button["text"] for row in menu["keyboard"] for button in row]
-    assert labels == ["📊 CLASSIFICA", "🛰 ANALISI"]
+    assert labels == ["📊 CLASSIFICA", "🛰 ANALISI", "📅 CALENDARIO"]
     assert menu["is_persistent"] is True
 
 
