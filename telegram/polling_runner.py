@@ -1,4 +1,4 @@
-"""
+""" 
 SOYUZ GAGARIN — Telegram Polling Runner
 
 Alternativa al webhook Render.
@@ -21,6 +21,10 @@ if ROOT_DIR not in sys.path:
 from telegram.bot import _api, _command_response, _reply, telegram_diagnostic, telegram_menu
 
 
+class WebhookActiveError(RuntimeError):
+    """Raised when Telegram confirms that webhook mode blocks getUpdates."""
+
+
 def get_updates(offset: int | None = None, timeout: int = 0) -> list[dict]:
     params = {"timeout": timeout, "allowed_updates": ["message"]}
     if offset is not None:
@@ -34,11 +38,12 @@ def get_updates(offset: int | None = None, timeout: int = 0) -> list[dict]:
                 "getUpdates blocked by Telegram API error_code=409: webhook is active; "
                 "polling cannot run while webhook mode is enabled."
             )
-        else:
-            message = (
-                f"getUpdates failed (error_code={error_code or 'UNKNOWN'}): "
-                f"{description or 'unknown Telegram API error'}"
-            )
+            print(f"getUpdates BLOCKED | {message}", flush=True)
+            raise WebhookActiveError(message)
+        message = (
+            f"getUpdates failed (error_code={error_code or 'UNKNOWN'}): "
+            f"{description or 'unknown Telegram API error'}"
+        )
         print(f"getUpdates FAILED | {message}", flush=True)
         raise RuntimeError(message)
 
@@ -91,8 +96,18 @@ def main() -> None:
         raise SystemExit(1)
 
     # Process pending updates once and exit (suitable for Actions).
-    # API errors must fail the run: they are not equivalent to an empty queue.
-    updates = get_updates(timeout=0)
+    # A webhook/polling conflict is a transport-mode mismatch, not an empty
+    # queue. Leave the webhook untouched and do not acknowledge any update.
+    try:
+        updates = get_updates(timeout=0)
+    except WebhookActiveError:
+        print(
+            "POLLING SKIPPED | Telegram webhook is active; updates must be "
+            "handled by the configured webhook. No updates acknowledged.",
+            flush=True,
+        )
+        return
+
     print(f"Pending updates: {len(updates)}", flush=True)
 
     max_offset = None
