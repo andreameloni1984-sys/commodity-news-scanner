@@ -20,6 +20,7 @@ def _instrument(**overrides):
         "logical_symbol": "WTI/USD",
         "broker_symbol": "TEST-WTI-2026-11-27",
         "contract": "WTI CFD 27 Nov 2026",
+        "contract_type": "EXPIRING_FUTURE",
         "expiry": "2026-11-27",
         "currency": "USD",
         "verification_source": "TRADING_212_APP_SCREEN",
@@ -44,6 +45,7 @@ def _series(**overrides):
         "logical_symbol": "WTI/USD",
         "broker_symbol": "TEST-WTI-2026-11-27",
         "contract": "WTI CFD 27 Nov 2026",
+        "contract_type": "EXPIRING_FUTURE",
         "expiry": "2026-11-27",
         "currency": "USD",
         "timeframe": "M5",
@@ -85,6 +87,9 @@ def test_logical_universe_contains_exactly_the_eight_selected_commodities():
         {"logical_symbol": "SPY"},
         {"broker_symbol": ""},
         {"contract": ""},
+        {"contract_type": "UNKNOWN"},
+        {"contract_type": "SPOT", "expiry": "2026-11-27"},
+        {"contract_type": "EXPIRING_FUTURE", "expiry": None},
         {"expiry": ""},
         {"expiry": "27-11-2026"},
         {"expiry": "20261127"},
@@ -109,6 +114,40 @@ def test_default_registry_is_empty_and_blocks_unreviewed_contracts():
 
 def test_exact_trading212_cfd_series_can_be_bound_to_registry_approved_instrument():
     validate_same_cfd_series(_instrument(), _series(), registry=_registry())
+
+
+def test_spot_cfd_identity_and_series_accept_explicit_no_expiry():
+    instrument = _instrument(
+        logical_symbol="XAU/USD", broker_symbol="XAUUSD", contract="Gold",
+        contract_type="SPOT", expiry=None,
+    )
+    series = _series(
+        logical_symbol="XAU/USD", broker_symbol="XAUUSD", contract="Gold",
+        contract_type="SPOT", expiry=None, series_id="t212-cfd-xauusd-spot-m5",
+    )
+    registry = _registry(instrument)
+
+    validate_same_cfd_series(instrument, series, registry=registry)
+    signal_id = build_cfd_signal_id(
+        instrument, series, registry=registry, direction="LONG",
+        candle_timestamp="2026-11-06T00:05:00Z",
+        levels=_levels(series_id=series.series_id),
+    )
+    assert signal_id.startswith("T212CFD-")
+
+
+def test_spot_cfd_series_rejects_a_fabricated_expiry():
+    instrument = _instrument(
+        logical_symbol="XAU/USD", broker_symbol="XAUUSD", contract="Gold",
+        contract_type="SPOT", expiry=None,
+    )
+    series = _series(
+        logical_symbol="XAU/USD", broker_symbol="XAUUSD", contract="Gold",
+        contract_type="SPOT", expiry="2026-11-25",
+        series_id="t212-cfd-xauusd-spot-m5",
+    )
+    with pytest.raises(ValueError, match="must be None for SPOT"):
+        validate_same_cfd_series(instrument, series, registry=_registry(instrument))
 
 
 @pytest.mark.parametrize(
