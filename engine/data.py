@@ -983,6 +983,8 @@ def _fetch_yahoo(
     }
 
     errors = []
+    best_candles = None
+    best_age_seconds = None
 
     for url_template in YAHOO_URLS:
 
@@ -997,11 +999,7 @@ def _fetch_yahoo(
         )
 
         if error:
-
-            errors.append(
-                error
-            )
-
+            errors.append(error)
             continue
 
         candles, parse_error = (
@@ -1010,16 +1008,45 @@ def _fetch_yahoo(
             )
         )
 
-        if candles:
+        if not candles:
+            errors.append(
+                parse_error
+                or "YAHOO_NO_CANDLES"
+            )
+            continue
 
+        # query1/query2 are alternate Yahoo chart endpoints, not independent
+        # market-data providers. Try the next endpoint when the first returns
+        # structurally valid but stale bars. Never relabel stale data as LIVE.
+        latest_timestamp = candles[-1].get("timestamp")
+        try:
+            age_seconds = time.time() - float(latest_timestamp)
+        except (TypeError, ValueError):
+            age_seconds = float("inf")
+
+        if (
+            best_candles is None
+            or age_seconds < best_age_seconds
+        ):
+            best_candles = candles
+            best_age_seconds = age_seconds
+
+        if age_seconds <= EFFECTIVE_LIVE_MAX_AGE_SECONDS:
             return (
                 candles,
                 None,
             )
 
         errors.append(
-            parse_error
-            or "YAHOO_NO_CANDLES"
+            f"{url_template.split('/')[2]}:STALE@{age_seconds:.1f}s"
+        )
+
+    # If neither endpoint is fresh, retain the freshest valid series as
+    # non-live context; load_data remains responsible for the final status.
+    if best_candles is not None:
+        return (
+            best_candles,
+            None,
         )
 
     return (
