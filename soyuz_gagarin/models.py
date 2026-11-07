@@ -55,6 +55,7 @@ class Candidate:
     liquidity_ok: bool = False
     volatility_ok: bool = False
     regime_ok: bool = False
+    # Deprecated compatibility field; intraday time windows are not an entry gate.
     session_ok: bool = False
     curve_ok: bool = False
 

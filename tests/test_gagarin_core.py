@@ -63,6 +63,12 @@ def test_allows_paper_candidate():
     assert d.reason == "APPROVED_FOR_PAPER"
 
 
+def test_intraday_session_flag_does_not_veto_a_valid_commodity_setup():
+    d = GagarinEngine().evaluate(market(), candidate(session_ok=False))
+    assert d.action == "PAPER_ENTRY"
+    assert d.reason == "APPROVED_FOR_PAPER"
+
+
 def test_unknown_asset_is_blocked():
     d = GagarinEngine().evaluate(market("XYZ"), candidate(symbol="XYZ"))
     assert d.action == "PAPER_WATCH"
@@ -99,7 +105,7 @@ def test_legacy_wait_is_not_an_automatic_gagarin_veto():
         metadata={"operational_gates": {
             "paper_only": True, "data_quality_ok": True, "freshness_ok": True,
             "contract_ok": True, "liquidity_ok": True, "volatility_ok": True,
-            "regime_ok": True, "session_ok": True, "curve_ok": True,
+            "regime_ok": True, "session_ok": False, "curve_ok": True,
         }},
     )
     decisions = evaluate_states([state])

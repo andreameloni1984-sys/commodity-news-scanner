@@ -204,10 +204,8 @@ def evaluate_states(states: Iterable[object]):
             else regime in {"RANGE", "MIXED", "TREND_UP", "TREND_DOWN", "UNKNOWN"}
         )
         regime_ok = bool(explicit_gates.get("regime_ok", regime_allowed))
-        session_ok = bool(explicit_gates.get(
-            "session_ok",
-            getattr(state, "live", False),
-        ))
+        # Intraday session windows are informational only. Market availability,
+        # quote freshness and liquidity are validated by their own gates.
         # Curve evidence is not yet a mandatory producer in the canonical state.
         curve_ok = bool(explicit_gates.get("curve_ok", True))
 
@@ -247,7 +245,6 @@ def evaluate_states(states: Iterable[object]):
             liquidity_ok=liquidity_ok,
             volatility_ok=volatility_ok,
             regime_ok=regime_ok,
-            session_ok=session_ok,
             curve_ok=curve_ok,
         )
 
