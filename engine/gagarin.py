@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import time
 
@@ -438,9 +439,16 @@ def analyze_one(commodity: Commodity) -> SoyuzState:
 
 def analyze_universe(commodities):
     universe_started = time.perf_counter()
-    results = []
-    for commodity in commodities:
-        results.append(analyze_one(commodity))
+    instruments = list(commodities)
+    if len(instruments) < 2:
+        results = [analyze_one(commodity) for commodity in instruments]
+    else:
+        # Bound concurrent provider waits: keep at most three instrument analyses
+        # in flight so a slow quote cannot serialize the entire commodity basket
+        # and the free data providers are not flooded with eight simultaneous scans.
+        with ThreadPoolExecutor(max_workers=min(3, len(instruments))) as executor:
+            # executor.map preserves input order; the ranking below remains deterministic.
+            results = list(executor.map(analyze_one, instruments))
     stamp_energy(results)
     stamp_paper(results)
     universe_duration_ms = round(
