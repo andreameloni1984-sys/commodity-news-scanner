@@ -5,8 +5,7 @@ Comandi principali:
     /start /help /ping /status /id
     /classifica /setup /analisi /prezzo
     /segnali /top /guida /rischio
-    /aggressivo212 /soft212 /prezzo212
-    /invest /invest_demo /invest_account /invest_orders /invest_buy /invest_auto
+    /classifica /analisi [materia prima] /status
 
 PAPER ONLY.
 """
@@ -22,16 +21,6 @@ from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 from engine.gagarin import analyze_universe
 from engine.decision_status import market_decision_status
 from commodities.universe import operational_commodities, get_commodity_by_name
-from engine.invest import (
-    analyze_invest_universe,
-    format_invest_report,
-    get_trading212_demo_status,
-    format_account_status,
-    format_pending_orders,
-    place_demo_order,
-    auto_buy_best_signal,
-    auto_buy_best_signal_budget,
-)
 from engine.daily_forecast import predict_today
 from soyuz_gagarin.adapter import evaluate_states
 
@@ -90,12 +79,11 @@ def telegram_diagnostic() -> bool:
     return True
 
 def telegram_menu() -> dict:
-    """Menu Telegram minimale: i tre comandi richiesti dall'utente."""
+    """Menu essenziale: classifica generale e analisi direzionale."""
     return {
         "keyboard": [
-            [{"text": "🚀 AGGRESSIVE 212"}],
-            [{"text": "🛡 SOFT 212"}],
-            [{"text": "🔗 COLLEGAMENTO INVEST TRADING212"}],
+            [{"text": "📊 CLASSIFICA"}],
+            [{"text": "🛰 ANALISI"}],
         ],
         "resize_keyboard": True,
         "is_persistent": True,
@@ -305,73 +293,9 @@ def _format_morning_pick(results):
 def _command_response(command: str) -> Optional[str]:
     raw = command.strip()
 
-    # Manual position registration enables transition-only post-entry monitoring.
-    # Prices are compared with Gagarin's provider feed; this is not a Trading 212 API.
-    command_name = raw.split(maxsplit=1)[0].lower() if raw else ""
-    if command_name == "/monitora":
-        parts = raw.split()
-        if len(parts) < 6 or len(parts) > 8:
-            return (
-                "Uso: /monitora ORO LONG ENTRY SL TP1 [TP2] [TP3]\n"
-                "ATTENZIONE: i numeri 2700 2680 2740 sono solo un esempio, NON quotazioni live.\n"
-                "Prima usa /analisi oro per vedere il prezzo provider attuale; inserisci poi i livelli della tua posizione.\n"
-                "I prezzi inseriti sono confrontati con il feed provider Gagarin, non con il Bid/Ask Trading 212."
-            )
-        commodity = _resolve_commodity(parts[1])
-        if commodity is None:
-            return "Commodity non riconosciuta o non abilitata. Usa oro, wti, brent, cacao, caffe, platino, riso o zucchero."
-        from engine.position_monitor import register_position
-        tp2 = parts[6] if len(parts) >= 7 else None
-        tp3 = parts[7] if len(parts) >= 8 else None
-        ok, message = register_position(
-            symbol=commodity.symbol, commodity=commodity.name,
-            direction=parts[2], entry=parts[3], stop=parts[4], tp1=parts[5],
-            tp2=tp2, tp3=tp3,
-        )
-        return message
-
-    if command_name == "/posizioni":
-        from engine.position_monitor import list_positions
-        positions = list_positions()
-        if not positions:
-            return "Nessuna posizione monitorata. Registra una con /monitora ORO LONG 2700 2680 2740."
-        lines = ["GAGARIN — POSIZIONI MONITORATE", "PAPER/ADVISORY ONLY", ""]
-        for p in positions:
-            lines.append(
-                f"{p.get('commodity')} {p.get('direction')} | Entry {p.get('entry'):g} "
-                f"| SL {p.get('stop'):g} | TP1 {p.get('tp1'):g}"
-            )
-        lines.append("")
-        lines.append("Quotazioni provider Gagarin, non Trading 212. Solo avvisi; nessun ordine viene modificato.")
-        return "\n".join(lines)
-
-    if command_name in {"/smetti", "/stopmonitore"}:
-        parts = raw.split()
-        if len(parts) != 2:
-            return "Uso: /smetti ORO"
-        commodity = _resolve_commodity(parts[1])
-        symbol = commodity.symbol if commodity is not None else parts[1].upper()
-        from engine.position_monitor import remove_position
-        _, message = remove_position(symbol)
-        return message
     button_commands = {
-        "🏆 classifica": "/classifica",
-        "🎯 setup": "/setup",
-        "🔥 top": "/top",
-        "📊 analisi": "/analisi",
-        "💰 prezzi": "/prezzo",
-        "📡 segnali": "/segnali",
-        "📖 guida": "/guida",
-        "⚠️ rischio": "/rischio",
-        "🔄 aggiorna": "/analisi",
-        "⚙️ stato": "/status",
-        "🚀 aggressive trading 2-1-2": "/aggressivo212",
-        "🛡 soft trading 2-1-2": "/soft212",
-        "🚀 aggressive 212": "/aggressivo212",
-        "🛡 soft 212": "/soft212",
-        "🔗 collegamento invest trading212": "/collegamento212",
-        "🚀 aggressivo": "/aggressivo212",
-        "🛡 soft": "/soft212",
+        "📊 classifica": "/classifica",
+        "🛰 analisi": "/analisi",
     }
     raw = button_commands.get(raw.lower(), raw)
     parts = raw.split()
@@ -384,15 +308,11 @@ def _command_response(command: str) -> Optional[str]:
 
     if command_name in {"/start", "/help", "/menu"}:
         return (
-            "🚀 GAGARIN — MENU SEMPLICE\n"
-            "🧪 PAPER/DEMO — nessun ordine reale.\n\n"
-            "🚀 AGGRESSIVE 212 — profilo aggressivo\n"
-            "🛡 SOFT 212 — profilo prudente\n"
-            "🔗 COLLEGAMENTO INVEST TRADING212 — verifica sola lettura\n\n"
-            "Monitor posizione: /monitora ORO LONG ENTRY SL TP1 [TP2] [TP3]\n"
-            "2700/2680/2740 nell'esempio sono valori fittizi: controlla prima /analisi oro.\n"
-            "/posizioni — elenco monitorate | /smetti ORO — disattiva monitor.\n"
-            "Gli avvisi automatici arrivano solo su nuovi segnali rilevanti o cambi di rischio/target; nessun messaggio di stato ripetitivo."
+            "🚀 GAGARIN — ANALISI DIREZIONALE\\n"
+            "🧪 PAPER ONLY — nessun ordine viene eseguito.\\n\\n"
+            "/classifica — direzione delle otto materie prime\\n"
+            "/analisi [materia prima] — analisi generale o singolo strumento\\n"
+            "/status — stato del bot"
         )
 
     if command_name in {"/aggressivo212", "/aggressive212"}:
@@ -545,43 +465,12 @@ def _command_response(command: str) -> Optional[str]:
         # Explicit user command: one guarded €10 order at most, INVEST DEMO only.
         return auto_buy_best_signal_budget(amount=10.0, min_score=50.0)
 
-    if command_name == "/classifica":
-        # Always rebuild the manual ranking from the canonical enabled universe.
-        # Cached results may have been produced by an older process/universe and
-        # must never reintroduce retired instruments into Telegram.
-        results = _run_analysis(on_demand=True)
-        return _format_classifica(results)
-
-    if command_name == "/analisi":
-        commodity = _resolve_commodity(argument) if argument else None
-        results = _run_analysis(commodity)
-        if not results:
-            return "Nessun risultato."
-        if commodity:
-            state = results[0]
-            status = market_decision_status(state)
-            price = "N/D" if state.price is None else f"{state.price:.6g}"
-            return (
-                f"🛰 SOYUZ GAGARIN — {state.commodity.upper()}\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"🧪 PAPER ONLY\n\n"
-                f"Prezzo: {price}\n"
-                f"BIAS: {'CONTESTO AUSILIARIO — NON OPERATIVO' if _is_auxiliary_forex(state) else status['bias']}\n"
-                f"SETUP: {status['setup']}\n"
-                f"TRADE PAPER: {status['trade_paper']}\n"
-                f"Confluence: {state.probability:.1f} / 100\n"
-                f"Quality: {state.quality:.1f}\n"
-                f"Confidence: {state.confidence:.1f}\n"
-                f"Blocker: {status['blockers'] or 'N/D'}"
-            )
-        return _format_classifica(results)
-
     if command_name == "/fasceorario":
         from research.intraday_windows import format_intraday_window_report
         return format_intraday_window_report()
 
     if command_name == "/status":
-        return "Bot attivo. PAPER ONLY. Sezione Invest disponibile."
+        return "Bot attivo. Analisi direzionale delle otto materie prime. PAPER ONLY."
 
     if command_name == "/ping":
         return "pong"
