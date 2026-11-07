@@ -23,7 +23,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from commodities.universe import (
-    enabled_commodities,
     operational_commodities,
     validate_universe,
 )
@@ -64,13 +63,12 @@ def _is_operational_state(state) -> bool:
 
 
 def _select_run_universe(now=None):
-    """Scan every enabled instrument on every scheduled cycle.
+    """Scan only the eight user-selected commodities on every cycle.
 
-    Session labels may describe liquidity windows, but they must not suppress
-    an otherwise valid Forex setup. Actual weekend/market-closed data status
-    remains enforced by the data and safety layers.
+    No Forex, equities, indices, ETFs or auxiliary instruments enter the
+    analysis, Governor, PAPER journal or directional report.
     """
-    return enabled_commodities()
+    return operational_commodities()
 
 # ============================================================
 # HEADER
@@ -587,27 +585,22 @@ def run():
     # UNIVERSE
     # --------------------------------------------------------
 
-    # Commodities are scanned continuously: time-of-day is not a reason to
-    # hide a market move. Only auxiliary FX remains restricted to its windows.
+    # The run universe is exactly the eight selected commodities.
     instruments = _select_run_universe()
     operational_instruments = [
         item for item in instruments
         if str(getattr(item, "symbol", "")).strip().upper() in OPERATIONAL_SYMBOLS
     ]
-    auxiliary_instruments = [
-        item for item in instruments
-        if str(getattr(item, "symbol", "")).strip().upper() not in OPERATIONAL_SYMBOLS
-    ]
+    auxiliary_instruments = []
 
     print(
-        "SESSION FILTER: 8 commodities operative; EUR/USD e GBP/USD restano ausiliari "
-        "e vengono analizzati nelle rispettive finestre (Europe/Rome)."
+        "UNIVERSE: solo le otto commodity selezionate; nessun Forex o strumento ausiliario."
     )
 
     if not instruments:
 
         print(
-            "⏭️ SKIP: nessuno strumento previsto nella finestra oraria corrente."
+            "⏭️ SKIP: nessuna delle otto commodity è disponibile per l'analisi."
         )
         print(
             "Run pianificato completato senza analisi; non è un errore del motore."
@@ -616,9 +609,8 @@ def run():
         return 0
 
     print(
-        f"Universe: {len(instruments)} strumenti analizzati "
-        f"({len(operational_instruments)} commodities operative, "
-        f"{len(auxiliary_instruments)} Forex ausiliari in finestra)"
+        f"Universe: {len(instruments)} commodity selezionate "
+        f"({len(operational_instruments)} operative; nessun altro strumento)"
     )
 
     print()
