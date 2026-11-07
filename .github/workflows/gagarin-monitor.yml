@@ -2,7 +2,7 @@ name: Gagarin Paper Monitor (GitHub Actions)
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "7,22,37,52 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -34,7 +34,7 @@ jobs:
       MAX_ENTRY_STOP_ATR: "2.5"
       SL_STRUCTURE_BUFFER_ATR: "0.15"
       SL_MIN_ATR: "0.80"
-      # Full provider-heavy monitor stays at 15m until rate-limit capacity is verified.
+      # Full provider-heavy monitor stays at 15m; offset avoids the top of the hour.
       MONITOR_INTERVAL_MINUTES: "15"
       POLITICAL_IMPACT_ENABLED: "1"
       US_PRESIDENT_IMPACT_ENABLED: "1"
