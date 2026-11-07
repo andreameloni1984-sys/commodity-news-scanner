@@ -50,6 +50,7 @@ from telegram.bot import send_telegram
 from telegram.signals import format_signal_board, format_watch_board
 from soyuz_gagarin.adapter import evaluate_states
 from execution.router import execute_state
+from economic_calendar import fetch_calendar, messages_due
 
 
 OPERATIONAL_SYMBOLS = frozenset(
@@ -751,6 +752,17 @@ def run():
     if TELEGRAM_ENABLED:
 
         print("📨 TELEGRAM")
+
+        # Macro calendar is part of the information flow, but never overrides
+        # technical direction, the Governor, stop-loss or take-profit.
+        try:
+            calendar_events = fetch_calendar()
+            for calendar_kind, calendar_message in messages_due(calendar_events):
+                print(calendar_message)
+                if not send_telegram(calendar_message):
+                    print(f"⚠️ CALENDAR Telegram delivery not confirmed ({calendar_kind}).")
+        except Exception as calendar_exc:
+            print(f"⚠️ ECONOMIC CALENDAR ERROR: {type(calendar_exc).__name__}: {calendar_exc}")
 
         try:
 
