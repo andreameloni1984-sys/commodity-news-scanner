@@ -17,11 +17,13 @@ import json
 import math
 from pathlib import Path
 import re
+from urllib.parse import urlparse
 
 
 TRADING212_BROKER = "TRADING212"
 TRADING212_CFD_PROVIDER = "TRADING212_CFD"
 TRADING212_APP_SCREEN = "TRADING_212_APP_SCREEN"
+TRADING212_OFFICIAL_CATALOG = "TRADING212_OFFICIAL_CATALOG"
 
 # Logical Gagarin universe only. These are not broker tickers.
 GAGARIN_CFD_LOGICAL_SYMBOLS = frozenset(
@@ -78,6 +80,33 @@ def _aware_utc_timestamp(value: str, field: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
+def _validate_verification_evidence(source: str, reference: str) -> None:
+    """Accept app-screen evidence or a canonical official Trading 212 CFD product page."""
+    selected_source = _required_text(source, "verification_source")
+    selected_reference = _required_text(reference, "verification_reference")
+    if selected_source == TRADING212_APP_SCREEN:
+        return
+    if selected_source != TRADING212_OFFICIAL_CATALOG:
+        raise ValueError(
+            "Identity evidence must be a Trading 212 app screen or official CFD catalogue page"
+        )
+
+    parsed = urlparse(selected_reference)
+    if (
+        parsed.scheme != "https"
+        or parsed.netloc.lower() not in {"trading212.com", "www.trading212.com"}
+        or parsed.query
+        or parsed.fragment
+        or not re.fullmatch(
+            r"/(?:[a-z]{2}/)?trading-instruments/cfd/[A-Za-z0-9][A-Za-z0-9._-]*",
+            parsed.path,
+        )
+    ):
+        raise ValueError(
+            "Official catalogue evidence must be a canonical Trading 212 CFD product URL"
+        )
+
+
 def _positive_level(value: float, field: str) -> str:
     # bool is a subclass of int in Python; float(True) == 1.0 would otherwise
     # let a malformed flag masquerade as a valid CFD price level.
@@ -123,9 +152,7 @@ class CFDInstrumentIdentity:
         currency = _required_text(self.currency, "currency")
         if len(currency) != 3 or not currency.isascii() or not currency.isalpha() or currency != currency.upper():
             raise ValueError("currency must be a three-letter uppercase ISO code")
-        if self.verification_source != TRADING212_APP_SCREEN:
-            raise ValueError("Identity must be verified from the Trading 212 app instrument screen")
-        _required_text(self.verification_reference, "verification_reference")
+        _validate_verification_evidence(self.verification_source, self.verification_reference)
         evidence_hash = _required_text(
             self.verification_evidence_sha256, "verification_evidence_sha256"
         )
