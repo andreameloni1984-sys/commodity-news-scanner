@@ -397,10 +397,16 @@ def _command_response(command: str) -> Optional[str]:
         )
 
     if command_name in {"/aggressivo212", "/aggressive212"}:
+        if argument:
+            return (
+                "Il desk AGGRESSIVE usa il motore futures GAGARIN e non accetta quotazioni CFD.\\n"
+                "Per mantenere separati i mercati, usa il canale CFD dedicato:\\n"
+                "/prezzo212 SIMBOLO BID ASK\\n"
+                "Esempio: /prezzo212 WTI 78.10 78.13"
+            )
         try:
             from soyuz_gagarin.aggressive_desk import format_aggressive_desk
             from soyuz_gagarin.trading_profiles import get_profile
-            from engine.trading212 import build_manual_cfd_quote, format_manual_cfd_quote, parse_bid_ask
             profile = get_profile("AGGRESSIVE")
             results = _run_analysis()
             if results is None:
@@ -416,20 +422,6 @@ def _command_response(command: str) -> Optional[str]:
                 desk = desk + "\n" + "\n".join(fx_lines)
             except Exception:
                 pass
-            if argument:
-                parts = argument.replace(",", ".").split()
-                if len(parts) >= 3:
-                    symbol = parts[0]
-                    bid, ask = parse_bid_ask(" ".join(parts[1:]))
-                    if bid is not None and ask is not None:
-                        quote = build_manual_cfd_quote(symbol, bid, ask)
-                        desk = desk + "\n\n" + format_manual_cfd_quote(quote)
-                    else:
-                        desk = desk + "\n\n212: bid/ask non validi. Esempio: /aggressivo212 WTI 78.10 78.13"
-                else:
-                    desk = desk + "\n\n212: usa simbolo bid ask. Esempio: /aggressivo212 WTI 78.10 78.13"
-            else:
-                desk = desk + "\n\n212 CFD: inserimento manuale solo per il paniere GAGARIN; nessun confronto con futures."
             desk = desk + "\n\nProfilo: probabilita >= " + str(profile.min_probability) + ", qualita >= " + str(profile.min_quality) + ", rischio " + str(profile.risk_per_trade_pct) + "% per operazione, max " + str(profile.max_open_positions) + " posizioni."
             try:
                 from research.intraday_windows import format_intraday_window_summary
