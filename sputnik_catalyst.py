@@ -19,12 +19,9 @@ DOMAIN_INSTRUMENTS = {
         ("PALLADIUM", "Palladium / metals"),
     ],
     "AGRICULTURE": [
-        ("CORN", "Corn / agriculture"),
         ("WHEAT", "Wheat / agriculture"),
-        ("SUGAR", "Sugar / agriculture"),
-        ("COCOA", "Cocoa / agriculture"),
-        ("COFFEE", "Coffee / agriculture"),
-        ("RICE", "Rice / agriculture"),
+        ("CORN", "Corn / agriculture"),
+        ("SOYBEAN", "Soybean / agriculture"),
     ],
     "DEFENSE": [("US_DEFENSE", "US defense sector")],
     "AI_TECH": [
