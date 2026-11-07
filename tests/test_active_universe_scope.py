@@ -106,7 +106,7 @@ def test_telegram_marks_forex_as_context_and_excludes_it_from_pick(monkeypatch):
     assert received == [gold]
 
 
-def test_main_scans_all_enabled_instruments_without_intraday_time_gate():
+def test_main_scans_only_selected_commodities_without_intraday_time_gate():
     import ast
     from pathlib import Path
 
@@ -122,8 +122,8 @@ def test_main_scans_all_enabled_instruments_without_intraday_time_gate():
 
     selector = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_select_run_universe")
     selector_source = ast.get_source_segment(source, selector)
-    assert "enabled_commodities()" in selector_source
-    assert "return enabled_commodities()" in selector_source
+    assert "operational_commodities()" in selector_source
+    assert "return operational_commodities()" in selector_source
     assert "filter_by_session" not in selector_source
 
 
