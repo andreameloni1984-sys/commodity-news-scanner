@@ -7,6 +7,7 @@ from engine.cfd_identity import (
     CFDQuoteSeriesIdentity,
     CFDSignalLevels,
     GAGARIN_CFD_LOGICAL_SYMBOLS,
+    TRADING212_OFFICIAL_CATALOG,
     build_cfd_signal_id,
     load_verified_instrument_registry,
     validate_same_cfd_series,
@@ -104,6 +105,35 @@ def test_logical_universe_contains_exactly_the_eight_selected_commodities():
 def test_unverified_or_out_of_scope_instrument_identity_is_rejected(changes):
     with pytest.raises(ValueError):
         _instrument(**changes).validate()
+
+
+def test_official_catalog_product_page_can_verify_contract_identity():
+    instrument = _instrument(
+        verification_source=TRADING212_OFFICIAL_CATALOG,
+        verification_reference=(
+            "https://www.trading212.com/it/trading-instruments/cfd/CRUDE.NOV26"
+        ),
+    )
+
+    assert instrument.validate() is instrument
+
+
+@pytest.mark.parametrize(
+    "reference",
+    [
+        "http://www.trading212.com/it/trading-instruments/cfd/CRUDE.NOV26",
+        "https://example.com/it/trading-instruments/cfd/CRUDE.NOV26",
+        "https://www.trading212.com/it/trading-instruments/cfd",
+        "https://www.trading212.com/it/trading-instruments/cfd/CRUDE.NOV26?quote=1",
+        "https://www.trading212.com.evil.example/it/trading-instruments/cfd/CRUDE.NOV26",
+    ],
+)
+def test_official_catalog_evidence_rejects_noncanonical_or_untrusted_urls(reference):
+    with pytest.raises(ValueError, match="canonical Trading 212 CFD product URL"):
+        _instrument(
+            verification_source=TRADING212_OFFICIAL_CATALOG,
+            verification_reference=reference,
+        ).validate()
 
 
 def test_default_registry_is_empty_and_blocks_unreviewed_contracts():
