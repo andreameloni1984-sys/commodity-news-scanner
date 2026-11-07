@@ -1,4 +1,4 @@
-"""Provider fallback regression tests for stale but structurally valid candles."""
+"""Futures freshness tests: independent CFD references never replace futures quotes."""
 
 import time
 from types import SimpleNamespace
@@ -23,55 +23,58 @@ def _candles(latest_age_seconds):
     return rows
 
 
-def _configure_provider_chain(monkeypatch, provider_rows):
+def _configure_provider_chain(monkeypatch, provider_rows, provider_order=("YAHOO",)):
     monkeypatch.setattr(
         data,
         "PROVIDER_ORDER",
-        {"EUR/USD": tuple(provider_rows)},
+        {"XAU/USD": tuple(provider_order)},
     )
-    monkeypatch.setattr(
-        data,
-        "_try_provider",
-        lambda state, symbol, provider: provider_rows[provider],
-    )
-    # Keep the tests independent of the weekday/weekend market calendar.
+    calls = []
+
+    def provider_call(state, symbol, provider):
+        calls.append(provider)
+        return provider_rows[provider]
+
+    monkeypatch.setattr(data, "_try_provider", provider_call)
+    # Keep tests independent of the weekday/weekend market calendar.
     monkeypatch.setattr(
         data,
         "classify_data_status",
         lambda commodity, live, data_ok, timestamp=None: "LIVE" if live else "STALE",
     )
+    return calls
 
 
-def _load(monkeypatch, provider_rows):
-    _configure_provider_chain(monkeypatch, provider_rows)
-    state = SoyuzState(commodity="EUR/USD", symbol="EUR/USD")
-    commodity = SimpleNamespace(name="EUR/USD", symbol="EUR/USD")
+def _load(monkeypatch, provider_rows, provider_order=("YAHOO",)):
+    _configure_provider_chain(monkeypatch, provider_rows, provider_order)
+    state = SoyuzState(commodity="Oro", symbol="XAU/USD")
+    commodity = SimpleNamespace(name="Oro", symbol="XAU/USD")
     return data.load_data(state, commodity)
 
 
-def test_stale_primary_provider_falls_through_to_fresh_provider(monkeypatch):
+def test_biquote_cfd_reference_is_never_a_futures_fallback(monkeypatch):
     provider_rows = {
-        "BIQUOTE": (_candles(900), None, "EURUSD"),
-        "YAHOO": (_candles(90), None, "EURUSD=X"),
+        "YAHOO": (_candles(900), None, "GC=F"),
+        "BIQUOTE": (_candles(30), None, "XAUUSD"),
     }
+    calls = _configure_provider_chain(monkeypatch, provider_rows, provider_order=("YAHOO",))
 
-    state = _load(monkeypatch, provider_rows)
+    state = data.load_data(
+        SoyuzState(commodity="Oro", symbol="XAU/USD"),
+        SimpleNamespace(name="Oro", symbol="XAU/USD"),
+    )
 
+    assert calls == ["YAHOO"]
     assert state.data_source == "YAHOO"
-    assert state.live is True
-    assert state.metadata["freshness_status"] == "LIVE"
-    assert state.metadata["freshness_fallback_used"] is True
-    attempts = state.metadata["provider_attempts"]
-    assert attempts[0]["freshness_status"] == "STALE"
-    assert attempts[0]["accepted_for_live"] is False
-    assert attempts[1]["freshness_status"] == "LIVE"
-    assert attempts[1]["accepted_for_live"] is True
+    assert state.data_ok is True
+    assert state.live is False
+    assert state.metadata["freshness_status"] == "STALE"
+    assert state.metadata["freshness_fallback_reason"] == "ALL_PROVIDER_CANDLES_STALE"
 
 
-def test_all_stale_providers_keep_freshest_sample_as_non_live_context(monkeypatch):
+def test_stale_yahoo_futures_sample_is_kept_as_non_live_context(monkeypatch):
     provider_rows = {
-        "BIQUOTE": (_candles(1200), None, "EURUSD"),
-        "YAHOO": (_candles(720), None, "EURUSD=X"),
+        "YAHOO": (_candles(720), None, "GC=F"),
     }
 
     state = _load(monkeypatch, provider_rows)
@@ -84,30 +87,22 @@ def test_all_stale_providers_keep_freshest_sample_as_non_live_context(monkeypatc
     assert 700 <= state.data_age_seconds <= 740
 
 
-def test_closed_market_marks_stale_fallback_as_market_closed(monkeypatch):
+def test_closed_market_marks_stale_yahoo_futures_as_market_closed(monkeypatch):
     provider_rows = {
-        "BIQUOTE": (_candles(1200), None, "EURUSD"),
-        "YAHOO": (_candles(720), None, "EURUSD=X"),
+        "YAHOO": (_candles(720), None, "GC=F"),
     }
-    _configure_provider_chain(monkeypatch, provider_rows)
+    calls = _configure_provider_chain(monkeypatch, provider_rows)
     monkeypatch.setattr(
         data,
         "classify_data_status",
         lambda commodity, live, data_ok, timestamp=None: "MARKET_CLOSED",
     )
-    calls = []
-
-    def provider_call(state, symbol, provider):
-        calls.append(provider)
-        return provider_rows[provider]
-
-    monkeypatch.setattr(data, "_try_provider", provider_call)
     state = data.load_data(
-        SoyuzState(commodity="EUR/USD", symbol="EUR/USD"),
-        SimpleNamespace(name="EUR/USD", symbol="EUR/USD"),
+        SoyuzState(commodity="Oro", symbol="XAU/USD"),
+        SimpleNamespace(name="Oro", symbol="XAU/USD"),
     )
 
-    assert calls == ["BIQUOTE"]
+    assert calls == ["YAHOO"]
     assert state.live is False
     assert state.metadata["data_status"] == "MARKET_CLOSED"
     assert state.metadata["freshness_fallback_reason"] == "MARKET_CLOSED"

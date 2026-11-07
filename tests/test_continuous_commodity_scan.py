@@ -9,8 +9,7 @@ def test_all_enabled_commodities_are_scanned_outside_session_windows():
     instruments = main._select_run_universe(now=after_session)
     symbols = {item.symbol for item in instruments}
 
-    assert {
+    assert symbols == {
         "XAU/USD", "XAG/USD", "COPPER/USD", "WTI/USD", "BRENT/USD",
         "WHEAT/USD", "CORN/USD", "SOYBEAN/USD",
-    }.issubset(symbols)
-    assert {"EUR/USD", "GBP/USD"}.issubset(symbols)
+    }

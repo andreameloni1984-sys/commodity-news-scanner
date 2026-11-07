@@ -16,6 +16,28 @@ from typing import Any, Iterable
 from config import LIVE_MAX_AGE_SECONDS
 from engine.session_windows import is_overlap, is_eia_window
 from engine.pattern_exit import analyze_pattern_and_exit
+from commodities.universe import operational_commodities
+
+_OPERATIONAL_SYMBOLS = frozenset(item.symbol.strip().upper() for item in operational_commodities())
+
+# Provider quote symbols are aliases, not additional instruments. Map only the
+# explicit Yahoo-futures and BiQuote-reference symbols for the eight commodities.
+_OPERATIONAL_PROVIDER_ALIASES = {
+    "XAUUSD": "XAU/USD", "GC=F": "XAU/USD",
+    "XAGUSD": "XAG/USD", "SI=F": "XAG/USD",
+    "HG=F": "COPPER/USD",
+    "USOIL": "WTI/USD", "CL=F": "WTI/USD",
+    "UKOIL": "BRENT/USD", "BZ=F": "BRENT/USD",
+    "ZW=F": "WHEAT/USD",
+    "ZC=F": "CORN/USD",
+    "ZS=F": "SOYBEAN/USD",
+}
+
+
+def _is_operational_symbol(symbol: Any) -> bool:
+    normalized = str(symbol or "").strip().upper()
+    canonical = _OPERATIONAL_PROVIDER_ALIASES.get(normalized, normalized)
+    return canonical in _OPERATIONAL_SYMBOLS
 
 # Preliminary thresholds deliberately lower than confirmed-entry thresholds.
 POTENTIAL_MIN_PROBABILITY = 35.0
@@ -200,6 +222,9 @@ def find_aggressive_alerts(states: Iterable[Any]) -> list[dict]:
     """Return up to three ranked potential or confirmed live setups."""
     found = []
     for state in states:
+        symbol = getattr(state, "symbol", "")
+        if not _is_operational_symbol(symbol):
+            continue
         item = _item_from_state(state)
         # Calculate once so stage and displayed exit/TP/SL use identical evidence.
         item["pattern_analysis"] = analyze_pattern_and_exit(
