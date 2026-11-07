@@ -223,7 +223,7 @@ RSS_FEEDS = (
     ("SPUTNIK / WHITE HOUSE", "https://www.whitehouse.gov/news/feed/"),
 )
 GDELT_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
-GDELT_QUERY = '(oil OR crude OR WTI OR Brent OR gold OR silver OR OPEC OR sanctions OR Trump OR "Federal Reserve" OR Iran OR Hormuz OR energy OR inflation)'
+GDELT_QUERY = '(oil OR crude OR WTI OR Brent OR gold OR silver OR OPEC OR sanctions OR Trump OR "Federal Reserve" OR Iran OR Hormuz OR energy OR inflation OR wheat OR corn OR maize OR soybean OR soybeans OR USDA OR WASDE OR "crop progress" OR harvest)'
 
 OIL_TERMS = {
     "oil", "crude", "wti", "brent", "opec", "petroleum", "diesel",
@@ -233,9 +233,10 @@ OIL_TERMS = {
 }
 METAL_TERMS = {"gold", "bullion", "precious metal", "precious metals", "xau", "silver", "argento", "platinum", "platino", "xpt", "palladium", "palladio", "xag", "xpd"}
 AGRI_TERMS = {
-    "coffee", "arabica", "robusta", "caffè", "caffe", "cocoa", "cacao",
-    "rice", "riso", "sugar", "zucchero", "raw sugar", "white sugar",
-    "coffee futures", "cocoa futures", "rice futures", "sugar futures",
+    "wheat", "corn", "maize", "soybean", "soybeans", "soy", "grain", "grains",
+    "usda", "wasde", "crop progress", "crop production", "export sales",
+    "planting", "harvest", "drought", "frost", "flood", "black sea",
+    "ukraine grain", "argentina drought", "brazil soybean",
 }
 MACRO_TERMS = {
     "federal reserve", "fed", "interest rate", "interest rates", "rate cut",
@@ -578,10 +579,9 @@ def classify_event(title: str) -> dict[str, Any]:
         assets.extend(["Oro", "Argento", "Platino", "Palladio"])
     if has_agri:
         for asset, terms in {
-            "Caffè": {"coffee", "arabica", "robusta", "caffè", "caffe"},
-            "Cacao": {"cocoa", "cacao"},
-            "Riso": {"rice", "riso"},
-            "Zucchero": {"sugar", "zucchero"},
+            "Grano": {"wheat", "grain", "grains", "black sea", "ukraine grain"},
+            "Mais": {"corn", "maize"},
+            "Soia": {"soybean", "soybeans", "soy", "brazil soybean"},
         }.items():
             if any(term in text for term in terms):
                 assets.append(asset)
@@ -595,7 +595,7 @@ def classify_event(title: str) -> dict[str, Any]:
     for asset in assets:
         if asset in {"WTI", "Brent"}:
             up_terms, down_terms = OIL_BULLISH_TERMS, OIL_BEARISH_TERMS
-        elif asset in {"Caffè", "Cacao", "Riso", "Zucchero"}:
+        elif asset in {"Grano", "Mais", "Soia"}:
             up_terms, down_terms = AGRI_BULLISH_TERMS, AGRI_BEARISH_TERMS
         else:
             up_terms, down_terms = METAL_BULLISH_TERMS, METAL_BEARISH_TERMS
@@ -653,14 +653,12 @@ def _asset_matches(asset: str, state: Any) -> bool:
         return "platino" in name or "platinum" in name or "XPT" in symbol
     if asset == "Palladio":
         return "palladio" in name or "palladium" in name or "XPD" in symbol
-    if asset == "Caffè":
-        return "caff" in name or "coffee" in name
-    if asset == "Cacao":
-        return "cacao" in name or "cocoa" in name
-    if asset == "Riso":
-        return "riso" in name or "rice" in name
-    if asset == "Zucchero":
-        return "zucchero" in name or "sugar" in name
+    if asset == "Grano":
+        return "grano" in name or "wheat" in name
+    if asset == "Mais":
+        return "mais" in name or "corn" in name
+    if asset == "Soia":
+        return "soia" in name or "soybean" in name or "soy" in name
     return False
 
 
