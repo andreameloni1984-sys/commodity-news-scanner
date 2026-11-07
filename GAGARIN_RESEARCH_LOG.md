@@ -627,3 +627,13 @@
 - **Regression coverage added:** accelerating momentum ranks above steady pace; fading momentum is penalized but the directional candidate remains visible.
 - **Commits:** `02b9065df47eac2b6f257ad4d16a30b16e2116c3` (implementation); `c43f5e61f682472b5fe958f0d96ee09f65f756d7` (tests).
 - **Verification:** tests have been added but have not been executed in this session; CI must pass before treating the change as validated in production. No deployment or live trade was performed.
+
+
+## 2026-11-05 — Remove redundant pip self-upgrade from manual SOYUZ workflow
+
+- Audit: `.github/workflows/soyuz.yml` already provisions Python 3.11 with `actions/setup-python@v5` and pip caching, then installs `requirements.txt` (or the existing `requests` fallback). The separate pip self-upgrade is not required by the workflow's install, compile, test, diagnostic, or run commands.
+- Cleanup: removed only `python -m pip install --upgrade pip`. Kept the manual trigger, concurrency guard, secrets references, all environment values, dependency installation/fallback, compile step, tests, agriculture diagnostic, and `python main.py`.
+- Regression: add `tests/test_soyuz_workflow_install.py` to assert that dependency installation, validation steps, and PAPER ONLY remain while the self-upgrade is absent.
+- Cost/benefit: removes one package-index upgrade/resolution operation per manual SOYUZ run. Exact network bytes and wall-clock savings are not measured.
+- Scope: CI/bootstrap only. No market-data requests, providers, polling, signal generation, scoring, Governor, risk, Telegram behavior, journal, or execution authorization changed.
+- PAPER ONLY; no deployment, secrets changes, live API call, Telegram send, broker action, order, or merge.
