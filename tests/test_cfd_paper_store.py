@@ -9,11 +9,16 @@ from engine.cfd_identity import (
     CFDQuoteSeriesIdentity,
     CFDSignalLevels,
 )
+import state_store
+
 from engine.cfd_paper_store import (
+    CFD_FEEDBACK_STATE_KEY,
+    CFD_JOURNAL_STATE_KEY,
     load_cfd_feedback,
     load_cfd_paper_journal,
     record_cfd_feedback,
     record_cfd_paper_signal,
+    storage_backend,
 )
 
 
@@ -248,3 +253,77 @@ def test_cfd_feedback_does_not_accept_non_finite_event_prices(tmp_path):
             journal_path=journal,
             feedback_path=feedback,
         )
+
+
+
+def _install_fake_postgres(monkeypatch, state):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test.invalid/gagarin")
+    monkeypatch.setattr(state_store, "ensure_schema", lambda: True)
+    monkeypatch.setattr(state_store, "load_state", lambda key: state.get(key))
+
+    def save_state(key, rows):
+        state[key] = [dict(row) for row in rows]
+        return True
+
+    monkeypatch.setattr(state_store, "save_state", save_state)
+
+
+def test_cfd_journal_and_feedback_persist_across_runner_local_paths(tmp_path, monkeypatch):
+    state = {}
+    _install_fake_postgres(monkeypatch, state)
+
+    first_journal = tmp_path / "run-one" / "cfd-journal.csv"
+    second_journal = tmp_path / "run-two" / "cfd-journal.csv"
+    first_feedback = tmp_path / "run-one" / "cfd-feedback.csv"
+    second_feedback = tmp_path / "run-two" / "cfd-feedback.csv"
+
+    first = _record(tmp_path, journal_path=first_journal)
+    duplicate = _record(tmp_path, journal_path=second_journal)
+
+    assert first["inserted"] is True
+    assert duplicate["inserted"] is False
+    assert len(state[CFD_JOURNAL_STATE_KEY]) == 1
+    assert load_cfd_paper_journal(second_journal)[0]["signal_id"] == first["signal_id"]
+
+    instrument = _instrument()
+    series = _series()
+    feedback = record_cfd_feedback(
+        first["signal_id"], instrument, series,
+        event_type="CFD_CANDLE_OBSERVED",
+        event_timestamp="2026-11-06T15:35:00Z",
+        event_price=78.25,
+        registry=_registry(instrument),
+        journal_path=second_journal,
+        feedback_path=first_feedback,
+    )
+    duplicate_feedback = record_cfd_feedback(
+        first["signal_id"], instrument, series,
+        event_type="CFD_CANDLE_OBSERVED",
+        event_timestamp="2026-11-06T15:35:00Z",
+        event_price=78.25,
+        registry=_registry(instrument),
+        journal_path=second_journal,
+        feedback_path=second_feedback,
+    )
+
+    assert feedback["inserted"] is True
+    assert duplicate_feedback["inserted"] is False
+    assert len(state[CFD_FEEDBACK_STATE_KEY]) == 1
+    assert load_cfd_feedback(second_feedback)[0]["feedback_id"] == feedback["feedback_id"]
+    assert storage_backend() == "POSTGRES_AVAILABLE"
+
+
+def test_cfd_store_fails_closed_when_configured_database_is_unavailable(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test.invalid/gagarin")
+    monkeypatch.setattr(state_store, "ensure_schema", lambda: False)
+
+    journal = tmp_path / "cfd-journal.csv"
+    with pytest.raises(RuntimeError, match="refusing ephemeral CSV fallback"):
+        _record(tmp_path, journal_path=journal)
+
+    assert not journal.exists()
+
+
+def test_cfd_store_reports_ephemeral_backend_without_database(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    assert storage_backend() == "LOCAL_CSV_EPHEMERAL"
