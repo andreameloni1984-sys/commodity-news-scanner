@@ -97,7 +97,7 @@ def apply_trump_brain_boost(state: Any, brain_scores: list[dict[str, Any]]) -> A
             (inst in {"WTI", "BRENT"} and ("wti" in name or "brent" in name or symbol in {"USOIL", "UKOIL", "CL"}))
             or (inst == "GOLD" and ("gold" in name or "oro" in name or "XAU" in symbol))
             or (inst in {"SILVER", "PLATINUM", "PALLADIUM"} and any(m in name for m in ("silver", "argento", "platino", "palladio")))
-            or (inst in {"CORN", "WHEAT", "SUGAR", "COFFEE", "COCOA", "RICE"} and any(m in name for m in ("corn", "wheat", "sugar", "coffee", "cocoa", "rice")))
+            or (inst in {"CORN", "WHEAT", "SOYBEAN"} and any(m in name for m in ("corn", "mais", "wheat", "grano", "soybean", "soia")))
         ):
             if best is None or item["catalyst_score"] > best["catalyst_score"]:
                 best = item
