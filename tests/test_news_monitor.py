@@ -162,15 +162,13 @@ def test_mixed_oil_catalysts_stay_neutral_and_explain_why():
     assert 0 <= result["confidence_score"] <= 100
 
 
-def test_selected_agricultural_commodities_are_classified_by_crop_catalyst():
-    coffee = classify_event("Brazil drought threatens Arabica coffee harvest")
-    cocoa = classify_event("Cocoa crop disease reduces production forecast")
-    rice = classify_event("Rice export ban disrupts supply")
-    sugar = classify_event("Sugar production rises after bumper harvest")
-    assert coffee["impact"]["Caffè"] == "RIALZISTA"
-    assert cocoa["impact"]["Cacao"] == "RIALZISTA"
-    assert rice["impact"]["Riso"] == "RIALZISTA"
-    assert sugar["impact"]["Zucchero"] == "RIBASSISTA"
+def test_selected_grain_commodities_are_classified_by_crop_catalyst():
+    wheat = classify_event("Black Sea drought threatens wheat harvest")
+    corn = classify_event("USDA reports corn crop damage after flooding")
+    soy = classify_event("Brazil drought threatens soybean production")
+    assert wheat["impact"]["Grano"] == "RIALZISTA"
+    assert corn["impact"]["Mais"] == "RIALZISTA"
+    assert soy["impact"]["Soia"] == "RIALZISTA"
 
 
 def test_platinum_and_silver_are_supported_in_selected_universe():
@@ -180,8 +178,8 @@ def test_platinum_and_silver_are_supported_in_selected_universe():
 
 
 def test_agricultural_mixed_catalysts_remain_mixed():
-    result = classify_event("Coffee harvest improves but drought threatens supply")
-    assert result["impact"]["Caffè"] == "MISTA"
+    result = classify_event("Wheat harvest improves but drought threatens supply")
+    assert result["impact"]["Grano"] == "MISTA"
 
 
 def test_sputnik_historical_action_reaction_is_attached_to_gagarin_news():
@@ -655,3 +653,15 @@ def test_gagarin_handoff_missing_direction_is_explicit_neutral():
     assert "TRADE PAPER: NOT_EXECUTED" in message
     assert "AZIONE: NO_DECISION" in message
     assert "WAIT" not in message
+
+
+def test_grain_news_is_matched_only_to_the_corresponding_live_commodity():
+    from telegram.news_monitor import _asset_matches
+
+    wheat = SimpleNamespace(commodity="Grano", symbol="WHEAT/USD")
+    corn = SimpleNamespace(commodity="Mais", symbol="CORN/USD")
+    soy = SimpleNamespace(commodity="Soia", symbol="SOYBEAN/USD")
+    assert _asset_matches("Grano", wheat)
+    assert not _asset_matches("Grano", corn)
+    assert _asset_matches("Mais", corn)
+    assert _asset_matches("Soia", soy)
