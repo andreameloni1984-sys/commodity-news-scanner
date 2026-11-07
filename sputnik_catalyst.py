@@ -1,63 +1,55 @@
 """SPUTNIK catalyst-to-market mapping.
 
-Maps documented public-policy themes to instruments/sectors worth monitoring.
-It produces WATCH candidates only; direction must be confirmed by live price,
-volume, technical setup and Gagarin's existing risk/safety gates.
+Maps public-policy themes only to the agreed operational watch universe.
+It produces WATCH candidates only; it never infers a trade direction or
+authorizes execution.
 """
 from __future__ import annotations
 from typing import Any
 
 DOMAIN_INSTRUMENTS = {
     "ENERGY": [
-        ("WTI", "Crude oil / energy"),
-        ("BRENT", "Brent crude / energy"),
+        ("WTI", "WTI crude oil"),
+        ("BRENT", "Brent crude oil"),
     ],
     "METALS": [
-        ("GOLD", "Gold / metals"),
-        ("SILVER", "Silver / metals"),
-        ("PLATINUM", "Platinum / metals"),
-        ("PALLADIUM", "Palladium / metals"),
+        ("GOLD", "Gold"),
+        ("SILVER", "Silver"),
+        ("COPPER", "Copper"),
     ],
     "AGRICULTURE": [
-        ("CORN", "Corn / agriculture"),
-        ("WHEAT", "Wheat / agriculture"),
-        ("SUGAR", "Sugar / agriculture"),
-        ("COCOA", "Cocoa / agriculture"),
-        ("COFFEE", "Coffee / agriculture"),
-        ("RICE", "Rice / agriculture"),
+        ("CORN", "Corn"),
+        ("WHEAT", "Wheat"),
+        ("SOYBEAN", "Soybean"),
     ],
-    "DEFENSE": [("US_DEFENSE", "US defense sector")],
+    # Broad catalyst categories remain useful for discovery, but candidates
+    # are restricted to instruments in the selected universe.
+    "DEFENSE": [],
     "AI_TECH": [
-        ("NASDAQ100", "US technology / AI"),
-        ("QQQ", "Nasdaq-100 ETF; verify broker symbol"),
-        ("SEMICONDUCTORS", "Semiconductor sector / ETF watch"),
+        ("QQQ", "Nasdaq-100 ETF"),
     ],
     "DATA_CENTERS": [
-        ("NASDAQ100", "US technology / AI"),
-        ("QQQ", "Nasdaq-100 ETF; verify broker symbol"),
-        ("SEMICONDUCTORS", "Semiconductor sector / ETF watch"),
-        ("POWER_INFRASTRUCTURE", "Power equipment, grid and electrical infrastructure"),
+        ("QQQ", "Nasdaq-100 ETF"),
+        ("COPPER", "Copper"),
     ],
     "POWER_INFRA": [
-        ("POWER_INFRASTRUCTURE", "Power equipment, grid and electrical infrastructure"),
-        ("COPPER", "Copper; verify provider and broker symbol"),
-        ("NATGAS", "Natural gas; verify provider and broker symbol"),
+        ("COPPER", "Copper"),
     ],
-    "SPACE": [("US_AEROSPACE", "US aerospace / space")],
-    "CRYPTO": [("BTCUSD", "Bitcoin")],
-    "MEDIA": [("MEDIA", "US media sector")],
-    "REAL_ESTATE": [("US_REIT", "US real estate / REIT")],
+    "SPACE": [],
+    "CRYPTO": [],
+    "MEDIA": [],
+    "REAL_ESTATE": [],
     "TRADE_POLICY": [
-        ("NASDAQ100", "US technology / growth equities"),
-        ("GOLD", "Gold / defensive asset"),
-        ("USD", "US dollar"),
-        ("WTI", "Crude oil; only if the policy affects energy trade"),
-        ("BRENT", "Brent crude; only if the policy affects energy trade"),
+        ("SPY", "S&P 500 ETF"),
+        ("QQQ", "Nasdaq-100 ETF"),
+        ("GOLD", "Gold"),
+        ("WTI", "WTI crude oil; only when policy affects energy trade"),
+        ("BRENT", "Brent crude oil; only when policy affects energy trade"),
     ],
     "RATES_MACRO": [
-        ("GOLD", "Gold / metals"),
-        ("NASDAQ100", "US technology / growth equities"),
-        ("USD", "US dollar"),
+        ("GOLD", "Gold"),
+        ("SPY", "S&P 500 ETF"),
+        ("QQQ", "Nasdaq-100 ETF"),
     ],
 }
 

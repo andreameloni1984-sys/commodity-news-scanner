@@ -18,13 +18,11 @@ def classify(text):
         domains.append("GEOPOLITICS")
     if any(k in value for k in ("oil", "crude", "brent", "wti", "opec", "petroleum")):
         domains.append("ENERGY")
-    if any(k in value for k in ("coffee", "cocoa", "cacao", "rice", "sugar", "wheat", "corn", "drought", "harvest")):
+    if any(k in value for k in ("wheat", "corn", "soybean", "drought", "harvest", "grano", "mais", "soia")):
         domains.append("AGRICULTURE")
-    if any(k in value for k in ("gold", "silver", "platinum", "palladium")):
+    if any(k in value for k in ("gold", "silver", "copper", "oro", "argento", "rame")):
         domains.append("METALS")
 
-    # Data-centre / AI infrastructure policy is a distinct catalyst from generic
-    # media mentions. Do not assume that a social post means a rule is in force.
     data_centre_terms = (
         "data center", "data centers", "data centre", "data centres", "datacenter",
         "datacenters", "ai infrastructure", "artificial intelligence infrastructure",
@@ -36,7 +34,6 @@ def classify(text):
         "electricity generation", "grid connection", "energy infrastructure",
     )
     ai_terms = ("artificial intelligence", " ai ", "semiconductor", "semiconductors", "gpu", "data center", "data centre", "datacenter")
-    padded = f" {value} "
     if any(term in value for term in data_centre_terms) or (
         any(term in value for term in ai_terms) and any(term in value for term in power_terms)
     ):
@@ -49,15 +46,15 @@ def classify(text):
 
     domains = list(dict.fromkeys(domains))
     instruments = {
-        "TRADE_POLICY": ["NASDAQ100", "GOLD", "USD", "WTI", "BRENT"],
-        "RATES_MACRO": ["GOLD", "NASDAQ100", "USD"],
-        "GEOPOLITICS": ["GOLD", "WTI", "BRENT", "DEFENSE"],
+        "TRADE_POLICY": ["SPY", "QQQ", "GOLD", "WTI", "BRENT"],
+        "RATES_MACRO": ["GOLD", "SPY", "QQQ"],
+        "GEOPOLITICS": ["GOLD", "WTI", "BRENT"],
         "ENERGY": ["WTI", "BRENT"],
-        "AGRICULTURE": ["COFFEE", "COCOA", "RICE", "SUGAR", "WHEAT", "CORN"],
-        "METALS": ["GOLD", "SILVER", "PLATINUM", "PALLADIUM"],
-        "AI_TECH": ["NASDAQ100", "QQQ", "SEMICONDUCTORS"],
-        "DATA_CENTERS": ["NASDAQ100", "QQQ", "SEMICONDUCTORS", "POWER_INFRASTRUCTURE"],
-        "POWER_INFRA": ["POWER_INFRASTRUCTURE", "COPPER", "NATGAS"],
+        "AGRICULTURE": ["WHEAT", "CORN", "SOYBEAN"],
+        "METALS": ["GOLD", "SILVER", "COPPER"],
+        "AI_TECH": ["QQQ"],
+        "DATA_CENTERS": ["QQQ", "COPPER"],
+        "POWER_INFRA": ["COPPER"],
     }
     watch = list(dict.fromkeys(i for domain in domains for i in instruments.get(domain, [])))
     return {
