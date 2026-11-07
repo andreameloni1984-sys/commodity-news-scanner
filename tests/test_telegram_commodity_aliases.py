@@ -1,6 +1,6 @@
 import pytest
 
-from commodities.universe import enabled_commodities
+from commodities.universe import operational_commodities
 from telegram.bot import _resolve_commodity
 
 
@@ -30,7 +30,7 @@ def test_selected_commodities_are_resolvable(alias, expected):
 
 
 def test_all_enabled_canonical_names_are_resolvable():
-    for commodity in enabled_commodities():
+    for commodity in operational_commodities():
         assert _resolve_commodity(commodity.name) is commodity
         assert _resolve_commodity(commodity.symbol) is commodity
 
