@@ -21,8 +21,7 @@ import requests
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 from engine.gagarin import analyze_universe
 from engine.decision_status import market_decision_status
-from engine.forex_session import filter_forex_for_session
-from commodities.universe import enabled_commodities, get_commodity_by_name
+from commodities.universe import operational_commodities, get_commodity_by_name
 from engine.invest import (
     analyze_invest_universe,
     format_invest_report,
@@ -147,7 +146,8 @@ def _reply(chat_id, text: str, reply_markup: Optional[dict] = None) -> bool:
     return True
 
 def _run_analysis(commodity=None, *, on_demand=True):
-    commodities = filter_forex_for_session(enabled_commodities(), on_demand=on_demand)
+    # Telegram analysis uses the same fixed eight-commodity universe as the monitor.
+    commodities = operational_commodities()
     if commodity is not None:
         commodities = [c for c in commodities if c.name.lower() == commodity.name.lower()]
     if not commodities:
@@ -160,7 +160,7 @@ def _resolve_commodity(name: str):
     key = " ".join(str(name or "").strip().split()).lower()
     if not key:
         return None
-    for commodity in enabled_commodities():
+    for commodity in operational_commodities():
         if commodity.name.lower() == key or commodity.symbol.lower() == key:
             return commodity
     aliases = {
@@ -407,22 +407,13 @@ def _command_response(command: str) -> Optional[str]:
                 return "Nessun risultato. Riprova con /analisi."
             set_last_results(results)
             desk = format_aggressive_desk(results)
-            try:
-                from cloud_api import FOREX_AGGRESSIVE_PORTFOLIO
-                fx = FOREX_AGGRESSIVE_PORTFOLIO.snapshot()
-                fx_lines = ["", "FX AGGRESSIVE", "Capitale: " + str(round(fx.get("equity", 100), 2)), "Aperte: " + str(len(fx.get("open_positions", [])))]
-                for p in fx.get("open_positions", [])[:5]:
-                    fx_lines.append(str(p.get("symbol")) + " " + str(p.get("direction")) + " entry " + str(p.get("entry")))
-                desk = desk + "\n" + "\n".join(fx_lines)
-            except Exception:
-                pass
             if argument:
                 bid, ask = parse_bid_ask(argument)
                 if bid is not None:
                     sym = None
                     for part in argument.replace(",", ".").split():
                         up = part.upper()
-                        if up in {"WTI", "BRENT", "ORO", "ARGENTO", "SPY", "QQQ", "EURUSD", "GBPUSD"}:
+                        if up in {"WTI", "BRENT", "ORO", "ARGENTO"}:
                             sym = up
                             break
                     if sym:

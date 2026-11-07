@@ -1,9 +1,9 @@
 # ============================================================
 # SOYUZ GAGARIN v1.4
-# COMMODITY UNIVERSE (trimmed to 10 core)
+# COMMODITY UNIVERSE (fixed eight-commodity allowlist)
 # ============================================================
 #
-# Universo operativo principale, ridotto a 10-12 strumenti di interesse.
+# Universo operativo Gagarin: esclusivamente gli otto simboli autorizzati.
 #
 # IMPORTANTE:
 # I simboli qui sotto sono IDENTIFICATORI LOGICI.
@@ -56,7 +56,7 @@ class Commodity:
 
 
 # ============================================================
-# MAIN UNIVERSE (10 core)
+# MAIN UNIVERSE (8 core)
 # ============================================================
 #
 # Focus su strumenti rilevanti per le regole attive (energia shock + weekly)
@@ -65,9 +65,7 @@ class Commodity:
 # METALLI: Oro, Argento, Rame
 # ENERGY: WTI, Brent
 # AGRICOLTURA: Grano, Mais, Soia
-# Forex core: EUR/USD, GBP/USD (restano separati ma prioritari per day)
-#
-# Forex minori rimossi per ridurre rumore.
+# Nessun Forex, azione, indice o ETF nel paniere operativo.
 #
 # ============================================================
 
@@ -87,10 +85,21 @@ COMMODITIES = [
     Commodity(name="Mais", symbol="CORN/USD", category="Agriculture", unit="USD", priority=7),
     Commodity(name="Soia", symbol="SOYBEAN/USD", category="Agriculture", unit="USD", priority=8),
 
-    # CORE FOREX (day overlap prioritari)
-    Commodity(name="EUR/USD", symbol="EUR/USD", category="Forex", unit="USD", priority=9),
-    Commodity(name="GBP/USD", symbol="GBP/USD", category="Forex", unit="USD", priority=10),
 ]
+
+# Exact Gagarin universe. This is a scope allowlist, not a trading filter.
+GAGARIN_OPERATIONAL_SYMBOLS = frozenset(
+    {
+        "XAU/USD",
+        "XAG/USD",
+        "COPPER/USD",
+        "WTI/USD",
+        "BRENT/USD",
+        "WHEAT/USD",
+        "CORN/USD",
+        "SOYBEAN/USD",
+    }
+)
 
 # ============================================================
 # HELPERS
@@ -106,6 +115,7 @@ def enabled_commodities() -> list[Commodity]:
         commodity
         for commodity in COMMODITIES
         if commodity.enabled
+        and commodity.symbol.strip().upper() in GAGARIN_OPERATIONAL_SYMBOLS
     ]
 
 
@@ -122,7 +132,7 @@ def get_commodity_by_name(
         else ""
     )
 
-    for commodity in COMMODITIES:
+    for commodity in enabled_commodities():
 
         if (
             commodity.name.lower()
@@ -146,7 +156,7 @@ def get_commodity_by_symbol(
         else ""
     )
 
-    for commodity in COMMODITIES:
+    for commodity in enabled_commodities():
 
         if (
             commodity.symbol.upper()
@@ -165,7 +175,7 @@ def get_categories() -> list[str]:
 
     categories = []
 
-    for commodity in COMMODITIES:
+    for commodity in enabled_commodities():
 
         if commodity.category not in categories:
             categories.append(
@@ -263,6 +273,9 @@ def validate_universe() -> list[str]:
             commodity.symbol.strip().upper()
         )
 
+        if commodity.enabled and symbol_key not in GAGARIN_OPERATIONAL_SYMBOLS:
+            errors.append(f"UNAUTHORIZED_ENABLED_SYMBOL:{commodity.symbol}")
+
         if symbol_key in symbols:
 
             errors.append(
@@ -303,18 +316,10 @@ if _UNIVERSE_ERRORS:
 
 
 def operational_commodities() -> list[Commodity]:
-    """Return the eight tradable commodity instruments; Forex remains auxiliary."""
-    return [
-        commodity
-        for commodity in enabled_commodities()
-        if commodity.category.strip().lower() != "forex"
-    ]
+    """Return only enabled instruments in the exact eight-symbol Gagarin allowlist."""
+    return enabled_commodities()
 
 
 def auxiliary_commodities() -> list[Commodity]:
-    """Return enabled context instruments that must not generate standalone signals."""
-    return [
-        commodity
-        for commodity in enabled_commodities()
-        if commodity.category.strip().lower() == "forex"
-    ]
+    """Gagarin has no auxiliary instruments outside its fixed eight-symbol universe."""
+    return []
