@@ -653,3 +653,15 @@ def test_gagarin_handoff_missing_direction_is_explicit_neutral():
     assert "TRADE PAPER: NOT_EXECUTED" in message
     assert "AZIONE: NO_DECISION" in message
     assert "WAIT" not in message
+
+
+def test_grain_news_is_matched_only_to_the_corresponding_live_commodity():
+    from telegram.news_monitor import _asset_matches
+
+    wheat = SimpleNamespace(commodity="Grano", symbol="WHEAT/USD")
+    corn = SimpleNamespace(commodity="Mais", symbol="CORN/USD")
+    soy = SimpleNamespace(commodity="Soia", symbol="SOYBEAN/USD")
+    assert _asset_matches("Grano", wheat)
+    assert not _asset_matches("Grano", corn)
+    assert _asset_matches("Mais", corn)
+    assert _asset_matches("Soia", soy)
