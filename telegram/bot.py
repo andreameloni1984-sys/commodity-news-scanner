@@ -399,9 +399,9 @@ def _command_response(command: str) -> Optional[str]:
     if command_name in {"/aggressivo212", "/aggressive212"}:
         if argument:
             return (
-                "Il desk AGGRESSIVE usa il motore futures GAGARIN e non accetta quotazioni CFD.\\n"
-                "Per mantenere separati i mercati, usa il canale CFD dedicato:\\n"
-                "/prezzo212 SIMBOLO BID ASK\\n"
+                "Il desk AGGRESSIVE usa il motore futures GAGARIN e non accetta quotazioni CFD.\n"
+                "Per mantenere separati i mercati, usa il canale CFD dedicato:\n"
+                "/prezzo212 SIMBOLO BID ASK\n"
                 "Esempio: /prezzo212 WTI 78.10 78.13"
             )
         try:
