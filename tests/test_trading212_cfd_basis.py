@@ -38,6 +38,17 @@ def test_manual_t212_quote_accepts_only_the_eight_selected_commodities():
         assert build_manual_cfd_quote(symbol, 10, 10.1)["status"] == "MANUAL_QUOTE_ONLY"
 
 
+def test_manual_t212_quote_rejects_boolean_values_as_prices():
+    for bid, ask in ((True, 78.13), (78.10, True), (False, 78.13), (78.10, False)):
+        quote = build_manual_cfd_quote("WTI", bid, ask)
+        assert quote["status"] == "INVALID_QUOTE"
+        assert quote.get("bid") is None
+        assert quote.get("ask") is None
+        assert quote.get("entry") is None
+        assert quote.get("stop_loss") is None
+        assert quote.get("take_profit") is None
+
+
 def test_legacy_comparison_never_uses_futures_price_as_cfd_reference():
     result = compare_price("WTI", 78.12, 78.10, 78.13)
 
@@ -59,6 +70,7 @@ def test_telegram_prezzo212_does_not_run_gagarin_futures_analysis(monkeypatch):
 
     assert "TRADING 212 — CFD QUOTE" in message
     assert "Prezzo di riferimento CFD comparabile: N/D" in message
+
 
 def test_aggressive_desk_routes_manual_cfd_quotes_to_dedicated_command(monkeypatch):
     from telegram import bot
