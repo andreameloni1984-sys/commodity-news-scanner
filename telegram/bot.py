@@ -125,7 +125,7 @@ def send_telegram(message: str) -> bool:
             )
             return False
         print(
-            f"Telegram SEND CONFIRMED | message_id={message_id} | api_roundtrip={send_duration_ms:.0f}ms",
+            f"Telegram SEND API ACCEPTED | message_id={message_id} | api_roundtrip={send_duration_ms:.0f}ms",
             flush=True,
         )
     return True
@@ -143,7 +143,7 @@ def _reply(chat_id, text: str, reply_markup: Optional[dict] = None) -> bool:
     if message_id is None:
         print("Telegram REPLY NOT CONFIRMED | missing/invalid message_id", flush=True)
         return False
-    print(f"Telegram REPLY CONFIRMED | message_id={message_id}", flush=True)
+    print(f"Telegram REPLY API ACCEPTED | message_id={message_id}", flush=True)
     return True
 
 def _run_analysis(commodity=None, *, on_demand=True):
