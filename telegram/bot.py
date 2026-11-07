@@ -84,6 +84,7 @@ def telegram_menu() -> dict:
         "keyboard": [
             [{"text": "📊 CLASSIFICA"}],
             [{"text": "🛰 ANALISI"}],
+            [{"text": "📅 CALENDARIO"}],
         ],
         "resize_keyboard": True,
         "is_persistent": True,
@@ -296,6 +297,7 @@ def _command_response(command: str) -> Optional[str]:
     button_commands = {
         "📊 classifica": "/classifica",
         "🛰 analisi": "/analisi",
+        "📅 calendario": "/calendario",
     }
     raw = button_commands.get(raw.lower(), raw)
     parts = raw.split()
@@ -312,8 +314,13 @@ def _command_response(command: str) -> Optional[str]:
             "🧪 PAPER ONLY — nessun ordine viene eseguito.\n\n"
             "/classifica — direzione delle otto materie prime\n"
             "/analisi [materia prima] — analisi generale o singolo strumento\n"
+            "/calendario — eventi macro rilevanti\n"
             "/status — stato del bot"
         )
+
+    if command_name == "/calendario":
+        from economic_calendar import fetch_calendar, format_calendar
+        return format_calendar(fetch_calendar())
 
     if command_name == "/classifica":
         results = _run_analysis(on_demand=True)
