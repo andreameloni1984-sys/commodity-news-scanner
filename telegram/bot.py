@@ -141,6 +141,14 @@ def _run_analysis(commodity=None, *, on_demand=True):
     if not commodities:
         return None
     results = analyze_universe(commodities)
+    # Telegram/manual and event-driven scans must use the same canonical Governor
+    # as the scheduled CLI; raw engine state alone is not an operational decision.
+    decisions = evaluate_states(results)
+    decisions_by_symbol = {decision.symbol: decision for decision in decisions}
+    from engine.cloud_api_status import attach_runtime_decision_metadata
+    for state in results:
+        symbol = str(getattr(state, "symbol", "")).strip().upper()
+        attach_runtime_decision_metadata(state, decisions_by_symbol.get(symbol))
     set_last_results(results)
     return results
 
@@ -335,19 +343,28 @@ def _command_response(command: str) -> Optional[str]:
             state = results[0]
             status = market_decision_status(state)
             price = "N/D" if state.price is None else f"{state.price:.6g}"
-            return (
-                f"🛰 SOYUZ GAGARIN — {state.commodity.upper()}\\n"
-                f"━━━━━━━━━━━━━━━━━━━━\\n"
-                f"🧪 PAPER ONLY\\n\\n"
-                f"Prezzo: {price}\\n"
-                f"BIAS: {status['bias']}\\n"
-                f"SETUP: {status['setup']}\\n"
-                f"TRADE PAPER: {status['trade_paper']}\\n"
-                f"Confluence: {state.probability:.1f} / 100\\n"
-                f"Quality: {state.quality:.1f}\\n"
-                f"Confidence: {state.confidence:.1f}\\n"
-                f"Blocker: {status['blockers'] or 'N/D'}"
-            )
+            lines = [
+                f"🛰 SOYUZ GAGARIN — {state.commodity.upper()}",
+                "━━━━━━━━━━━━━━━━━━━━",
+                "🧪 PAPER ONLY",
+                "",
+                f"Prezzo: {price}",
+                f"BIAS: {status['bias']}",
+                f"SETUP: {status['setup']}",
+                f"TRADE PAPER: {status['trade_paper']}",
+                f"Confluence: {state.probability:.1f} / 100",
+                f"Quality: {state.quality:.1f}",
+                f"Confidence: {state.confidence:.1f}",
+            ]
+            for label, attribute in (
+                ("ENTRY", "entry"), ("SL", "stop"), ("TP1", "tp1"),
+                ("TP2", "tp2"), ("TP3", "tp3"),
+            ):
+                value = getattr(state, attribute, None)
+                if value is not None:
+                    lines.append(f"{label}: {value:.6g}")
+            lines.append(f"Blocker: {status['blockers'] or 'N/D'}")
+            return "\n".join(lines)
         return _format_classifica(results)
 
     if command_name == "/fasceorario":
