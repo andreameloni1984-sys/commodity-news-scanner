@@ -292,14 +292,20 @@ def load_cfd_paper_journal(
     path: str | Path = DEFAULT_CFD_JOURNAL_FILE,
 ) -> list[dict[str, str]]:
     """Read only the dedicated CFD PAPER journal; never reads futures feedback."""
-    return _load_rows(\n        _store_path(path, "journal_path"), JOURNAL_FIELDS,\n        state_key=CFD_JOURNAL_STATE_KEY, key_field="signal_id",\n    )
+    return _load_rows(
+        _store_path(path, "journal_path"), JOURNAL_FIELDS,
+        state_key=CFD_JOURNAL_STATE_KEY, key_field="signal_id",
+    )
 
 
 def load_cfd_feedback(
     path: str | Path = DEFAULT_CFD_FEEDBACK_FILE,
 ) -> list[dict[str, str]]:
     """Read only the dedicated CFD feedback file."""
-    return _load_rows(\n        _store_path(path, "feedback_path"), FEEDBACK_FIELDS,\n        state_key=CFD_FEEDBACK_STATE_KEY, key_field="feedback_id",\n    )
+    return _load_rows(
+        _store_path(path, "feedback_path"), FEEDBACK_FIELDS,
+        state_key=CFD_FEEDBACK_STATE_KEY, key_field="feedback_id",
+    )
 
 
 def record_cfd_paper_signal(
@@ -364,7 +370,8 @@ def record_cfd_paper_signal(
         "feed_origin_status": "NOT_AUTHENTICATED_BY_JOURNAL",
     }
     row["inserted"] = _append_unique(
-        journal, JOURNAL_FIELDS, row, key_field="signal_id"
+        journal, JOURNAL_FIELDS, row, key_field="signal_id",
+        state_key=CFD_JOURNAL_STATE_KEY,
     )
     return row
 
@@ -396,7 +403,10 @@ def record_cfd_feedback(
     validate_same_cfd_series(instrument, series, registry=registry)
 
     matching = [
-        row for row in _load_rows(\n            journal, JOURNAL_FIELDS,\n            state_key=CFD_JOURNAL_STATE_KEY, key_field="signal_id",\n        )
+        row for row in _load_rows(
+            journal, JOURNAL_FIELDS,
+            state_key=CFD_JOURNAL_STATE_KEY, key_field="signal_id",
+        )
         if row.get("signal_id") == identifier
     ]
     if not matching:
@@ -457,6 +467,7 @@ def record_cfd_feedback(
         "feed_origin_status": "NOT_AUTHENTICATED_BY_JOURNAL",
     }
     row["inserted"] = _append_unique(
-        feedback, FEEDBACK_FIELDS, row, key_field="feedback_id"
+        feedback, FEEDBACK_FIELDS, row, key_field="feedback_id",
+        state_key=CFD_FEEDBACK_STATE_KEY,
     )
     return row
