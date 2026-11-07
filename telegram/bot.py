@@ -465,6 +465,34 @@ def _command_response(command: str) -> Optional[str]:
         # Explicit user command: one guarded €10 order at most, INVEST DEMO only.
         return auto_buy_best_signal_budget(amount=10.0, min_score=50.0)
 
+    if command_name == "/classifica":
+        results = _run_analysis(on_demand=True)
+        return _format_classifica(results)
+
+    if command_name == "/analisi":
+        commodity = _resolve_commodity(argument) if argument else None
+        results = _run_analysis(commodity)
+        if not results:
+            return "Nessun risultato."
+        if commodity:
+            state = results[0]
+            status = market_decision_status(state)
+            price = "N/D" if state.price is None else f"{state.price:.6g}"
+            return (
+                f"🛰 SOYUZ GAGARIN — {state.commodity.upper()}\\n"
+                f"━━━━━━━━━━━━━━━━━━━━\\n"
+                f"🧪 PAPER ONLY\\n\\n"
+                f"Prezzo: {price}\\n"
+                f"BIAS: {status['bias']}\\n"
+                f"SETUP: {status['setup']}\\n"
+                f"TRADE PAPER: {status['trade_paper']}\\n"
+                f"Confluence: {state.probability:.1f} / 100\\n"
+                f"Quality: {state.quality:.1f}\\n"
+                f"Confidence: {state.confidence:.1f}\\n"
+                f"Blocker: {status['blockers'] or 'N/D'}"
+            )
+        return _format_classifica(results)
+
     if command_name == "/fasceorario":
         from research.intraday_windows import format_intraday_window_report
         return format_intraday_window_report()
