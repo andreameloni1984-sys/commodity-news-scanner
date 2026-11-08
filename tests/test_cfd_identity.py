@@ -20,6 +20,7 @@ def _instrument(**overrides):
         "market_type": "CFD",
         "logical_symbol": "WTI/USD",
         "broker_symbol": "TEST-WTI-2026-11-27",
+        "app_symbol": "CRUDE",
         "contract": "WTI CFD 27 Nov 2026",
         "contract_type": "EXPIRING_FUTURE",
         "expiry": "2026-11-27",
@@ -107,9 +108,12 @@ def test_unverified_or_out_of_scope_instrument_identity_is_rejected(changes):
         _instrument(**changes).validate()
 
 
-def test_official_catalog_product_page_can_verify_contract_identity():
+def test_official_catalog_slug_is_separate_from_app_and_feed_symbols():
     instrument = _instrument(
-        broker_symbol="CRUDE.NOV26",
+        broker_symbol="TEST-WTI-FEED-2026-11-18",
+        app_symbol="CRUDE",
+        catalogue_ticker="CRUDE",
+        catalogue_slug="CRUDE.NOV26",
         contract="Crude Oil CFD 18 Nov 2026",
         expiry="2026-11-18",
         verification_source=TRADING212_OFFICIAL_CATALOG,
@@ -118,17 +122,37 @@ def test_official_catalog_product_page_can_verify_contract_identity():
         ),
     )
 
+    # The official URL slug is checked against catalogue_slug, never broker_symbol.
     assert instrument.validate() is instrument
 
 
-def test_official_catalog_product_page_must_match_broker_symbol():
-    with pytest.raises(ValueError, match="must exactly match broker_symbol"):
+def test_official_catalog_product_page_must_match_catalogue_slug():
+    with pytest.raises(ValueError, match="must exactly match catalogue_slug"):
         _instrument(
+            app_symbol="CRUDE",
+            catalogue_ticker="CRUDE",
+            catalogue_slug="BRENT.NOV26",
             verification_source=TRADING212_OFFICIAL_CATALOG,
             verification_reference=(
                 "https://www.trading212.com/it/trading-instruments/cfd/CRUDE.NOV26"
             ),
         ).validate()
+
+
+def test_official_catalog_evidence_requires_ticker_and_slug():
+    with pytest.raises(ValueError, match="catalogue_slug is required"):
+        _instrument(
+            verification_source=TRADING212_OFFICIAL_CATALOG,
+            verification_reference=(
+                "https://www.trading212.com/it/trading-instruments/cfd/CRUDE.NOV26"
+            ),
+            catalogue_ticker="CRUDE",
+        ).validate()
+
+
+def test_app_screen_evidence_requires_an_explicit_app_symbol():
+    with pytest.raises(ValueError, match="app_symbol is required"):
+        _instrument(app_symbol=None).validate()
 
 
 @pytest.mark.parametrize(
@@ -146,6 +170,8 @@ def test_official_catalog_evidence_rejects_noncanonical_or_untrusted_urls(refere
         _instrument(
             verification_source=TRADING212_OFFICIAL_CATALOG,
             verification_reference=reference,
+            catalogue_ticker="CRUDE",
+            catalogue_slug="CRUDE.NOV26",
         ).validate()
 
 
@@ -161,7 +187,7 @@ def test_exact_trading212_cfd_series_can_be_bound_to_registry_approved_instrumen
 
 def test_spot_cfd_identity_and_series_accept_explicit_no_expiry():
     instrument = _instrument(
-        logical_symbol="XAU/USD", broker_symbol="XAUUSD", contract="Gold",
+        logical_symbol="XAU/USD", broker_symbol="XAUUSD", app_symbol="XAUUSD", contract="Gold",
         contract_type="SPOT", expiry=None,
     )
     series = _series(
@@ -181,7 +207,7 @@ def test_spot_cfd_identity_and_series_accept_explicit_no_expiry():
 
 def test_spot_cfd_series_rejects_a_fabricated_expiry():
     instrument = _instrument(
-        logical_symbol="XAU/USD", broker_symbol="XAUUSD", contract="Gold",
+        logical_symbol="XAU/USD", broker_symbol="XAUUSD", app_symbol="XAUUSD", contract="Gold",
         contract_type="SPOT", expiry=None,
     )
     series = _series(
