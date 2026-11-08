@@ -106,7 +106,6 @@ def approve(
         ("liquidity_ok", candidate.liquidity_ok, "LIQUIDITY_FAIL"),
         ("volatility_ok", candidate.volatility_ok, "VOLATILITY_FAIL"),
         ("regime_ok", candidate.regime_ok, "REGIME_FAIL"),
-        ("session_ok", candidate.session_ok, "SESSION_FAIL"),
         ("curve_ok", candidate.curve_ok, "CURVE_FAIL"),
     )
     for _, ok, reason in operational:
