@@ -80,7 +80,7 @@ def _aware_utc_timestamp(value: str, field: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
-def _validate_verification_evidence(source: str, reference: str) -> None:
+def _validate_verification_evidence(source: str, reference: str, broker_symbol: str) -> None:
     """Accept app-screen evidence or a canonical official Trading 212 CFD product page."""
     selected_source = _required_text(source, "verification_source")
     selected_reference = _required_text(reference, "verification_reference")
@@ -104,6 +104,11 @@ def _validate_verification_evidence(source: str, reference: str) -> None:
     ):
         raise ValueError(
             "Official catalogue evidence must be a canonical Trading 212 CFD product URL"
+        )
+    catalogue_symbol = parsed.path.rsplit("/", 1)[-1]
+    if catalogue_symbol != _required_text(broker_symbol, "broker_symbol"):
+        raise ValueError(
+            "Official catalogue URL instrument slug must exactly match broker_symbol"
         )
 
 
@@ -152,7 +157,9 @@ class CFDInstrumentIdentity:
         currency = _required_text(self.currency, "currency")
         if len(currency) != 3 or not currency.isascii() or not currency.isalpha() or currency != currency.upper():
             raise ValueError("currency must be a three-letter uppercase ISO code")
-        _validate_verification_evidence(self.verification_source, self.verification_reference)
+        _validate_verification_evidence(
+            self.verification_source, self.verification_reference, self.broker_symbol
+        )
         evidence_hash = _required_text(
             self.verification_evidence_sha256, "verification_evidence_sha256"
         )

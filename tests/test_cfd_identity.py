@@ -109,6 +109,9 @@ def test_unverified_or_out_of_scope_instrument_identity_is_rejected(changes):
 
 def test_official_catalog_product_page_can_verify_contract_identity():
     instrument = _instrument(
+        broker_symbol="CRUDE.NOV26",
+        contract="Crude Oil CFD 18 Nov 2026",
+        expiry="2026-11-18",
         verification_source=TRADING212_OFFICIAL_CATALOG,
         verification_reference=(
             "https://www.trading212.com/it/trading-instruments/cfd/CRUDE.NOV26"
@@ -116,6 +119,16 @@ def test_official_catalog_product_page_can_verify_contract_identity():
     )
 
     assert instrument.validate() is instrument
+
+
+def test_official_catalog_product_page_must_match_broker_symbol():
+    with pytest.raises(ValueError, match="must exactly match broker_symbol"):
+        _instrument(
+            verification_source=TRADING212_OFFICIAL_CATALOG,
+            verification_reference=(
+                "https://www.trading212.com/it/trading-instruments/cfd/CRUDE.NOV26"
+            ),
+        ).validate()
 
 
 @pytest.mark.parametrize(
