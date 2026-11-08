@@ -80,12 +80,26 @@ def _aware_utc_timestamp(value: str, field: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
-def _validate_verification_evidence(source: str, reference: str, broker_symbol: str) -> None:
-    """Accept app-screen evidence or a canonical official Trading 212 CFD product page."""
+def _validate_verification_evidence(
+    source: str,
+    reference: str,
+    *,
+    app_symbol: str | None,
+    catalogue_ticker: str | None,
+    catalogue_slug: str | None,
+) -> None:
+    """Validate evidence identifiers without conflating app, ticker, slug, or feed symbol."""
     selected_source = _required_text(source, "verification_source")
     selected_reference = _required_text(reference, "verification_reference")
+
     if selected_source == TRADING212_APP_SCREEN:
+        _required_text(app_symbol, "app_symbol")
+        if catalogue_ticker is not None:
+            _required_text(catalogue_ticker, "catalogue_ticker")
+        if catalogue_slug is not None:
+            _required_text(catalogue_slug, "catalogue_slug")
         return
+
     if selected_source != TRADING212_OFFICIAL_CATALOG:
         raise ValueError(
             "Identity evidence must be a Trading 212 app screen or official CFD catalogue page"
@@ -105,10 +119,22 @@ def _validate_verification_evidence(source: str, reference: str, broker_symbol: 
         raise ValueError(
             "Official catalogue evidence must be a canonical Trading 212 CFD product URL"
         )
-    catalogue_symbol = parsed.path.rsplit("/", 1)[-1]
-    if catalogue_symbol != _required_text(broker_symbol, "broker_symbol"):
+
+    # The URL path segment is a catalogue slug, not the app ticker or the
+    # broker/feed symbol. Keep all identifiers independent.
+    slug = _required_text(catalogue_slug, "catalogue_slug")
+    ticker = _required_text(catalogue_ticker, "catalogue_ticker")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", slug):
+        raise ValueError("catalogue_slug must be a valid Trading 212 catalogue path segment")
+    if not re.fullmatch(r"[A-Z0-9][A-Z0-9._-]*", ticker):
+        raise ValueError("catalogue_ticker must use uppercase letters, digits, dot, underscore, or hyphen")
+    if app_symbol is not None:
+        _required_text(app_symbol, "app_symbol")
+
+    path_slug = parsed.path.rsplit("/", 1)[-1]
+    if path_slug != slug:
         raise ValueError(
-            "Official catalogue URL instrument slug must exactly match broker_symbol"
+            "Official catalogue URL instrument slug must exactly match catalogue_slug"
         )
 
 
@@ -128,7 +154,7 @@ def _positive_level(value: float, field: str) -> str:
 
 @dataclass(frozen=True)
 class CFDInstrumentIdentity:
-    """Candidate screen-derived identity; registry membership is required for approval."""
+    """Candidate identity with independent app/catalogue/feed identifiers; registry approval is required."""
 
     broker: str
     market_type: str
@@ -142,6 +168,11 @@ class CFDInstrumentIdentity:
     verification_reference: str
     verification_evidence_sha256: str
     verified_at_utc: str
+    # Independent identifiers: UI symbol, catalogue ticker, catalogue URL slug.
+    # broker_symbol remains the symbol expected from an authorized quote adapter.
+    app_symbol: str | None = None
+    catalogue_ticker: str | None = None
+    catalogue_slug: str | None = None
 
     def validate(self) -> "CFDInstrumentIdentity":
         """Validate field shape; registry membership is the approval boundary."""
@@ -158,7 +189,11 @@ class CFDInstrumentIdentity:
         if len(currency) != 3 or not currency.isascii() or not currency.isalpha() or currency != currency.upper():
             raise ValueError("currency must be a three-letter uppercase ISO code")
         _validate_verification_evidence(
-            self.verification_source, self.verification_reference, self.broker_symbol
+            self.verification_source,
+            self.verification_reference,
+            app_symbol=self.app_symbol,
+            catalogue_ticker=self.catalogue_ticker,
+            catalogue_slug=self.catalogue_slug,
         )
         evidence_hash = _required_text(
             self.verification_evidence_sha256, "verification_evidence_sha256"
@@ -173,7 +208,7 @@ class CFDInstrumentIdentity:
 
 @dataclass(frozen=True)
 class CFDInstrumentRegistry:
-    """Allowlist of contract identities manually reviewed against app screenshots.
+    """Allowlist of contract identities manually reviewed against app screenshots and catalogue evidence.
 
     A syntactically valid identity is not approved by itself. Only an exact
     record in this registry can be bound to a quote series or signal ID.
@@ -196,6 +231,9 @@ class CFDInstrumentRegistry:
                 record.contract_type,
                 record.expiry,
                 record.currency,
+                record.app_symbol,
+                record.catalogue_ticker,
+                record.catalogue_slug,
             )
             if key in seen:
                 raise ValueError("Registry contains a duplicate CFD contract identity")
@@ -345,6 +383,9 @@ def build_cfd_signal_id(
         "market_type": instrument.market_type,
         "logical_symbol": instrument.logical_symbol,
         "broker_symbol": instrument.broker_symbol,
+        "app_symbol": instrument.app_symbol,
+        "catalogue_ticker": instrument.catalogue_ticker,
+        "catalogue_slug": instrument.catalogue_slug,
         "contract": instrument.contract,
         "contract_type": instrument.contract_type,
         "expiry": instrument.expiry,
