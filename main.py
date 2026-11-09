@@ -258,6 +258,82 @@ def _print_data_summary(results):
     print()
 
 
+def _lubjanka_log_value(value):
+    if value is None:
+        return "N/D"
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        number = float(value)
+        if number != number or abs(number) == float("inf"):
+            return "N/D"
+        return f"{number:.6g}"
+    return str(value).replace("\\n", " ")[:120]
+
+
+def _print_lubjanka_summary(results):
+    """Log the existing LUBJANKA observation and conditional plan without changing decisions."""
+    print("🛰️ LUBJANKA M5 / INTERCEPTOR")
+    print("-" * 72)
+
+    for state in results:
+        metadata = getattr(state, "metadata", {}) or {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        observation = metadata.get("lubjanka")
+        plan = metadata.get("lubjanka_playbook")
+        commodity = str(getattr(state, "commodity", "UNKNOWN") or "UNKNOWN")
+        symbol = str(getattr(state, "symbol", "N/D") or "N/D")
+
+        if not isinstance(observation, dict):
+            print(f"{commodity:<18} [{symbol}] status=MISSING")
+            continue
+
+        events = []
+        for event in observation.get("events", []) or []:
+            if not isinstance(event, dict):
+                continue
+            name = str(event.get("interceptor") or "UNKNOWN")
+            direction = str(event.get("direction") or "N/D")
+            stage = str(event.get("stage") or "N/D")
+            strength = _lubjanka_log_value(event.get("strength_atr"))
+            events.append(f"{name}:{direction}:{stage}:{strength}ATR")
+
+        print(
+            f"{commodity:<18} [{symbol}] "
+            f"status={_lubjanka_log_value(observation.get('status'))} "
+            f"direction={_lubjanka_log_value(observation.get('direction'))} "
+            f"stage={_lubjanka_log_value(observation.get('stage'))} "
+            f"provider={_lubjanka_log_value(observation.get('provider'))} "
+            f"bar_utc={_lubjanka_log_value(observation.get('last_bar_timestamp_utc'))} "
+            f"age_open_s={_lubjanka_log_value(observation.get('bar_age_seconds'))} "
+            f"age_close_s={_lubjanka_log_value(observation.get('bar_close_age_seconds'))} "
+            f"close={_lubjanka_log_value(observation.get('last_close'))} "
+            f"atr_m5={_lubjanka_log_value(observation.get('atr_5m'))} "
+            f"events={','.join(events) if events else 'NONE'}"
+        )
+
+        if isinstance(plan, dict):
+            plan_status = str(plan.get("status") or "UNKNOWN")
+            if plan_status == "CONDITIONAL_PLAN":
+                print(
+                    "  PLAN=CONDITIONAL_PLAN "
+                    f"execution={_lubjanka_log_value(plan.get('execution_status'))} "
+                    f"entry={_lubjanka_log_value(plan.get('entry_trigger'))} "
+                    f"SL={_lubjanka_log_value(plan.get('stop_loss'))} "
+                    f"TP1={_lubjanka_log_value(plan.get('take_profit_1'))} "
+                    f"TP2={_lubjanka_log_value(plan.get('take_profit_2'))} "
+                    f"RR={_lubjanka_log_value(plan.get('rr_tp1'))}/"
+                    f"{_lubjanka_log_value(plan.get('rr_tp2'))} "
+                    f"bar_age_s={_lubjanka_log_value(plan.get('bar_age_seconds'))}"
+                )
+            else:
+                reason = str(plan.get("reason") or "")[:120]
+                print(f"  PLAN={plan_status} reason={reason}")
+        else:
+            print("  PLAN=MISSING")
+
+    print()
+
+
 # ============================================================
 # GAGARIN RANKING
 # ============================================================
@@ -709,6 +785,8 @@ def run():
     _print_data_summary(
         results
     )
+
+    _print_lubjanka_summary(results)
 
     _print_ranking(
         results
