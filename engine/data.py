@@ -173,7 +173,6 @@ FREE_EXECUTION_PROVIDERS = frozenset({"BIQUOTE", "YAHOO"})
 
 EXECUTION_MARKET_TYPES = {
     "XAU/USD": "FUTURES_CONTINUOUS",
-    "XAG/USD": "FUTURES_CONTINUOUS",
     "COPPER/USD": "FUTURES_CONTINUOUS",
     "WTI/USD": "FUTURES_CONTINUOUS",
     "BRENT/USD": "FUTURES_CONTINUOUS",
@@ -186,7 +185,6 @@ EXECUTION_MARKET_TYPES = {
 
 PROVIDER_MARKET_TYPES = {
     "XAU/USD": {"YAHOO": "FUTURES_CONTINUOUS"},
-    "XAG/USD": {"YAHOO": "FUTURES_CONTINUOUS"},
     "COPPER/USD": {"YAHOO": "FUTURES_CONTINUOUS"},
     "WTI/USD": {"YAHOO": "FUTURES_CONTINUOUS"},
     "BRENT/USD": {"YAHOO": "FUTURES_CONTINUOUS"},
@@ -199,7 +197,6 @@ PROVIDER_MARKET_TYPES = {
 
 INSTRUMENT_DATA_METADATA = {
     "XAU/USD": {"currency": "USD", "unit": "troy_oz", "market_type": "FUTURES_CONTINUOUS"},
-    "XAG/USD": {"currency": "USD", "unit": "troy_oz", "market_type": "FUTURES_CONTINUOUS"},
     "COPPER/USD": {"currency": "USD", "unit": "pound", "market_type": "FUTURES_CONTINUOUS"},
     "WTI/USD": {"currency": "USD", "unit": "barrel", "market_type": "FUTURES_CONTINUOUS"},
     "BRENT/USD": {"currency": "USD", "unit": "barrel", "market_type": "FUTURES_CONTINUOUS"},
@@ -214,7 +211,6 @@ PROVIDER_ORDER = {
     # Futures execution only. BiQuote metal/energy symbols are MT5 CFDs,
     # so they are not valid fallbacks for these futures contracts.
     "XAU/USD": ("YAHOO",),
-    "XAG/USD": ("YAHOO",),
     "COPPER/USD": ("YAHOO",),
     "WTI/USD": ("YAHOO",),
     "BRENT/USD": ("YAHOO",),
