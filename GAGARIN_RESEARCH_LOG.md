@@ -652,3 +652,13 @@
 - PAPER ONLY unchanged. No real orders, deployment, or live Telegram delivery claimed.
 
 - Follow-up wiring: removed the time-window Forex filter from Telegram on-demand analysis; updated main runner to treat all 13 approved instruments as operational, include them in Governor/execution/paper feedback, and remove legacy "FX context only" labeling. Added Telegram aliases for EUR/USD, DAX, S&P 500, NVIDIA and Tesla.
+
+
+## 2026-11-09 — Start Gagarin as market-only 5-minute monitor
+
+- Removed the separate Invest AUTO monitor thread from the Render Telegram runner. It was generating unrelated MSFT/US-equity scans and invoked the Trading 212 demo integration, outside the user's requested market-direction workflow.
+- Changed the Gagarin position/forecast market monitor cadence from 15 minutes to 5 minutes.
+- Removed the old Trading 212 profile/link command menu from the startup welcome and simplified the Telegram command list to analysis, classification, signals and position-monitor commands.
+- Kept news/event monitor at 60-second polling with 300-second recheck, PAPER ONLY, no broker execution, and the approved 13-symbol universe.
+- Render verification before this change: Telegram webhook service v2 was online and startup welcome was delivered. Legacy duplicate service `soyuz-gagarin-telegram` has no `TELEGRAM_BOT_TOKEN` and crashes; it is not the active v2 instance.
+- Cloud API service starts, but logs report `DATABASE_URL missing`; persistence is disabled and its login endpoint returns 503. This does not block the Telegram webhook monitor but must be configured separately for durable cloud history.

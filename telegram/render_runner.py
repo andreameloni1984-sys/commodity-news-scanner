@@ -25,8 +25,6 @@ from soyuz_gagarin.mt5_bridge import build_demo_payloads
 
 DEFAULT_PORT = 10000
 WEBHOOK_PATH = "/telegram/webhook"
-INVEST_AUTO_INTERVAL = 15 * 60  # 15 minuti
-
 
 def prepare_webhook() -> bool:
     external_url = os.getenv("RENDER_EXTERNAL_URL", "").strip().rstrip("/")
@@ -67,63 +65,6 @@ def prepare_webhook() -> bool:
     return False
 
 
-def invest_auto_loop() -> None:
-    """Controllo periodico in sola lettura: non invia ordini in automatico."""
-    from engine.invest import analyze_invest_universe, trading212_demo_available
-    from engine.trading212_demo import get_account_summary
-
-    print("Invest AUTO monitor started | interval=15min | READ ONLY | DEMO ONLY", flush=True)
-    if trading212_demo_available():
-        ok, data = get_account_summary()
-        if ok:
-            print("Trading212 DEMO API connectivity: OK (account summary read-only)", flush=True)
-        else:
-            err = data.get("error", data.get("message", "API_ERROR")) if isinstance(data, dict) else "API_ERROR"
-            print(f"Trading212 DEMO API connectivity: FAILED | {str(err)[:180]}", flush=True)
-    else:
-        print("Trading212 DEMO API connectivity: NOT CONFIGURED (credentials missing)", flush=True)
-
-    last_t212_check = time.monotonic()
-    t212_check_interval = 60 * 60
-
-    while True:
-        try:
-            now = time.monotonic()
-            if now - last_t212_check >= t212_check_interval:
-                last_t212_check = now
-                if trading212_demo_available():
-                    auth_ok, auth_data = get_account_summary()
-                    if auth_ok:
-                        print("Trading212 DEMO hourly auth check: OK (read-only)", flush=True)
-                    else:
-                        auth_err = auth_data.get("error", auth_data.get("message", "API_ERROR")) if isinstance(auth_data, dict) else "API_ERROR"
-                        print(f"Trading212 DEMO hourly auth check: FAILED | {str(auth_err)[:180]}", flush=True)
-                else:
-                    print("Trading212 DEMO hourly auth check: NOT CONFIGURED", flush=True)
-
-            signals = analyze_invest_universe()
-            candidates = [s for s in signals if s.direction == "LONG"]
-            if candidates:
-                best = candidates[0]
-                print(
-                    f"Invest SCAN | LONG={len(candidates)} | best={best.ticker} "
-                    f"score={best.score:.1f} price={best.price}",
-                    flush=True,
-                )
-            else:
-                print("Invest SCAN | no confirmed LONG", flush=True)
-
-            if os.getenv("T212_AUTO_BUY_ENABLED", "0").strip() == "1":
-                from engine.invest import auto_buy_best_signal_budget
-                result = auto_buy_best_signal_budget(amount=10.0, min_score=50.0)
-                print("Invest AUTO BUY | " + result.replace("\n", " | ")[:900], flush=True)
-                if "ORDINE DEMO INVIATO" in result:
-                    send_telegram(result)
-        except Exception as exc:
-            print(f"Invest SCAN error | {type(exc).__name__}: {exc}", flush=True)
-        time.sleep(INVEST_AUTO_INTERVAL)
-
-
 def position_monitor_loop() -> None:
     """Periodic forecast and position monitor; Telegram is transition-only."""
     from engine.position_monitor import evaluate_positions, list_positions
@@ -131,8 +72,8 @@ def position_monitor_loop() -> None:
     from telegram.aggressive_alert import run_aggressive_alert
     from engine.energy_confluence import stamp_energy, format_energy_alert
 
-    interval = 15 * 60
-    print("Gagarin market monitor | interval=15min | deduplicated forecast + position alerts", flush=True)
+    interval = 5 * 60
+    print("Gagarin market monitor | interval=5min | 13 approved instruments | PAPER ONLY", flush=True)
     last_energy_alert = None
     while True:
         try:
@@ -411,10 +352,9 @@ def main() -> None:
     print("🟢 Telegram webhook: ACTIVE", flush=True)
 
     commands_ok, commands_data = _api("setMyCommands", {"commands": [
-        {"command": "aggressivo212", "description": "Profilo AGGRESSIVE 212"},
-        {"command": "soft212", "description": "Profilo SOFT 212"},
-        {"command": "collegamento212", "description": "Stato collegamento Invest Trading 212"},
-        {"command": "fasceorario", "description": "Statistiche delle tre fasce orarie"},
+        {"command": "analisi", "description": "Analisi intraday dei 13 strumenti"},
+        {"command": "classifica", "description": "Classifica delle opportunità LONG/SHORT"},
+        {"command": "segnali", "description": "Ultimi segnali e direzioni"},
         {"command": "monitora", "description": "Registra una posizione per avvisi di rischio"},
         {"command": "posizioni", "description": "Elenca le posizioni monitorate"},
         {"command": "smetti", "description": "Disattiva il monitor di una posizione"},
@@ -430,11 +370,6 @@ def main() -> None:
     print("Gagarin NEWS monitor | interval=60s | PAPER/DEMO | event-triggered analysis", flush=True)
 
     threading.Thread(
-        target=invest_auto_loop,
-        name="invest-auto",
-        daemon=True,
-    ).start()
-    threading.Thread(
         target=position_monitor_loop,
         name="gagarin-position-monitor",
         daemon=True,
@@ -443,8 +378,7 @@ def main() -> None:
     if TELEGRAM_CHAT_ID:
         welcome_sent = _reply(
             TELEGRAM_CHAT_ID,
-            "🚀 GAGARIN ONLINE\n🧪 PAPER/DEMO — nessun ordine reale.\n\nUsa uno dei tre pulsanti:\n• AGGRESSIVE 212\n• SOFT 212\n• COLLEGAMENTO INVEST TRADING212",
-            reply_markup=telegram_menu(),
+            "🚀 GAGARIN ONLINE\n🧪 PAPER ONLY — nessun ordine reale.\n\nPaniere: 13 strumenti. Scansione intraday ogni 5 minuti.\nComandi: /analisi /classifica /segnali",
         )
         print(
             "Telegram startup welcome | "
