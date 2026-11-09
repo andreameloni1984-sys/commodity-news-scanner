@@ -6,7 +6,6 @@ def test_active_commodity_universe_keeps_only_selected_core_commodities():
     commodity_rows = [row for row in rows if row.category != "Forex"]
     assert {row.symbol for row in commodity_rows} == {
         "XAU/USD",
-        "XAG/USD",
         "COPPER/USD",
         "WTI/USD",
         "BRENT/USD",
@@ -14,7 +13,7 @@ def test_active_commodity_universe_keeps_only_selected_core_commodities():
         "CORN/USD",
         "SOYBEAN/USD",
     }
-    assert len(commodity_rows) == 8
+    assert len(commodity_rows) == 7
 
 
 def test_unneeded_commodity_symbols_are_not_active():
@@ -39,7 +38,7 @@ def test_forex_universe_is_preserved_separately():
         "EUR/USD",
         "GBP/USD",
     }
-    assert universe_size() == 10
+    assert universe_size() == 9
 
 
 
@@ -55,25 +54,25 @@ def test_core_metals_and_cereals_have_explicit_data_routes():
         assert "YAHOO" in PROVIDER_ORDER[symbol]
 
 
-def test_operational_universe_is_eight_commodities_and_forex_is_auxiliary():
+def test_operational_universe_is_seven_commodities_and_forex_is_auxiliary():
     from commodities.universe import operational_commodities, auxiliary_commodities
 
     operational = operational_commodities()
     auxiliary = auxiliary_commodities()
     assert {item.symbol for item in operational} == {
-        "XAU/USD", "XAG/USD", "COPPER/USD", "WTI/USD",
+        "XAU/USD", "COPPER/USD", "WTI/USD",
         "BRENT/USD", "WHEAT/USD", "CORN/USD", "SOYBEAN/USD",
     }
     assert {item.symbol for item in auxiliary} == {"EUR/USD", "GBP/USD"}
     assert all(item.category.lower() != "forex" for item in operational)
 
 
-def test_canonical_governor_allows_only_eight_operational_commodities():
+def test_canonical_governor_allows_only_seven_operational_commodities():
     from soyuz_gagarin.config import GagarinConfig
 
     allowed = set(GagarinConfig().allowed_assets)
     assert allowed == {
-        "XAU/USD", "XAG/USD", "COPPER/USD", "WTI/USD",
+        "XAU/USD", "COPPER/USD", "WTI/USD",
         "BRENT/USD", "WHEAT/USD", "CORN/USD", "SOYBEAN/USD",
     }
     assert not ({"EUR/USD", "GBP/USD"} & allowed)
@@ -142,7 +141,7 @@ def test_telegram_classifica_ignores_stale_cached_results(monkeypatch):
         probability=40.0, quality=0.0, confidence=0.0,
         final_decision="WAIT",
     ) for symbol, name in [
-        ("XAU/USD", "Oro"), ("XAG/USD", "Argento"),
+        ("XAU/USD", "Oro"),
         ("COPPER/USD", "Rame"), ("WTI/USD", "Petrolio WTI"),
         ("BRENT/USD", "Petrolio Brent"), ("WHEAT/USD", "Grano"),
         ("CORN/USD", "Mais"), ("SOYBEAN/USD", "Soia"),
@@ -157,8 +156,8 @@ def test_telegram_classifica_ignores_stale_cached_results(monkeypatch):
     assert report.count("\n")  # a formatted report was returned
     assert "Legacy" not in report
     assert "21." not in report
-    assert "10. GBP/USD" in report
-    assert "8. Soia" in report
+    assert "9. GBP/USD" in report
+    assert "7. Soia" in report
 
 
 def test_morning_pick_never_passes_auxiliary_forex_to_governor(monkeypatch):
