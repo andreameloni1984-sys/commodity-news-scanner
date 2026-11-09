@@ -582,32 +582,22 @@ def test_buy_board_never_claims_buy_when_no_entry():
     assert "PAPER ONLY" in text
 
 
-def test_telegram_dashboard_menu_matches_gagarin_sections():
+def test_telegram_dashboard_menu_removes_legacy_keyboard():
     from telegram.bot import telegram_menu
 
-    menu = telegram_menu()
-    labels = [button["text"] for row in menu["keyboard"] for button in row]
-
-    assert labels == [
-        "🚀 AGGRESSIVE 212",
-        "🛡 SOFT 212",
-        "🔗 COLLEGAMENTO INVEST TRADING212",
-    ]
-    assert menu["resize_keyboard"] is True
-    assert menu["is_persistent"] is True
+    assert telegram_menu() == {"remove_keyboard": True}
 
 
-def test_telegram_start_uses_dashboard_keyboard():
+def test_telegram_start_describes_commodity_commands_without_broker_controls():
     from telegram.bot import _command_response, telegram_menu
 
     text = _command_response("/start")
-    menu = telegram_menu()
 
     assert "GAGARIN" in text
-    assert "PAPER/DEMO" in text
-    assert "🚀 AGGRESSIVE 212" in [
-        button["text"] for row in menu["keyboard"] for button in row
-    ]
+    assert "PAPER ONLY" in text
+    assert "/classifica" in text
+    assert "/analisi" in text
+    assert telegram_menu() == {"remove_keyboard": True}
 
 
 
