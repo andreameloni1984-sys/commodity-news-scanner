@@ -13,9 +13,9 @@ class GagarinTelegramMenuTests(unittest.TestCase):
         end = source.index("def send_telegram", start)
         menu_source = source[start:end]
         labels = (
-            "🚀 AGGRESSIVE 212",
-            "🛡 SOFT 212",
-            "🔗 COLLEGAMENTO INVEST TRADING212",
+            "📊 CLASSIFICA",
+            "🛰 ANALISI",
+            "📅 CALENDARIO",
         )
         for label in labels:
             self.assertIn(label, menu_source)
@@ -23,7 +23,10 @@ class GagarinTelegramMenuTests(unittest.TestCase):
         self.assertIn("def telegram_diagnostic", source)
         self.assertIn("def send_telegram", source)
         self.assertIn("setMyCommands", runner)
-        self.assertIn("/collegamento212", source)
+        self.assertNotIn("/collegamento212", source)
+        self.assertIn("/classifica", source)
+        self.assertIn("/analisi", source)
+        self.assertIn("/calendario", source)
 
 
 if __name__ == "__main__":

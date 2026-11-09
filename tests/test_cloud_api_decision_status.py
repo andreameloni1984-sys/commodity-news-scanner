@@ -130,8 +130,8 @@ def test_runtime_legacy_wait_becomes_safety_block_not_market_wait():
     assert "WAIT" not in metadata.values()
 
 
-def test_cli_and_monitor_use_shared_runtime_status_adapter():
-    for path in ("main.py", "telegram/render_runner.py"):
+def test_cli_and_telegram_analysis_use_shared_runtime_status_adapter():
+    for path in ("main.py", "telegram/bot.py"):
         source = Path(path).read_text(encoding="utf-8")
         assert "attach_runtime_decision_metadata" in source
         assert 'else "WAIT"' not in source

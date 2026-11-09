@@ -12,11 +12,11 @@ def test_tariff_headline_maps_to_watch_candidates_without_trade():
 
 def test_energy_and_agriculture_headlines_map_to_relevant_instruments():
     energy = classify("OPEC cuts crude oil output")
-    agriculture = classify("Drought threatens coffee and cocoa harvest")
+    agriculture = classify("Drought threatens wheat and soybean harvest")
     assert "WTI" in energy["watch_instruments"]
     assert "BRENT" in energy["watch_instruments"]
-    assert "COFFEE" in agriculture["watch_instruments"]
-    assert "COCOA" in agriculture["watch_instruments"]
+    assert "WHEAT" in agriculture["watch_instruments"]
+    assert "SOYBEAN" in agriculture["watch_instruments"]
 
 
 def test_irrelevant_headline_does_not_create_signal():
@@ -80,3 +80,15 @@ def test_generic_data_centre_headline_does_not_create_direction():
     assert "DATA_CENTERS" in result["domains"]
     assert result["trade_direction"] is None
     assert result["order_authorized"] is False
+
+
+def test_selected_grains_map_to_the_gagarin_universe():
+    wheat = classify("USDA raises wheat export forecast after improved harvest")
+    corn = classify("USDA reports corn crop damage")
+    soy = classify("Brazil drought threatens soybean harvest")
+    assert "WHEAT" in wheat["watch_instruments"]
+    assert "CORN" in corn["watch_instruments"]
+    assert "SOYBEAN" in soy["watch_instruments"]
+    for result in (wheat, corn, soy):
+        assert result["trade_direction"] is None
+        assert result["order_authorized"] is False

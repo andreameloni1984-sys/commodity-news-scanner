@@ -588,11 +588,7 @@ def test_telegram_dashboard_menu_matches_gagarin_sections():
     menu = telegram_menu()
     labels = [button["text"] for row in menu["keyboard"] for button in row]
 
-    assert labels == [
-        "🚀 AGGRESSIVE 212",
-        "🛡 SOFT 212",
-        "🔗 COLLEGAMENTO INVEST TRADING212",
-    ]
+    assert labels == ["📊 CLASSIFICA", "🛰 ANALISI", "📅 CALENDARIO"]
     assert menu["resize_keyboard"] is True
     assert menu["is_persistent"] is True
 
@@ -604,10 +600,8 @@ def test_telegram_start_uses_dashboard_keyboard():
     menu = telegram_menu()
 
     assert "GAGARIN" in text
-    assert "PAPER/DEMO" in text
-    assert "🚀 AGGRESSIVE 212" in [
-        button["text"] for row in menu["keyboard"] for button in row
-    ]
+    assert "PAPER ONLY" in text
+    assert "/classifica" in text and "/analisi" in text and "/calendario" in text
 
 
 
@@ -874,3 +868,44 @@ def test_safety_recomputes_rr_from_actual_bracket_prices():
     assert state.safety == "BLOCKED"
     assert "RR_GEOMETRY_MISMATCH" in state.blockers
     assert "RR_FAIL" in state.blockers
+
+
+def test_manual_telegram_analysis_applies_canonical_governor(monkeypatch):
+    from types import SimpleNamespace
+    import telegram.bot as bot
+    import engine.cloud_api_status as cloud_status
+
+    state = SimpleNamespace(symbol="XAU/USD", metadata={})
+    monkeypatch.setattr(bot, "operational_commodities", lambda: [object()])
+    monkeypatch.setattr(bot, "analyze_universe", lambda instruments: [state])
+    decision = SimpleNamespace(symbol="XAU/USD")
+    monkeypatch.setattr(bot, "evaluate_states", lambda states: [decision])
+    monkeypatch.setattr(
+        cloud_status,
+        "attach_runtime_decision_metadata",
+        lambda current, selected: current.metadata.update({"gagarin_action": "PAPER_SIGNAL"}),
+    )
+
+    results = bot._run_analysis()
+    assert results == [state]
+    assert state.metadata["gagarin_action"] == "PAPER_SIGNAL"
+
+
+def test_telegram_single_commodity_analysis_includes_calculated_risk_levels(monkeypatch):
+    from types import SimpleNamespace
+    import telegram.bot as bot
+
+    commodity = SimpleNamespace(name="Oro")
+    state = SimpleNamespace(
+        commodity="Oro", symbol="XAU/USD", setup_direction="LONG",
+        final_decision="ENTRY", safety="SAFE", blockers=[],
+        live=True, data_ok=True, price=2000.0, atr=10.0,
+        probability=80.0, quality=75.0, confidence=70.0,
+        entry=2001.0, stop=1990.0, tp1=2017.5, tp2=2023.0, tp3=2028.5,
+    )
+    monkeypatch.setattr(bot, "_resolve_commodity", lambda name: commodity)
+    monkeypatch.setattr(bot, "_run_analysis", lambda selected: [state])
+
+    report = bot._command_response("/analisi oro")
+    for expected in ("BIAS: LONG", "ENTRY: 2001", "SL: 1990", "TP1: 2017.5", "TP2: 2023", "TP3: 2028.5"):
+        assert expected in report
