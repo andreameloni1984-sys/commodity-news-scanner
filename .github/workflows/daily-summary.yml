@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
     steps:
@@ -25,12 +26,15 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
       - name: Send summary
         run: |
           python - <<'PY'
           import os, json, urllib.request
           from telegram.signals import format_watch_board
-          from engine.feedback import summarize, format_summary
+          from engine.feedback import summarize, format_summary, storage_backend
 
           token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
           chat = os.getenv("TELEGRAM_CHAT_ID", "").strip()
@@ -39,11 +43,16 @@ jobs:
               raise SystemExit(0)
 
           # Feedback summary
+          backend = "UNKNOWN"
           try:
+              backend = storage_backend()
               fb = summarize()
-              fb_text = format_summary(fb)
+              fb_text = f"ARCHIVIO: {backend}\n" + format_summary(fb)
           except Exception as e:
               fb_text = f"Feedback non disponibile: {e}"
+
+          if backend != "POSTGRES":
+              fb_text = "⚠️ STORICO NON PERSISTENTE — controllare DATABASE_URL\n" + fb_text
 
           text = (
               "🚀 **GAGARIN — RIEPILOGO GIORNALIERO**\n"

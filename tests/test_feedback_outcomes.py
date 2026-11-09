@@ -317,3 +317,22 @@ def test_database_recovery_merges_csv_fallback_without_losing_newer_outcomes(mon
     assert len(saved) == 1
     assert {row["signal_id"] for row in saved[0]} == {"db-only", "shared", "csv-only"}
 
+def test_feedback_storage_backend_does_not_claim_postgres_without_database_url(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    assert feedback.storage_backend() == "LOCAL_CSV_NO_DATABASE_URL"
+
+
+def test_daily_summary_reads_durable_feedback_and_discloses_backend():
+    from pathlib import Path
+
+    workflow = (
+        Path(__file__).resolve().parents[1]
+        / ".github"
+        / "workflows"
+        / "daily-summary.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "DATABASE_URL: ${{ secrets.DATABASE_URL }}" in workflow
+    assert "pip install -r requirements.txt" in workflow
+    assert "storage_backend" in workflow
+    assert "STORICO NON PERSISTENTE" in workflow
