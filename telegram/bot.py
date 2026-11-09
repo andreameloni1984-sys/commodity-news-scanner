@@ -242,7 +242,7 @@ def _format_intraday(results):
     for state in results:
         status = market_decision_status(state)
         if _is_out_of_scope_instrument(state):
-            lines.append(f"{state.commodity} | CONTESTO FX — NON OPERATIVO")
+            lines.append(f"{state.commodity} | FUORI PANIERE — NON OPERATIVO")
             continue
         lines.append(
             f"{state.commodity} | BIAS {status['bias']} | "
