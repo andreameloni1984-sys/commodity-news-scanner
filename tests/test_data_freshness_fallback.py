@@ -24,10 +24,26 @@ def _candles(latest_age_seconds):
 
 
 def _configure_provider_chain(monkeypatch, provider_rows):
+    test_symbol = "TEST/PAIR"
     monkeypatch.setattr(
         data,
         "PROVIDER_ORDER",
-        {"EUR/USD": tuple(provider_rows)},
+        {test_symbol: tuple(provider_rows)},
+    )
+    monkeypatch.setattr(
+        data,
+        "EXECUTION_MARKET_TYPES",
+        {test_symbol: "TEST_MARKET"},
+    )
+    monkeypatch.setattr(
+        data,
+        "PROVIDER_MARKET_TYPES",
+        {test_symbol: {provider: "TEST_MARKET" for provider in provider_rows}},
+    )
+    monkeypatch.setattr(
+        data,
+        "INSTRUMENT_DATA_METADATA",
+        {test_symbol: {"currency": "USD", "unit": "test_unit", "market_type": "TEST_MARKET"}},
     )
     monkeypatch.setattr(
         data,
@@ -44,8 +60,8 @@ def _configure_provider_chain(monkeypatch, provider_rows):
 
 def _load(monkeypatch, provider_rows):
     _configure_provider_chain(monkeypatch, provider_rows)
-    state = SoyuzState(commodity="EUR/USD", symbol="EUR/USD")
-    commodity = SimpleNamespace(name="EUR/USD", symbol="EUR/USD")
+    state = SoyuzState(commodity="Test pair", symbol="TEST/PAIR")
+    commodity = SimpleNamespace(name="Test pair", symbol="TEST/PAIR")
     return data.load_data(state, commodity)
 
 
@@ -103,8 +119,8 @@ def test_closed_market_marks_stale_fallback_as_market_closed(monkeypatch):
 
     monkeypatch.setattr(data, "_try_provider", provider_call)
     state = data.load_data(
-        SoyuzState(commodity="EUR/USD", symbol="EUR/USD"),
-        SimpleNamespace(name="EUR/USD", symbol="EUR/USD"),
+        SoyuzState(commodity="Test pair", symbol="TEST/PAIR"),
+        SimpleNamespace(name="Test pair", symbol="TEST/PAIR"),
     )
 
     assert calls == ["BIQUOTE"]
