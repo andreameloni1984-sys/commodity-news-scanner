@@ -662,3 +662,12 @@
 - Kept news/event monitor at 60-second polling with 300-second recheck, PAPER ONLY, no broker execution, and the approved 13-symbol universe.
 - Render verification before this change: Telegram webhook service v2 was online and startup welcome was delivered. Legacy duplicate service `soyuz-gagarin-telegram` has no `TELEGRAM_BOT_TOKEN` and crashes; it is not the active v2 instance.
 - Cloud API service starts, but logs report `DATABASE_URL missing`; persistence is disabled and its login endpoint returns 503. This does not block the Telegram webhook monitor but must be configured separately for durable cloud history.
+
+
+## 2026-11-09 — Restore the exact eight-commodity Gagarin universe
+
+- Finding: the default branch commit `b3bfb0dfacd0fcb1c90d7e2f2d477070abe48110` expanded the active universe to 13 instruments (eight commodities, EUR/USD, DAX, S&P 500, NVIDIA and Tesla), contrary to the user's explicit eight-commodity scope.
+- Proposed correction on a dedicated branch: remove non-commodity instruments from the canonical universe, Governor allowlist, Yahoo/provider route maps, Telegram aliases and cached-result presentation; keep the eight selected commodities only.
+- Regression coverage asserts exact eight-symbol membership, exact Governor allowlist and provider-map membership, and rejection of out-of-basket cached Telegram states.
+- No scoring, direction, indicators, thresholds, risk, sizing, feed identities, credentials, account links, orders or PAPER-only behavior changed. No changes to main, no merge or deployment.
+- Trading 212 CFD market data remains unavailable through the documented Public API; Yahoo futures remain separate and BiQuote remains an independent CFD reference only.
