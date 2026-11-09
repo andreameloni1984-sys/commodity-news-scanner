@@ -408,6 +408,11 @@ def analyze_one(commodity: Commodity) -> SoyuzState:
 
     data_fetch_started = time.perf_counter()
     state = load_data(state, commodity)
+    # Compact M5 intraday context: diagnostic only; no independent signal path.
+    from engine.intraday_indicators import calculate_intraday_context
+    state.metadata["intraday_indicators"] = calculate_intraday_context(
+        state.candles, state.closes
+    )
     state.metadata["data_fetch_duration_ms"] = round(
         (time.perf_counter() - data_fetch_started) * 1000.0, 2
     )
