@@ -559,6 +559,7 @@ def test_retest_trigger_rejects_wrong_side_close():
 def test_intraday_dashboard_is_paper_and_compact():
     from telegram.bot import _format_intraday
     state = _prepare_directional_state("LONG")
+    state.symbol = "XAU/USD"
     state.setup = "TREND_CONTINUATION"
     state.setup_direction = "LONG"
     state.trigger = "NOT_CONFIRMED"
@@ -624,7 +625,7 @@ def test_morning_pick_hides_engine_rationale():
     import telegram.bot as bot
 
     state = _prepare_directional_state("LONG")
-    state.symbol = "TEST/USD"
+    state.symbol = "XAU/USD"
     state.commodity = "Oro"
     state.setup_direction = "LONG"
     state.entry = 100.0
@@ -635,7 +636,7 @@ def test_morning_pick_hides_engine_rationale():
     state.rr3 = 2.5
 
     class Decision:
-        symbol = "TEST/USD"
+        symbol = "XAU/USD"
         action = "PAPER_SIGNAL"
 
     original = bot.evaluate_states
