@@ -121,3 +121,11 @@ def test_morning_pick_never_passes_out_of_basket_state_to_governor(monkeypatch):
     assert received == [gold]
     assert "COMMODITY: Oro" in report
     assert "EUR/USD" not in report
+
+
+def test_telegram_setup_and_intraday_hide_out_of_basket_states():
+    import telegram.bot as bot
+
+    eurusd = SimpleNamespace(symbol="EUR/USD", commodity="EUR/USD")
+    assert "EUR/USD" not in bot._format_setup([eurusd])
+    assert "EUR/USD" not in bot._format_intraday([eurusd])
