@@ -24,6 +24,17 @@ def test_potential_setup_alerts_before_trigger_confirmation():
     assert alerts[0]["stage"] == "POSSIBILE"
 
 
+def test_explicit_provider_aliases_are_accepted_for_the_eight_commodities():
+    for symbol in ("XAUUSD", "GC=F", "XAGUSD", "SI=F", "HG=F", "USOIL",
+                   "CL=F", "UKOIL", "BZ=F", "ZW=F", "ZC=F", "ZS=F"):
+        assert len(find_aggressive_alerts([candidate(symbol=symbol)])) == 1
+
+
+def test_out_of_scope_symbols_remain_rejected_from_aggressive_alerts():
+    for symbol in ("EURUSD", "GBPUSD", "AAPL_US_EQ", "QQQ", "NG=F"):
+        assert find_aggressive_alerts([candidate(symbol=symbol)]) == []
+
+
 def test_potential_alert_is_clear_about_unconfirmed_trigger():
     message = format_aggressive_alert([candidate()])
     assert "POSSIBILE OPPORTUNITÀ" in message

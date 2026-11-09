@@ -12,7 +12,6 @@ COMMODITY_SYMBOLS = {
     "XAU/USD", "XAG/USD", "COPPER/USD", "WTI/USD",
     "BRENT/USD", "WHEAT/USD", "CORN/USD", "SOYBEAN/USD",
 }
-FX_SYMBOLS = {"EUR/USD", "GBP/USD"}
 
 
 def _fresh_candles():
@@ -31,10 +30,10 @@ def _fresh_candles():
     return rows
 
 
-def test_all_ten_active_symbols_have_explicit_free_market_basis_routes():
+def test_all_eight_active_commodity_symbols_have_explicit_free_market_basis_routes():
     active = {row.symbol for row in enabled_commodities()}
 
-    assert active == COMMODITY_SYMBOLS | FX_SYMBOLS
+    assert active == COMMODITY_SYMBOLS
     assert set(data.PROVIDER_ORDER) == active
     assert set(data.EXECUTION_MARKET_TYPES) == active
     assert set(data.INSTRUMENT_DATA_METADATA) == active
@@ -44,14 +43,6 @@ def test_all_ten_active_symbols_have_explicit_free_market_basis_routes():
         assert data.EXECUTION_MARKET_TYPES[symbol] == "FUTURES_CONTINUOUS"
         assert data.PROVIDER_MARKET_TYPES[symbol] == {
             "YAHOO": "FUTURES_CONTINUOUS"
-        }
-
-    for symbol in FX_SYMBOLS:
-        assert data.PROVIDER_ORDER[symbol] == ("BIQUOTE", "YAHOO")
-        assert data.EXECUTION_MARKET_TYPES[symbol] == "FX_SPOT"
-        assert data.PROVIDER_MARKET_TYPES[symbol] == {
-            "BIQUOTE": "FX_SPOT",
-            "YAHOO": "FX_SPOT",
         }
 
     assert all(
@@ -65,11 +56,15 @@ def test_all_ten_active_symbols_have_explicit_free_market_basis_routes():
     )
 
 
-def test_biquote_fx_symbols_are_explicit_and_yahoo_fallback_is_spot():
-    assert data.BIQUOTE_SYMBOLS["EUR/USD"] == "EURUSD"
-    assert data.BIQUOTE_SYMBOLS["GBP/USD"] == "GBPUSD"
-    assert data.YAHOO_SYMBOLS["EUR/USD"] == "EURUSD=X"
-    assert data.YAHOO_SYMBOLS["GBP/USD"] == "GBPUSD=X"
+def test_fx_symbols_are_absent_from_all_operational_provider_maps():
+    for symbol in ("EUR/USD", "GBP/USD"):
+        assert symbol not in {row.symbol for row in enabled_commodities()}
+        assert symbol not in data.BIQUOTE_SYMBOLS
+        assert symbol not in data.YAHOO_SYMBOLS
+        assert symbol not in data.PROVIDER_ORDER
+        assert symbol not in data.EXECUTION_MARKET_TYPES
+        assert symbol not in data.PROVIDER_MARKET_TYPES
+        assert symbol not in data.INSTRUMENT_DATA_METADATA
 
 
 def test_biquote_commodity_cfd_cannot_replace_futures_execution():

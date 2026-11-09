@@ -100,10 +100,14 @@ def test_lubjanka_direction_is_used_when_other_bias_fields_are_missing():
 
 def test_lubjanka_interception_is_not_dropped_by_telegram_top_ten_limit():
     ordinary = []
-    for index in range(10):
+    provider_aliases = (
+        "XAUUSD", "XAGUSD", "HG=F", "USOIL", "UKOIL",
+        "GC=F", "SI=F", "CL=F", "BZ=F", "ZW=F",
+    )
+    for index, symbol in enumerate(provider_aliases):
         item = candidate("EARLY_MOVE")
         item.commodity = f"Ordinary-{index}"
-        item.symbol = f"ORD{index}"
+        item.symbol = symbol
         item.metadata = {}
         item.probability = 90
         item.quality = 90
@@ -112,7 +116,7 @@ def test_lubjanka_interception_is_not_dropped_by_telegram_top_ten_limit():
 
     early = candidate("FALSE_BREAKOUT")
     early.commodity = "Early interception"
-    early.symbol = "EARLY"
+    early.symbol = "ZC=F"
     early.probability = 0
     early.quality = 0
     early.confidence = 0
@@ -120,8 +124,8 @@ def test_lubjanka_interception_is_not_dropped_by_telegram_top_ten_limit():
     alerts = find_aggressive_alerts(ordinary + [early])
 
     assert len(alerts) == 10
-    assert any(item["symbol"] == "EARLY" for item in alerts)
-    assert alerts[0]["symbol"] == "EARLY"
+    assert any(item["symbol"] == "ZC=F" for item in alerts)
+    assert alerts[0]["symbol"] == "ZC=F"
     assert alerts[0]["stage"] == "OSSERVAZIONE"
 
 

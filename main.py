@@ -23,7 +23,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from commodities.universe import (
-    enabled_commodities,
     operational_commodities,
     validate_universe,
 )
@@ -64,13 +63,8 @@ def _is_operational_state(state) -> bool:
 
 
 def _select_run_universe(now=None):
-    """Scan every enabled instrument on every scheduled cycle.
-
-    Session labels may describe liquidity windows, but they must not suppress
-    an otherwise valid Forex setup. Actual weekend/market-closed data status
-    remains enforced by the data and safety layers.
-    """
-    return enabled_commodities()
+    """Return only the eight selected operational commodities each cycle."""
+    return operational_commodities()
 
 # ============================================================
 # HEADER
