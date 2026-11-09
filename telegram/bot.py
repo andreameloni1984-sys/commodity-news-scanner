@@ -178,9 +178,8 @@ def _resolve_commodity(name: str):
     return get_commodity_by_name(canonical)
 
 def _is_auxiliary_forex(state) -> bool:
-    return str(getattr(state, "symbol", "") or "").strip().upper() in {
-        "EUR/USD", "GBP/USD"
-    }
+    # The current approved universe contains tradable FX, indices and equities.
+    return False
 
 
 def _format_classifica(results):
