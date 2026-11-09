@@ -22,6 +22,10 @@ from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 from engine.gagarin import analyze_universe
 from engine.decision_status import market_decision_status
 from commodities.universe import enabled_commodities, get_commodity_by_name
+
+_OPERATIONAL_SYMBOLS = frozenset(
+    commodity.symbol.strip().upper() for commodity in enabled_commodities()
+)
 from engine.invest import (
     analyze_invest_universe,
     format_invest_report,
@@ -170,27 +174,27 @@ def _resolve_commodity(name: str):
         "grano": "Grano", "wheat": "Grano",
         "mais": "Mais", "corn": "Mais", "maize": "Mais",
         "soia": "Soia", "soybean": "Soia", "soybeans": "Soia",
-        "eurusd": "EUR/USD", "dax": "DAX", "sp500": "S&P 500", "s&p 500": "S&P 500",
-        "nvidia": "NVIDIA", "nvda": "NVIDIA", "tesla": "Tesla", "tsla": "Tesla",
     }
     canonical = aliases.get(key)
     if canonical is None:
         return None
     return get_commodity_by_name(canonical)
 
-def _is_auxiliary_forex(state) -> bool:
-    # The current approved universe contains tradable FX, indices and equities.
-    return False
+def _is_out_of_scope_instrument(state) -> bool:
+    """Reject stale/manual states that are not in the exact eight-commodity basket."""
+    symbol = str(getattr(state, "symbol", "") or "").strip().upper()
+    return symbol not in _OPERATIONAL_SYMBOLS
 
 
 def _format_classifica(results):
+    results = [state for state in (results or []) if not _is_out_of_scope_instrument(state)]
     if not results:
         return "📊 CLASSIFICA GAGARIN\nNessun risultato disponibile."
     lines = ["🚀 SOYUZ GAGARIN", "📊 CLASSIFICA", "━━━━━━━━━━━━━━━━━━━━", "🧪 PAPER ONLY", ""]
     for index, state in enumerate(results, start=1):
         status = market_decision_status(state)
-        if _is_auxiliary_forex(state):
-            label = "CONTESTO FX — NON OPERATIVO"
+        if _is_out_of_scope_instrument(state):
+            label = "FUORI PANIERE — NON OPERATIVO"
         else:
             label = (
                 f"BIAS {status['bias']} | SETUP {status['setup']} | "
@@ -203,7 +207,7 @@ def _format_classifica(results):
         )
     entries = [
         s for s in results
-        if not _is_auxiliary_forex(s) and s.final_decision == "ENTRY"
+        if not _is_out_of_scope_instrument(s) and s.final_decision == "ENTRY"
     ]
     lines.append("")
     lines.append("🎯 OPERATIVITÀ")
@@ -215,8 +219,8 @@ def _format_setup(results):
     lines = ["🚀 SOYUZ GAGARIN", "📊 SETUP", "━━━━━━━━━━━━━━━━━━━━", "🧪 PAPER ONLY", ""]
     for state in results:
         status = market_decision_status(state)
-        if _is_auxiliary_forex(state):
-            lines.append(f"{state.commodity} | CONTESTO FX — NON OPERATIVO")
+        if _is_out_of_scope_instrument(state):
+            lines.append(f"{state.commodity} | FUORI PANIERE — NON OPERATIVO")
             continue
         line = (
             f"{state.commodity} | BIAS {status['bias']} | "
@@ -235,7 +239,7 @@ def _format_intraday(results):
     lines = ["🚀 SOYUZ GAGARIN", "INTRADAY", "━━━━━━━━━━━━━━━━━━━━", "🧪 PAPER ONLY", ""]
     for state in results:
         status = market_decision_status(state)
-        if _is_auxiliary_forex(state):
+        if _is_out_of_scope_instrument(state):
             lines.append(f"{state.commodity} | CONTESTO FX — NON OPERATIVO")
             continue
         lines.append(
@@ -248,7 +252,7 @@ def _format_buy(results):
     if not results:
         return "GAGARIN — OGGI\nNessun risultato disponibile."
     operational_results = [
-        state for state in results if not _is_auxiliary_forex(state)
+        state for state in results if not _is_out_of_scope_instrument(state)
     ]
     forecast = predict_today(operational_results)
     lines = ["GAGARIN — OGGI", "━━━━━━━━━━━━━━━━━━━━", "🧪 PAPER ONLY", ""]
@@ -274,9 +278,9 @@ def _format_buy(results):
 def _format_morning_pick(results):
     if not results:
         return "GAGARIN — COSA COMPRO?\nNessun risultato disponibile."
-    # Every instrument in the approved universe is eligible for the pick.
+    # Only states in the eight-commodity basket are eligible for the pick.
     operational_results = [
-        state for state in results if not _is_auxiliary_forex(state)
+        state for state in results if not _is_out_of_scope_instrument(state)
     ]
     decisions = evaluate_states(operational_results)
     best = None
@@ -566,7 +570,7 @@ def _command_response(command: str) -> Optional[str]:
                 f"━━━━━━━━━━━━━━━━━━━━\n"
                 f"🧪 PAPER ONLY\n\n"
                 f"Prezzo: {price}\n"
-                f"BIAS: {'CONTESTO AUSILIARIO — NON OPERATIVO' if _is_auxiliary_forex(state) else status['bias']}\n"
+                f"BIAS: {'CONTESTO AUSILIARIO — NON OPERATIVO' if _is_out_of_scope_instrument(state) else status['bias']}\n"
                 f"SETUP: {status['setup']}\n"
                 f"TRADE PAPER: {status['trade_paper']}\n"
                 f"Confluence: {state.probability:.1f} / 100\n"
