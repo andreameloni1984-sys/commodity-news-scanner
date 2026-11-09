@@ -21,8 +21,7 @@ import requests
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 from engine.gagarin import analyze_universe
 from engine.decision_status import market_decision_status
-from engine.forex_session import filter_forex_for_session
-from commodities.universe import enabled_commodities, get_commodity_by_name
+from commodities.universe import operational_commodities, get_commodity_by_name
 from engine.invest import (
     analyze_invest_universe,
     format_invest_report,
@@ -147,7 +146,7 @@ def _reply(chat_id, text: str, reply_markup: Optional[dict] = None) -> bool:
     return True
 
 def _run_analysis(commodity=None, *, on_demand=True):
-    commodities = filter_forex_for_session(enabled_commodities(), on_demand=on_demand)
+    commodities = operational_commodities()
     if commodity is not None:
         commodities = [c for c in commodities if c.name.lower() == commodity.name.lower()]
     if not commodities:
@@ -160,7 +159,7 @@ def _resolve_commodity(name: str):
     key = " ".join(str(name or "").strip().split()).lower()
     if not key:
         return None
-    for commodity in enabled_commodities():
+    for commodity in operational_commodities():
         if commodity.name.lower() == key or commodity.symbol.lower() == key:
             return commodity
     aliases = {
@@ -320,7 +319,7 @@ def _command_response(command: str) -> Optional[str]:
             )
         commodity = _resolve_commodity(parts[1])
         if commodity is None:
-            return "Commodity non riconosciuta o non abilitata. Usa oro, wti, brent, cacao, caffe, platino, riso o zucchero."
+            return "Commodity non riconosciuta o non abilitata. Usa oro, argento, rame, wti, brent, grano, mais o soia."
         from engine.position_monitor import register_position
         tp2 = parts[6] if len(parts) >= 7 else None
         tp3 = parts[7] if len(parts) >= 8 else None

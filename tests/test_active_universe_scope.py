@@ -106,7 +106,7 @@ def test_telegram_marks_forex_as_context_and_excludes_it_from_pick(monkeypatch):
     assert received == [gold]
 
 
-def test_main_scans_all_enabled_instruments_without_intraday_time_gate():
+def test_main_and_cloud_api_scan_only_the_eight_selected_commodities():
     import ast
     from pathlib import Path
 
@@ -122,9 +122,24 @@ def test_main_scans_all_enabled_instruments_without_intraday_time_gate():
 
     selector = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_select_run_universe")
     selector_source = ast.get_source_segment(source, selector)
-    assert "enabled_commodities()" in selector_source
-    assert "return enabled_commodities()" in selector_source
+    assert "operational_commodities()" in selector_source
+    assert "enabled_commodities()" not in selector_source
     assert "filter_by_session" not in selector_source
+
+    cloud_source = (Path(__file__).resolve().parents[1] / "cloud_api.py").read_text(encoding="utf-8")
+    cloud_tree = ast.parse(cloud_source)
+    cloud_run = next(node for node in cloud_tree.body if isinstance(node, ast.FunctionDef) and node.name == "_run_gagarin")
+    cloud_run_source = ast.get_source_segment(cloud_source, cloud_run)
+    assert "commodities = operational_commodities()" in cloud_run_source
+    assert "filter_forex_for_session" not in cloud_run_source
+
+    confirmation = next(
+        node for node in cloud_tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_run_sputnik_confirmation"
+    )
+    confirmation_source = ast.get_source_segment(cloud_source, confirmation)
+    assert "analyze_universe(operational_commodities())" in confirmation_source
+    assert "enabled_commodities()" not in confirmation_source
 
 
 
@@ -146,7 +161,6 @@ def test_telegram_classifica_ignores_stale_cached_results(monkeypatch):
         ("COPPER/USD", "Rame"), ("WTI/USD", "Petrolio WTI"),
         ("BRENT/USD", "Petrolio Brent"), ("WHEAT/USD", "Grano"),
         ("CORN/USD", "Mais"), ("SOYBEAN/USD", "Soia"),
-        ("EUR/USD", "EUR/USD"), ("GBP/USD", "GBP/USD"),
     ]]
     monkeypatch.setattr(bot, "get_last_results", lambda: stale)
     calls = []
@@ -157,7 +171,8 @@ def test_telegram_classifica_ignores_stale_cached_results(monkeypatch):
     assert report.count("\n")  # a formatted report was returned
     assert "Legacy" not in report
     assert "21." not in report
-    assert "10. GBP/USD" in report
+    assert "EUR/USD" not in report
+    assert "GBP/USD" not in report
     assert "8. Soia" in report
 
 
