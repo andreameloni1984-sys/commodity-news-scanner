@@ -650,3 +650,5 @@
 - Updated regression tests to assert exact membership, removed-symbol exclusion, free Yahoo routing, and Governor coverage.
 - Data caveat: Yahoo symbol mappings are configured routes, not proof of current provider availability, live freshness, or intraday tradability. These are checked by runtime data validation; any unavailable/stale instrument must be reported, not silently substituted.
 - PAPER ONLY unchanged. No real orders, deployment, or live Telegram delivery claimed.
+
+- Follow-up wiring: removed the time-window Forex filter from Telegram on-demand analysis; updated main runner to treat all 13 approved instruments as operational, include them in Governor/execution/paper feedback, and remove legacy "FX context only" labeling. Added Telegram aliases for EUR/USD, DAX, S&P 500, NVIDIA and Tesla.
