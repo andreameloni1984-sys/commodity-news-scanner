@@ -3,7 +3,7 @@
 import time
 from types import SimpleNamespace
 
-from commodities.universe import enabled_commodities
+from commodities.universe import operational_commodities
 import engine.data as data
 from engine.state import SoyuzState
 
@@ -31,13 +31,13 @@ def _fresh_candles():
     return rows
 
 
-def test_all_ten_active_symbols_have_explicit_free_market_basis_routes():
-    active = {row.symbol for row in enabled_commodities()}
+def test_eight_operational_symbols_have_explicit_free_market_basis_routes():
+    active = {row.symbol for row in operational_commodities()}
 
-    assert active == COMMODITY_SYMBOLS | FX_SYMBOLS
-    assert set(data.PROVIDER_ORDER) == active
-    assert set(data.EXECUTION_MARKET_TYPES) == active
-    assert set(data.INSTRUMENT_DATA_METADATA) == active
+    assert active == COMMODITY_SYMBOLS
+    assert active <= set(data.PROVIDER_ORDER)
+    assert active <= set(data.EXECUTION_MARKET_TYPES)
+    assert active <= set(data.INSTRUMENT_DATA_METADATA)
 
     for symbol in COMMODITY_SYMBOLS:
         assert data.PROVIDER_ORDER[symbol] == ("YAHOO",)
@@ -65,7 +65,10 @@ def test_all_ten_active_symbols_have_explicit_free_market_basis_routes():
     )
 
 
-def test_biquote_fx_symbols_are_explicit_and_yahoo_fallback_is_spot():
+def test_legacy_fx_routes_are_not_part_of_the_operational_universe():
+    active = {row.symbol for row in operational_commodities()}
+    assert FX_SYMBOLS.isdisjoint(active)
+
     assert data.BIQUOTE_SYMBOLS["EUR/USD"] == "EURUSD"
     assert data.BIQUOTE_SYMBOLS["GBP/USD"] == "GBPUSD"
     assert data.YAHOO_SYMBOLS["EUR/USD"] == "EURUSD=X"
