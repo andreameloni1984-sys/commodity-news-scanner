@@ -28,7 +28,7 @@ def build_conditional_playbook(candles: Any, interception: dict, *, now_epoch: f
         return {"status": "UNAVAILABLE", "reason": "meno di 8 candele M5 chiuse", "paper_only": True}
     latest = bars[-1]
     age = now - latest["timestamp"]
-    if age < 0 or age > 1200:
+    if age < 0 or age > 600:
         return {"status": "UNAVAILABLE", "reason": "ultima candela M5 non fresca", "bar_age_seconds": round(age, 1), "paper_only": True}
     ranges = []
     for previous, current in zip(bars[-15:-1], bars[-14:]):
