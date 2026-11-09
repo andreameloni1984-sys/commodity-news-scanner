@@ -627,3 +627,14 @@
 - **Regression coverage added:** accelerating momentum ranks above steady pace; fading momentum is penalized but the directional candidate remains visible.
 - **Commits:** `02b9065df47eac2b6f257ad4d16a30b16e2116c3` (implementation); `c43f5e61f682472b5fe958f0d96ee09f65f756d7` (tests).
 - **Verification:** tests have been added but have not been executed in this session; CI must pass before treating the change as validated in production. No deployment or live trade was performed.
+
+
+## 2026-11-09 — Add compact intraday indicator context
+
+- Added `engine/intraday_indicators.py` to calculate EMA 10/50/200 alignment, Bollinger Bands (20, 2), UTC-day proxy VWAP, and an approximate recent-volume POC from normalized M5 OHLCV candles.
+- Wired the diagnostic output into `state.metadata["intraday_indicators"]` immediately after data loading. Existing RSI(14) and ATR remain in the current regime/data pipeline; they are not duplicated.
+- Added regression tests for normal history and graceful degradation when volume/history is unavailable.
+- The new indicators are context/diagnostics only in this first integration: they do not create signals, alter probability thresholds, authorize entries, bypass triggers, change risk/SL/TP, or change PAPER ONLY behavior.
+- Precision limits: VWAP uses a UTC calendar-day anchor as a proxy rather than exchange-specific session hours; POC is a typical-price volume histogram rather than tick-level volume-at-price. Missing volume leaves VWAP/POC unavailable without blocking analysis.
+- Cleanup decision: no existing runtime module was deleted in this pass because a safe dependency audit is required before removing code. Previously documented duplicate scheduled scans and static research jobs remain disabled; this change avoids speculative deletion of active safety, data, Telegram, or news paths.
+- Validation: tests added; CI must pass on the PR before merge. No deployment, live market check, Telegram delivery, or trading result is claimed. PAPER ONLY.
