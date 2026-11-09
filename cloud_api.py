@@ -534,7 +534,7 @@ def _run_sputnik_confirmation(events: list[dict]) -> dict:
     errors = validate_universe()
     if errors:
         raise RuntimeError("CONFIGURATION_BLOCKED: " + ", ".join(errors))
-    results = analyze_universe(enabled_commodities())
+    results = analyze_universe(operational_commodities())
     decisions = evaluate_states(results)
     by_symbol = {str(getattr(d, "symbol", "")).upper(): d for d in decisions}
     for state in results:
