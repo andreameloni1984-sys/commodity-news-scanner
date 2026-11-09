@@ -1,6 +1,6 @@
 import pytest
 
-from commodities.universe import enabled_commodities
+from commodities.universe import operational_commodities
 from telegram.bot import _resolve_commodity
 
 
@@ -29,8 +29,8 @@ def test_selected_commodities_are_resolvable(alias, expected):
     assert commodity.name == expected
 
 
-def test_all_enabled_canonical_names_are_resolvable():
-    for commodity in enabled_commodities():
+def test_all_operational_canonical_names_are_resolvable():
+    for commodity in operational_commodities():
         assert _resolve_commodity(commodity.name) is commodity
         assert _resolve_commodity(commodity.symbol) is commodity
 
@@ -72,3 +72,20 @@ def test_monitora_usage_marks_prices_as_examples_not_live_quotes():
     assert "NON quotazioni live" in response
     assert "/analisi oro" in response
     assert "Bid/Ask Trading 212" in response
+
+
+def test_forex_symbols_are_not_resolvable_as_gagarin_commodities():
+    assert _resolve_commodity("EUR/USD") is None
+    assert _resolve_commodity("GBP/USD") is None
+
+
+def test_telegram_analysis_passes_only_the_eight_selected_commodities(monkeypatch):
+    from telegram import bot
+
+    received = []
+    monkeypatch.setattr(bot, "analyze_universe", lambda rows: received.extend(rows) or [])
+    assert bot._run_analysis(on_demand=True) == []
+    assert {item.symbol for item in received} == {
+        "XAU/USD", "XAG/USD", "COPPER/USD", "WTI/USD",
+        "BRENT/USD", "WHEAT/USD", "CORN/USD", "SOYBEAN/USD",
+    }
