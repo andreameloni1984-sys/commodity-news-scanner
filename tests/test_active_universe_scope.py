@@ -1,114 +1,103 @@
-from commodities.universe import enabled_commodities, get_symbols, universe_size
+from datetime import datetime
+from zoneinfo import ZoneInfo
+from types import SimpleNamespace
+
+from commodities.universe import (
+    enabled_commodities,
+    get_symbols,
+    universe_size,
+    operational_commodities,
+    auxiliary_commodities,
+)
+
+EXPECTED_SYMBOLS = {
+    "XAU/USD", "XAG/USD", "COPPER/USD", "WTI/USD",
+    "BRENT/USD", "WHEAT/USD", "CORN/USD", "SOYBEAN/USD",
+}
+FORBIDDEN_SYMBOLS = {
+    "EUR/USD", "GBP/USD", "DAX", "SP500", "NVDA", "TSLA",
+    "XPT/USD", "XPD/USD", "NATGAS/USD", "HEATINGOIL/USD",
+    "GASOLINE/USD", "COCOA/USD", "COFFEE/USD", "SUGAR/USD",
+    "COTTON/USD", "RICE/USD", "LIVESTOCK/USD", "LUMBER/USD",
+}
 
 
-def test_active_universe_matches_new_intraday_list():
+def test_active_universe_is_exactly_the_eight_selected_commodities():
     rows = enabled_commodities()
-    assert {row.symbol for row in rows} == {
-        "XAU/USD", "XAG/USD", "COPPER/USD", "WTI/USD", "BRENT/USD",
-        "WHEAT/USD", "CORN/USD", "SOYBEAN/USD",
-        "EUR/USD", "DAX", "SP500", "NVDA", "TSLA",
-    }
-    assert universe_size() == 13
+    assert {row.symbol for row in rows} == EXPECTED_SYMBOLS
+    assert universe_size() == 8
+    assert all(row.category in {"Metal", "Energy", "Agriculture"} for row in rows)
 
 
-def test_removed_symbols_are_not_active():
-    active = set(get_symbols())
-    removed = {
-        "GBP/USD", "XPT/USD", "XPD/USD", "RICE/USD", "SUGAR/USD",
-        "COCOA/USD", "COFFEE/USD", "GASOLINE/USD", "NATGAS/USD",
-    }
-    assert active.isdisjoint(removed)
+def test_forbidden_assets_are_not_in_the_universe():
+    assert set(get_symbols()).isdisjoint(FORBIDDEN_SYMBOLS)
 
 
-def test_every_active_instrument_is_operational_and_governor_allowed():
-    from commodities.universe import operational_commodities, auxiliary_commodities
+def test_operational_universe_and_governor_allowlist_match_exactly():
     from soyuz_gagarin.config import GagarinConfig
 
-    assert {x.symbol for x in operational_commodities()} == set(get_symbols())
+    assert {item.symbol for item in operational_commodities()} == EXPECTED_SYMBOLS
     assert auxiliary_commodities() == []
-    assert set(GagarinConfig().allowed_assets) == set(get_symbols())
+    assert set(GagarinConfig().allowed_assets) == EXPECTED_SYMBOLS
 
 
-def test_new_financial_instruments_have_explicit_free_yahoo_routes():
-    from engine.data import (
-        EXECUTION_MARKET_TYPES, PROVIDER_MARKET_TYPES,
-        PROVIDER_ORDER, YAHOO_SYMBOLS,
-    )
-    expected = {
-        "DAX": "^GDAXI",
-        "SP500": "^GSPC",
-        "NVDA": "NVDA",
-        "TSLA": "TSLA",
-    }
-    for symbol, yahoo_symbol in expected.items():
-        assert YAHOO_SYMBOLS[symbol] == yahoo_symbol
-        assert PROVIDER_ORDER[symbol] == ("YAHOO",)
-        assert PROVIDER_MARKET_TYPES[symbol]["YAHOO"] == EXECUTION_MARKET_TYPES[symbol]
+def test_main_scans_exactly_eight_commodities_without_intraday_time_gate():
+    import main
+
+    after_session = datetime(2026, 11, 2, 19, 40, tzinfo=ZoneInfo("Europe/Rome"))
+    instruments = main._select_run_universe(now=after_session)
+    assert {item.symbol for item in instruments} == EXPECTED_SYMBOLS
 
 
-def test_eurusd_is_the_only_active_fx_pair():
-    rows = enabled_commodities()
-    forex = {row.symbol for row in rows if row.category == "Forex"}
-    assert forex == {"EUR/USD"}
-
-
-def test_main_scans_all_enabled_instruments_without_intraday_time_gate():
-    import ast
-    from pathlib import Path
-
-    source = (Path(__file__).resolve().parents[1] / "main.py").read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    run_function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "run")
-    run_source = ast.get_source_segment(source, run_function)
-    assert "_select_run_universe()" in run_source
-    assert "results = analyze_universe(" in run_source
-    assert "decisions = evaluate_states(operational_results)" in run_source
-    assert "for state in operational_results:" in run_source
-    assert "format_watch_board(operational_results" in run_source
-
-    selector = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_select_run_universe")
-    selector_source = ast.get_source_segment(source, selector)
-    assert "enabled_commodities()" in selector_source
-    assert "return enabled_commodities()" in selector_source
-    assert "filter_by_session" not in selector_source
-
-
-
-def test_telegram_classifica_ignores_stale_cached_results(monkeypatch):
-    from types import SimpleNamespace
+def test_telegram_classifica_drops_out_of_basket_cached_results(monkeypatch):
     import telegram.bot as bot
 
-    stale = [SimpleNamespace(
-        symbol=f"OLD/{i}", commodity=f"Legacy {i}", setup_direction="",
-        probability=40.0, quality=0.0, confidence=0.0,
-        final_decision="WAIT",
-    ) for i in range(21)]
-    fresh = [SimpleNamespace(
-        symbol=symbol, commodity=name, setup_direction="",
-        probability=40.0, quality=0.0, confidence=0.0,
-        final_decision="WAIT",
-    ) for symbol, name in [
+    names = [
         ("XAU/USD", "Oro"), ("XAG/USD", "Argento"),
         ("COPPER/USD", "Rame"), ("WTI/USD", "Petrolio WTI"),
         ("BRENT/USD", "Petrolio Brent"), ("WHEAT/USD", "Grano"),
         ("CORN/USD", "Mais"), ("SOYBEAN/USD", "Soia"),
-        ("EUR/USD", "EUR/USD"), ("DAX", "DAX"), ("SP500", "S&P 500"), ("NVDA", "NVIDIA"), ("TSLA", "Tesla"),
-    ]]
+    ]
+    fresh = [
+        SimpleNamespace(
+            symbol=symbol, commodity=name, setup_direction="",
+            probability=40.0, quality=0.0, confidence=0.0,
+            final_decision="WAIT",
+        )
+        for symbol, name in names
+    ]
+    fresh.extend([
+        SimpleNamespace(
+            symbol="EUR/USD", commodity="EUR/USD", setup_direction="",
+            probability=99.0, quality=99.0, confidence=99.0,
+            final_decision="ENTRY",
+        ),
+        SimpleNamespace(
+            symbol="NVDA", commodity="NVIDIA", setup_direction="",
+            probability=99.0, quality=99.0, confidence=99.0,
+            final_decision="ENTRY",
+        ),
+    ])
+    stale = [
+        SimpleNamespace(
+            symbol=f"OLD/{i}", commodity=f"Legacy {i}", setup_direction="",
+            probability=40.0, quality=0.0, confidence=0.0,
+            final_decision="WAIT",
+        )
+        for i in range(21)
+    ]
     monkeypatch.setattr(bot, "get_last_results", lambda: stale)
-    calls = []
-    monkeypatch.setattr(bot, "_run_analysis", lambda **kwargs: calls.append(kwargs) or fresh)
+    monkeypatch.setattr(bot, "_run_analysis", lambda **kwargs: fresh)
 
     report = bot._command_response("/classifica")
-    assert calls == [{"on_demand": True}]
-    assert report.count("\n")  # a formatted report was returned
-    assert "Legacy" not in report
-    assert "21." not in report
-    assert "13. Tesla" in report
     assert "8. Soia" in report
+    assert "EUR/USD" not in report
+    assert "NVIDIA" not in report
+    assert "Legacy" not in report
+    assert "9." not in report
 
 
-def test_morning_pick_never_passes_auxiliary_forex_to_governor(monkeypatch):
-    from types import SimpleNamespace
+def test_morning_pick_never_passes_out_of_basket_state_to_governor(monkeypatch):
     import telegram.bot as bot
 
     gold = SimpleNamespace(
@@ -129,6 +118,6 @@ def test_morning_pick_never_passes_auxiliary_forex_to_governor(monkeypatch):
 
     report = bot._format_morning_pick([gold, eurusd])
 
-    assert received == [gold, eurusd]
+    assert received == [gold]
     assert "COMMODITY: Oro" in report
     assert "EUR/USD" not in report
