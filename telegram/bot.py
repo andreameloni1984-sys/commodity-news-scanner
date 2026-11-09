@@ -214,6 +214,7 @@ def _format_classifica(results):
     lines.append(f"🟢 {len(entries)} ENTRATA/E AUTORIZZATA/E" if entries else "🟡 NESSUNA ENTRATA AUTORIZZATA")
     return "\n".join(lines)
 def _format_setup(results):
+    results = [state for state in (results or []) if not _is_out_of_scope_instrument(state)]
     if not results:
         return "📊 SETUP\nNessun risultato disponibile."
     lines = ["🚀 SOYUZ GAGARIN", "📊 SETUP", "━━━━━━━━━━━━━━━━━━━━", "🧪 PAPER ONLY", ""]
@@ -234,6 +235,7 @@ def _format_setup(results):
         lines.append(line)
     return "\n".join(lines)
 def _format_intraday(results):
+    results = [state for state in (results or []) if not _is_out_of_scope_instrument(state)]
     if not results:
         return "INTRADAY\nNessun risultato disponibile."
     lines = ["🚀 SOYUZ GAGARIN", "INTRADAY", "━━━━━━━━━━━━━━━━━━━━", "🧪 PAPER ONLY", ""]
