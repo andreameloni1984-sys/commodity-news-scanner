@@ -251,3 +251,18 @@ def test_silv_reference_never_replaces_yahoo_execution_price(monkeypatch):
     assert reference["price"] == 3900.0
     assert reference["basis_status"] == "CALCULATED_SPOT_MINUS_FUTURES"
     assert reference["basis_spot_minus_futures_pct"] is not None
+
+def test_silv_reference_is_disabled_by_default_without_environment_override(monkeypatch):
+    monkeypatch.delenv("SILV_SPOT_REFERENCE_ENABLED", raising=False)
+    calls = []
+    monkeypatch.setattr(
+        data.requests,
+        "get",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    quote = data._fetch_silv_spot_reference("XAU/USD")
+
+    assert quote["status"] == "DISABLED"
+    assert quote["price"] is None
+    assert calls == []
