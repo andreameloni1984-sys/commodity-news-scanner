@@ -1,6 +1,6 @@
 # ============================================================
 # SOYUZ GAGARIN v1.4
-# COMMODITY UNIVERSE (trimmed to 10 core)
+# COMMODITY UNIVERSE (9 active: 7 commodities + 2 FX)
 # ============================================================
 #
 # Universo operativo principale, ridotto a 10-12 strumenti di interesse.
@@ -56,13 +56,13 @@ class Commodity:
 
 
 # ============================================================
-# MAIN UNIVERSE (10 core)
+# MAIN UNIVERSE (9 active)
 # ============================================================
 #
 # Focus su strumenti rilevanti per le regole attive (energia shock + weekly)
 # e paniere SOYUZ deciso:
 #
-# METALLI: Oro, Argento, Rame
+# METALLI: Oro, Rame (Argento disabilitato per volatilità)
 # ENERGY: WTI, Brent
 # AGRICOLTURA: Grano, Mais, Soia
 # Forex core: EUR/USD, GBP/USD (restano separati ma prioritari per day)
@@ -303,7 +303,7 @@ if _UNIVERSE_ERRORS:
 
 
 def operational_commodities() -> list[Commodity]:
-    """Return the eight tradable commodity instruments; Forex remains auxiliary."""
+    """Return the seven tradable commodity instruments; Forex remains auxiliary."""
     return [
         commodity
         for commodity in enabled_commodities()
