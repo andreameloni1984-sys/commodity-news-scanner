@@ -9,8 +9,6 @@ from telegram.bot import _resolve_commodity
     [
         ("oro", "Oro"),
         ("gold", "Oro"),
-        ("argento", "Argento"),
-        ("silver", "Argento"),
         ("rame", "Rame"),
         ("copper", "Rame"),
         ("wti", "Petrolio WTI"),
@@ -35,7 +33,7 @@ def test_all_enabled_canonical_names_are_resolvable():
         assert _resolve_commodity(commodity.symbol) is commodity
 
 
-@pytest.mark.parametrize("removed", ["platino", "palladio", "riso", "zucchero", "cacao", "caffe", "caffè"])
+@pytest.mark.parametrize("removed", ["argento", "silver", "platino", "palladio", "riso", "zucchero", "cacao", "caffe", "caffè"])
 def test_removed_commodities_are_not_resolved(removed):
     assert _resolve_commodity(removed) is None
 
