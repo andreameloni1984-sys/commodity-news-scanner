@@ -396,60 +396,38 @@ def _command_response(command: str) -> Optional[str]:
             "Gli avvisi automatici arrivano solo su nuovi segnali rilevanti o cambi di rischio/target; nessun messaggio di stato ripetitivo."
         )
 
-    if command_name in {"/aggressivo212", "/aggressive212"}:
-        try:
-            from soyuz_gagarin.aggressive_desk import format_aggressive_desk
-            from soyuz_gagarin.trading_profiles import get_profile
-            from engine.trading212 import compare_price, format_comparison, parse_bid_ask
-            profile = get_profile("AGGRESSIVE")
-            results = _run_analysis()
-            if results is None:
-                return "Nessun risultato. Riprova con /analisi."
-            set_last_results(results)
-            desk = format_aggressive_desk(results)
-            try:
-                from cloud_api import FOREX_AGGRESSIVE_PORTFOLIO
-                fx = FOREX_AGGRESSIVE_PORTFOLIO.snapshot()
-                fx_lines = ["", "FX AGGRESSIVE", "Capitale: " + str(round(fx.get("equity", 100), 2)), "Aperte: " + str(len(fx.get("open_positions", [])))]
-                for p in fx.get("open_positions", [])[:5]:
-                    fx_lines.append(str(p.get("symbol")) + " " + str(p.get("direction")) + " entry " + str(p.get("entry")))
-                desk = desk + "\n" + "\n".join(fx_lines)
-            except Exception:
-                pass
-            if argument:
-                bid, ask = parse_bid_ask(argument)
-                if bid is not None:
-                    sym = None
-                    for part in argument.replace(",", ".").split():
-                        up = part.upper()
-                        if up in {"WTI", "BRENT", "ORO", "ARGENTO", "SPY", "QQQ", "EURUSD", "GBPUSD"}:
-                            sym = up
-                            break
-                    if sym:
-                        gprice = None
-                        for st in results:
-                            if str(getattr(st, "symbol", "")).upper() == sym:
-                                gprice = getattr(st, "price", None)
-                                break
-                        comp = compare_price(sym, gprice, bid, ask)
-                        desk = desk + "\n\n" + format_comparison(comp)
-                    else:
-                        desk = desk + "\n\n212: incolla anche il simbolo, es. /aggressivo212 WTI 78.10 78.13"
-                else:
-                    desk = desk + "\n\n212: per il confronto incolla bid e ask, es. /aggressivo212 WTI 78.10 78.13"
-            else:
-                desk = desk + "\n\n212: per confrontare i prezzi Trading 212 incolla bid e ask dopo il comando."
-            desk = desk + "\n\nProfilo: probabilita >= " + str(profile.min_probability) + ", qualita >= " + str(profile.min_quality) + ", rischio " + str(profile.risk_per_trade_pct) + "% per operazione, max " + str(profile.max_open_positions) + " posizioni."
-            try:
-                from research.intraday_windows import format_intraday_window_summary
-                desk = desk + "\n\n" + format_intraday_window_summary()
-            except Exception as exc:
-                desk = desk + "\n\nFasce orarie: dati non disponibili (" + type(exc).__name__ + ")."
-            return desk
-        except Exception as exc:
-            return "Errore reparto aggressive: " + type(exc).__name__ + ": " + str(exc)
+    if command_name in {"/aggressivo212", "/aggressive212", "/soft212"}:
+        desk_name = (
+            "AGGRESSIVE"
+            if command_name in {"/aggressivo212", "/aggressive212"}
+            else "SOFT"
+        )
+        return "\n".join([
+            "TRADING 212 — CFD | GAGARIN",
+            "━━━━━━━━━━━━━━━━━━━━",
+            "Reparto: " + desk_name,
+            "Stato: BLOCCATO — FEED CFD TRADING 212 NON VERIFICATO",
+            "Motivo: non sono verificati simbolo broker, contratto, scadenza, valuta e una serie storica CFD Trading 212 dello stesso strumento.",
+            "Questo comando non richiama il motore futures, non mostra il portafoglio FX e non genera segnali da prezzi di altri provider.",
+            "Entry / SL / TP: NON CALCOLATI.",
+            "Modalità: PAPER ONLY — nessun ordine.",
+        ])
 
-    if command_name in {"/soft212", "/soft"}:
+    if command_name == "/prezzo212":
+        try:
+            from engine.trading212 import build_manual_cfd_quote, format_manual_cfd_quote, parse_bid_ask
+            if not argument:
+                return "TRADING 212 — CFD QUOTE\nIncolla: simbolo bid ask\nEs: /prezzo212 WTI 78.10 78.13"
+            parts = argument.replace(",", ".").split()
+            if len(parts) != 3:
+                return "Uso: /prezzo212 SIMBOLO BID ASK. Contratto, scadenza e valuta restano da verificare."
+            symbol = parts[0]
+            bid, ask = parse_bid_ask(" ".join(parts[1:]))
+            return format_manual_cfd_quote(build_manual_cfd_quote(symbol, bid, ask))
+        except Exception as exc:
+            return "Errore 212: " + type(exc).__name__ + ": " + str(exc)
+
+    if command_name == "/soft":
         try:
             from soyuz_gagarin.trading_profiles import get_profile
             profile = get_profile("SOFT")
@@ -465,36 +443,6 @@ def _command_response(command: str) -> Optional[str]:
             return _format_classifica(results) + "\n\n" + window_summary + "\n\nProfilo SOFT: probabilita >= " + str(profile.min_probability) + ", qualita >= " + str(profile.min_quality) + ", rischio " + str(profile.risk_per_trade_pct) + "%."
         except Exception as exc:
             return "Errore soft: " + type(exc).__name__ + ": " + str(exc)
-
-    if command_name == "/prezzo212":
-        try:
-            from engine.trading212 import compare_price, format_comparison, parse_bid_ask
-            if not argument:
-                return "212 PREZZI\nIncolla: simbolo bid ask\nEs: /prezzo212 WTI 78.10 78.13"
-            parts = argument.split()
-            sym = parts[0].upper()
-            bid, ask = parse_bid_ask(" ".join(parts[1:]))
-            gprice = None
-            results = get_last_results()
-            if results:
-                for st in results:
-                    if str(getattr(st, "symbol", "")).upper() == sym:
-                        gprice = getattr(st, "price", None)
-                        break
-            if gprice is None:
-                try:
-                    results = _run_analysis()
-                    if results:
-                        set_last_results(results)
-                        for st in results:
-                            if str(getattr(st, "symbol", "")).upper() == sym:
-                                gprice = getattr(st, "price", None)
-                                break
-                except Exception:
-                    pass
-            return format_comparison(compare_price(sym, gprice, bid, ask))
-        except Exception as exc:
-            return "Errore 212: " + type(exc).__name__ + ": " + str(exc)
 
     if command_name == "/invest":
         signals = analyze_invest_universe()
