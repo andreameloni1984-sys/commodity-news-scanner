@@ -1,6 +1,6 @@
 # GAGARIN — Selezione ufficiale e confronto risultati
 
-**Conferma utente:** 2026-11-09 — usare il paniere attuale già presente nel codice (14 strumenti).  
+**Conferma utente:** 2026-11-09 — usare il paniere attuale già presente nel codice (13 strumenti).  
 **Modalità:** PAPER ONLY. Nessun ordine reale.  
 **Obiettivo operativo:** identificare strumento e direzione (LONG/SHORT/WAIT); non dipendere da Trading 212 né da confronti con i suoi prezzi.
 
@@ -17,13 +17,13 @@
 | Agricoli | Corn | CORN |
 | Agricoli | Soybean | SOYBEAN |
 | Forex | EUR/USD | EUR/USD |
-| Forex | GBP/USD | GBP/USD |
+|  GBP/USD |
 | Indici | DAX | DAX |
 | Indici | S&P 500 | SP500 |
 | Azioni | NVIDIA | NVDA |
 | Azioni | Tesla | TSLA |
 
-**Nota:** la selezione confermata è quella attuale del repository, inclusi Silver, Forex, indici e azioni. Non applicare la precedente proposta di rimuovere Silver a questo paniere senza una nuova istruzione esplicita.
+**Nota:** la selezione confermata è quella attuale del repository, inclusi Silver, EUR/USD, indici e azioni. Non applicare la precedente proposta di rimuovere Silver a questo paniere senza una nuova istruzione esplicita.
 
 ## Metodo di confronto dei risultati
 
