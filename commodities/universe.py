@@ -75,7 +75,7 @@ class Commodity:
 COMMODITIES = [
     # CORE METALS
     Commodity(name="Oro", symbol="XAU/USD", category="Metal", unit="USD", priority=1),
-    Commodity(name="Argento", symbol="XAG/USD", category="Metal", unit="USD", priority=2),
+    Commodity(name="Argento", symbol="XAG/USD", category="Metal", unit="USD", priority=2, enabled=False),
     Commodity(name="Rame", symbol="COPPER/USD", category="Metal", unit="USD", priority=3),
 
     # CORE ENERGY (supporta ENERGY_SHOCK_AND_WEEKLY_SAME_SIDE)
