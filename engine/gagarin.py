@@ -161,6 +161,10 @@ def calculate_quality(state: SoyuzState) -> SoyuzState:
                 (asset == "Argento" and ("argento" in asset_name or "silver" in asset_name or "XAG" in symbol)) or
                 (asset == "Platino" and ("platino" in asset_name or "platinum" in asset_name or "XPT" in symbol)) or
                 (asset == "Palladio" and ("palladio" in asset_name or "palladium" in asset_name or "XPD" in symbol)) or
+                (asset == "Rame" and ("rame" in asset_name or "copper" in asset_name or "HG" in symbol)) or
+                (asset == "Grano" and ("grano" in asset_name or "wheat" in asset_name or "ZW" in symbol)) or
+                (asset == "Mais" and ("mais" in asset_name or "corn" in asset_name or "ZC" in symbol)) or
+                (asset == "Soia" and ("soia" in asset_name or "soybean" in asset_name or "ZS" in symbol)) or
                 (asset == "Caffè" and ("caff" in asset_name or "coffee" in asset_name)) or
                 (asset == "Cacao" and ("cacao" in asset_name or "cocoa" in asset_name)) or
                 (asset == "Riso" and ("riso" in asset_name or "rice" in asset_name)) or
