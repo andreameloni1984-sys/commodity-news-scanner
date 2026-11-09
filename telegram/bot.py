@@ -5,8 +5,7 @@ Comandi principali:
     /start /help /ping /status /id
     /classifica /setup /analisi /prezzo
     /segnali /top /guida /rischio
-    /aggressivo212 /soft212 /prezzo212
-    /invest /invest_demo /invest_account /invest_orders /invest_buy /invest_auto
+    /classifica /analisi [materia prima] /status
 
 PAPER ONLY.
 """
@@ -23,16 +22,6 @@ from engine.gagarin import analyze_universe
 from engine.decision_status import market_decision_status
 from engine.forex_session import filter_forex_for_session
 from commodities.universe import enabled_commodities, get_commodity_by_name
-from engine.invest import (
-    analyze_invest_universe,
-    format_invest_report,
-    get_trading212_demo_status,
-    format_account_status,
-    format_pending_orders,
-    place_demo_order,
-    auto_buy_best_signal,
-    auto_buy_best_signal_budget,
-)
 from engine.daily_forecast import predict_today
 from soyuz_gagarin.adapter import evaluate_states
 
@@ -91,17 +80,8 @@ def telegram_diagnostic() -> bool:
     return True
 
 def telegram_menu() -> dict:
-    """Menu Telegram minimale: i tre comandi richiesti dall'utente."""
-    return {
-        "keyboard": [
-            [{"text": "🚀 AGGRESSIVE 212"}],
-            [{"text": "🛡 SOFT 212"}],
-            [{"text": "🔗 COLLEGAMENTO INVEST TRADING212"}],
-        ],
-        "resize_keyboard": True,
-        "is_persistent": True,
-        "one_time_keyboard": False,
-    }
+    """Rimuove la vecchia tastiera: GAGARIN si usa con i comandi testuali."""
+    return {"remove_keyboard": True}
 
 def send_telegram(message: str) -> bool:
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
@@ -307,7 +287,7 @@ def _command_response(command: str) -> Optional[str]:
     raw = command.strip()
 
     # Manual position registration enables transition-only post-entry monitoring.
-    # Prices are compared with Gagarin's provider feed; this is not a Trading 212 API.
+    # Prices are compared exclusively with Gagarin's provider feed.
     command_name = raw.split(maxsplit=1)[0].lower() if raw else ""
     if command_name == "/monitora":
         parts = raw.split()
@@ -316,11 +296,11 @@ def _command_response(command: str) -> Optional[str]:
                 "Uso: /monitora ORO LONG ENTRY SL TP1 [TP2] [TP3]\n"
                 "ATTENZIONE: i numeri 2700 2680 2740 sono solo un esempio, NON quotazioni live.\n"
                 "Prima usa /analisi oro per vedere il prezzo provider attuale; inserisci poi i livelli della tua posizione.\n"
-                "I prezzi inseriti sono confrontati con il feed provider Gagarin, non con il Bid/Ask Trading 212."
+                "I prezzi inseriti sono confrontati esclusivamente con il feed provider Gagarin."
             )
         commodity = _resolve_commodity(parts[1])
         if commodity is None:
-            return "Commodity non riconosciuta o non abilitata. Usa oro, wti, brent, cacao, caffe, platino, riso o zucchero."
+            return "Commodity non riconosciuta o non abilitata. Usa oro, argento, rame, wti, brent, grano, mais o soia."
         from engine.position_monitor import register_position
         tp2 = parts[6] if len(parts) >= 7 else None
         tp3 = parts[7] if len(parts) >= 8 else None
@@ -343,7 +323,7 @@ def _command_response(command: str) -> Optional[str]:
                 f"| SL {p.get('stop'):g} | TP1 {p.get('tp1'):g}"
             )
         lines.append("")
-        lines.append("Quotazioni provider Gagarin, non Trading 212. Solo avvisi; nessun ordine viene modificato.")
+        lines.append("Quotazioni del feed Gagarin. Solo avvisi; nessun ordine viene modificato.")
         return "\n".join(lines)
 
     if command_name in {"/smetti", "/stopmonitore"}:
@@ -366,13 +346,6 @@ def _command_response(command: str) -> Optional[str]:
         "⚠️ rischio": "/rischio",
         "🔄 aggiorna": "/analisi",
         "⚙️ stato": "/status",
-        "🚀 aggressive trading 2-1-2": "/aggressivo212",
-        "🛡 soft trading 2-1-2": "/soft212",
-        "🚀 aggressive 212": "/aggressivo212",
-        "🛡 soft 212": "/soft212",
-        "🔗 collegamento invest trading212": "/collegamento212",
-        "🚀 aggressivo": "/aggressivo212",
-        "🛡 soft": "/soft212",
     }
     raw = button_commands.get(raw.lower(), raw)
     parts = raw.split()
@@ -385,166 +358,15 @@ def _command_response(command: str) -> Optional[str]:
 
     if command_name in {"/start", "/help", "/menu"}:
         return (
-            "🚀 GAGARIN — MENU SEMPLICE\n"
-            "🧪 PAPER/DEMO — nessun ordine reale.\n\n"
-            "🚀 AGGRESSIVE 212 — profilo aggressivo\n"
-            "🛡 SOFT 212 — profilo prudente\n"
-            "🔗 COLLEGAMENTO INVEST TRADING212 — verifica sola lettura\n\n"
+            "🚀 GAGARIN — ANALISI COMMODITY\n"
+            "🧪 PAPER ONLY — nessun ordine viene inviato.\n\n"
+            "/classifica — classifica delle materie prime\n"
+            "/analisi [oro|argento|rame|wti|brent|grano|mais|soia] — analisi singola\n\n"
             "Monitor posizione: /monitora ORO LONG ENTRY SL TP1 [TP2] [TP3]\n"
             "2700/2680/2740 nell'esempio sono valori fittizi: controlla prima /analisi oro.\n"
             "/posizioni — elenco monitorate | /smetti ORO — disattiva monitor.\n"
             "Gli avvisi automatici arrivano solo su nuovi segnali rilevanti o cambi di rischio/target; nessun messaggio di stato ripetitivo."
         )
-
-    if command_name in {"/aggressivo212", "/aggressive212"}:
-        try:
-            from soyuz_gagarin.aggressive_desk import format_aggressive_desk
-            from soyuz_gagarin.trading_profiles import get_profile
-            from engine.trading212 import compare_price, format_comparison, parse_bid_ask
-            profile = get_profile("AGGRESSIVE")
-            results = _run_analysis()
-            if results is None:
-                return "Nessun risultato. Riprova con /analisi."
-            set_last_results(results)
-            desk = format_aggressive_desk(results)
-            try:
-                from cloud_api import FOREX_AGGRESSIVE_PORTFOLIO
-                fx = FOREX_AGGRESSIVE_PORTFOLIO.snapshot()
-                fx_lines = ["", "FX AGGRESSIVE", "Capitale: " + str(round(fx.get("equity", 100), 2)), "Aperte: " + str(len(fx.get("open_positions", [])))]
-                for p in fx.get("open_positions", [])[:5]:
-                    fx_lines.append(str(p.get("symbol")) + " " + str(p.get("direction")) + " entry " + str(p.get("entry")))
-                desk = desk + "\n" + "\n".join(fx_lines)
-            except Exception:
-                pass
-            if argument:
-                bid, ask = parse_bid_ask(argument)
-                if bid is not None:
-                    sym = None
-                    for part in argument.replace(",", ".").split():
-                        up = part.upper()
-                        if up in {"WTI", "BRENT", "ORO", "ARGENTO", "SPY", "QQQ", "EURUSD", "GBPUSD"}:
-                            sym = up
-                            break
-                    if sym:
-                        gprice = None
-                        for st in results:
-                            if str(getattr(st, "symbol", "")).upper() == sym:
-                                gprice = getattr(st, "price", None)
-                                break
-                        comp = compare_price(sym, gprice, bid, ask)
-                        desk = desk + "\n\n" + format_comparison(comp)
-                    else:
-                        desk = desk + "\n\n212: incolla anche il simbolo, es. /aggressivo212 WTI 78.10 78.13"
-                else:
-                    desk = desk + "\n\n212: per il confronto incolla bid e ask, es. /aggressivo212 WTI 78.10 78.13"
-            else:
-                desk = desk + "\n\n212: per confrontare i prezzi Trading 212 incolla bid e ask dopo il comando."
-            desk = desk + "\n\nProfilo: probabilita >= " + str(profile.min_probability) + ", qualita >= " + str(profile.min_quality) + ", rischio " + str(profile.risk_per_trade_pct) + "% per operazione, max " + str(profile.max_open_positions) + " posizioni."
-            try:
-                from research.intraday_windows import format_intraday_window_summary
-                desk = desk + "\n\n" + format_intraday_window_summary()
-            except Exception as exc:
-                desk = desk + "\n\nFasce orarie: dati non disponibili (" + type(exc).__name__ + ")."
-            return desk
-        except Exception as exc:
-            return "Errore reparto aggressive: " + type(exc).__name__ + ": " + str(exc)
-
-    if command_name in {"/soft212", "/soft"}:
-        try:
-            from soyuz_gagarin.trading_profiles import get_profile
-            profile = get_profile("SOFT")
-            results = _run_analysis()
-            if results is None:
-                return "Nessun risultato. Riprova con /analisi."
-            set_last_results(results)
-            try:
-                from research.intraday_windows import format_intraday_window_summary
-                window_summary = format_intraday_window_summary()
-            except Exception as exc:
-                window_summary = "Fasce orarie: dati non disponibili (" + type(exc).__name__ + ")."
-            return _format_classifica(results) + "\n\n" + window_summary + "\n\nProfilo SOFT: probabilita >= " + str(profile.min_probability) + ", qualita >= " + str(profile.min_quality) + ", rischio " + str(profile.risk_per_trade_pct) + "%."
-        except Exception as exc:
-            return "Errore soft: " + type(exc).__name__ + ": " + str(exc)
-
-    if command_name == "/prezzo212":
-        try:
-            from engine.trading212 import compare_price, format_comparison, parse_bid_ask
-            if not argument:
-                return "212 PREZZI\nIncolla: simbolo bid ask\nEs: /prezzo212 WTI 78.10 78.13"
-            parts = argument.split()
-            sym = parts[0].upper()
-            bid, ask = parse_bid_ask(" ".join(parts[1:]))
-            gprice = None
-            results = get_last_results()
-            if results:
-                for st in results:
-                    if str(getattr(st, "symbol", "")).upper() == sym:
-                        gprice = getattr(st, "price", None)
-                        break
-            if gprice is None:
-                try:
-                    results = _run_analysis()
-                    if results:
-                        set_last_results(results)
-                        for st in results:
-                            if str(getattr(st, "symbol", "")).upper() == sym:
-                                gprice = getattr(st, "price", None)
-                                break
-                except Exception:
-                    pass
-            return format_comparison(compare_price(sym, gprice, bid, ask))
-        except Exception as exc:
-            return "Errore 212: " + type(exc).__name__ + ": " + str(exc)
-
-    if command_name == "/invest":
-        signals = analyze_invest_universe()
-        return format_invest_report(signals)
-
-    if command_name in {"/collegamento212", "/collegamento-invest-trading212"}:
-        status = get_trading212_demo_status()
-        return (
-            "🔗 COLLEGAMENTO INVEST TRADING212\n"
-            "Verifica sola lettura dell'account DEMO. Nessun ordine viene inviato.\n\n"
-            + status
-            + "\n\nSe la connessione non è disponibile, controllare le chiavi API INVEST DEMO nelle variabili ambiente del servizio. "
-              "Questo pulsante non esegue acquisti."
-        )
-
-    if command_name == "/invest_demo":
-        return get_trading212_demo_status()
-
-    if command_name == "/invest_account":
-        return format_account_status()
-
-    if command_name == "/invest_orders":
-        return format_pending_orders()
-
-    if command_name == "/invest_buy":
-        parts = argument.split()
-        if len(parts) < 2:
-            return "Uso: /invest_buy TICKER QTY\nEsempio: /invest_buy AAPL_US_EQ 1"
-        ticker = parts[0].upper()
-        try:
-            qty = float(parts[1])
-        except ValueError:
-            return "Quantità non valida."
-        return place_demo_order(ticker, qty)
-
-    if command_name == "/invest_buy_value":
-        parts = argument.split()
-        if len(parts) != 3:
-            return "Uso: /invest_buy_value TICKER SIMBOLO IMPORTO\nEsempio: /invest_buy_value NVDA_US_EQ NVDA 10"
-        ticker, symbol = parts[0].upper(), parts[1].upper()
-        try:
-            amount = float(parts[2])
-        except ValueError:
-            return "Importo non valido."
-        from engine.invest import place_demo_order_by_value
-        return place_demo_order_by_value(ticker, symbol, amount)
-
-    if command_name == "/invest_auto":
-        # Explicit user command: one guarded €10 order at most, INVEST DEMO only.
-        return auto_buy_best_signal_budget(amount=10.0, min_score=50.0)
 
     if command_name == "/classifica":
         # Always rebuild the manual ranking from the canonical enabled universe.
@@ -582,7 +404,7 @@ def _command_response(command: str) -> Optional[str]:
         return format_intraday_window_report()
 
     if command_name == "/status":
-        return "Bot attivo. PAPER ONLY. Sezione Invest disponibile."
+        return "GAGARIN attivo. PAPER ONLY. Analisi direzionale delle materie prime."
 
     if command_name == "/ping":
         return "pong"

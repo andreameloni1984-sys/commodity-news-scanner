@@ -71,4 +71,4 @@ def test_monitora_usage_marks_prices_as_examples_not_live_quotes():
     response = _command_response("/monitora")
     assert "NON quotazioni live" in response
     assert "/analisi oro" in response
-    assert "Bid/Ask Trading 212" in response
+    assert "feed provider Gagarin" in response

@@ -25,7 +25,6 @@ from soyuz_gagarin.mt5_bridge import build_demo_payloads
 
 DEFAULT_PORT = 10000
 WEBHOOK_PATH = "/telegram/webhook"
-INVEST_AUTO_INTERVAL = 15 * 60  # 15 minuti
 
 
 def prepare_webhook() -> bool:
@@ -66,62 +65,6 @@ def prepare_webhook() -> bool:
     print("Telegram WEBHOOK FAILED | URL_NOT_PERSISTING", flush=True)
     return False
 
-
-def invest_auto_loop() -> None:
-    """Controllo periodico in sola lettura: non invia ordini in automatico."""
-    from engine.invest import analyze_invest_universe, trading212_demo_available
-    from engine.trading212_demo import get_account_summary
-
-    print("Invest AUTO monitor started | interval=15min | READ ONLY | DEMO ONLY", flush=True)
-    if trading212_demo_available():
-        ok, data = get_account_summary()
-        if ok:
-            print("Trading212 DEMO API connectivity: OK (account summary read-only)", flush=True)
-        else:
-            err = data.get("error", data.get("message", "API_ERROR")) if isinstance(data, dict) else "API_ERROR"
-            print(f"Trading212 DEMO API connectivity: FAILED | {str(err)[:180]}", flush=True)
-    else:
-        print("Trading212 DEMO API connectivity: NOT CONFIGURED (credentials missing)", flush=True)
-
-    last_t212_check = time.monotonic()
-    t212_check_interval = 60 * 60
-
-    while True:
-        try:
-            now = time.monotonic()
-            if now - last_t212_check >= t212_check_interval:
-                last_t212_check = now
-                if trading212_demo_available():
-                    auth_ok, auth_data = get_account_summary()
-                    if auth_ok:
-                        print("Trading212 DEMO hourly auth check: OK (read-only)", flush=True)
-                    else:
-                        auth_err = auth_data.get("error", auth_data.get("message", "API_ERROR")) if isinstance(auth_data, dict) else "API_ERROR"
-                        print(f"Trading212 DEMO hourly auth check: FAILED | {str(auth_err)[:180]}", flush=True)
-                else:
-                    print("Trading212 DEMO hourly auth check: NOT CONFIGURED", flush=True)
-
-            signals = analyze_invest_universe()
-            candidates = [s for s in signals if s.direction == "LONG"]
-            if candidates:
-                best = candidates[0]
-                print(
-                    f"Invest SCAN | LONG={len(candidates)} | best={best.ticker} "
-                    f"score={best.score:.1f} price={best.price}",
-                    flush=True,
-                )
-            else:
-                print("Invest SCAN | no confirmed LONG", flush=True)
-
-            if os.getenv("T212_AUTO_BUY_ENABLED", "0").strip() == "1":
-                from engine.invest import auto_buy_best_signal_budget
-                result = auto_buy_best_signal_budget(amount=10.0, min_score=50.0)
-                print("Invest AUTO BUY | " + result.replace("\n", " | ")[:900], flush=True)
-                if "ORDINE DEMO INVIATO" in result:
-                    send_telegram(result)
-        except Exception as exc:
-            print(f"Invest SCAN error | {type(exc).__name__}: {exc}", flush=True)
-        time.sleep(INVEST_AUTO_INTERVAL)
 
 
 def position_monitor_loop() -> None:
@@ -204,24 +147,11 @@ def handle_update(update: dict) -> None:
         if chat_id is None or not text:
             return
 
-        button_commands = {
-            "🚀 AGGRESSIVE 212": "/aggressivo212",
-            "🛡 SOFT 212": "/soft212",
-            "🔗 COLLEGAMENTO INVEST TRADING212": "/collegamento212",
-        }
         original_text = text.strip()
-        normalized = " ".join(original_text.upper().split())
-        text = button_commands.get(normalized, original_text)
-
-        if text == original_text and normalized.startswith("🚀 AGGRESSIVE 212"):
-            text = "/aggressivo212"
-        elif text == original_text and normalized.startswith("🛡 SOFT 212"):
-            text = "/soft212"
-        elif text == original_text and normalized.startswith("🔗 COLLEGAMENTO INVEST TRADING212"):
-            text = "/collegamento212"
+        text = original_text
 
         if not text.startswith("/"):
-            _reply(chat_id, "Comando non riconosciuto. Usa /aggressivo212, /soft212, /analisi, /classifica oppure /help.")
+            _reply(chat_id, "Comando non riconosciuto. Usa /classifica, /analisi oppure /help.")
             return
 
         print(
@@ -233,7 +163,7 @@ def handle_update(update: dict) -> None:
         command_name = text.strip().split("@", 1)[0].lower()
 
         heavy_commands = {
-            "/aggressivo", "/aggressive", "/aggressivo212", "/soft212", "/analisi", "/top", "/classifica",
+            "/analisi", "/top", "/classifica",
             "/setup", "/intraday", "/comprare", "/compra", "/cosa",
             "/cosacomprare", "/qualeccompro", "/quale", "/compro",
             "/segnali", "/perche", "/perché", "/prezzo", "/metalli",
@@ -264,7 +194,7 @@ def handle_update(update: dict) -> None:
             print(f"Telegram webhook | unsupported command: {text}", flush=True)
             _reply(
                 chat_id,
-                "⚠️ Comando non disponibile. Usa /aggressivo212, /soft212, /analisi, /classifica oppure /help.",
+                "⚠️ Comando non disponibile. Usa /classifica, /analisi oppure /help.",
             )
 
     except Exception as exc:
@@ -411,9 +341,8 @@ def main() -> None:
     print("🟢 Telegram webhook: ACTIVE", flush=True)
 
     commands_ok, commands_data = _api("setMyCommands", {"commands": [
-        {"command": "aggressivo212", "description": "Profilo AGGRESSIVE 212"},
-        {"command": "soft212", "description": "Profilo SOFT 212"},
-        {"command": "collegamento212", "description": "Stato collegamento Invest Trading 212"},
+        {"command": "classifica", "description": "Classifica delle materie prime"},
+        {"command": "analisi", "description": "Analisi di una materia prima"},
         {"command": "fasceorario", "description": "Statistiche delle tre fasce orarie"},
         {"command": "monitora", "description": "Registra una posizione per avvisi di rischio"},
         {"command": "posizioni", "description": "Elenca le posizioni monitorate"},
@@ -430,11 +359,6 @@ def main() -> None:
     print("Gagarin NEWS monitor | interval=60s | PAPER/DEMO | event-triggered analysis", flush=True)
 
     threading.Thread(
-        target=invest_auto_loop,
-        name="invest-auto",
-        daemon=True,
-    ).start()
-    threading.Thread(
         target=position_monitor_loop,
         name="gagarin-position-monitor",
         daemon=True,
@@ -443,7 +367,7 @@ def main() -> None:
     if TELEGRAM_CHAT_ID:
         welcome_sent = _reply(
             TELEGRAM_CHAT_ID,
-            "🚀 GAGARIN ONLINE\n🧪 PAPER/DEMO — nessun ordine reale.\n\nUsa uno dei tre pulsanti:\n• AGGRESSIVE 212\n• SOFT 212\n• COLLEGAMENTO INVEST TRADING212",
+            "🚀 GAGARIN ONLINE\n🧪 PAPER ONLY — nessun ordine inviato.\n\nUsa /classifica per le materie prime oppure /analisi [oro|argento|rame|wti|brent|grano|mais|soia].",
             reply_markup=telegram_menu(),
         )
         print(

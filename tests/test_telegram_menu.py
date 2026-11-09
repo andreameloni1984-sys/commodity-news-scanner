@@ -4,26 +4,27 @@ from pathlib import Path
 
 
 class GagarinTelegramMenuTests(unittest.TestCase):
-    def test_bot_parses_and_contains_only_requested_menu(self):
+    def test_telegram_keyboard_is_removed_and_t212_commands_are_absent(self):
         source = Path("telegram/bot.py").read_text(encoding="utf-8")
         runner = Path("telegram/render_runner.py").read_text(encoding="utf-8")
         ast.parse(source)
         ast.parse(runner)
+
         start = source.index("def telegram_menu")
         end = source.index("def send_telegram", start)
         menu_source = source[start:end]
-        labels = (
-            "🚀 AGGRESSIVE 212",
-            "🛡 SOFT 212",
-            "🔗 COLLEGAMENTO INVEST TRADING212",
-        )
-        for label in labels:
-            self.assertIn(label, menu_source)
-        self.assertEqual(menu_source.count('"text"'), 3)
+        self.assertIn('"remove_keyboard": True', menu_source)
+        self.assertNotIn('"keyboard"', menu_source)
+        self.assertNotIn("212", source)
+        self.assertNotIn("Trading", source)
+        self.assertNotIn("212", runner)
+        self.assertNotIn("Trading", runner)
+        self.assertNotIn("invest_auto_loop", runner)
         self.assertIn("def telegram_diagnostic", source)
         self.assertIn("def send_telegram", source)
         self.assertIn("setMyCommands", runner)
-        self.assertIn("/collegamento212", source)
+        self.assertIn('{"command": "classifica"', runner)
+        self.assertIn('{"command": "analisi"', runner)
 
 
 if __name__ == "__main__":
