@@ -68,7 +68,7 @@ class GagarinConfig:
     allowed_assets: Tuple[str, ...] = (
         # Otto asset operativi. EUR/USD e GBP/USD restano nel data universe
         # come contesto macro/FX, ma non possono ricevere segnali autonomi.
-        "XAU/USD", "XAG/USD", "COPPER/USD", "WTI/USD", "BRENT/USD",
+        "XAU/USD", "COPPER/USD", "WTI/USD", "BRENT/USD",
         "WHEAT/USD", "CORN/USD", "SOYBEAN/USD",
     )
     blocked_if_stale_seconds: int = field(default=900)
