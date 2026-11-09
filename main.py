@@ -289,7 +289,7 @@ def _print_ranking(results):
         )
 
         action_label = (
-            "CONTESTO FX — NON OPERATIVO"
+            "FUORI PANIERE — NON OPERATIVO"
             if not _is_operational_state(state)
             else str((getattr(state, "metadata", {}) or {}).get(
                 "gagarin_action", state.final_decision
