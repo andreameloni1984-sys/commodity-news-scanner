@@ -40,13 +40,16 @@ def _state(data_status):
     )
 
 
-def test_stale_quote_is_labeled_without_suppressing_lubjanka_plan():
+def test_stale_quote_hides_lubjanka_levels_but_keeps_directional_observation():
     message = format_watch_board([_state("STALE")], min_score=999.0)
 
     assert "QUOTAZIONE STALE (601s)" in message
     assert "piano LUBJANKA mantenuto come osservazione" in message
     assert "LUBJANKA SHORT / EARLY_MOVE" in message
-    assert "Entry trigger 4039.5" in message
+    assert "osservazione scaduta" in message
+    assert "Entry trigger" not in message
+    assert "TP1" not in message
+    assert "Invalidazione:" not in message
     assert "Solo monitoraggio. Non è un segnale di entrata." in message
 
 
@@ -55,3 +58,10 @@ def test_live_quote_does_not_receive_stale_warning():
 
     assert "LUBJANKA SHORT / EARLY_MOVE" in message
     assert "QUOTAZIONE STALE" not in message
+
+def test_live_quote_but_old_m5_bar_hides_conditional_levels():
+    state = _state("LIVE")
+    state.metadata["lubjanka_playbook"]["bar_age_seconds"] = 603.0
+    message = format_watch_board([state], min_score=999.0)
+    assert "osservazione scaduta" in message
+    assert "Entry trigger" not in message
