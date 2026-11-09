@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "verification_policy": "Populate only after manually reviewing the exact Trading 212 CFD instrument screen. Record broker symbol, contract, expiry, currency, verification timestamp, private evidence reference, and SHA-256 digest. No entries are currently verified.",
+  "instruments": []
+}
