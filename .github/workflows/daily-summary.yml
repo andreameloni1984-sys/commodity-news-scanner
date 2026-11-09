@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
     steps:
@@ -25,12 +26,15 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install feedback runtime dependencies
+        run: python -m pip install "requests>=2.31,<3" "psycopg[binary]>=3.2,<4"
+
       - name: Send summary
         run: |
           python - <<'PY'
           import os, json, urllib.request
           from telegram.signals import format_watch_board
-          from engine.feedback import summarize, format_summary
+          from engine.feedback import summarize, format_summary, storage_backend
 
           token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
           chat = os.getenv("TELEGRAM_CHAT_ID", "").strip()
@@ -38,10 +42,18 @@ jobs:
               print("Missing Telegram secrets")
               raise SystemExit(0)
 
-          # Feedback summary
+          # Read the same durable journal as the monitor. Never report a
+          # runner-local empty CSV as a verified zero-signal trading history.
           try:
-              fb = summarize()
-              fb_text = format_summary(fb)
+              backend = storage_backend()
+              if backend != "POSTGRES":
+                  fb_text = (
+                      "Feedback non disponibile: archivio persistente "
+                      f"non disponibile ({backend})"
+                  )
+              else:
+                  fb = summarize()
+                  fb_text = format_summary(fb)
           except Exception as e:
               fb_text = f"Feedback non disponibile: {e}"
 
