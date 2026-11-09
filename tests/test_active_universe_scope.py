@@ -133,6 +133,14 @@ def test_main_and_cloud_api_scan_only_the_eight_selected_commodities():
     assert "commodities = operational_commodities()" in cloud_run_source
     assert "filter_forex_for_session" not in cloud_run_source
 
+    confirmation = next(
+        node for node in cloud_tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_run_sputnik_confirmation"
+    )
+    confirmation_source = ast.get_source_segment(cloud_source, confirmation)
+    assert "analyze_universe(operational_commodities())" in confirmation_source
+    assert "enabled_commodities()" not in confirmation_source
+
 
 
 def test_telegram_classifica_ignores_stale_cached_results(monkeypatch):
