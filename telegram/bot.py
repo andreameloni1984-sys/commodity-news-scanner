@@ -21,7 +21,6 @@ import requests
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 from engine.gagarin import analyze_universe
 from engine.decision_status import market_decision_status
-from engine.forex_session import filter_forex_for_session
 from commodities.universe import enabled_commodities, get_commodity_by_name
 from engine.invest import (
     analyze_invest_universe,
@@ -147,7 +146,7 @@ def _reply(chat_id, text: str, reply_markup: Optional[dict] = None) -> bool:
     return True
 
 def _run_analysis(commodity=None, *, on_demand=True):
-    commodities = filter_forex_for_session(enabled_commodities(), on_demand=on_demand)
+    commodities = enabled_commodities()
     if commodity is not None:
         commodities = [c for c in commodities if c.name.lower() == commodity.name.lower()]
     if not commodities:
@@ -171,6 +170,8 @@ def _resolve_commodity(name: str):
         "grano": "Grano", "wheat": "Grano",
         "mais": "Mais", "corn": "Mais", "maize": "Mais",
         "soia": "Soia", "soybean": "Soia", "soybeans": "Soia",
+        "eurusd": "EUR/USD", "dax": "DAX", "sp500": "S&P 500", "s&p 500": "S&P 500",
+        "nvidia": "NVIDIA", "nvda": "NVIDIA", "tesla": "Tesla", "tsla": "Tesla",
     }
     canonical = aliases.get(key)
     if canonical is None:
@@ -178,9 +179,8 @@ def _resolve_commodity(name: str):
     return get_commodity_by_name(canonical)
 
 def _is_auxiliary_forex(state) -> bool:
-    return str(getattr(state, "symbol", "") or "").strip().upper() in {
-        "EUR/USD", "GBP/USD"
-    }
+    # The current approved universe contains tradable FX, indices and equities.
+    return False
 
 
 def _format_classifica(results):
@@ -274,8 +274,7 @@ def _format_buy(results):
 def _format_morning_pick(results):
     if not results:
         return "GAGARIN — COSA COMPRO?\nNessun risultato disponibile."
-    # Forex remains available as auxiliary context, but it must never enter
-    # the manual operational pick or the canonical entry governor.
+    # Every instrument in the approved universe is eligible for the pick.
     operational_results = [
         state for state in results if not _is_auxiliary_forex(state)
     ]

@@ -73,23 +73,22 @@ class Commodity:
 
 
 COMMODITIES = [
-    # CORE METALS
+    # COMMODITIES — eight instruments retained from the user's existing core list
     Commodity(name="Oro", symbol="XAU/USD", category="Metal", unit="USD", priority=1),
     Commodity(name="Argento", symbol="XAG/USD", category="Metal", unit="USD", priority=2),
     Commodity(name="Rame", symbol="COPPER/USD", category="Metal", unit="USD", priority=3),
-
-    # CORE ENERGY (supporta ENERGY_SHOCK_AND_WEEKLY_SAME_SIDE)
     Commodity(name="Petrolio WTI", symbol="WTI/USD", category="Energy", unit="USD", priority=4),
     Commodity(name="Petrolio Brent", symbol="BRENT/USD", category="Energy", unit="USD", priority=5),
-
-    # CORE CEREALS
     Commodity(name="Grano", symbol="WHEAT/USD", category="Agriculture", unit="USD", priority=6),
     Commodity(name="Mais", symbol="CORN/USD", category="Agriculture", unit="USD", priority=7),
     Commodity(name="Soia", symbol="SOYBEAN/USD", category="Agriculture", unit="USD", priority=8),
 
-    # CORE FOREX (day overlap prioritari)
+    # NEW FINANCIAL INSTRUMENTS — exact examples from the user's new list
     Commodity(name="EUR/USD", symbol="EUR/USD", category="Forex", unit="USD", priority=9),
-    Commodity(name="GBP/USD", symbol="GBP/USD", category="Forex", unit="USD", priority=10),
+    Commodity(name="DAX", symbol="DAX", category="Index", unit="EUR", priority=10),
+    Commodity(name="S&P 500", symbol="SP500", category="Index", unit="USD", priority=11),
+    Commodity(name="NVIDIA", symbol="NVDA", category="Equity", unit="USD", priority=12),
+    Commodity(name="Tesla", symbol="TSLA", category="Equity", unit="USD", priority=13),
 ]
 
 # ============================================================
@@ -303,18 +302,10 @@ if _UNIVERSE_ERRORS:
 
 
 def operational_commodities() -> list[Commodity]:
-    """Return the eight tradable commodity instruments; Forex remains auxiliary."""
-    return [
-        commodity
-        for commodity in enabled_commodities()
-        if commodity.category.strip().lower() != "forex"
-    ]
+    """Return every instrument in the user's active intraday universe."""
+    return enabled_commodities()
 
 
 def auxiliary_commodities() -> list[Commodity]:
-    """Return enabled context instruments that must not generate standalone signals."""
-    return [
-        commodity
-        for commodity in enabled_commodities()
-        if commodity.category.strip().lower() == "forex"
-    ]
+    """No active-universe instrument is context-only; all may generate signals."""
+    return []

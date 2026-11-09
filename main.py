@@ -587,8 +587,7 @@ def run():
     # UNIVERSE
     # --------------------------------------------------------
 
-    # Commodities are scanned continuously: time-of-day is not a reason to
-    # hide a market move. Only auxiliary FX remains restricted to its windows.
+    # Every instrument in the approved intraday universe is scanned every cycle.
     instruments = _select_run_universe()
     operational_instruments = [
         item for item in instruments
@@ -600,8 +599,7 @@ def run():
     ]
 
     print(
-        "SESSION FILTER: 8 commodities operative; EUR/USD e GBP/USD restano ausiliari "
-        "e vengono analizzati nelle rispettive finestre (Europe/Rome)."
+        "INTRADAY UNIVERSE: 13 strumenti operativi; nessun filtro orario per categoria."
     )
 
     if not instruments:
@@ -617,8 +615,8 @@ def run():
 
     print(
         f"Universe: {len(instruments)} strumenti analizzati "
-        f"({len(operational_instruments)} commodities operative, "
-        f"{len(auxiliary_instruments)} Forex ausiliari in finestra)"
+        f"({len(operational_instruments)} operativi, "
+        f"{len(auxiliary_instruments)} ausiliari)"
     )
 
     print()
@@ -669,7 +667,7 @@ def run():
             state.metadata = metadata
         if not _is_operational_state(state):
             metadata["gagarin_action"] = "AUXILIARY_ONLY"
-            metadata["gagarin_reason"] = "FOREX_CONTEXT_ONLY"
+            metadata["gagarin_reason"] = "NOT_IN_APPROVED_UNIVERSE"
         else:
             from engine.cloud_api_status import attach_runtime_decision_metadata
             attach_runtime_decision_metadata(state, decision)

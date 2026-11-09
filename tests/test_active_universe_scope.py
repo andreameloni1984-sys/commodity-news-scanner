@@ -1,109 +1,55 @@
 from commodities.universe import enabled_commodities, get_symbols, universe_size
 
 
-def test_active_commodity_universe_keeps_only_selected_core_commodities():
+def test_active_universe_matches_new_intraday_list():
     rows = enabled_commodities()
-    commodity_rows = [row for row in rows if row.category != "Forex"]
-    assert {row.symbol for row in commodity_rows} == {
-        "XAU/USD",
-        "XAG/USD",
-        "COPPER/USD",
-        "WTI/USD",
-        "BRENT/USD",
-        "WHEAT/USD",
-        "CORN/USD",
-        "SOYBEAN/USD",
+    assert {row.symbol for row in rows} == {
+        "XAU/USD", "XAG/USD", "COPPER/USD", "WTI/USD", "BRENT/USD",
+        "WHEAT/USD", "CORN/USD", "SOYBEAN/USD",
+        "EUR/USD", "DAX", "SP500", "NVDA", "TSLA",
     }
-    assert len(commodity_rows) == 8
+    assert universe_size() == 13
 
 
-def test_unneeded_commodity_symbols_are_not_active():
+def test_removed_symbols_are_not_active():
     active = set(get_symbols())
     removed = {
-        "XPT/USD",
-        "XPD/USD",
-        "RICE/USD",
-        "SUGAR/USD",
-        "COCOA/USD",
-        "COFFEE/USD",
-        "GASOLINE/USD",
-        "NATGAS/USD",
+        "GBP/USD", "XPT/USD", "XPD/USD", "RICE/USD", "SUGAR/USD",
+        "COCOA/USD", "COFFEE/USD", "GASOLINE/USD", "NATGAS/USD",
     }
     assert active.isdisjoint(removed)
 
 
-def test_forex_universe_is_preserved_separately():
-    rows = enabled_commodities()
-    forex = {row.symbol for row in rows if row.category == "Forex"}
-    assert forex == {
-        "EUR/USD",
-        "GBP/USD",
-    }
-    assert universe_size() == 10
-
-
-
-def test_core_metals_and_cereals_have_explicit_data_routes():
-    from engine.data import AGRI_SYMBOLS, PROVIDER_ORDER, YAHOO_SYMBOLS
-
-    assert YAHOO_SYMBOLS["COPPER/USD"] == "HG=F"
-    assert YAHOO_SYMBOLS["WHEAT/USD"] == "ZW=F"
-    assert YAHOO_SYMBOLS["CORN/USD"] == "ZC=F"
-    assert YAHOO_SYMBOLS["SOYBEAN/USD"] == "ZS=F"
-    assert {"WHEAT/USD", "CORN/USD", "SOYBEAN/USD"} <= AGRI_SYMBOLS
-    for symbol in ("COPPER/USD", "WHEAT/USD", "CORN/USD", "SOYBEAN/USD"):
-        assert "YAHOO" in PROVIDER_ORDER[symbol]
-
-
-def test_operational_universe_is_eight_commodities_and_forex_is_auxiliary():
+def test_every_active_instrument_is_operational_and_governor_allowed():
     from commodities.universe import operational_commodities, auxiliary_commodities
-
-    operational = operational_commodities()
-    auxiliary = auxiliary_commodities()
-    assert {item.symbol for item in operational} == {
-        "XAU/USD", "XAG/USD", "COPPER/USD", "WTI/USD",
-        "BRENT/USD", "WHEAT/USD", "CORN/USD", "SOYBEAN/USD",
-    }
-    assert {item.symbol for item in auxiliary} == {"EUR/USD", "GBP/USD"}
-    assert all(item.category.lower() != "forex" for item in operational)
-
-
-def test_canonical_governor_allows_only_eight_operational_commodities():
     from soyuz_gagarin.config import GagarinConfig
 
-    allowed = set(GagarinConfig().allowed_assets)
-    assert allowed == {
-        "XAU/USD", "XAG/USD", "COPPER/USD", "WTI/USD",
-        "BRENT/USD", "WHEAT/USD", "CORN/USD", "SOYBEAN/USD",
+    assert {x.symbol for x in operational_commodities()} == set(get_symbols())
+    assert auxiliary_commodities() == []
+    assert set(GagarinConfig().allowed_assets) == set(get_symbols())
+
+
+def test_new_financial_instruments_have_explicit_free_yahoo_routes():
+    from engine.data import (
+        EXECUTION_MARKET_TYPES, PROVIDER_MARKET_TYPES,
+        PROVIDER_ORDER, YAHOO_SYMBOLS,
+    )
+    expected = {
+        "DAX": "^GDAXI",
+        "SP500": "^GSPC",
+        "NVDA": "NVDA",
+        "TSLA": "TSLA",
     }
-    assert not ({"EUR/USD", "GBP/USD"} & allowed)
+    for symbol, yahoo_symbol in expected.items():
+        assert YAHOO_SYMBOLS[symbol] == yahoo_symbol
+        assert PROVIDER_ORDER[symbol] == ("YAHOO",)
+        assert PROVIDER_MARKET_TYPES[symbol]["YAHOO"] == EXECUTION_MARKET_TYPES[symbol]
 
 
-def test_telegram_marks_forex_as_context_and_excludes_it_from_pick(monkeypatch):
-    from types import SimpleNamespace
-    import telegram.bot as bot
-
-    gold = SimpleNamespace(
-        symbol="XAU/USD", commodity="Oro", setup_direction="LONG",
-        probability=70.0, quality=65.0, confidence=68.0,
-        final_decision="ENTRY", setup_quality=70.0,
-        trigger_confirmed=True, setup="TREND", trigger="BREAKOUT",
-    )
-    eurusd = SimpleNamespace(
-        symbol="EUR/USD", commodity="EUR/USD", setup_direction="LONG",
-        probability=90.0, quality=90.0, confidence=90.0,
-        final_decision="ENTRY", setup_quality=90.0,
-        trigger_confirmed=True, setup="TREND", trigger="BREAKOUT",
-    )
-
-    board = bot._format_classifica([gold, eurusd])
-    assert "CONTESTO FX — NON OPERATIVO" in board
-    assert "1 ENTRATA/E AUTORIZZATA/E" in board
-
-    received = []
-    monkeypatch.setattr(bot, "predict_today", lambda rows: received.extend(rows) or None)
-    bot._format_buy([gold, eurusd])
-    assert received == [gold]
+def test_eurusd_is_the_only_active_fx_pair():
+    rows = enabled_commodities()
+    forex = {row.symbol for row in rows if row.category == "Forex"}
+    assert forex == {"EUR/USD"}
 
 
 def test_main_scans_all_enabled_instruments_without_intraday_time_gate():
@@ -146,7 +92,7 @@ def test_telegram_classifica_ignores_stale_cached_results(monkeypatch):
         ("COPPER/USD", "Rame"), ("WTI/USD", "Petrolio WTI"),
         ("BRENT/USD", "Petrolio Brent"), ("WHEAT/USD", "Grano"),
         ("CORN/USD", "Mais"), ("SOYBEAN/USD", "Soia"),
-        ("EUR/USD", "EUR/USD"), ("GBP/USD", "GBP/USD"),
+        ("EUR/USD", "EUR/USD"), ("DAX", "DAX"), ("SP500", "S&P 500"), ("NVDA", "NVIDIA"), ("TSLA", "Tesla"),
     ]]
     monkeypatch.setattr(bot, "get_last_results", lambda: stale)
     calls = []
@@ -157,7 +103,7 @@ def test_telegram_classifica_ignores_stale_cached_results(monkeypatch):
     assert report.count("\n")  # a formatted report was returned
     assert "Legacy" not in report
     assert "21." not in report
-    assert "10. GBP/USD" in report
+    assert "13. Tesla" in report
     assert "8. Soia" in report
 
 
@@ -183,6 +129,6 @@ def test_morning_pick_never_passes_auxiliary_forex_to_governor(monkeypatch):
 
     report = bot._format_morning_pick([gold, eurusd])
 
-    assert received == [gold]
+    assert received == [gold, eurusd]
     assert "COMMODITY: Oro" in report
     assert "EUR/USD" not in report

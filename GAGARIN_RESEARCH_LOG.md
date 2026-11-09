@@ -627,3 +627,28 @@
 - **Regression coverage added:** accelerating momentum ranks above steady pace; fading momentum is penalized but the directional candidate remains visible.
 - **Commits:** `02b9065df47eac2b6f257ad4d16a30b16e2116c3` (implementation); `c43f5e61f682472b5fe958f0d96ee09f65f756d7` (tests).
 - **Verification:** tests have been added but have not been executed in this session; CI must pass before treating the change as validated in production. No deployment or live trade was performed.
+
+
+## 2026-11-09 — Add compact intraday indicator context
+
+- Added `engine/intraday_indicators.py` to calculate EMA 10/50/200 alignment, Bollinger Bands (20, 2), UTC-day proxy VWAP, and an approximate recent-volume POC from normalized M5 OHLCV candles.
+- Wired the diagnostic output into `state.metadata["intraday_indicators"]` immediately after data loading. Existing RSI(14) and ATR remain in the current regime/data pipeline; they are not duplicated.
+- Added regression tests for normal history and graceful degradation when volume/history is unavailable.
+- The new indicators are context/diagnostics only in this first integration: they do not create signals, alter probability thresholds, authorize entries, bypass triggers, change risk/SL/TP, or change PAPER ONLY behavior.
+- Precision limits: VWAP uses a UTC calendar-day anchor as a proxy rather than exchange-specific session hours; POC is a typical-price volume histogram rather than tick-level volume-at-price. Missing volume leaves VWAP/POC unavailable without blocking analysis.
+- Cleanup decision: no existing runtime module was deleted in this pass because a safe dependency audit is required before removing code. Previously documented duplicate scheduled scans and static research jobs remain disabled; this change avoids speculative deletion of active safety, data, Telegram, or news paths.
+- Validation: tests added; CI must pass on the PR before merge. No deployment, live market check, Telegram delivery, or trading result is claimed. PAPER ONLY.
+
+
+## 2026-11-09 — Replace active intraday instrument universe
+
+- Replaced the previous 10-symbol universe (8 commodities + EUR/USD + GBP/USD) with the requested 13-symbol intraday universe: Gold, Silver, Copper, WTI, Brent, Wheat, Corn, Soybean, EUR/USD, DAX, S&P 500, NVIDIA and Tesla.
+- Removed GBP/USD from the active universe and from provider routing. Legacy unrelated commodity symbols remain inactive.
+- Added explicit Yahoo chart mappings for DAX (`^GDAXI`), S&P 500 (`^GSPC`), NVIDIA (`NVDA`) and Tesla (`TSLA`), with distinct INDEX_SPOT / EQUITY_SPOT market types and metadata.
+- Expanded the canonical Governor allowlist to exactly the 13 active instruments. Updated Telegram classification/pick filtering so EUR/USD and all new asset classes are operational rather than context-only.
+- Retained the eight commodity instruments from the already agreed active commodity basket because the supplied screenshot names the Commodity category but does not replace its specific constituents.
+- Updated regression tests to assert exact membership, removed-symbol exclusion, free Yahoo routing, and Governor coverage.
+- Data caveat: Yahoo symbol mappings are configured routes, not proof of current provider availability, live freshness, or intraday tradability. These are checked by runtime data validation; any unavailable/stale instrument must be reported, not silently substituted.
+- PAPER ONLY unchanged. No real orders, deployment, or live Telegram delivery claimed.
+
+- Follow-up wiring: removed the time-window Forex filter from Telegram on-demand analysis; updated main runner to treat all 13 approved instruments as operational, include them in Governor/execution/paper feedback, and remove legacy "FX context only" labeling. Added Telegram aliases for EUR/USD, DAX, S&P 500, NVIDIA and Tesla.
