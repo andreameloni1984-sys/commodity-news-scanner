@@ -1,6 +1,7 @@
 """Free-only, market-basis-safe routing tests for the active Gagarin universe."""
 
 import time
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from commodities.universe import enabled_commodities
@@ -174,3 +175,83 @@ def test_twelve_data_provider_is_hard_disabled_before_any_http_request(monkeypat
     assert candles == []
     assert error == "PAID_OR_UNVERIFIED_PROVIDER_DISABLED_BY_FREE_ONLY_POLICY"
     assert provider_symbol is None
+
+
+
+def test_biquote_cfd_reference_is_separate_from_futures_execution(monkeypatch):
+    assert data.BIQUOTE_CFD_REFERENCE_SYMBOLS == {
+        "XAU/USD": "XAUUSD",
+        "XAG/USD": "XAGUSD",
+        "WTI/USD": "USOIL",
+        "BRENT/USD": "UKOIL",
+    }
+    assert "COPPER/USD" not in data.BIQUOTE_CFD_REFERENCE_SYMBOLS
+    assert "WHEAT/USD" not in data.BIQUOTE_CFD_REFERENCE_SYMBOLS
+    assert "CORN/USD" not in data.BIQUOTE_CFD_REFERENCE_SYMBOLS
+    assert "SOYBEAN/USD" not in data.BIQUOTE_CFD_REFERENCE_SYMBOLS
+
+    now = time.time()
+    opened = {
+        "openTime": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now - 120)),
+        "open": 100.0, "high": 102.0, "low": 99.0, "close": 101.0,
+        "volume": 0, "isOpen": True,
+    }
+    closed = []
+    for index in range(data.MIN_CANDLES_REQUIRED):
+        open_time = now - 420 - (data.MIN_CANDLES_REQUIRED - index - 1) * 300
+        closed.append({
+            "openTime": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(open_time)),
+            "open": 99.0, "high": 101.0, "low": 98.0, "close": 100.0 + index * 0.01,
+            "volume": 0, "isOpen": False,
+        })
+    def fake_request(url, params=None, **kwargs):
+        if url.endswith("/ohlc"):
+            return {"symbol": "XAUUSD", "bars": [opened, *closed]}, None
+        return {
+            "symbol": "XAUUSD", "bid": 100.28, "ask": 100.30, "mid": 100.29,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "quoteAgeSeconds": 1, "stale": False, "marketState": "open",
+            "source": "MetaTrader 5",
+        }, None
+    monkeypatch.setattr(data, "_request_json", fake_request)
+    result = data._fetch_biquote_cfd_reference("XAU/USD")
+    assert result["provider"] == "BIQUOTE"
+    assert result["market_type"] == "CFD"
+    assert result["status"] == "LIVE"
+    assert result["price"] == 100.29
+    assert result["bid"] == 100.28 and result["ask"] == 100.30
+    assert result["spread"] == 0.02
+    assert result["candles_count"] == data.MIN_CANDLES_REQUIRED
+    assert result["execution_eligible"] is False
+
+
+def test_biquote_cfd_reference_failure_does_not_change_futures_route(monkeypatch):
+    monkeypatch.setattr(
+        data, "_request_json",
+        lambda *args, **kwargs: (None, "HTTP_503"),
+    )
+    result = data._fetch_biquote_cfd_reference("WTI/USD")
+    assert result["status"] == "QUOTE_UNAVAILABLE"
+    assert result["execution_eligible"] is False
+    assert data.PROVIDER_ORDER["WTI/USD"] == ("YAHOO",)
+    assert data.EXECUTION_MARKET_TYPES["WTI/USD"] == "FUTURES_CONTINUOUS"
+
+
+def test_biquote_cfd_reference_is_not_attached_to_futures_state(monkeypatch):
+    def forbidden(*args, **kwargs):
+        raise AssertionError("BiQuote CFD reference must not be fetched by futures finalization.")
+
+    monkeypatch.setattr(data, "_fetch_biquote_cfd_reference", forbidden)
+    monkeypatch.setattr(data, "_fetch_narwhal_reference", lambda symbol: {"status": "DISABLED"})
+    monkeypatch.setattr(
+        data, "_fetch_silv_spot_reference",
+        lambda *args, **kwargs: {"status": "DISABLED"},
+    )
+
+    state = SoyuzState(commodity="Oro", symbol="XAU/USD")
+    finalized = data._finalize_with_narwhal_reference(
+        state, _fresh_candles(), "YAHOO"
+    )
+
+    assert finalized.symbol == "XAU/USD"
+    assert "cfd_reference_quotes" not in finalized.metadata
