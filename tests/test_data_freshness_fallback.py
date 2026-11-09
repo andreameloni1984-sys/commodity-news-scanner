@@ -111,3 +111,58 @@ def test_closed_market_marks_stale_fallback_as_market_closed(monkeypatch):
     assert state.live is False
     assert state.metadata["data_status"] == "MARKET_CLOSED"
     assert state.metadata["freshness_fallback_reason"] == "MARKET_CLOSED"
+
+def _mock_yahoo_endpoints(monkeypatch, ages, now=1_800_000_000):
+    monkeypatch.setattr(data.time, "time", lambda: now)
+    monkeypatch.setattr(
+        data,
+        "YAHOO_URLS",
+        tuple(f"https://query{index}.finance.yahoo.com/chart/GC=F" for index in range(1, len(ages) + 1)),
+    )
+    candles_by_endpoint = {
+        index: _candles(age)
+        for index, age in enumerate(ages, start=1)
+    }
+    calls = []
+
+    def request(url, params=None, retries=0):
+        index = int(url.split("query")[1].split(".")[0])
+        calls.append(index)
+        return {"endpoint": index}, None
+
+    def parse(payload):
+        return candles_by_endpoint[payload["endpoint"]], None
+
+    monkeypatch.setattr(data, "_request_json", request)
+    monkeypatch.setattr(data, "_parse_yahoo", parse)
+    return candles_by_endpoint, calls
+
+
+def test_yahoo_tries_second_endpoint_when_first_returns_stale_candles(monkeypatch):
+    endpoints, calls = _mock_yahoo_endpoints(monkeypatch, [700, 45])
+
+    candles, error = data._fetch_yahoo("XAU/USD")
+
+    assert error is None
+    assert calls == [1, 2]
+    assert candles == endpoints[2]
+
+
+def test_yahoo_uses_freshest_valid_endpoint_when_both_are_stale(monkeypatch):
+    endpoints, calls = _mock_yahoo_endpoints(monkeypatch, [900, 700])
+
+    candles, error = data._fetch_yahoo("XAU/USD")
+
+    assert error is None
+    assert calls == [1, 2]
+    assert candles == endpoints[2]
+
+
+def test_yahoo_does_not_call_second_endpoint_when_first_is_fresh(monkeypatch):
+    endpoints, calls = _mock_yahoo_endpoints(monkeypatch, [45, 20])
+
+    candles, error = data._fetch_yahoo("XAU/USD")
+
+    assert error is None
+    assert calls == [1]
+    assert candles == endpoints[1]
