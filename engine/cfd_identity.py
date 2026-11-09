@@ -173,6 +173,11 @@ class CFDInstrumentIdentity:
     app_symbol: str | None = None
     catalogue_ticker: str | None = None
     catalogue_slug: str | None = None
+    # These flags record that the referenced evidence was manually reviewed.
+    # In particular, expiry_verified=True with expiry=None means no expiry was
+    # explicitly confirmed; None alone never proves a non-expiring contract.
+    contract_type_evidence_verified: bool = False
+    expiry_evidence_verified: bool = False
 
     def validate(self) -> "CFDInstrumentIdentity":
         """Validate field shape; registry membership is the approval boundary."""
@@ -185,6 +190,10 @@ class CFDInstrumentIdentity:
         _required_text(self.broker_symbol, "broker_symbol")
         _required_text(self.contract, "contract")
         _validate_contract_expiry(self.contract_type, self.expiry, "expiry")
+        if self.contract_type_evidence_verified is not True:
+            raise ValueError("contract type must be explicitly verified against the referenced evidence")
+        if self.expiry_evidence_verified is not True:
+            raise ValueError("expiry must be explicitly verified against the referenced evidence, including explicit no-expiry")
         currency = _required_text(self.currency, "currency")
         if len(currency) != 3 or not currency.isascii() or not currency.isalpha() or currency != currency.upper():
             raise ValueError("currency must be a three-letter uppercase ISO code")
@@ -234,6 +243,8 @@ class CFDInstrumentRegistry:
                 record.app_symbol,
                 record.catalogue_ticker,
                 record.catalogue_slug,
+                record.contract_type_evidence_verified,
+                record.expiry_evidence_verified,
             )
             if key in seen:
                 raise ValueError("Registry contains a duplicate CFD contract identity")
@@ -386,6 +397,8 @@ def build_cfd_signal_id(
         "app_symbol": instrument.app_symbol,
         "catalogue_ticker": instrument.catalogue_ticker,
         "catalogue_slug": instrument.catalogue_slug,
+        "contract_type_evidence_verified": instrument.contract_type_evidence_verified,
+        "expiry_evidence_verified": instrument.expiry_evidence_verified,
         "contract": instrument.contract,
         "contract_type": instrument.contract_type,
         "expiry": instrument.expiry,

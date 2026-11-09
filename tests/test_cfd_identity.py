@@ -24,6 +24,8 @@ def _instrument(**overrides):
         "contract": "WTI CFD 27 Nov 2026",
         "contract_type": "EXPIRING_FUTURE",
         "expiry": "2026-11-27",
+        "contract_type_evidence_verified": True,
+        "expiry_evidence_verified": True,
         "currency": "USD",
         "verification_source": "TRADING_212_APP_SCREEN",
         "verification_reference": "test-fixture:trading212-cfd-screen",
@@ -95,6 +97,10 @@ def test_logical_universe_contains_exactly_the_eight_selected_commodities():
         {"expiry": ""},
         {"expiry": "27-11-2026"},
         {"expiry": "20261127"},
+        {"contract_type_evidence_verified": False},
+        {"expiry_evidence_verified": False},
+        {"contract_type_evidence_verified": None},
+        {"expiry_evidence_verified": 1},
         {"currency": "usd"},
         {"currency": "US"},
         {"verification_source": "BIQUOTE"},
@@ -183,6 +189,20 @@ def test_default_registry_is_empty_and_blocks_unreviewed_contracts():
 
 def test_exact_trading212_cfd_series_can_be_bound_to_registry_approved_instrument():
     validate_same_cfd_series(_instrument(), _series(), registry=_registry())
+
+
+def test_spot_no_expiry_requires_explicit_expiry_evidence_review():
+    instrument = _instrument(
+        logical_symbol="XAU/USD", broker_symbol="XAUUSD", app_symbol="XAUUSD", contract="Gold",
+        contract_type="SPOT", expiry=None, expiry_evidence_verified=False,
+    )
+    with pytest.raises(ValueError, match="expiry must be explicitly verified"):
+        instrument.validate()
+
+
+def test_contract_type_requires_explicit_evidence_review():
+    with pytest.raises(ValueError, match="contract type must be explicitly verified"):
+        _instrument(contract_type_evidence_verified=False).validate()
 
 
 def test_spot_cfd_identity_and_series_accept_explicit_no_expiry():
