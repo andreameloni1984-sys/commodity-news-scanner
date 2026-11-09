@@ -9,7 +9,7 @@ from engine.state import SoyuzState
 
 
 COMMODITY_SYMBOLS = {
-    "XAU/USD", "XAG/USD", "COPPER/USD", "WTI/USD",
+    "XAU/USD", "COPPER/USD", "WTI/USD",
     "BRENT/USD", "WHEAT/USD", "CORN/USD", "SOYBEAN/USD",
 }
 FX_SYMBOLS = {"EUR/USD", "GBP/USD"}
@@ -31,7 +31,7 @@ def _fresh_candles():
     return rows
 
 
-def test_all_ten_active_symbols_have_explicit_free_market_basis_routes():
+def test_all_nine_active_symbols_have_explicit_free_market_basis_routes():
     active = {row.symbol for row in enabled_commodities()}
 
     assert active == COMMODITY_SYMBOLS | FX_SYMBOLS
