@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from telegram import bot
@@ -62,3 +64,14 @@ def test_reply_requires_message_id(monkeypatch):
         True, {"ok": True, "result": {}}
     ))
     assert bot._reply("12345", "reply") is False
+
+
+def test_daily_summary_workflow_requires_explicit_telegram_api_ack():
+    workflow = Path(".github/workflows/daily-summary.yml").read_text(encoding="utf-8")
+    assert "from telegram.bot import _api, _confirmed_message_id" in workflow
+    assert "message_id = _confirmed_message_id(response) if ok else None" in workflow
+    assert 'print(f"Telegram API ACCEPTED | message_id={message_id}")' in workflow
+    assert "raise RuntimeError(" in workflow
+    assert "raise SystemExit(" in workflow
+    assert "Summary sent" not in workflow
+    assert "Send failed" not in workflow
