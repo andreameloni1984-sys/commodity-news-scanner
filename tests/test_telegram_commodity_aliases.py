@@ -45,6 +45,7 @@ def test_setup_formatter_distinguishes_pending_setup_from_no_setup():
     from telegram.bot import _format_setup
 
     pending = SimpleNamespace(
+        symbol="WHEAT/USD",
         commodity="Grano",
         setup_direction="LONG",
         setup_quality=45.0,
