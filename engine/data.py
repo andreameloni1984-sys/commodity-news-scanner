@@ -28,8 +28,8 @@ COMMODITIES (8)
     BiQuote metal/energy CFD prices are not used as futures fallbacks.
     No paid-plan commodities endpoint is in the active route.
 
-AUXILIARY FX (2)
-    BiQuote FX spot → Yahoo FX spot fallback.
+FX (1), INDICES (2), EQUITIES (2)
+    Yahoo public chart feed; availability/freshness is checked per run.
 
 Twelve Data legacy helpers remain isolated from the active execution route.
 
@@ -127,7 +127,6 @@ BIQUOTE_SYMBOLS = {
     "WTI/USD": "USOIL",        # CFD reference; not futures execution
     "BRENT/USD": "UKOIL",      # CFD reference; not futures execution
     "EUR/USD": "EURUSD",
-    "GBP/USD": "GBPUSD",
 }
 
 
@@ -146,7 +145,10 @@ YAHOO_SYMBOLS = {
     "CORN/USD": "ZC=F",
     "SOYBEAN/USD": "ZS=F",
     "EUR/USD": "EURUSD=X",
-    "GBP/USD": "GBPUSD=X",
+    "DAX": "^GDAXI",
+    "SP500": "^GSPC",
+    "NVDA": "NVDA",
+    "TSLA": "TSLA",
 }
 
 
@@ -181,7 +183,10 @@ EXECUTION_MARKET_TYPES = {
     "CORN/USD": "FUTURES_CONTINUOUS",
     "SOYBEAN/USD": "FUTURES_CONTINUOUS",
     "EUR/USD": "FX_SPOT",
-    "GBP/USD": "FX_SPOT",
+    "DAX": "INDEX_SPOT",
+    "SP500": "INDEX_SPOT",
+    "NVDA": "EQUITY_SPOT",
+    "TSLA": "EQUITY_SPOT",
 }
 
 PROVIDER_MARKET_TYPES = {
@@ -194,7 +199,10 @@ PROVIDER_MARKET_TYPES = {
     "CORN/USD": {"YAHOO": "FUTURES_CONTINUOUS"},
     "SOYBEAN/USD": {"YAHOO": "FUTURES_CONTINUOUS"},
     "EUR/USD": {"BIQUOTE": "FX_SPOT", "YAHOO": "FX_SPOT"},
-    "GBP/USD": {"BIQUOTE": "FX_SPOT", "YAHOO": "FX_SPOT"},
+    "DAX": {"YAHOO": "INDEX_SPOT"},
+    "SP500": {"YAHOO": "INDEX_SPOT"},
+    "NVDA": {"YAHOO": "EQUITY_SPOT"},
+    "TSLA": {"YAHOO": "EQUITY_SPOT"},
 }
 
 INSTRUMENT_DATA_METADATA = {
@@ -207,7 +215,10 @@ INSTRUMENT_DATA_METADATA = {
     "CORN/USD": {"currency": "USD", "unit": "cent_per_bushel", "market_type": "FUTURES_CONTINUOUS"},
     "SOYBEAN/USD": {"currency": "USD", "unit": "cent_per_bushel", "market_type": "FUTURES_CONTINUOUS"},
     "EUR/USD": {"currency": "USD", "unit": "USD_per_EUR", "market_type": "FX_SPOT"},
-    "GBP/USD": {"currency": "USD", "unit": "USD_per_GBP", "market_type": "FX_SPOT"},
+    "DAX": {"currency": "EUR", "unit": "index_points", "market_type": "INDEX_SPOT"},
+    "SP500": {"currency": "USD", "unit": "index_points", "market_type": "INDEX_SPOT"},
+    "NVDA": {"currency": "USD", "unit": "share", "market_type": "EQUITY_SPOT"},
+    "TSLA": {"currency": "USD", "unit": "share", "market_type": "EQUITY_SPOT"},
 }
 
 PROVIDER_ORDER = {
@@ -223,7 +234,10 @@ PROVIDER_ORDER = {
     "SOYBEAN/USD": ("YAHOO",),
     # Both sources are FX spot. No paid/keyed provider is required.
     "EUR/USD": ("BIQUOTE", "YAHOO"),
-    "GBP/USD": ("BIQUOTE", "YAHOO"),
+    "DAX": ("YAHOO",),
+    "SP500": ("YAHOO",),
+    "NVDA": ("YAHOO",),
+    "TSLA": ("YAHOO",),
 }
 
 
