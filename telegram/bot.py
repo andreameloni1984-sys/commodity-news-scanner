@@ -396,6 +396,12 @@ def _command_response(command: str) -> Optional[str]:
         )
 
     if command_name in {"/aggressivo212", "/aggressive212"}:
+        if argument:
+            return (
+                "Inserimento manuale Bid/Ask Trading 212 disattivato. "
+                "Le schermate servono solo a verificare simbolo, contratto e scadenza; "
+                "nessun prezzo viene confrontato con la serie futures GAGARIN."
+            )
         try:
             from soyuz_gagarin.aggressive_desk import format_aggressive_desk
             from soyuz_gagarin.trading_profiles import get_profile
@@ -414,12 +420,6 @@ def _command_response(command: str) -> Optional[str]:
                 desk = desk + "\n" + "\n".join(fx_lines)
             except Exception:
                 pass
-            if argument:
-                return (
-                    "Inserimento manuale Bid/Ask Trading 212 disattivato. "
-                    "Le schermate servono solo a verificare simbolo, contratto e scadenza; "
-                    "nessun prezzo viene confrontato con la serie futures GAGARIN."
-                )
             desk = desk + "\n\nProfilo: probabilita >= " + str(profile.min_probability) + ", qualita >= " + str(profile.min_quality) + ", rischio " + str(profile.risk_per_trade_pct) + "% per operazione, max " + str(profile.max_open_positions) + " posizioni."
             try:
                 from research.intraday_windows import format_intraday_window_summary
