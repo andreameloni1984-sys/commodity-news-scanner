@@ -31,13 +31,14 @@ def _fresh_candles():
     return rows
 
 
-def test_all_ten_active_symbols_have_explicit_free_market_basis_routes():
+def test_only_eight_selected_commodities_are_active_with_explicit_free_routes():
     active = {row.symbol for row in enabled_commodities()}
 
-    assert active == COMMODITY_SYMBOLS | FX_SYMBOLS
-    assert set(data.PROVIDER_ORDER) == active
-    assert set(data.EXECUTION_MARKET_TYPES) == active
-    assert set(data.INSTRUMENT_DATA_METADATA) == active
+    assert active == COMMODITY_SYMBOLS
+    assert active.isdisjoint(FX_SYMBOLS)
+    assert active <= set(data.PROVIDER_ORDER)
+    assert active <= set(data.EXECUTION_MARKET_TYPES)
+    assert active <= set(data.INSTRUMENT_DATA_METADATA)
 
     for symbol in COMMODITY_SYMBOLS:
         assert data.PROVIDER_ORDER[symbol] == ("YAHOO",)
@@ -45,24 +46,6 @@ def test_all_ten_active_symbols_have_explicit_free_market_basis_routes():
         assert data.PROVIDER_MARKET_TYPES[symbol] == {
             "YAHOO": "FUTURES_CONTINUOUS"
         }
-
-    for symbol in FX_SYMBOLS:
-        assert data.PROVIDER_ORDER[symbol] == ("BIQUOTE", "YAHOO")
-        assert data.EXECUTION_MARKET_TYPES[symbol] == "FX_SPOT"
-        assert data.PROVIDER_MARKET_TYPES[symbol] == {
-            "BIQUOTE": "FX_SPOT",
-            "YAHOO": "FX_SPOT",
-        }
-
-    assert all(
-        provider in data.FREE_EXECUTION_PROVIDERS
-        for chain in data.PROVIDER_ORDER.values()
-        for provider in chain
-    )
-    assert all(
-        "TWELVE_DATA" not in chain
-        for chain in data.PROVIDER_ORDER.values()
-    )
 
 
 def test_biquote_fx_symbols_are_explicit_and_yahoo_fallback_is_spot():

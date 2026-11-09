@@ -13,9 +13,8 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from commodities.universe import enabled_commodities, validate_universe
+from commodities.universe import operational_commodities, validate_universe
 from engine.gagarin import analyze_universe
-from engine.forex_session import filter_forex_for_session
 from engine.cloud_api_status import cloud_api_decision_status
 from soyuz_gagarin.adapter import evaluate_states
 from paper_portfolio import PaperPortfolio
@@ -393,7 +392,7 @@ def _run_gagarin(*, on_demand: bool = False):
     if errors:
         raise RuntimeError("CONFIGURATION_BLOCKED: " + ", ".join(errors))
 
-    commodities = filter_forex_for_session(enabled_commodities(), on_demand=on_demand)
+    commodities = operational_commodities()
     results = analyze_universe(commodities)
     decisions = evaluate_states(results)
     by_symbol = {d.symbol: d for d in decisions}
@@ -535,7 +534,7 @@ def _run_sputnik_confirmation(events: list[dict]) -> dict:
     errors = validate_universe()
     if errors:
         raise RuntimeError("CONFIGURATION_BLOCKED: " + ", ".join(errors))
-    results = analyze_universe(enabled_commodities())
+    results = analyze_universe(operational_commodities())
     decisions = evaluate_states(results)
     by_symbol = {str(getattr(d, "symbol", "")).upper(): d for d in decisions}
     for state in results:
