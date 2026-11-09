@@ -23,7 +23,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from commodities.universe import (
-    enabled_commodities,
     operational_commodities,
     validate_universe,
 )
@@ -64,13 +63,8 @@ def _is_operational_state(state) -> bool:
 
 
 def _select_run_universe(now=None):
-    """Scan every enabled instrument on every scheduled cycle.
-
-    Session labels may describe liquidity windows, but they must not suppress
-    an otherwise valid Forex setup. Actual weekend/market-closed data status
-    remains enforced by the data and safety layers.
-    """
-    return enabled_commodities()
+    """Scan only the eight user-selected commodities on every scheduled cycle."""
+    return operational_commodities()
 
 # ============================================================
 # HEADER
@@ -587,22 +581,12 @@ def run():
     # UNIVERSE
     # --------------------------------------------------------
 
-    # Commodities are scanned continuously: time-of-day is not a reason to
-    # hide a market move. Only auxiliary FX remains restricted to its windows.
+    # The analysis universe is deliberately restricted to the eight selected commodities.
     instruments = _select_run_universe()
-    operational_instruments = [
-        item for item in instruments
-        if str(getattr(item, "symbol", "")).strip().upper() in OPERATIONAL_SYMBOLS
-    ]
-    auxiliary_instruments = [
-        item for item in instruments
-        if str(getattr(item, "symbol", "")).strip().upper() not in OPERATIONAL_SYMBOLS
-    ]
+    operational_instruments = list(instruments)
+    auxiliary_instruments = []
 
-    print(
-        "SESSION FILTER: 8 commodities operative; EUR/USD e GBP/USD restano ausiliari "
-        "e vengono analizzati nelle rispettive finestre (Europe/Rome)."
-    )
+    print("UNIVERSE: solo le otto materie prime richieste; Forex escluso dalla scansione.")
 
     if not instruments:
 
@@ -616,9 +600,7 @@ def run():
         return 0
 
     print(
-        f"Universe: {len(instruments)} strumenti analizzati "
-        f"({len(operational_instruments)} commodities operative, "
-        f"{len(auxiliary_instruments)} Forex ausiliari in finestra)"
+        f"Universe: {len(instruments)} materie prime selezionate analizzate"
     )
 
     print()
