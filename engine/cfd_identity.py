@@ -51,9 +51,11 @@ def _verified_expiry(value: str, field: str) -> str:
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
         raise ValueError(f"{field} must use YYYY-MM-DD")
     try:
-        date.fromisoformat(text)
+        parsed = date.fromisoformat(text)
     except ValueError as exc:
         raise ValueError(f"{field} must be a valid calendar date") from exc
+    if parsed < date.today():
+        raise ValueError(f"{field} must not be in the past")
     return text
 
 

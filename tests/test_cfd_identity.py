@@ -114,6 +114,16 @@ def test_unverified_or_out_of_scope_instrument_identity_is_rejected(changes):
         _instrument(**changes).validate()
 
 
+def test_expired_contract_identity_is_rejected():
+    with pytest.raises(ValueError, match="expiry must not be in the past"):
+        _instrument(expiry="2000-01-01").validate()
+
+
+def test_expired_quote_series_is_rejected():
+    with pytest.raises(ValueError, match="quote-series expiry must not be in the past"):
+        _series(expiry="2000-01-01").validate()
+
+
 def test_official_catalog_slug_is_separate_from_app_and_feed_symbols():
     instrument = _instrument(
         broker_symbol="TEST-WTI-FEED-2026-11-18",
