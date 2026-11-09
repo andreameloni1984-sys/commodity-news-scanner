@@ -23,37 +23,32 @@
     {
       "category": "energy",
       "name": "WTI",
-      "symbol": "WTI"
+      "symbol": "WTI/USD"
     },
     {
       "category": "energy",
       "name": "Brent",
-      "symbol": "BRENT"
+      "symbol": "BRENT/USD"
     },
     {
       "category": "agriculture",
       "name": "Wheat",
-      "symbol": "WHEAT"
+      "symbol": "WHEAT/USD"
     },
     {
       "category": "agriculture",
       "name": "Corn",
-      "symbol": "CORN"
+      "symbol": "CORN/USD"
     },
     {
       "category": "agriculture",
       "name": "Soybean",
-      "symbol": "SOYBEAN"
+      "symbol": "SOYBEAN/USD"
     },
     {
       "category": "forex",
       "name": "EUR/USD",
       "symbol": "EUR/USD"
-    },
-    {
-      "category": "forex",
-      "name": "GBP/USD",
-      "symbol": "GBP/USD"
     },
     {
       "category": "indices",
