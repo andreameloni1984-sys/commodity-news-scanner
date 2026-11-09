@@ -32,14 +32,11 @@ def test_unneeded_commodity_symbols_are_not_active():
     assert active.isdisjoint(removed)
 
 
-def test_forex_universe_is_preserved_separately():
+def test_forex_pairs_are_removed_from_active_universe():
     rows = enabled_commodities()
     forex = {row.symbol for row in rows if row.category == "Forex"}
-    assert forex == {
-        "EUR/USD",
-        "GBP/USD",
-    }
-    assert universe_size() == 10
+    assert forex == set()
+    assert universe_size() == 8
 
 
 
@@ -64,7 +61,7 @@ def test_operational_universe_is_eight_commodities_and_forex_is_auxiliary():
         "XAU/USD", "XAG/USD", "COPPER/USD", "WTI/USD",
         "BRENT/USD", "WHEAT/USD", "CORN/USD", "SOYBEAN/USD",
     }
-    assert {item.symbol for item in auxiliary} == {"EUR/USD", "GBP/USD"}
+    assert auxiliary == []
     assert all(item.category.lower() != "forex" for item in operational)
 
 
@@ -146,7 +143,6 @@ def test_telegram_classifica_ignores_stale_cached_results(monkeypatch):
         ("COPPER/USD", "Rame"), ("WTI/USD", "Petrolio WTI"),
         ("BRENT/USD", "Petrolio Brent"), ("WHEAT/USD", "Grano"),
         ("CORN/USD", "Mais"), ("SOYBEAN/USD", "Soia"),
-        ("EUR/USD", "EUR/USD"), ("GBP/USD", "GBP/USD"),
     ]]
     monkeypatch.setattr(bot, "get_last_results", lambda: stale)
     calls = []
@@ -157,7 +153,7 @@ def test_telegram_classifica_ignores_stale_cached_results(monkeypatch):
     assert report.count("\n")  # a formatted report was returned
     assert "Legacy" not in report
     assert "21." not in report
-    assert "10. GBP/USD" in report
+    assert "GBP/USD" not in report
     assert "8. Soia" in report
 
 

@@ -16,6 +16,9 @@ from typing import Any, Iterable
 from config import LIVE_MAX_AGE_SECONDS
 from engine.session_windows import is_overlap, is_eia_window
 from engine.pattern_exit import analyze_pattern_and_exit
+from commodities.universe import operational_commodities
+
+_OPERATIONAL_SYMBOLS = frozenset(item.symbol.strip().upper() for item in operational_commodities())
 
 # Preliminary thresholds deliberately lower than confirmed-entry thresholds.
 POTENTIAL_MIN_PROBABILITY = 35.0
@@ -200,6 +203,9 @@ def find_aggressive_alerts(states: Iterable[Any]) -> list[dict]:
     """Return up to three ranked potential or confirmed live setups."""
     found = []
     for state in states:
+        symbol = str(getattr(state, "symbol", "") or "").strip().upper()
+        if symbol not in _OPERATIONAL_SYMBOLS:
+            continue
         item = _item_from_state(state)
         # Calculate once so stage and displayed exit/TP/SL use identical evidence.
         item["pattern_analysis"] = analyze_pattern_and_exit(
