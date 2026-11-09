@@ -147,24 +147,11 @@ def handle_update(update: dict) -> None:
         if chat_id is None or not text:
             return
 
-        button_commands = {
-            "🚀 AGGRESSIVE 212": "/aggressivo212",
-            "🛡 SOFT 212": "/soft212",
-            "🔗 COLLEGAMENTO INVEST TRADING212": "/collegamento212",
-        }
         original_text = text.strip()
-        normalized = " ".join(original_text.upper().split())
-        text = button_commands.get(normalized, original_text)
-
-        if text == original_text and normalized.startswith("🚀 AGGRESSIVE 212"):
-            text = "/aggressivo212"
-        elif text == original_text and normalized.startswith("🛡 SOFT 212"):
-            text = "/soft212"
-        elif text == original_text and normalized.startswith("🔗 COLLEGAMENTO INVEST TRADING212"):
-            text = "/collegamento212"
+        text = original_text
 
         if not text.startswith("/"):
-            _reply(chat_id, "Comando non riconosciuto. Usa /aggressivo212, /soft212, /analisi, /classifica oppure /help.")
+            _reply(chat_id, "Comando non riconosciuto. Usa /classifica, /analisi oppure /help.")
             return
 
         print(
@@ -176,7 +163,7 @@ def handle_update(update: dict) -> None:
         command_name = text.strip().split("@", 1)[0].lower()
 
         heavy_commands = {
-            "/aggressivo", "/aggressive", "/aggressivo212", "/soft212", "/analisi", "/top", "/classifica",
+            "/analisi", "/top", "/classifica",
             "/setup", "/intraday", "/comprare", "/compra", "/cosa",
             "/cosacomprare", "/qualeccompro", "/quale", "/compro",
             "/segnali", "/perche", "/perché", "/prezzo", "/metalli",
@@ -207,7 +194,7 @@ def handle_update(update: dict) -> None:
             print(f"Telegram webhook | unsupported command: {text}", flush=True)
             _reply(
                 chat_id,
-                "⚠️ Comando non disponibile. Usa /aggressivo212, /soft212, /analisi, /classifica oppure /help.",
+                "⚠️ Comando non disponibile. Usa /classifica, /analisi oppure /help.",
             )
 
     except Exception as exc:
@@ -354,9 +341,8 @@ def main() -> None:
     print("🟢 Telegram webhook: ACTIVE", flush=True)
 
     commands_ok, commands_data = _api("setMyCommands", {"commands": [
-        {"command": "aggressivo212", "description": "Profilo AGGRESSIVE 212"},
-        {"command": "soft212", "description": "Profilo SOFT 212"},
-        {"command": "collegamento212", "description": "Stato collegamento Invest Trading 212"},
+        {"command": "classifica", "description": "Classifica delle materie prime"},
+        {"command": "analisi", "description": "Analisi di una materia prima"},
         {"command": "fasceorario", "description": "Statistiche delle tre fasce orarie"},
         {"command": "monitora", "description": "Registra una posizione per avvisi di rischio"},
         {"command": "posizioni", "description": "Elenca le posizioni monitorate"},
@@ -381,7 +367,7 @@ def main() -> None:
     if TELEGRAM_CHAT_ID:
         welcome_sent = _reply(
             TELEGRAM_CHAT_ID,
-            "🚀 GAGARIN ONLINE\n🧪 PAPER/DEMO — nessun ordine reale.\n\nUsa uno dei tre pulsanti:\n• AGGRESSIVE 212\n• SOFT 212\n• COLLEGAMENTO INVEST TRADING212",
+            "🚀 GAGARIN ONLINE\n🧪 PAPER ONLY — nessun ordine inviato.\n\nUsa /classifica per le materie prime oppure /analisi [oro|argento|rame|wti|brent|grano|mais|soia].",
             reply_markup=telegram_menu(),
         )
         print(
