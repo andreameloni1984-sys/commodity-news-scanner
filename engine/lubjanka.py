@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 _INTERVAL_SECONDS = 300
-_MAX_AGE_SECONDS = 20 * 60
+_MAX_AGE_SECONDS = 10 * 60  # bar-open timestamp: close + max 5m grace
 _MAX_FUTURE_SECONDS = 90
 _MIN_COMPLETED_BARS = 8
 _BREAKOUT_LOOKBACK = 6
