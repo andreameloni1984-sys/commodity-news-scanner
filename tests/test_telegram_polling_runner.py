@@ -116,7 +116,9 @@ class TelegramPollingRunnerTests(unittest.TestCase):
 
     @patch("telegram.polling_runner.telegram_diagnostic", return_value=True)
     @patch("telegram.polling_runner._api")
-    def test_main_does_not_print_success_after_webhook_conflict(self, api, diagnostic):
+    def test_main_skips_polling_when_webhook_is_active_without_acknowledging_updates(
+        self, api, diagnostic
+    ):
         api.return_value = (
             False,
             {"ok": False, "error_code": 409, "description": "Webhook active"},
@@ -124,9 +126,13 @@ class TelegramPollingRunnerTests(unittest.TestCase):
 
         output = io.StringIO()
         with redirect_stdout(output):
-            with self.assertRaisesRegex(RuntimeError, "webhook is active"):
-                polling_runner.main()
+            result = polling_runner.main()
 
+        api.assert_called_once()
+        self.assertIsNone(result)
+        self.assertIn("POLLING SKIPPED", output.getvalue())
+        self.assertIn("webhook is active", output.getvalue())
+        self.assertIn("No updates acknowledged", output.getvalue())
         self.assertNotIn("Polling run completed", output.getvalue())
         self.assertNotIn("Pending updates:", output.getvalue())
 
