@@ -1,6 +1,6 @@
 # GAGARIN — Selezione ufficiale e confronto risultati
 
-**Conferma utente:** 2026-11-09 — usare il paniere attuale già presente nel codice (13 strumenti).  
+**Conferma utente:** 2026-11-09 — usare il paniere attuale già presente nel codice (14 strumenti).  
 **Modalità:** PAPER ONLY. Nessun ordine reale.  
 **Obiettivo operativo:** identificare strumento e direzione (LONG/SHORT/WAIT); non dipendere da Trading 212 né da confronti con i suoi prezzi.
 
