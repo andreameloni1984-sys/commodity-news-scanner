@@ -23,6 +23,7 @@ def state(candles):
         rr2=2.0,
         rr3=2.5,
         stop_atr=1.0,
+        atr=2.0,
         regime="TREND_UP",
         structure_direction="LONG",
         setup="TREND_CONTINUATION",
@@ -30,7 +31,16 @@ def state(candles):
         data_source="TEST",
         data_ok=True,
         live=True,
-        metadata={"data_status": "TEST", "gagarin_action": "PAPER_ENTRY"},
+        metadata={
+            "data_status": "TEST",
+            "gagarin_action": "PAPER_ENTRY",
+            "quote_provider": "TEST",
+            "quote_timestamp": "1970-01-01T00:16:40+00:00",
+            "quote_age_seconds": 0.0,
+            "quote_symbol": "GCZ26",
+            "quote_market_type": "FUTURES",
+            "contract_month": "2026-12",
+        },
         candles=candles,
         timestamps=[],
         highs=[],
@@ -65,17 +75,23 @@ def test_target_outcome_and_r_metrics_are_recorded(tmp_path):
     assert summary["win_rate_pct"] == 100.0
 
 
-def test_same_bar_stop_and_target_is_scored_as_stop(tmp_path):
+def test_same_bar_stop_and_target_is_unverifiable_not_scored(tmp_path):
     path = tmp_path / "feedback.csv"
     append_signal(state([{"timestamp": 1000, "high": 101, "low": 99}]), path=path)
     s1 = state([
         {"timestamp": 1000, "high": 101, "low": 99},
+        # Both stop and target are inside this OHLC range; intrabar order is unknown.
         {"timestamp": 2000, "high": 104, "low": 97.5},
     ])
-    update_open_outcomes([s1], path=path)
+    assert update_open_outcomes([s1], path=path) == 1
     row = load_feedback(path)[0]
-    assert row["outcome"] == "STOP"
-    assert float(row["r_multiple"]) == -1.0
+    assert row["outcome"] == "ESITO NON VERIFICABILE"
+    assert row["outcome_reason"] == "SAME_CANDLE_SL_TP_AMBIGUITY"
+    assert row["r_multiple"] == ""
+    summary = summarize(path=path)
+    assert summary["closed"] == 0
+    assert summary["win_rate_pct"] is None
+    assert summary["outcomes"]["ESITO NON VERIFICABILE"] == 1
 
 
 def test_summary_breaks_down_per_asset_and_direction(tmp_path):
@@ -175,6 +191,46 @@ def test_forecast_identity_includes_timeframe(tmp_path):
     assert {row["timeframe"] for row in rows} == {"5min", "15min"}
     assert len({row["signal_id"] for row in rows}) == 2
 
+
+
+
+def test_forecast_identity_includes_provider_and_exact_futures_contract(tmp_path):
+    path = tmp_path / "feedback.csv"
+    december = state([{"timestamp": 1000, "high": 101, "low": 99}])
+    december.metadata.update(
+        quote_provider="YAHOO",
+        quote_symbol="GC=F",
+        quote_market_type="FUTURES",
+        contract_month="2026-12",
+    )
+    february = state([{"timestamp": 1000, "high": 101, "low": 99}])
+    february.metadata.update(
+        quote_provider="YAHOO",
+        quote_symbol="GC=F",
+        quote_market_type="FUTURES",
+        contract_month="2027-02",
+    )
+
+    assert append_signal(december, path=path) is True
+    assert append_signal(february, path=path) is True
+    rows = load_feedback(path)
+    assert len(rows) == 2
+    assert len({row["signal_id"] for row in rows}) == 2
+    assert {row["contract_month"] for row in rows} == {"2026-12", "2027-02"}
+
+
+def test_forecast_identity_includes_quote_provider(tmp_path):
+    path = tmp_path / "feedback.csv"
+    yahoo = state([{"timestamp": 1000, "high": 101, "low": 99}])
+    yahoo.metadata.update(quote_provider="YAHOO")
+    alternate = state([{"timestamp": 1000, "high": 101, "low": 99}])
+    alternate.metadata.update(quote_provider="TWELVE_DATA")
+
+    assert append_signal(yahoo, path=path) is True
+    assert append_signal(alternate, path=path) is True
+    rows = load_feedback(path)
+    assert len(rows) == 2
+    assert len({row["signal_id"] for row in rows}) == 2
 
 
 def test_naive_iso_timestamp_is_interpreted_as_utc():
@@ -317,3 +373,119 @@ def test_database_recovery_merges_csv_fallback_without_losing_newer_outcomes(mon
     assert len(saved) == 1
     assert {row["signal_id"] for row in saved[0]} == {"db-only", "shared", "csv-only"}
 
+
+
+def test_signal_records_quote_provenance_atr_and_status(tmp_path):
+    path = tmp_path / "feedback.csv"
+    s = state([{"timestamp": 1000, "high": 101, "low": 99}])
+    s.atr = 2.75
+    s.data_age_seconds = 42.5
+    s.metadata.update({
+        "quote_provider": "YAHOO",
+        "quote_timestamp": "2026-11-04T15:20:00+00:00",
+        "quote_age_seconds": 38.5,
+        "quote_symbol": "GCZ26",
+        "quote_market_type": "FUTURES",
+        "contract_month": "2026-12",
+        "contract_expiry": "2026-12-28",
+    })
+
+    assert append_signal(s, path=path) is True
+    row = load_feedback(path)[0]
+
+    assert row["quote_provider"] == "YAHOO"
+    assert row["quote_timestamp"] == "2026-11-04T15:20:00+00:00"
+    assert float(row["quote_age_seconds"]) == 38.5
+    assert row["quote_symbol"] == "GCZ26"
+    assert row["market_type"] == "FUTURES"
+    assert row["contract_month"] == "2026-12"
+    assert row["contract_expiry"] == "2026-12-28"
+    assert float(row["atr"]) == 2.75
+    assert row["signal_status"] == "PAPER_ENTRY"
+    assert row["outcome"] == "OPEN"
+
+
+def test_continuous_future_without_expiry_is_unverifiable_not_scored(tmp_path):
+    path = tmp_path / "feedback.csv"
+    s0 = state([{"timestamp": 1000, "high": 101, "low": 99}])
+    s0.metadata.update(
+        quote_symbol="GC=F",
+        quote_market_type="FUTURES_CONTINUOUS",
+    )
+    s0.metadata.pop("contract_month", None)
+    s0.metadata.pop("contract_expiry", None)
+    append_signal(s0, path=path)
+
+    s1 = state([
+        {"timestamp": 1000, "high": 101, "low": 99},
+        {"timestamp": 2000, "high": 104, "low": 99.5},
+    ])
+    s1.metadata.update(
+        quote_symbol="GC=F",
+        quote_market_type="FUTURES_CONTINUOUS",
+    )
+    s1.metadata.pop("contract_month", None)
+    s1.metadata.pop("contract_expiry", None)
+
+    assert update_open_outcomes([s1], path=path) == 1
+    row = load_feedback(path)[0]
+    assert row["outcome"] == "ESITO NON VERIFICABILE"
+    assert row["outcome_reason"] == "CONTRACT_IDENTITY_NOT_EXPOSED"
+    assert row["r_multiple"] == ""
+    summary = summarize(path=path)
+    assert summary["closed"] == 0
+    assert summary["outcomes"]["ESITO NON VERIFICABILE"] == 1
+
+
+def test_same_continuous_ticker_with_contract_rollover_is_unverifiable(tmp_path):
+    path = tmp_path / "feedback.csv"
+    s0 = state([{"timestamp": 1000, "high": 101, "low": 99}])
+    s0.metadata.update(
+        quote_symbol="GC=F",
+        quote_market_type="FUTURES_CONTINUOUS",
+        contract_month="2026-12",
+    )
+    append_signal(s0, path=path)
+
+    s1 = state([
+        {"timestamp": 1000, "high": 101, "low": 99},
+        {"timestamp": 2000, "high": 104, "low": 99.5},
+    ])
+    s1.metadata.update(
+        quote_symbol="GC=F",
+        quote_market_type="FUTURES_CONTINUOUS",
+        contract_month="2027-02",
+    )
+
+    assert update_open_outcomes([s1], path=path) == 1
+    row = load_feedback(path)[0]
+    assert row["outcome"] == "ESITO NON VERIFICABILE"
+    assert row["outcome_reason"] == "CONTRACT_MONTH_MISMATCH"
+
+
+def test_fx_spot_outcome_remains_verifiable_without_expiry(tmp_path):
+    path = tmp_path / "feedback.csv"
+    s0 = state([{"timestamp": 1000, "high": 101, "low": 99}])
+    s0.symbol = "EUR/USD"
+    s0.metadata.update(
+        quote_symbol="EURUSD",
+        quote_market_type="FX_SPOT",
+    )
+    s0.metadata.pop("contract_month", None)
+    s0.metadata.pop("contract_expiry", None)
+    append_signal(s0, path=path)
+
+    s1 = state([
+        {"timestamp": 1000, "high": 101, "low": 99},
+        {"timestamp": 2000, "high": 103.5, "low": 99.5},
+    ])
+    s1.symbol = "EUR/USD"
+    s1.metadata.update(
+        quote_symbol="EURUSD",
+        quote_market_type="FX_SPOT",
+    )
+    s1.metadata.pop("contract_month", None)
+    s1.metadata.pop("contract_expiry", None)
+
+    assert update_open_outcomes([s1], path=path) == 1
+    assert load_feedback(path)[0]["outcome"] == "TP1"
