@@ -46,3 +46,13 @@ def test_stale_bars_never_create_a_plan():
     plan = build_conditional_playbook(candles, {"status": "INTERCEPTED", "direction": "SHORT",
         "directional_conflict": False}, now_epoch=candles[-1]["timestamp"] + 3600)
     assert plan["status"] == "UNAVAILABLE"
+
+def test_playbook_rejects_bar_older_than_ten_minutes():
+    candles = bars("down")
+    plan = build_conditional_playbook(
+        candles,
+        {"status": "INTERCEPTED", "direction": "SHORT", "directional_conflict": False},
+        now_epoch=candles[-1]["timestamp"] + 603,
+    )
+    assert plan["status"] == "UNAVAILABLE"
+    assert "non fresca" in plan["reason"]
