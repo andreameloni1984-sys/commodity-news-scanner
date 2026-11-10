@@ -1,0 +1,36 @@
+name: Gagarin Render Keepalive
+
+on:
+  schedule:
+    # Offset away from the start of the hour; a best-effort wake/keepalive for the Free web service.
+    - cron: "3,13,23,33,43,53 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gagarin-render-keepalive
+  cancel-in-progress: true
+
+jobs:
+  health:
+    name: Ping Gagarin Render health endpoint
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Wake and verify the webhook service
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://soyuz-gagarin-telegram-v2.onrender.com/health"
+          response="$(curl --silent --show-error --fail \
+            --connect-timeout 10 \
+            --max-time 90 \
+            --retry 8 \
+            --retry-all-errors \
+            --retry-delay 10 \
+            --retry-max-time 180 \
+            "$url")"
+          test "$response" = "OK"
+          echo "GAGARIN_RENDER_HEALTH=OK"
