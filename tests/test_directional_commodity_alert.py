@@ -67,3 +67,14 @@ def test_alert_shows_full_target_ladder_and_does_not_assume_usd():
     assert "Timestamp quotazione: NON VERIFICATO" in message
     assert "Trigger: IN ATTESA DI CONFERMA" in message
     assert "2700 USD" not in message
+
+def test_directional_forecasts_exclude_forex_outside_the_eight_commodity_basket():
+    states = [
+        candidate(),
+        candidate(commodity="EUR/USD", symbol="EUR/USD"),
+        candidate(commodity="GBP/USD", symbol="GBP/USD"),
+    ]
+
+    selected = alert.find_directional_commodity_alerts(states)
+
+    assert [item["commodity"] for item in selected] == ["Oro"]
