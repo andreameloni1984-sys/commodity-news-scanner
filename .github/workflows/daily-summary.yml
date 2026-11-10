@@ -1,11 +1,6 @@
 name: Gagarin Daily Summary
 
-on:
-  schedule:
-    # Ogni giorno alle 06:15 UTC
-    - cron: "15 6 * * *"
-  workflow_dispatch:
-
+on: {}
 permissions:
   contents: read
 
