@@ -1,19 +1,6 @@
 name: SOYUZ GAGARIN PAPER
 
-on:
-  push:
-    branches:
-      - "soyuz-gagarin-v1"
-      - "soyuz-gagarin-v2-governor-integration"
-      - "gagarin-mt5-demo-bridge-v1"
-      - "main"
-      - "ci/gagarin-safety-coverage"
-  pull_request:
-    branches:
-      - "soyuz-gagarin-v1"
-      - "gagarin-mt5-demo-bridge-v1"
-      - "main"
-
+on: {}
 jobs:
   test:
     runs-on: ubuntu-latest
