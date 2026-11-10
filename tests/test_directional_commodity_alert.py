@@ -99,7 +99,9 @@ def test_directional_alert_maps_all_eight_commodity_names_to_exact_symbols():
         ("Mais", "CORN/USD"),
         ("Soia", "SOYBEAN/USD"),
     ]
-    states = [candidate(commodity=name, symbol=symbol) for name, symbol in pairs]
-    selected = alert.find_directional_commodity_alerts(states)
-    assert {item["symbol"] for item in selected} == {symbol for _, symbol in pairs}
+    for name, symbol in pairs:
+        selected = alert.find_directional_commodity_alerts([
+            candidate(commodity=name, symbol=symbol)
+        ])
+        assert [item["symbol"] for item in selected] == [symbol]
 
