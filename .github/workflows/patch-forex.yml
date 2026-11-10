@@ -1,8 +1,6 @@
 name: patch-forex-aggressive
 
-on:
-  workflow_dispatch:
-
+on: {}
 jobs:
   patch:
     runs-on: ubuntu-latest
