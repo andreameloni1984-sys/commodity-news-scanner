@@ -1,6 +1,11 @@
 import pytest
 
 from commodities.universe import enabled_commodities
+
+EXPECTED_SYMBOLS = {
+    "XAU/USD", "XAG/USD", "COPPER/USD", "WTI/USD",
+    "BRENT/USD", "WHEAT/USD", "CORN/USD", "SOYBEAN/USD",
+}
 from telegram.bot import _resolve_commodity
 
 
@@ -38,6 +43,32 @@ def test_all_enabled_canonical_names_are_resolvable():
 @pytest.mark.parametrize("removed", ["platino", "palladio", "riso", "zucchero", "cacao", "caffe", "caffè"])
 def test_removed_commodities_are_not_resolved(removed):
     assert _resolve_commodity(removed) is None
+
+
+def test_telegram_analysis_and_resolution_fail_closed_when_extra_rows_are_added(monkeypatch):
+    import commodities.universe as universe
+    import telegram.bot as bot
+
+    original = list(universe.COMMODITIES)
+    extras = [
+        universe.Commodity(name="EUR/USD", symbol="EUR/USD", category="Forex"),
+        universe.Commodity(name="NVIDIA", symbol="NVDA", category="Equity"),
+        universe.Commodity(name="Palladio", symbol="XPD/USD", category="Metal"),
+    ]
+    monkeypatch.setattr(universe, "COMMODITIES", original + extras)
+
+    analyzed = []
+    monkeypatch.setattr(
+        bot,
+        "analyze_universe",
+        lambda rows: analyzed.extend(rows) or [],
+    )
+
+    assert bot._run_analysis() == []
+    assert {item.symbol for item in analyzed} == EXPECTED_SYMBOLS
+    assert bot._resolve_commodity("EUR/USD") is None
+    assert bot._resolve_commodity("NVIDIA") is None
+    assert bot._resolve_commodity("Palladio") is None
 
 
 def test_setup_formatter_distinguishes_pending_setup_from_no_setup():

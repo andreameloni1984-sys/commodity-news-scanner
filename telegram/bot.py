@@ -21,10 +21,14 @@ import requests
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 from engine.gagarin import analyze_universe
 from engine.decision_status import market_decision_status
-from commodities.universe import enabled_commodities, get_commodity_by_name
+from commodities.universe import (
+    OPERATIONAL_COMMODITY_SYMBOLS,
+    operational_commodities,
+    get_commodity_by_name,
+)
 
 _OPERATIONAL_SYMBOLS = frozenset(
-    commodity.symbol.strip().upper() for commodity in enabled_commodities()
+    str(symbol).strip().upper() for symbol in OPERATIONAL_COMMODITY_SYMBOLS
 )
 from engine.invest import (
     analyze_invest_universe,
@@ -150,7 +154,9 @@ def _reply(chat_id, text: str, reply_markup: Optional[dict] = None) -> bool:
     return True
 
 def _run_analysis(commodity=None, *, on_demand=True):
-    commodities = enabled_commodities()
+    # The Render five-minute loop and Telegram commands share this entrypoint.
+    # Always apply the fixed operational allowlist, not the expandable master list.
+    commodities = operational_commodities()
     if commodity is not None:
         commodities = [c for c in commodities if c.name.lower() == commodity.name.lower()]
     if not commodities:
@@ -163,7 +169,7 @@ def _resolve_commodity(name: str):
     key = " ".join(str(name or "").strip().split()).lower()
     if not key:
         return None
-    for commodity in enabled_commodities():
+    for commodity in operational_commodities():
         if commodity.name.lower() == key or commodity.symbol.lower() == key:
             return commodity
     aliases = {
