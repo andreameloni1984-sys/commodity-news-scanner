@@ -1,11 +1,6 @@
 name: Telegram Polling (GitHub Actions)
 
-on:
-  schedule:
-    # Ogni 5 minuti durante l'orario di mercato (regolabile)
-    - cron: "*/5 7-21 * * 1-5"
-  workflow_dispatch:
-
+on: {}
 permissions:
   contents: read
 
