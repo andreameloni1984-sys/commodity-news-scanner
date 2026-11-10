@@ -1,8 +1,6 @@
 name: Gagarin Paper Monitor (GitHub Actions)
 
-on:
-  workflow_dispatch:
-
+on: {}
 permissions:
   contents: read
 
