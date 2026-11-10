@@ -237,13 +237,9 @@ def format_watch_board(results: Iterable[object], min_score: float = 45.0) -> st
             )
         plan = meta.get("lubjanka_playbook", {}) if isinstance(meta, dict) else {}
         if isinstance(plan, dict) and plan.get("status") == "CONDITIONAL_PLAN":
-            try:
-                m5_age = float(plan.get("bar_age_seconds"))
-            except (TypeError, ValueError, OverflowError):
-                m5_age = float("inf")
-            # A stale quote or old completed M5 bar invalidates every displayed
-            # conditional level. Keep only the directional observation visible.
-            plan_stale = data_status == "STALE" or not (0 <= m5_age <= 600)
+            # Reuse the provider's existing freshness status. No additional
+            # age threshold is introduced by the Telegram presentation layer.
+            plan_stale = data_status == "STALE"
             if plan_stale:
                 lines.append(
                     f"   LUBJANKA {plan['direction']} / {plan['interceptor']} — "
