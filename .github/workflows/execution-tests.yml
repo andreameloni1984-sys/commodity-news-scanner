@@ -1,9 +1,6 @@
 name: Gagarin Execution Layer Tests
 
-on:
-  push:
-  pull_request:
-
+on: {}
 jobs:
   test-execution:
     runs-on: ubuntu-latest
