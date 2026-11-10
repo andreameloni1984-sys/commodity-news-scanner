@@ -1,9 +1,6 @@
 name: SOYUZ GAGARIN
 
-on:
-  workflow_dispatch:
-
-
+on: {}
 permissions:
   contents: read
 
