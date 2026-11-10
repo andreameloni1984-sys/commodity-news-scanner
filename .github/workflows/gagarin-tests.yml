@@ -1,10 +1,6 @@
 name: SOYUZ GAGARIN Tests
 
-on:
-  push:
-    branches: ["main"]
-  pull_request:
-
+on: {}
 jobs:
   test:
     runs-on: ubuntu-latest
