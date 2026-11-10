@@ -23,7 +23,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from commodities.universe import (
-    enabled_commodities,
     operational_commodities,
     validate_universe,
 )
@@ -69,7 +68,7 @@ def _select_run_universe(now=None):
     Actual weekend/market-closed data status remains enforced by the data
     and safety layers.
     """
-    return enabled_commodities()
+    return operational_commodities()
 
 # ============================================================
 # HEADER
