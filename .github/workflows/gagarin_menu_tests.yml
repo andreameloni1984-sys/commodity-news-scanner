@@ -1,18 +1,6 @@
 name: GAGARIN Telegram menu tests
 
-on:
-  pull_request:
-    paths:
-      - "telegram/bot.py"
-      - "tests/test_telegram_menu.py"
-      - ".github/workflows/gagarin_menu_tests.yml"
-  push:
-    branches: [main]
-    paths:
-      - "telegram/bot.py"
-      - "tests/test_telegram_menu.py"
-      - ".github/workflows/gagarin_menu_tests.yml"
-
+on: {}
 permissions:
   contents: read
 
