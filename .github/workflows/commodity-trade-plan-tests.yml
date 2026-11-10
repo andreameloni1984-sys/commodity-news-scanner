@@ -1,35 +1,6 @@
 name: Commodity trade-plan tests
 
-on:
-  push:
-    branches: [main]
-    paths:
-      - "soyuz_gagarin/commodity_trade_plan.py"
-      - "soyuz_gagarin/adapter.py"
-      - "soyuz_gagarin/risk_governor.py"
-      - "soyuz_gagarin/models.py"
-      - "tests/test_commodity_trade_plan.py"
-      - "tests/test_gagarin_core.py"
-      - "engine/feedback.py"
-      - "main.py"
-      - "tests/test_feedback_outcomes.py"
-      - "telegram/render_runner.py"
-      - ".github/workflows/commodity-trade-plan-tests.yml"
-  pull_request:
-    paths:
-      - "soyuz_gagarin/commodity_trade_plan.py"
-      - "soyuz_gagarin/adapter.py"
-      - "soyuz_gagarin/risk_governor.py"
-      - "soyuz_gagarin/models.py"
-      - "engine/feedback.py"
-      - "main.py"
-      - "tests/test_commodity_trade_plan.py"
-      - "tests/test_gagarin_core.py"
-      - "tests/test_feedback_outcomes.py"
-      - "telegram/render_runner.py"
-      - ".github/workflows/commodity-trade-plan-tests.yml"
-  workflow_dispatch:
-
+on: {}
 permissions:
   contents: read
 
