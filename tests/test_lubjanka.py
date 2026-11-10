@@ -98,6 +98,13 @@ def test_lubjanka_ignores_the_still_forming_five_minute_candle():
     assert result["last_bar_timestamp"] == candles[-2]["timestamp"]
 
 
+def test_lubjanka_keeps_existing_twenty_minute_freshness_window():
+    candles = make_bars("up")
+    result = intercept_market(candles, now_epoch=candles[-1]["timestamp"] + 603)
+    assert result["status"] == "INTERCEPTED"
+    assert result["direction"] == "LONG"
+
+
 def test_lubjanka_rejects_stale_completed_candles():
     candles = make_bars("up")
     result = intercept_market(candles, now_epoch=candles[-1]["timestamp"] + 3600)
