@@ -83,6 +83,19 @@ COMMODITIES = [
 
 ]
 
+# This is the fail-closed operational boundary. Provider or universe additions
+# must never expand GAGARIN's active basket without an explicit user change.
+OPERATIONAL_COMMODITY_SYMBOLS = frozenset({
+    "XAU/USD",
+    "XAG/USD",
+    "COPPER/USD",
+    "WTI/USD",
+    "BRENT/USD",
+    "WHEAT/USD",
+    "CORN/USD",
+    "SOYBEAN/USD",
+})
+
 # ============================================================
 # HELPERS
 # ============================================================
@@ -294,8 +307,12 @@ if _UNIVERSE_ERRORS:
 
 
 def operational_commodities() -> list[Commodity]:
-    """Return exactly the eight selected commodity instruments."""
-    return enabled_commodities()
+    """Return only the eight user-approved commodities, even if other rows exist."""
+    return [
+        commodity
+        for commodity in enabled_commodities()
+        if commodity.symbol.strip().upper() in OPERATIONAL_COMMODITY_SYMBOLS
+    ]
 
 
 def auxiliary_commodities() -> list[Commodity]:
