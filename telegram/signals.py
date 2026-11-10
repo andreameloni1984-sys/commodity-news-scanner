@@ -237,12 +237,20 @@ def format_watch_board(results: Iterable[object], min_score: float = 45.0) -> st
             )
         plan = meta.get("lubjanka_playbook", {}) if isinstance(meta, dict) else {}
         if isinstance(plan, dict) and plan.get("status") == "CONDITIONAL_PLAN":
-            lines.append(
-                f"   LUBJANKA {plan['direction']} / {plan['interceptor']} — {plan['activation']}\n"
-                f"   Entry trigger {plan['entry_trigger']} | SL {plan['stop_loss']} | "
-                f"TP1 {plan['take_profit_1']} ({plan['rr_tp1']}R) | TP2 {plan['take_profit_2']} ({plan['rr_tp2']}R)\n"
-                f"   Invalidazione: {plan['invalidation']} | M5 age {plan['bar_age_seconds']}s"
-            )
+            # Reuse the provider's existing freshness status. No additional
+            # age threshold is introduced by the Telegram presentation layer.
+            if data_status == "STALE":
+                lines.append(
+                    f"   LUBJANKA {plan['direction']} / {plan['interceptor']} — "
+                    "osservazione scaduta: attendere una nuova candela M5 e una quotazione fresca."
+                )
+            else:
+                lines.append(
+                    f"   LUBJANKA {plan['direction']} / {plan['interceptor']} — {plan['activation']}\n"
+                    f"   Entry trigger {plan['entry_trigger']} | SL {plan['stop_loss']} | "
+                    f"TP1 {plan['take_profit_1']} ({plan['rr_tp1']}R) | TP2 {plan['take_profit_2']} ({plan['rr_tp2']}R)\n"
+                    f"   Invalidazione: {plan['invalidation']} | M5 age {plan['bar_age_seconds']}s"
+                )
 
     lines += ["", "⚠️ Solo monitoraggio. Non è un segnale di entrata."]
     return "\n".join(lines)
