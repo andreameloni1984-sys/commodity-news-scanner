@@ -1,9 +1,6 @@
 name: aggressive-alert
 
-on:
-  # Manual-only: the scheduled Gagarin monitor already scans the same full universe.
-  workflow_dispatch:
-
+on: {}
 permissions:
   contents: read
 
