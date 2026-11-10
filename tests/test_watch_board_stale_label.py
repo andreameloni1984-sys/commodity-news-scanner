@@ -59,9 +59,10 @@ def test_live_quote_does_not_receive_stale_warning():
     assert "LUBJANKA SHORT / EARLY_MOVE" in message
     assert "QUOTAZIONE STALE" not in message
 
-def test_live_quote_but_old_m5_bar_hides_conditional_levels():
+def test_live_quote_uses_existing_playbook_freshness_without_new_ten_minute_cutoff():
     state = _state("LIVE")
     state.metadata["lubjanka_playbook"]["bar_age_seconds"] = 603.0
     message = format_watch_board([state], min_score=999.0)
-    assert "osservazione scaduta" in message
-    assert "Entry trigger" not in message
+    assert "QUOTAZIONE STALE" not in message
+    assert "Entry trigger 4039.5" in message
+    assert "TP1 4037.55" in message
