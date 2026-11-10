@@ -129,3 +129,21 @@ def test_telegram_setup_and_intraday_hide_out_of_basket_states():
     eurusd = SimpleNamespace(symbol="EUR/USD", commodity="EUR/USD")
     assert "EUR/USD" not in bot._format_setup([eurusd])
     assert "EUR/USD" not in bot._format_intraday([eurusd])
+
+
+def test_operational_selector_fails_closed_if_unapproved_rows_are_added(monkeypatch):
+    import commodities.universe as universe
+    from main import _select_run_universe
+
+    original = list(universe.COMMODITIES)
+    extras = [
+        universe.Commodity(name="EUR/USD", symbol="EUR/USD", category="Forex"),
+        universe.Commodity(name="DAX", symbol="DAX", category="Index"),
+        universe.Commodity(name="NVIDIA", symbol="NVDA", category="Equity"),
+    ]
+    monkeypatch.setattr(universe, "COMMODITIES", original + extras)
+
+    enabled_symbols = {item.symbol for item in universe.enabled_commodities()}
+    assert {"EUR/USD", "DAX", "NVDA"}.issubset(enabled_symbols)
+    assert {item.symbol for item in universe.operational_commodities()} == EXPECTED_SYMBOLS
+    assert {item.symbol for item in _select_run_universe()} == EXPECTED_SYMBOLS
