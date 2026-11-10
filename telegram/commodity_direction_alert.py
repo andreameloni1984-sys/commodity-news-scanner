@@ -3,7 +3,7 @@
 Forecasts are advisory, require fresh live provider data, and never place orders.
 Repeated unchanged forecasts are suppressed to avoid Telegram noise.
 
-Allineato all'universo trimmed (10 core).
+Allineato esclusivamente al paniere delle otto materie prime selezionate.
 """
 from __future__ import annotations
 
@@ -21,7 +21,6 @@ _ALLOWED = {
     "oro", "gold", "argento", "silver", "rame", "copper",
     "petrolio wti", "wti", "petrolio brent", "brent",
     "grano", "wheat", "mais", "corn", "soia", "soybean",
-    "eur/usd", "gbp/usd",
 }
 MIN_PROBABILITY = 55.0
 MIN_QUALITY = 45.0
