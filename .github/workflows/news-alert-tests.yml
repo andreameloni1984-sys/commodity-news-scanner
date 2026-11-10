@@ -1,12 +1,6 @@
 name: Gagarin NEWS alert tests
 
-on:
-  push:
-  pull_request:
-    branches:
-      - main
-  workflow_dispatch:
-
+on: {}
 permissions:
   contents: read
 
