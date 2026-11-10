@@ -47,12 +47,22 @@ def test_stale_bars_never_create_a_plan():
         "directional_conflict": False}, now_epoch=candles[-1]["timestamp"] + 3600)
     assert plan["status"] == "UNAVAILABLE"
 
-def test_playbook_rejects_bar_older_than_ten_minutes():
+def test_playbook_keeps_existing_twenty_minute_freshness_window():
     candles = bars("down")
     plan = build_conditional_playbook(
         candles,
         {"status": "INTERCEPTED", "direction": "SHORT", "directional_conflict": False},
         now_epoch=candles[-1]["timestamp"] + 603,
+    )
+    assert plan["status"] == "CONDITIONAL_PLAN"
+
+
+def test_playbook_rejects_bar_older_than_twenty_minutes():
+    candles = bars("down")
+    plan = build_conditional_playbook(
+        candles,
+        {"status": "INTERCEPTED", "direction": "SHORT", "directional_conflict": False},
+        now_epoch=candles[-1]["timestamp"] + 1203,
     )
     assert plan["status"] == "UNAVAILABLE"
     assert "non fresca" in plan["reason"]
