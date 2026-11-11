@@ -771,16 +771,9 @@ def run():
                     f"📡 SIGNAL CHANNEL: Telegram accepted {len(signal_results)} signal(s)"
                 )
             else:
-                # Send WATCH pre-alert for near-threshold setups
-                watch_msg = format_watch_board(operational_results, min_score=40.0)
-                if "Nessun setup vicino" not in watch_msg:
-                    delivered = send_telegram(watch_msg)
-                    if not delivered:
-                        print("❌ TELEGRAM DELIVERY FAILED: WATCH message was not accepted by Telegram.")
-                        return 1
-                    print("🟡 WATCH pre-alert accepted by Telegram")
-                else:
-                    print("No signals and no watch candidates")
+                # WATCH/EARLY_SETUP remain visible in logs, not Telegram.
+                # Do not alter scans or the signal authorization path.
+                print("No authorized LONG/SHORT signals; WATCH notifications suppressed")
 
         except Exception as exc:
 
