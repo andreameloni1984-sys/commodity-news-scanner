@@ -48,7 +48,7 @@ from engine.feedback import (
 )
 
 from telegram.bot import send_telegram
-from telegram.signals import format_signal_board, format_watch_board
+from telegram.signals import format_signal_board
 from soyuz_gagarin.adapter import evaluate_states
 from execution.router import execute_state
 
@@ -761,8 +761,14 @@ def run():
         try:
 
             if signal_results:
+                # Send only authorized, confirmed signals, never WATCH candidates.
+                # Deduplicate overlapping engine decisions for the same symbol/direction.
+                unique_signals = list({
+                    (str(s.symbol).upper(), str(s.setup_direction).upper()): s
+                    for s in signal_results
+                }.values())
                 delivered = send_telegram(
-                    format_signal_board(operational_results)
+                    format_signal_board(unique_signals)
                 )
                 if not delivered:
                     print("❌ TELEGRAM DELIVERY FAILED: signal message was not accepted by Telegram.")
