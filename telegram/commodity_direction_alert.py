@@ -3,7 +3,7 @@
 Forecasts are advisory, require fresh live provider data, and never place orders.
 Repeated unchanged forecasts are suppressed to avoid Telegram noise.
 
-Allineato all'universo trimmed (10 core).
+Allineato esclusivamente al paniere delle otto materie prime selezionate.
 """
 from __future__ import annotations
 
@@ -17,11 +17,23 @@ from typing import Any, Iterable
 
 from config import LIVE_MAX_AGE_SECONDS
 
-_ALLOWED = {
-    "oro", "gold", "argento", "silver", "rame", "copper",
-    "petrolio wti", "wti", "petrolio brent", "brent",
-    "grano", "wheat", "mais", "corn", "soia", "soybean",
-    "eur/usd", "gbp/usd",
+_SYMBOL_BY_COMMODITY_NAME = {
+    "oro": "XAU/USD",
+    "gold": "XAU/USD",
+    "argento": "XAG/USD",
+    "silver": "XAG/USD",
+    "rame": "COPPER/USD",
+    "copper": "COPPER/USD",
+    "petrolio wti": "WTI/USD",
+    "wti": "WTI/USD",
+    "petrolio brent": "BRENT/USD",
+    "brent": "BRENT/USD",
+    "grano": "WHEAT/USD",
+    "wheat": "WHEAT/USD",
+    "mais": "CORN/USD",
+    "corn": "CORN/USD",
+    "soia": "SOYBEAN/USD",
+    "soybean": "SOYBEAN/USD",
 }
 MIN_PROBABILITY = 55.0
 MIN_QUALITY = 45.0
@@ -47,7 +59,9 @@ def find_directional_commodity_alerts(states: Iterable[Any]) -> list[dict]:
     candidates = []
     for state in states or []:
         name = str(getattr(state, "commodity", "") or "").strip()
-        if name.casefold() not in _ALLOWED:
+        expected_symbol = _SYMBOL_BY_COMMODITY_NAME.get(name.casefold())
+        symbol = str(getattr(state, "symbol", "") or "").strip().upper()
+        if expected_symbol is None or symbol != expected_symbol:
             continue
         direction = str(
             getattr(state, "setup_direction", None)
@@ -66,7 +80,7 @@ def find_directional_commodity_alerts(states: Iterable[Any]) -> list[dict]:
         if probability < MIN_PROBABILITY or quality < MIN_QUALITY or confidence < MIN_CONFIDENCE:
             continue
         candidates.append({
-            "commodity": name, "symbol": str(getattr(state, "symbol", "") or name).upper(),
+            "commodity": name, "symbol": symbol,
             "direction": direction, "price": price, "age": age,
             "provider": str(getattr(state, "data_source", "") or "provider non specificato"),
             "probability": probability, "quality": quality, "confidence": confidence,

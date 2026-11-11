@@ -73,7 +73,7 @@ def position_monitor_loop() -> None:
     from engine.energy_confluence import stamp_energy, format_energy_alert
 
     interval = 5 * 60
-    print("Gagarin market monitor | interval=5min | 13 approved instruments | PAPER ONLY", flush=True)
+    print("Gagarin market monitor | interval=5min | 8 selected commodities | PAPER ONLY", flush=True)
     last_energy_alert = None
     while True:
         try:
@@ -352,7 +352,7 @@ def main() -> None:
     print("🟢 Telegram webhook: ACTIVE", flush=True)
 
     commands_ok, commands_data = _api("setMyCommands", {"commands": [
-        {"command": "analisi", "description": "Analisi intraday dei 13 strumenti"},
+        {"command": "analisi", "description": "Analisi intraday delle 8 materie prime"},
         {"command": "classifica", "description": "Classifica delle opportunità LONG/SHORT"},
         {"command": "segnali", "description": "Ultimi segnali e direzioni"},
         {"command": "monitora", "description": "Registra una posizione per avvisi di rischio"},
@@ -378,7 +378,7 @@ def main() -> None:
     if TELEGRAM_CHAT_ID:
         welcome_sent = _reply(
             TELEGRAM_CHAT_ID,
-            "🚀 GAGARIN ONLINE\n🧪 PAPER ONLY — nessun ordine reale.\n\nPaniere: 13 strumenti. Scansione intraday ogni 5 minuti.\nComandi: /analisi /classifica /segnali",
+            "🚀 GAGARIN ONLINE\n🧪 PAPER ONLY — nessun ordine reale.\n\nPaniere: 8 materie prime. Scansione intraday ogni 5 minuti.\nComandi: /analisi /classifica /segnali",
         )
         print(
             "Telegram startup welcome | "

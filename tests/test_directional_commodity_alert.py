@@ -5,7 +5,7 @@ from telegram import commodity_direction_alert as alert
 
 def candidate(**overrides):
     values = dict(
-        commodity="Oro", symbol="XAUUSD", setup_direction="LONG",
+        commodity="Oro", symbol="XAU/USD", setup_direction="LONG",
         opportunity_direction="LONG", live=True, price=2700,
         data_age_seconds=10, probability=65, quality=60, confidence=55,
         data_source="TWELVE_DATA", entry=2700, stop=2680, tp1=2740,
@@ -67,3 +67,41 @@ def test_alert_shows_full_target_ladder_and_does_not_assume_usd():
     assert "Timestamp quotazione: NON VERIFICATO" in message
     assert "Trigger: IN ATTESA DI CONFERMA" in message
     assert "2700 USD" not in message
+
+def test_directional_forecasts_exclude_forex_outside_the_eight_commodity_basket():
+    states = [
+        candidate(),
+        candidate(commodity="EUR/USD", symbol="EUR/USD"),
+        candidate(commodity="GBP/USD", symbol="GBP/USD"),
+    ]
+
+    selected = alert.find_directional_commodity_alerts(states)
+
+    assert [item["commodity"] for item in selected] == ["Oro"]
+
+def test_directional_alert_requires_matching_canonical_commodity_symbol():
+    assert len(alert.find_directional_commodity_alerts([candidate()])) == 1
+    assert alert.find_directional_commodity_alerts([
+        candidate(symbol="EUR/USD"),
+        candidate(symbol="XAUUSD"),
+        candidate(symbol=""),
+    ]) == []
+
+
+def test_directional_alert_maps_all_eight_commodity_names_to_exact_symbols():
+    pairs = [
+        ("Oro", "XAU/USD"),
+        ("Argento", "XAG/USD"),
+        ("Rame", "COPPER/USD"),
+        ("Petrolio WTI", "WTI/USD"),
+        ("Petrolio Brent", "BRENT/USD"),
+        ("Grano", "WHEAT/USD"),
+        ("Mais", "CORN/USD"),
+        ("Soia", "SOYBEAN/USD"),
+    ]
+    for name, symbol in pairs:
+        selected = alert.find_directional_commodity_alerts([
+            candidate(commodity=name, symbol=symbol)
+        ])
+        assert [item["symbol"] for item in selected] == [symbol]
+

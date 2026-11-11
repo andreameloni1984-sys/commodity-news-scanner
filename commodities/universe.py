@@ -1,9 +1,9 @@
 # ============================================================
 # SOYUZ GAGARIN v1.4
-# COMMODITY UNIVERSE (trimmed to 10 core)
+# COMMODITY UNIVERSE (eight selected commodities)
 # ============================================================
 #
-# Universo operativo principale, ridotto a 10-12 strumenti di interesse.
+# Universo operativo: esclusivamente le otto materie prime selezionate.
 #
 # IMPORTANTE:
 # I simboli qui sotto sono IDENTIFICATORI LOGICI.
@@ -56,7 +56,7 @@ class Commodity:
 
 
 # ============================================================
-# MAIN UNIVERSE (10 core)
+# MAIN UNIVERSE (8 selected commodities)
 # ============================================================
 #
 # Focus su strumenti rilevanti per le regole attive (energia shock + weekly)
@@ -65,9 +65,7 @@ class Commodity:
 # METALLI: Oro, Argento, Rame
 # ENERGY: WTI, Brent
 # AGRICOLTURA: Grano, Mais, Soia
-# Forex core: EUR/USD, GBP/USD (restano separati ma prioritari per day)
-#
-# Forex minori rimossi per ridurre rumore.
+# Nessun Forex, indice, azione o ETF appartiene all'universo operativo.
 #
 # ============================================================
 
@@ -83,13 +81,20 @@ COMMODITIES = [
     Commodity(name="Mais", symbol="CORN/USD", category="Agriculture", unit="USD", priority=7),
     Commodity(name="Soia", symbol="SOYBEAN/USD", category="Agriculture", unit="USD", priority=8),
 
-    # NEW FINANCIAL INSTRUMENTS — exact examples from the user's new list
-    Commodity(name="EUR/USD", symbol="EUR/USD", category="Forex", unit="USD", priority=9),
-    Commodity(name="DAX", symbol="DAX", category="Index", unit="EUR", priority=10),
-    Commodity(name="S&P 500", symbol="SP500", category="Index", unit="USD", priority=11),
-    Commodity(name="NVIDIA", symbol="NVDA", category="Equity", unit="USD", priority=12),
-    Commodity(name="Tesla", symbol="TSLA", category="Equity", unit="USD", priority=13),
 ]
+
+# This is the fail-closed operational boundary. Provider or universe additions
+# must never expand GAGARIN's active basket without an explicit user change.
+OPERATIONAL_COMMODITY_SYMBOLS = frozenset({
+    "XAU/USD",
+    "XAG/USD",
+    "COPPER/USD",
+    "WTI/USD",
+    "BRENT/USD",
+    "WHEAT/USD",
+    "CORN/USD",
+    "SOYBEAN/USD",
+})
 
 # ============================================================
 # HELPERS
@@ -302,10 +307,14 @@ if _UNIVERSE_ERRORS:
 
 
 def operational_commodities() -> list[Commodity]:
-    """Return every instrument in the user's active intraday universe."""
-    return enabled_commodities()
+    """Return only the eight user-approved commodities, even if other rows exist."""
+    return [
+        commodity
+        for commodity in enabled_commodities()
+        if commodity.symbol.strip().upper() in OPERATIONAL_COMMODITY_SYMBOLS
+    ]
 
 
 def auxiliary_commodities() -> list[Commodity]:
-    """No active-universe instrument is context-only; all may generate signals."""
+    """No non-commodity auxiliary instruments are part of the active universe."""
     return []

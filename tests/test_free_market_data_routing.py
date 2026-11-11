@@ -12,11 +12,6 @@ COMMODITY_SYMBOLS = {
     "XAU/USD", "XAG/USD", "COPPER/USD", "WTI/USD",
     "BRENT/USD", "WHEAT/USD", "CORN/USD", "SOYBEAN/USD",
 }
-FX_SYMBOLS = {"EUR/USD"}
-INDEX_SYMBOLS = {"DAX", "SP500"}
-EQUITY_SYMBOLS = {"NVDA", "TSLA"}
-
-
 def _fresh_candles():
     latest = time.time() - 30
     rows = []
@@ -33,10 +28,10 @@ def _fresh_candles():
     return rows
 
 
-def test_all_thirteen_active_symbols_have_explicit_free_market_basis_routes():
+def test_exactly_eight_active_commodity_symbols_have_free_market_basis_routes():
     active = {row.symbol for row in enabled_commodities()}
 
-    assert active == COMMODITY_SYMBOLS | FX_SYMBOLS | INDEX_SYMBOLS | EQUITY_SYMBOLS
+    assert active == COMMODITY_SYMBOLS
     assert set(data.PROVIDER_ORDER) == active
     assert set(data.EXECUTION_MARKET_TYPES) == active
     assert set(data.INSTRUMENT_DATA_METADATA) == active
@@ -47,23 +42,6 @@ def test_all_thirteen_active_symbols_have_explicit_free_market_basis_routes():
         assert data.PROVIDER_MARKET_TYPES[symbol] == {
             "YAHOO": "FUTURES_CONTINUOUS"
         }
-
-    for symbol in FX_SYMBOLS:
-        assert data.PROVIDER_ORDER[symbol] == ("BIQUOTE", "YAHOO")
-        assert data.EXECUTION_MARKET_TYPES[symbol] == "FX_SPOT"
-        assert data.PROVIDER_MARKET_TYPES[symbol] == {
-            "BIQUOTE": "FX_SPOT", "YAHOO": "FX_SPOT",
-        }
-
-    for symbol in INDEX_SYMBOLS:
-        assert data.PROVIDER_ORDER[symbol] == ("YAHOO",)
-        assert data.EXECUTION_MARKET_TYPES[symbol] == "INDEX_SPOT"
-        assert data.PROVIDER_MARKET_TYPES[symbol] == {"YAHOO": "INDEX_SPOT"}
-
-    for symbol in EQUITY_SYMBOLS:
-        assert data.PROVIDER_ORDER[symbol] == ("YAHOO",)
-        assert data.EXECUTION_MARKET_TYPES[symbol] == "EQUITY_SPOT"
-        assert data.PROVIDER_MARKET_TYPES[symbol] == {"YAHOO": "EQUITY_SPOT"}
 
     assert all(
         provider in data.FREE_EXECUTION_PROVIDERS
@@ -76,9 +54,12 @@ def test_all_thirteen_active_symbols_have_explicit_free_market_basis_routes():
     )
 
 
-def test_biquote_fx_symbols_are_explicit_and_yahoo_fallback_is_spot():
-    assert data.BIQUOTE_SYMBOLS["EUR/USD"] == "EURUSD"
-    assert data.YAHOO_SYMBOLS["EUR/USD"] == "EURUSD=X"
+def test_biquote_is_reference_only_and_not_in_futures_execution_routes():
+    assert set(data.BIQUOTE_SYMBOLS) == {
+        "XAU/USD", "XAG/USD", "WTI/USD", "BRENT/USD",
+    }
+    assert set(data.YAHOO_SYMBOLS) == COMMODITY_SYMBOLS
+    assert set(data.PROVIDER_ORDER) == COMMODITY_SYMBOLS
 
 
 def test_biquote_commodity_cfd_cannot_replace_futures_execution():

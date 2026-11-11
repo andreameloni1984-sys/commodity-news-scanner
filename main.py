@@ -23,7 +23,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from commodities.universe import (
-    enabled_commodities,
     operational_commodities,
     validate_universe,
 )
@@ -64,13 +63,12 @@ def _is_operational_state(state) -> bool:
 
 
 def _select_run_universe(now=None):
-    """Scan every enabled instrument on every scheduled cycle.
+    """Scan exactly the eight configured commodities on every scheduled cycle.
 
-    Session labels may describe liquidity windows, but they must not suppress
-    an otherwise valid Forex setup. Actual weekend/market-closed data status
-    remains enforced by the data and safety layers.
+    Actual weekend/market-closed data status remains enforced by the data
+    and safety layers.
     """
-    return enabled_commodities()
+    return operational_commodities()
 
 # ============================================================
 # HEADER
@@ -290,7 +288,7 @@ def _print_ranking(results):
         )
 
         action_label = (
-            "CONTESTO FX — NON OPERATIVO"
+            "FUORI PANIERE — NON OPERATIVO"
             if not _is_operational_state(state)
             else str((getattr(state, "metadata", {}) or {}).get(
                 "gagarin_action", state.final_decision
@@ -599,7 +597,7 @@ def run():
     ]
 
     print(
-        "INTRADAY UNIVERSE: 13 strumenti operativi; nessun filtro orario per categoria."
+        "INTRADAY UNIVERSE: 8 materie prime selezionate."
     )
 
     if not instruments:

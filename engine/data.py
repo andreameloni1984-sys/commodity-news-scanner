@@ -28,8 +28,7 @@ COMMODITIES (8)
     BiQuote metal/energy CFD prices are not used as futures fallbacks.
     No paid-plan commodities endpoint is in the active route.
 
-FX (1), INDICES (2), EQUITIES (2)
-    Yahoo public chart feed; availability/freshness is checked per run.
+No FX, index or equity symbols are configured in the active execution universe.
 
 Twelve Data legacy helpers remain isolated from the active execution route.
 
@@ -122,11 +121,10 @@ SILV_SPOT_FAILURE_COOLDOWN_SECONDS = 60
 # ============================================================
 
 BIQUOTE_SYMBOLS = {
-    "XAU/USD": "XAUUSD",       # control/reference only; not futures execution
-    "XAG/USD": "XAGUSD",       # control/reference only; not futures execution
-    "WTI/USD": "USOIL",        # CFD reference; not futures execution
-    "BRENT/USD": "UKOIL",      # CFD reference; not futures execution
-    "EUR/USD": "EURUSD",
+    "XAU/USD": "XAUUSD",       # independent CFD reference; not futures execution
+    "XAG/USD": "XAGUSD",       # independent CFD reference; not futures execution
+    "WTI/USD": "USOIL",        # independent CFD reference; not futures execution
+    "BRENT/USD": "UKOIL",      # independent CFD reference; not futures execution
 }
 
 
@@ -144,11 +142,6 @@ YAHOO_SYMBOLS = {
     "WHEAT/USD": "ZW=F",
     "CORN/USD": "ZC=F",
     "SOYBEAN/USD": "ZS=F",
-    "EUR/USD": "EURUSD=X",
-    "DAX": "^GDAXI",
-    "SP500": "^GSPC",
-    "NVDA": "NVDA",
-    "TSLA": "TSLA",
 }
 
 
@@ -168,9 +161,8 @@ AGRI_SYMBOLS = {
 # ============================================================
 
 # Active execution providers are deliberately keyless/free.
-# Yahoo continuous futures are the execution basis for the eight commodities.
-# BiQuote and Yahoo are same-market-type FX spot fallbacks for the two auxiliary pairs.
-# BiQuote commodity CFD/MT5 quotes are not allowed to replace futures execution prices.
+# Yahoo continuous futures are the secondary execution basis for the eight commodities.
+# BiQuote commodity CFD/MT5 quotes remain independent references and never replace futures.
 FREE_EXECUTION_PROVIDERS = frozenset({"BIQUOTE", "YAHOO"})
 
 EXECUTION_MARKET_TYPES = {
@@ -182,11 +174,6 @@ EXECUTION_MARKET_TYPES = {
     "WHEAT/USD": "FUTURES_CONTINUOUS",
     "CORN/USD": "FUTURES_CONTINUOUS",
     "SOYBEAN/USD": "FUTURES_CONTINUOUS",
-    "EUR/USD": "FX_SPOT",
-    "DAX": "INDEX_SPOT",
-    "SP500": "INDEX_SPOT",
-    "NVDA": "EQUITY_SPOT",
-    "TSLA": "EQUITY_SPOT",
 }
 
 PROVIDER_MARKET_TYPES = {
@@ -198,11 +185,6 @@ PROVIDER_MARKET_TYPES = {
     "WHEAT/USD": {"YAHOO": "FUTURES_CONTINUOUS"},
     "CORN/USD": {"YAHOO": "FUTURES_CONTINUOUS"},
     "SOYBEAN/USD": {"YAHOO": "FUTURES_CONTINUOUS"},
-    "EUR/USD": {"BIQUOTE": "FX_SPOT", "YAHOO": "FX_SPOT"},
-    "DAX": {"YAHOO": "INDEX_SPOT"},
-    "SP500": {"YAHOO": "INDEX_SPOT"},
-    "NVDA": {"YAHOO": "EQUITY_SPOT"},
-    "TSLA": {"YAHOO": "EQUITY_SPOT"},
 }
 
 INSTRUMENT_DATA_METADATA = {
@@ -214,16 +196,10 @@ INSTRUMENT_DATA_METADATA = {
     "WHEAT/USD": {"currency": "USD", "unit": "cent_per_bushel", "market_type": "FUTURES_CONTINUOUS"},
     "CORN/USD": {"currency": "USD", "unit": "cent_per_bushel", "market_type": "FUTURES_CONTINUOUS"},
     "SOYBEAN/USD": {"currency": "USD", "unit": "cent_per_bushel", "market_type": "FUTURES_CONTINUOUS"},
-    "EUR/USD": {"currency": "USD", "unit": "USD_per_EUR", "market_type": "FX_SPOT"},
-    "DAX": {"currency": "EUR", "unit": "index_points", "market_type": "INDEX_SPOT"},
-    "SP500": {"currency": "USD", "unit": "index_points", "market_type": "INDEX_SPOT"},
-    "NVDA": {"currency": "USD", "unit": "share", "market_type": "EQUITY_SPOT"},
-    "TSLA": {"currency": "USD", "unit": "share", "market_type": "EQUITY_SPOT"},
 }
 
 PROVIDER_ORDER = {
-    # Futures execution only. BiQuote metal/energy symbols are MT5 CFDs,
-    # so they are not valid fallbacks for these futures contracts.
+    # Futures execution only. BiQuote CFD references are never a futures fallback.
     "XAU/USD": ("YAHOO",),
     "XAG/USD": ("YAHOO",),
     "COPPER/USD": ("YAHOO",),
@@ -232,12 +208,6 @@ PROVIDER_ORDER = {
     "WHEAT/USD": ("YAHOO",),
     "CORN/USD": ("YAHOO",),
     "SOYBEAN/USD": ("YAHOO",),
-    # Both sources are FX spot. No paid/keyed provider is required.
-    "EUR/USD": ("BIQUOTE", "YAHOO"),
-    "DAX": ("YAHOO",),
-    "SP500": ("YAHOO",),
-    "NVDA": ("YAHOO",),
-    "TSLA": ("YAHOO",),
 }
 
 

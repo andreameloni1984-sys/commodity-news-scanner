@@ -66,10 +66,9 @@ class GagarinConfig:
     sl_structure_buffer_atr: float = field(default=0.15)
     falsification_min_trades: int = field(default=30)
     allowed_assets: Tuple[str, ...] = (
-        # Active intraday universe: 8 commodities + EUR/USD + DAX + S&P 500 + NVDA + TSLA.
+        # Exactly the eight selected commodity instruments.
         "XAU/USD", "XAG/USD", "COPPER/USD", "WTI/USD", "BRENT/USD",
         "WHEAT/USD", "CORN/USD", "SOYBEAN/USD",
-        "EUR/USD", "DAX", "SP500", "NVDA", "TSLA",
     )
     blocked_if_stale_seconds: int = field(default=900)
     modules: Tuple[str, ...] = field(default=(
