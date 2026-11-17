@@ -199,8 +199,22 @@ def _stage(item: dict) -> str | None:
 def find_aggressive_alerts(states: Iterable[Any]) -> list[dict]:
     """Return up to three ranked potential or confirmed live setups."""
     found = []
+    from invest_demo_guard import validate_invest_signal
     for state in states:
         item = _item_from_state(state)
+        metadata = getattr(state, "metadata", {}) or {}
+        proposal = {
+            "symbol": item["symbol"],
+            "asset_class": metadata.get("asset_class", ""),
+            "account": metadata.get("account", ""),
+            "side": "BUY" if item["direction"] == "LONG" else "SELL",
+            "price": item.get("price"),
+            "quote_timestamp": item.get("quote_timestamp"),
+        }
+        eligible, reasons = validate_invest_signal(proposal)
+        if not eligible:
+            print(f"AGGRESSIVE_INVEST_BLOCKED {item['symbol']}: {','.join(reasons)}")
+            continue
         # Calculate once so stage and displayed exit/TP/SL use identical evidence.
         item["pattern_analysis"] = analyze_pattern_and_exit(
             direction=item["direction"], opens=item.get("opens"), closes=item.get("closes"),
