@@ -1,0 +1,56 @@
+name: Verify Trading 212 Invest Demo access
+on:
+  push:
+    branches: ["codex/check-invest-demo-access"]
+    paths: [".github/workflows/verify-invest-demo-access.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check existing credentials against demo read endpoints
+        env:
+          T212_API_KEY: ${{ secrets.T212_API_KEY }}
+          T212_API_SECRET: ${{ secrets.T212_API_SECRET }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, urllib.request, urllib.error
+          key = os.environ.get("T212_API_KEY", "").strip()
+          secret = os.environ.get("T212_API_SECRET", "").strip()
+          result = {"environment": "DEMO_ONLY", "api_key_present": bool(key),
+                    "api_secret_present": bool(secret), "orders_sent": 0}
+          if not key:
+              result["authentication"] = "MISSING_API_KEY"
+              print("DEMO_ACCESS_RESULT=" + json.dumps(result))
+              raise SystemExit(1)
+          result["auth_mode"] = "BASIC_KEY_PAIR" if secret else "LEGACY_API_KEY"
+          auth = "Basic " + base64.b64encode((key + ":" + secret).encode()).decode() if secret else key
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, req, fp, code, msg, headers, newurl):
+                  return None
+          opener = urllib.request.build_opener(NoRedirect())
+          checks = {}
+          for name, path in (("metadata", "/equity/metadata/instruments"), ("account_read", "/equity/account/summary")):
+              request = urllib.request.Request("https://demo.trading212.com/api/v0" + path,
+                         headers={"Authorization": auth, "Accept": "application/json"},
+                         method="GET")
+              try:
+                  with opener.open(request, timeout=20) as response:
+                      payload = json.load(response)
+                      valid = isinstance(payload, list) if name == "metadata" else isinstance(payload, dict) and "currency" in payload
+                      checks[name] = {"http_status": response.status, "valid_response": valid}
+                      if name == "metadata" and valid:
+                          checks[name]["instruments_count"] = len(payload)
+              except urllib.error.HTTPError as exc:
+                  checks[name] = {"http_status": exc.code, "valid_response": False}
+              except Exception as exc:
+                  checks[name] = {"error_type": type(exc).__name__, "valid_response": False}
+          result["checks"] = checks
+          result["authentication"] = "CONFIRMED" if any(v.get("valid_response") and v.get("http_status") == 200 for v in checks.values()) else "NOT_CONFIRMED"
+          print("DEMO_ACCESS_RESULT=" + json.dumps(result))
+          raise SystemExit(0 if result["authentication"] == "CONFIRMED" else 1)
+          PY
