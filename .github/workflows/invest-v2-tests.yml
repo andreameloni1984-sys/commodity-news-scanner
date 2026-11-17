@@ -6,7 +6,7 @@ on:
   pull_request:
     paths:
       - 'invest_v2/**'
-      - 'tests/test_invest_v2_core.py'
+      - 'tests/test_invest_v2_core.py tests/test_invest_v2_engines.py'
       - '.github/workflows/invest-v2-tests.yml'
 permissions:
   contents: read
