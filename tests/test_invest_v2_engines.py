@@ -59,3 +59,9 @@ def test_news_rejects_nonfinite_atr():
     event=NewsEvent("id-atr","XYZ","STOCK","Verified positive event","https://example.com/release",NOW,True,"POSITIVE")
     for atr in (float("nan"), float("inf"), -float("inf"), 0, -1, True):
         assert assess(event,quote_price=100,quote_timestamp=NOW,now=NOW,atr=atr) is None
+
+
+def test_news_rejects_quote_before_publication():
+    event=NewsEvent("id-timing","XYZ","STOCK","Verified event","https://example.com/release",NOW,True,"POSITIVE")
+    assert assess(event,quote_price=100,quote_timestamp=NOW-timedelta(seconds=1),now=NOW,atr=2) is None
+    assert assess(event,quote_price=100,quote_timestamp=NOW,now=NOW,atr=2) is not None
