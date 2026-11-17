@@ -30,3 +30,10 @@ def test_reject_bad_levels_and_missing_source():
 def test_reject_live_account_and_naive_time():
     assert not validate(replace(BASE, account="INVEST_LIVE"), now=NOW)[0]
     assert not validate(replace(BASE, quote_timestamp=NOW.replace(tzinfo=None)), now=NOW)[0]
+
+
+def test_reject_malformed_and_insecure_sources():
+    for url in ("http://example.com/release", "https://", "https:///missing-host",
+                "https://user:password@example.com/release", "javascript:alert(1)"):
+        valid, reasons = validate(replace(BASE, source_url=url), now=NOW)
+        assert not valid and "invalid_source_url" in reasons
