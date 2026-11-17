@@ -6,6 +6,7 @@ A candidate is NOT proof that Trading 212 offers the instrument.
 from dataclasses import dataclass
 from datetime import datetime
 from math import isfinite
+from re import fullmatch
 
 
 @dataclass(frozen=True)
@@ -31,7 +32,7 @@ def select_instruments(items: list[Instrument], *, now: datetime,
         return []
     eligible = []
     for item in items:
-        if (not item.symbol.strip() or item.asset_class not in ("STOCK", "ETF")
+        if (not isinstance(item.symbol, str) or not fullmatch(r'[A-Z0-9][A-Z0-9.\-]{0,19}', item.symbol) or item.asset_class not in ("STOCK", "ETF")
                 or not item.invest_demo_available or item.quote_timestamp.tzinfo is None):
             continue
         values = (item.price, item.average_daily_dollar_volume,
