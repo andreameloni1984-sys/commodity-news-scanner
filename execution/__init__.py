@@ -1,1 +1,0 @@
-"""SOYUZ GAGARIN execution layer."""
