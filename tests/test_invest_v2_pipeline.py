@@ -84,3 +84,11 @@ def test_join_rejects_wrong_ticker_asset_class_and_duplicate():
     assert assess_selected(EVENT, [ITEM, ITEM], now=NOW, atr=1.5) is None
     assert assess_selected(EVENT, [], now=NOW, atr=1.5) is None
     assert assess_selected(EVENT, [ITEM], now=NOW, atr=1.5) is not None
+
+
+def test_join_cannot_bypass_invest_selection_filter():
+    assert assess_selected(EVENT, [replace(ITEM, invest_demo_available=False)], now=NOW, atr=1.5) is None
+    assert assess_selected(EVENT, [replace(ITEM, quote_timestamp=NOW-timedelta(seconds=90))], now=NOW, atr=1.5) is None
+    assert assess_selected(EVENT, [replace(ITEM, spread_percent=3)], now=NOW, atr=1.5) is None
+    assert assess_selected(EVENT, [replace(ITEM, average_daily_dollar_volume=100)], now=NOW, atr=1.5) is None
+    assert assess_selected(EVENT, [replace(ITEM, technical_score=0, news_score=0)], now=NOW, atr=1.5) is None
