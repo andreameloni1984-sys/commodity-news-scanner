@@ -754,6 +754,28 @@ def run():
         )
     ]
 
+    # INVEST Demo migration: fail closed before sending actionable alerts.
+    # Legacy commodity/FX states have no verified INVEST instrument or
+    # timestamped equity quote and must not be presented as BUY proposals.
+    from invest_demo_guard import validate_invest_signal
+    verified_signals = []
+    for state in signal_results:
+        meta = getattr(state, "metadata", {}) or {}
+        proposal = {
+            "symbol": getattr(state, "symbol", ""),
+            "asset_class": meta.get("asset_class", ""),
+            "account": meta.get("account", ""),
+            "side": "BUY" if str(getattr(state, "setup_direction", "")).upper() == "LONG" else "SELL",
+            "price": getattr(state, "entry", None),
+            "quote_timestamp": meta.get("quote_timestamp"),
+        }
+        eligible, reasons = validate_invest_signal(proposal)
+        if eligible:
+            verified_signals.append(state)
+        else:
+            print(f"INVEST_DEMO_BLOCKED {proposal['symbol']}: {','.join(reasons)}")
+    signal_results = verified_signals
+
     if TELEGRAM_ENABLED:
 
         print("📨 TELEGRAM")
