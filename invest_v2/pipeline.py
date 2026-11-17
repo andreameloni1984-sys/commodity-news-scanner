@@ -1,7 +1,7 @@
 """Join independently selected INVEST instruments with news; reject ticker mismatches."""
 from __future__ import annotations
 from datetime import datetime
-from .selection import Instrument
+from .selection import Instrument, select_instruments
 from .sputnik import NewsEvent, assess
 from .core import Signal
 
@@ -15,5 +15,8 @@ def assess_selected(event: NewsEvent, selected: list[Instrument], *,
     if len(matches) != 1:
         return None
     item = matches[0]
+    # Never trust callers to have run the INVEST universe/liquidity/freshness filter.
+    if select_instruments([item], now=now) != [item]:
+        return None
     return assess(event, quote_price=item.price, quote_timestamp=item.quote_timestamp,
                   now=now, atr=atr)
