@@ -59,10 +59,10 @@ def format_telegram(signal: Signal, *, now: datetime | None = None) -> str | Non
     valid, _ = validate(signal, now=now)
     if not valid:
         return None
-    return (f"🟢 INVEST DEMO — PROPOSTA BUY (PAPER ONLY)\\n"
-            f"{signal.symbol} ({signal.asset_class}) | BUY\\n"
-            f"Prezzo: {signal.quote_price:.4f} | Entry: {signal.entry:.4f}\\n"
-            f"SL: {signal.stop_loss:.4f} | TP: {signal.take_profit:.4f}\\n"
-            f"Quotazione UTC: {signal.quote_timestamp.isoformat()}\\n"
-            f"Motivo: {signal.rationale}\\nFonte: {signal.source_url}\\n"
-            f"Evento: {signal.event_id}\\nNESSUN ORDINE INVIATO")
+    return (f"🟢 INVEST DEMO — PROPOSTA BUY (PAPER ONLY)\n"
+            f"{signal.symbol} ({signal.asset_class}) | BUY\n"
+            f"Prezzo: {signal.quote_price:.4f} | Entry: {signal.entry:.4f}\n"
+            f"SL: {signal.stop_loss:.4f} | TP: {signal.take_profit:.4f}\n"
+            f"Quotazione UTC: {signal.quote_timestamp.isoformat()}\n"
+            f"Motivo: {signal.rationale}\nFonte: {signal.source_url}\n"
+            f"Evento: {signal.event_id}\nNESSUN ORDINE INVIATO")
