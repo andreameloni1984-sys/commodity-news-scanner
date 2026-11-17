@@ -1,0 +1,22 @@
+name: INVEST v2 unit tests
+on:
+  push:
+    branches:
+      - rewrite/clean-invest-v2
+  pull_request:
+    paths:
+      - 'invest_v2/**'
+      - 'tests/test_invest_v2_core.py'
+      - '.github/workflows/invest-v2-tests.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test clean INVEST v2 core
+        run: python -m unittest discover -s tests -p test_invest_v2_core.py
