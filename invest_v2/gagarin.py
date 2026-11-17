@@ -32,6 +32,9 @@ def scan(symbol: str, asset_class: str, bars: list[Bar], quote_timestamp: dateti
     if not 0 <= (now-tail[-1].closed_at).total_seconds() <= 300:
         return None
     recent = tail[-1]
+    # Do not mix a fresh quote timestamp with an older completed bar.
+    if quote_timestamp.tzinfo is None or abs((quote_timestamp - recent.closed_at).total_seconds()) > 60:
+        return None
     previous = tail[:-1]
     avg_vol = sum(b.volume for b in previous) / len(previous)
     if not (recent.close > max(b.high for b in previous) and recent.close > tail[-6].close
