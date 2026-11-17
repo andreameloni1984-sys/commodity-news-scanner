@@ -46,3 +46,10 @@ def test_same_event_on_different_stocks_is_not_suppressed():
     assert deliver(first,now=NOW,sent_ids=sent,sender=sender,enabled=True)
     assert deliver(second,now=NOW,sent_ids=sent,sender=sender,enabled=True)
     assert len(calls)==2
+
+
+def test_quote_timestamp_must_match_latest_bar():
+    bars=[Bar(100,101,99,100,NOW-timedelta(minutes=20-i)) for i in range(20)]
+    bars.append(Bar(103,104,102,200,NOW))
+    assert scan("XYZ","STOCK",bars,NOW+timedelta(seconds=61),source_url="https://example.com",now=NOW+timedelta(seconds=61)) is None
+    assert scan("XYZ","STOCK",bars,NOW-timedelta(seconds=61),source_url="https://example.com",now=NOW) is None
