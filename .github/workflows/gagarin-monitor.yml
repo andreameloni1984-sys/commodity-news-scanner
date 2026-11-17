@@ -1,78 +1,64 @@
-name: Gagarin Paper Monitor (GitHub Actions)
+name: gagarin Invest Research
 
 on:
   workflow_dispatch:
+    inputs:
+      notify:
+        description: "Invia candidati demo al Telegram configurato (richiede catalogo Invest)"
+        type: boolean
+        default: false
+      environment:
+        description: "Catalogo da leggere; nessun ordine viene inviato"
+        type: choice
+        options: [demo, live]
+        default: demo
 permissions:
   contents: read
-
-# Paper journals are private operational data. Do not commit them to this public repository.
-# Persistence will be re-enabled only after private D1 storage is deployed and verified.
-
 concurrency:
-  group: gagarin-feedback-state
+  group: gagarin-invest-research
   cancel-in-progress: false
-
 jobs:
-  monitor:
-    name: Run Gagarin directly on GitHub
+  scan:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      T212_API_KEY: ${{ secrets.T212_API_KEY }}
+      T212_API_SECRET: ${{ secrets.T212_API_SECRET }}
+      T212_ENVIRONMENT: ${{ inputs.environment }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-      TELEGRAM_ENABLED: "1"
-      PAPER_TRADING_ONLY: "1"
-      # Existing authorization thresholds are intentionally unchanged.
-      MIN_ENTRY_PROBABILITY: "40"
-      MIN_ENTRY_QUALITY: "30"
-      MIN_ENTRY_CONFIDENCE: "35"
-      MIN_ENTRY_RR: "2.5"
-      MAX_ENTRY_STOP_ATR: "2.5"
-      SL_STRUCTURE_BUFFER_ATR: "0.15"
-      SL_MIN_ATR: "0.80"
-      # Full provider-heavy monitor stays at 15m until rate-limit capacity is verified.
-      MONITOR_INTERVAL_MINUTES: "15"
-      POLITICAL_IMPACT_ENABLED: "1"
-      US_PRESIDENT_IMPACT_ENABLED: "1"
-      ELECTION_IMPACT_ENABLED: "1"
-      FUTURES_STRUCTURE_ENABLED: "1"
-      WEATHER_ENABLED: "1"
-      DISASTER_ENABLED: "1"
-      CFTC_ENABLED: "1"
-      EIA_ENABLED: "1"
-      SOLE24_ENABLED: "1"
-      GAGARIN_FOREX_ON_DEMAND: "0"
-      NARWHAL_REFERENCE_ENABLED: "1"
-      NARWHAL_API_KEY: ${{ secrets.NARWHAL_API_KEY }}
+      NOTIFY: ${{ inputs.notify }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: "pip"
-
-      - name: Install dependencies
+      - name: Install test runner
+        run: python -m pip install 'pytest>=8,<9'
+      - name: Verify Invest selector
+        run: python -m pytest -q tests/test_invest_scanner.py
+      - uses: actions/cache/restore@v4
+        if: inputs.notify
+        with:
+          path: .invest-state
+          key: gagarin-invest-${{ github.ref_name }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: gagarin-invest-${{ github.ref_name }}-
+      - name: Validate notification configuration
+        if: inputs.notify
         run: |
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
+          test -n "$TELEGRAM_BOT_TOKEN" || { echo "::error::TELEGRAM_BOT_TOKEN required"; exit 1; }
+          test -n "$TELEGRAM_CHAT_ID" || { echo "::error::TELEGRAM_CHAT_ID required"; exit 1; }
+          test -n "$T212_API_KEY" || { echo "::error::T212_API_KEY required for catalog verification"; exit 1; }
+          test -n "$T212_API_SECRET" || { echo "::error::T212_API_SECRET required for catalog verification"; exit 1; }
+      - name: Scan stocks (no orders)
+        run: |
+          if [ "$NOTIFY" = "true" ]; then
+            python -m invest_scanner gagarin --notify
           else
-            pip install requests
+            python -m invest_scanner gagarin
           fi
-
-      - name: Validate configuration
-        run: |
-          python --version
-          test -n "$TELEGRAM_BOT_TOKEN" || { echo "::error::TELEGRAM_BOT_TOKEN secret missing"; exit 1; }
-          test -n "$TELEGRAM_CHAT_ID" || { echo "::error::TELEGRAM_CHAT_ID secret missing"; exit 1; }
-          echo "PAPER_TRADING_ONLY=$PAPER_TRADING_ONLY"
-          echo "THRESHOLDS=$MIN_ENTRY_PROBABILITY/$MIN_ENTRY_QUALITY/$MIN_ENTRY_CONFIDENCE RR=$MIN_ENTRY_RR"
-
-      - name: Compile Python
-        run: python -m compileall -q .
-
-      - name: Run Gagarin analysis, paper journal, feedback and Telegram alerts
-        run: python main.py
+      - uses: actions/cache/save@v4
+        if: always() && inputs.notify
+        with:
+          path: .invest-state
+          key: gagarin-invest-${{ github.ref_name }}-${{ github.run_id }}-${{ github.run_attempt }}

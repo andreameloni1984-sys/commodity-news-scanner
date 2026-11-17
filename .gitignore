@@ -1,0 +1,6 @@
+
+# Local Invest research state; never publish operational data
+.invest-state/
+__pycache__/
+.pytest_cache/
+*.pyc

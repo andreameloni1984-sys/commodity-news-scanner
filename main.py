@@ -20,6 +20,12 @@ nessun ordine reale viene eseguito.
 
 from __future__ import annotations
 
+# Invest is the CLI entry point. Legacy helpers below remain importable for
+# historical regression tests; they are not run by this executable.
+if __name__ == "__main__":
+    from invest_scanner.runner import main as run_invest
+    raise SystemExit(run_invest("gagarin"))
+
 from datetime import datetime, timezone
 
 from commodities.universe import (
