@@ -32,3 +32,17 @@ def test_dispatch_requires_opt_in_and_deduplicates():
     assert deliver(signal,now=NOW,sent_ids=sent,sender=sender,enabled=True)
     assert not deliver(signal,now=NOW,sent_ids=sent,sender=sender,enabled=True)
     assert len(calls)==1
+
+
+def test_same_event_on_different_stocks_is_not_suppressed():
+    event=NewsEvent("shared-event","AAA","STOCK","Verified sector event","https://example.com/release",NOW,True,"POSITIVE")
+    first=assess(event,quote_price=100,quote_timestamp=NOW,now=NOW,atr=2)
+    second=assess(replace(event,symbol="BBB"),quote_price=100,quote_timestamp=NOW,now=NOW,atr=2)
+    sent=set()
+    calls=[]
+    def sender(message):
+        calls.append(message)
+        return True
+    assert deliver(first,now=NOW,sent_ids=sent,sender=sender,enabled=True)
+    assert deliver(second,now=NOW,sent_ids=sent,sender=sender,enabled=True)
+    assert len(calls)==2
