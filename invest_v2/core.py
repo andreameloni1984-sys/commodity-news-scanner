@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from math import isfinite
-from typing import Mapping
+from urllib.parse import urlsplit
 
 
 @dataclass(frozen=True)
@@ -46,8 +46,9 @@ def validate(signal: Signal, *, now: datetime | None = None, max_age_seconds: in
     if all(isinstance(getattr(signal, k), (int, float)) and isfinite(getattr(signal, k)) for k in ("stop_loss", "entry", "take_profit")):
         if not signal.stop_loss < signal.entry < signal.take_profit:
             problems.append("invalid_buy_levels")
-    if not signal.source_url.startswith(("https://", "http://")):
-        problems.append("missing_source_url")
+    parsed_source = urlsplit(signal.source_url)
+    if parsed_source.scheme != "https" or not parsed_source.hostname or parsed_source.username or parsed_source.password:
+        problems.append("invalid_source_url")
     if not signal.rationale.strip():
         problems.append("missing_rationale")
     if not signal.event_id.strip():
