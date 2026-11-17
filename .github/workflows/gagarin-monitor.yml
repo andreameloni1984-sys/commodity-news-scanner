@@ -2,7 +2,7 @@ name: Gagarin Paper Monitor (GitHub Actions)
 
 on:
   schedule:
-    - cron: '0 * * * *'
+    - cron: '*/15 * * * *'
   workflow_dispatch:
 permissions:
   contents: read
