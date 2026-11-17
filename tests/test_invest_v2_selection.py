@@ -23,3 +23,9 @@ def test_reject_bad_market_data():
     assert not select_instruments([replace(BASE, price=float("nan"))], now=NOW)
     assert not select_instruments([replace(BASE, spread_percent=float("inf"))], now=NOW)
     assert not select_instruments([replace(BASE, quote_timestamp=NOW+timedelta(seconds=1))], now=NOW)
+
+def test_reject_forex_disguised_as_stock_and_malformed_tickers():
+    for symbol in ("EUR/USD", "GBP/USD", "EURUSD=X", "XYZ CFD", " xyz", "", "ABC\\nDEF"):
+        assert select_instruments([replace(BASE, symbol=symbol, asset_class="STOCK")], now=NOW) == []
+    assert [x.symbol for x in select_instruments(
+        [replace(BASE, symbol="BRK.B")], now=NOW)] == ["BRK.B"]
