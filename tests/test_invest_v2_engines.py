@@ -53,3 +53,9 @@ def test_quote_timestamp_must_match_latest_bar():
     bars.append(Bar(103,104,102,200,NOW))
     assert scan("XYZ","STOCK",bars,NOW+timedelta(seconds=61),source_url="https://example.com",now=NOW+timedelta(seconds=61)) is None
     assert scan("XYZ","STOCK",bars,NOW-timedelta(seconds=61),source_url="https://example.com",now=NOW) is None
+
+
+def test_news_rejects_nonfinite_atr():
+    event=NewsEvent("id-atr","XYZ","STOCK","Verified positive event","https://example.com/release",NOW,True,"POSITIVE")
+    for atr in (float("nan"), float("inf"), -float("inf"), 0, -1, True):
+        assert assess(event,quote_price=100,quote_timestamp=NOW,now=NOW,atr=atr) is None
