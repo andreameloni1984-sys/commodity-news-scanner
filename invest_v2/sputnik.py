@@ -28,7 +28,10 @@ def assess(event: NewsEvent, *, quote_price: float, quote_timestamp: datetime,
         return None
     if event.published_at.tzinfo is None or not 0 <= (now-event.published_at).total_seconds() <= 1800:
         return None
-    # A quote from before publication cannot confirm the market reaction.\n    if quote_timestamp.tzinfo is None or quote_timestamp < event.published_at:\n        return None\n    if not event.headline.strip() or not event.event_id.strip() or not isinstance(atr, (int, float)) or isinstance(atr, bool) or not isfinite(atr) or atr <= 0:
+    # A quote from before publication cannot confirm the market reaction.
+    if quote_timestamp.tzinfo is None or quote_timestamp < event.published_at:
+        return None
+    if not event.headline.strip() or not event.event_id.strip() or not isinstance(atr, (int, float)) or isinstance(atr, bool) or not isfinite(atr) or atr <= 0:
         return None
     signal = Signal(event.symbol,event.asset_class,account,"BUY",quote_price,quote_timestamp,
                     quote_price,quote_price-1.5*atr,quote_price+3*atr,
