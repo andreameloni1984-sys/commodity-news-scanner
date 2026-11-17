@@ -7,6 +7,7 @@ from invest_v2.sputnik import NewsEvent, assess
 from invest_v2.gagarin import Bar, scan
 from invest_v2.dispatch import deliver
 from invest_v2.core import format_telegram
+from invest_v2.pipeline import assess_selected
 
 NOW = datetime(2026, 11, 17, 12, 0, tzinfo=timezone.utc)
 ITEM = Instrument("XYZ", "STOCK", True, 100, 15_000_000, 0.08, NOW, 3, 4)
@@ -18,8 +19,8 @@ def _candidate(item=ITEM, event=EVENT, quote_timestamp=NOW):
     selected = select_instruments([item], now=NOW)
     if not selected:
         return None
-    return assess(event, quote_price=item.price, quote_timestamp=quote_timestamp,
-                  now=NOW, atr=1.5)
+    return assess_selected(event, [replace(item, quote_timestamp=quote_timestamp)],
+                           now=NOW, atr=1.5)
 
 
 def test_news_selection_levels_telegram_delivery_and_dedup():
@@ -75,3 +76,11 @@ def test_technical_day_trading_path_and_invalid_inputs():
                 source_url="https://example.com/quotes", now=NOW) is None
     assert scan("XYZ", "STOCK", bars, NOW-timedelta(seconds=90),
                 source_url="https://example.com/quotes", now=NOW) is None
+
+
+def test_join_rejects_wrong_ticker_asset_class_and_duplicate():
+    assert assess_selected(replace(EVENT, symbol="OTHER"), [ITEM], now=NOW, atr=1.5) is None
+    assert assess_selected(replace(EVENT, asset_class="ETF"), [ITEM], now=NOW, atr=1.5) is None
+    assert assess_selected(EVENT, [ITEM, ITEM], now=NOW, atr=1.5) is None
+    assert assess_selected(EVENT, [], now=NOW, atr=1.5) is None
+    assert assess_selected(EVENT, [ITEM], now=NOW, atr=1.5) is not None
