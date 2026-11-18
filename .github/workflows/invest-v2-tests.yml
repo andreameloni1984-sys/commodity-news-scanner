@@ -1,5 +1,6 @@
 name: INVEST v2 unit tests
 on:
+  workflow_dispatch:
   push:
     branches:
       - rewrite/clean-invest-v2
