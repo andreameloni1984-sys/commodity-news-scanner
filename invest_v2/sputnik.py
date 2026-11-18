@@ -26,10 +26,14 @@ def assess(event: NewsEvent, *, quote_price: float, quote_timestamp: datetime,
     """
     if not event.verified or event.sentiment != "POSITIVE" or event.asset_class not in ("STOCK","ETF"):
         return None
-    if event.published_at.tzinfo is None or not 0 <= (now-event.published_at).total_seconds() <= 1800:
+    if (not isinstance(now, datetime) or now.tzinfo is None
+            or not isinstance(event.published_at, datetime)
+            or event.published_at.tzinfo is None
+            or not 0 <= (now-event.published_at).total_seconds() <= 1800):
         return None
     # A quote from before publication cannot confirm the market reaction.
-    if quote_timestamp.tzinfo is None or quote_timestamp < event.published_at:
+    if (not isinstance(quote_timestamp, datetime) or quote_timestamp.tzinfo is None
+            or quote_timestamp < event.published_at):
         return None
     if not event.headline.strip() or not event.event_id.strip() or not isinstance(atr, (int, float)) or isinstance(atr, bool) or not isfinite(atr) or atr <= 0:
         return None
