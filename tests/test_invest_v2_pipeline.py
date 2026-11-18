@@ -92,3 +92,27 @@ def test_join_cannot_bypass_invest_selection_filter():
     assert assess_selected(EVENT, [replace(ITEM, spread_percent=3)], now=NOW, atr=1.5) is None
     assert assess_selected(EVENT, [replace(ITEM, average_daily_dollar_volume=100)], now=NOW, atr=1.5) is None
     assert assess_selected(EVENT, [replace(ITEM, technical_score=0, news_score=0)], now=NOW, atr=1.5) is None
+
+
+def test_telegram_transport_exception_does_not_deduplicate():
+    signal = _candidate()
+    sent = set()
+    def broken_sender(message):
+        raise ConnectionError("simulated Telegram outage")
+    assert deliver(signal, now=NOW, sent_ids=sent, sender=broken_sender, enabled=True) is False
+    assert not sent
+    delivered = []
+    def recovered_sender(message):
+        delivered.append(message)
+        return True
+    assert deliver(signal, now=NOW, sent_ids=sent, sender=recovered_sender, enabled=True)
+    assert len(delivered) == 1 and len(sent) == 1
+
+
+def test_telegram_requires_explicit_boolean_success():
+    signal = _candidate()
+    for response in (None, 1, "ok", False):
+        sent = set()
+        assert deliver(signal, now=NOW, sent_ids=sent,
+                       sender=lambda message: response, enabled=True) is False
+        assert not sent
