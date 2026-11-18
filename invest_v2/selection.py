@@ -33,7 +33,7 @@ def select_instruments(items: list[Instrument], *, now: datetime,
     eligible = []
     for item in items:
         if (not isinstance(item.symbol, str) or not fullmatch(r'[A-Z0-9][A-Z0-9.\-]{0,19}', item.symbol) or item.asset_class not in ("STOCK", "ETF")
-                or not item.invest_demo_available or item.quote_timestamp.tzinfo is None):
+                or item.invest_demo_available is not True or item.quote_timestamp.tzinfo is None):
             continue
         values = (item.price, item.average_daily_dollar_volume,
                   item.spread_percent, item.technical_score, item.news_score)
