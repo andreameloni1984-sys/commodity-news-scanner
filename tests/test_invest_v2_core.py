@@ -55,3 +55,10 @@ def test_reject_malformed_text_fields_without_crashing():
     for field in ("symbol", "source_url", "rationale", "event_id"):
         valid, reasons = validate(replace(BASE, **{field: None}), now=NOW)
         assert not valid
+
+
+def test_final_validator_rejects_forex_disguised_as_stock():
+    for ticker in ("EUR/USD", "GBP/USD", "EUR USD", "eurusd", "A" * 21):
+        valid, reasons = validate(replace(BASE, symbol=ticker, asset_class="STOCK"), now=NOW)
+        assert not valid and "missing_symbol" in reasons
+    assert validate(replace(BASE, symbol="BRK.B"), now=NOW)[0]
