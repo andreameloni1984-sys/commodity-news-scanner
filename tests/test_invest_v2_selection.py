@@ -35,3 +35,12 @@ def test_availability_must_be_explicit_true_boolean():
     for value in ("false", "yes", 1, None, False):
         assert select_instruments([replace(BASE, invest_demo_available=value)], now=NOW) == []
     assert select_instruments([BASE], now=NOW) == [BASE]
+
+
+def test_malformed_feed_entries_and_invalid_limits_fail_closed():
+    from datetime import datetime, timezone
+    now = datetime(2026, 11, 18, 12, 0, tzinfo=timezone.utc)
+    valid = Instrument("XYZ", "STOCK", True, 100, 15_000_000, 0.08, now, 3, 4)
+    assert select_instruments([None, {"symbol": "BAD"}, valid], now=now) == [valid]
+    for invalid_limit in (None, "10", 0, -1, True):
+        assert select_instruments([valid], now=now, limit=invalid_limit) == []
