@@ -47,8 +47,15 @@ def validate(signal: Signal, *, now: datetime | None = None, max_age_seconds: in
     if all(isinstance(getattr(signal, k), (int, float)) and isfinite(getattr(signal, k)) for k in ("stop_loss", "entry", "take_profit")):
         if not signal.stop_loss < signal.entry < signal.take_profit:
             problems.append("invalid_buy_levels")
-    parsed_source = urlsplit(signal.source_url) if isinstance(signal.source_url, str) else urlsplit("")
-    if parsed_source.scheme != "https" or not parsed_source.hostname or parsed_source.username or parsed_source.password:
+    try:
+        parsed_source = urlsplit(signal.source_url) if isinstance(signal.source_url, str) else urlsplit("")
+        valid_source = (parsed_source.scheme == "https" and bool(parsed_source.hostname)
+                        and not parsed_source.username and not parsed_source.password)
+        # urlsplit can raise ValueError on malformed IPv6, ports or bracketed hosts.
+        _ = parsed_source.port
+    except (ValueError, TypeError):
+        valid_source = False
+    if not valid_source:
         problems.append("invalid_source_url")
     if not isinstance(signal.rationale, str) or not signal.rationale.strip():
         problems.append("missing_rationale")
