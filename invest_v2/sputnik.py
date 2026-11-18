@@ -37,7 +37,7 @@ def assess(event: NewsEvent, *, quote_price: float, quote_timestamp: datetime,
         return None
     if (not isinstance(event.headline, str) or not event.headline.strip()
             or not isinstance(event.event_id, str) or not event.event_id.strip()
-            or not isinstance(atr, (int, float)) or isinstance(atr, bool) or not isfinite(atr) or atr <= 0:
+            or not isinstance(atr, (int, float)) or isinstance(atr, bool) or not isfinite(atr) or atr <= 0):
         return None
     signal = Signal(event.symbol,event.asset_class,account,"BUY",quote_price,quote_timestamp,
                     quote_price,quote_price-1.5*atr,quote_price+3*atr,
