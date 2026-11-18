@@ -39,6 +39,8 @@ jobs:
                   print("No account ID, balances, credentials or positions printed")
           except urllib.error.HTTPError as e:
               print("FAIL: DEMO authentication/account request HTTP status", e.code)
+              if e.code == 401:
+                  print("DIAGNOSIS: DEMO rejected credentials; verify key/secret pair, DEMO environment and API key permissions. No secret values logged.")
               sys.exit(1)
           except Exception as e:
               print("FAIL: DEMO request failed:", type(e).__name__)
