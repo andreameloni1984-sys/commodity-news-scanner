@@ -14,7 +14,12 @@ def deliver(signal: Signal, *, now: datetime, sent_ids: MutableSet[str],
     message = format_telegram(signal, now=now)
     if message is None:
         return False
-    if not sender(message):
+    try:
+        accepted = sender(message)
+    except Exception:
+        # Transport failures must not mark an event delivered.
+        return False
+    if accepted is not True:
         return False
     sent_ids.add(key)
     return True
