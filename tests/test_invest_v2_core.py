@@ -62,3 +62,10 @@ def test_final_validator_rejects_forex_disguised_as_stock():
         valid, reasons = validate(replace(BASE, symbol=ticker, asset_class="STOCK"), now=NOW)
         assert not valid and "missing_symbol" in reasons
     assert validate(replace(BASE, symbol="BRK.B"), now=NOW)[0]
+
+
+def test_malformed_ipv6_source_fails_closed_without_exception():
+    from dataclasses import replace
+    for url in ("https://[invalid/release", "https://[::1", "https://example.com:bad/release"):
+        valid, reasons = validate(replace(BASE, source_url=url), now=NOW)
+        assert not valid and "invalid_source_url" in reasons
