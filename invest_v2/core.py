@@ -26,7 +26,7 @@ class Signal:
 def validate(signal: Signal, *, now: datetime | None = None, max_age_seconds: int = 60) -> tuple[bool, tuple[str, ...]]:
     now = now or datetime.now(timezone.utc)
     problems: list[str] = []
-    if not isinstance(signal.symbol, str) or not fullmatch(r"[A-Z0-9][A-Z0-9.\\-]{0,19}", signal.symbol):
+    if not isinstance(signal.symbol, str) or not fullmatch(r"[A-Z0-9][A-Z0-9.\-]{0,19}", signal.symbol):
         problems.append("missing_symbol")
     if signal.asset_class not in ("STOCK", "ETF"):
         problems.append("not_stock_or_etf")
