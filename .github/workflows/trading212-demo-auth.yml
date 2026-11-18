@@ -24,6 +24,9 @@ jobs:
           if not key or not secret:
               print("FAIL: Missing DEMO API key or secret")
               sys.exit(1)
+          if key != key.strip() or secret != secret.strip():
+              print("FAIL: DEMO credential contains leading/trailing whitespace; check GitHub Secret formatting. No values logged.")
+              sys.exit(1)
           endpoint = "https://demo.trading212.com/api/v0/equity/account/summary"
           token = base64.b64encode((key + ":" + secret).encode()).decode()
           req = urllib.request.Request(endpoint, headers={"Authorization": "Basic " + token, "Accept": "application/json"}, method="GET")
