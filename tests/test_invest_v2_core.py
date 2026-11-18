@@ -37,3 +37,21 @@ def test_reject_malformed_and_insecure_sources():
                 "https://user:password@example.com/release", "javascript:alert(1)"):
         valid, reasons = validate(replace(BASE, source_url=url), now=NOW)
         assert not valid and "invalid_source_url" in reasons
+
+
+def test_reject_boolean_price_and_levels():
+    for field in ("quote_price", "entry", "stop_loss", "take_profit"):
+        valid, reasons = validate(replace(BASE, **{field: True}), now=NOW)
+        assert not valid and "invalid_" + field in reasons
+
+
+def test_reject_malformed_quote_timestamp_without_crashing():
+    for bad in (None, "2026-11-17T12:00:00Z", 0):
+        valid, reasons = validate(replace(BASE, quote_timestamp=bad), now=NOW)
+        assert not valid and "missing_quote_timezone" in reasons
+
+
+def test_reject_malformed_text_fields_without_crashing():
+    for field in ("symbol", "source_url", "rationale", "event_id"):
+        valid, reasons = validate(replace(BASE, **{field: None}), now=NOW)
+        assert not valid
