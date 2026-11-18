@@ -29,3 +29,9 @@ def test_reject_forex_disguised_as_stock_and_malformed_tickers():
         assert select_instruments([replace(BASE, symbol=symbol, asset_class="STOCK")], now=NOW) == []
     assert [x.symbol for x in select_instruments(
         [replace(BASE, symbol="BRK.B")], now=NOW)] == ["BRK.B"]
+
+
+def test_availability_must_be_explicit_true_boolean():
+    for value in ("false", "yes", 1, None, False):
+        assert select_instruments([replace(BASE, invest_demo_available=value)], now=NOW) == []
+    assert select_instruments([BASE], now=NOW) == [BASE]
