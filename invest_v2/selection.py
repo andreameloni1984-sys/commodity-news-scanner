@@ -28,12 +28,13 @@ def select_instruments(items: list[Instrument], *, now: datetime,
                        max_spread_percent: float = 0.5,
                        limit: int = 10) -> list[Instrument]:
     """Select liquid, tradeable STOCK/ETF BUY candidates; rank news + technical strength."""
-    if now.tzinfo is None or limit <= 0:
+    if not isinstance(now, datetime) or now.tzinfo is None or limit <= 0:
         return []
     eligible = []
     for item in items:
         if (not isinstance(item.symbol, str) or not fullmatch(r'[A-Z0-9][A-Z0-9.\-]{0,19}', item.symbol) or item.asset_class not in ("STOCK", "ETF")
-                or item.invest_demo_available is not True or item.quote_timestamp.tzinfo is None):
+                or item.invest_demo_available is not True
+                or not isinstance(item.quote_timestamp, datetime) or item.quote_timestamp.tzinfo is None):
             continue
         values = (item.price, item.average_daily_dollar_volume,
                   item.spread_percent, item.technical_score, item.news_score)
