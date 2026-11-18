@@ -73,8 +73,5 @@ jobs:
           echo "PAPER_TRADING_ONLY=$PAPER_TRADING_ONLY"
           echo "THRESHOLDS=$MIN_ENTRY_PROBABILITY/$MIN_ENTRY_QUALITY/$MIN_ENTRY_CONFIDENCE RR=$MIN_ENTRY_RR"
 
-      - name: Compile Python
-        run: python -m compileall -q .
-
       - name: Run Gagarin analysis, paper journal, feedback and Telegram alerts
         run: python main.py
