@@ -116,3 +116,13 @@ def test_telegram_requires_explicit_boolean_success():
         assert deliver(signal, now=NOW, sent_ids=sent,
                        sender=lambda message: response, enabled=True) is False
         assert not sent
+
+
+def test_news_malformed_timestamps_fail_closed():
+    for invalid in (None, "2026-11-17", 123, True):
+        assert assess(replace(EVENT, published_at=invalid), quote_price=100,
+                      quote_timestamp=NOW, now=NOW, atr=1.5) is None
+        assert assess(EVENT, quote_price=100, quote_timestamp=invalid,
+                      now=NOW, atr=1.5) is None
+    assert assess(EVENT, quote_price=100, quote_timestamp=NOW,
+                  now="invalid", atr=1.5) is None
