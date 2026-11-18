@@ -126,3 +126,9 @@ def test_news_malformed_timestamps_fail_closed():
                       now=NOW, atr=1.5) is None
     assert assess(EVENT, quote_price=100, quote_timestamp=NOW,
                   now="invalid", atr=1.5) is None
+
+
+def test_malformed_news_text_fails_closed_without_crashing():
+    for invalid in (None, 123, True, []):
+        assert _candidate(event=replace(EVENT, headline=invalid)) is None
+        assert _candidate(event=replace(EVENT, event_id=invalid)) is None
