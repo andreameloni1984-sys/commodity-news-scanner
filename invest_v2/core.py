@@ -38,7 +38,8 @@ def validate(signal: Signal, *, now: datetime | None = None, max_age_seconds: in
         value = getattr(signal, field)
         if not isinstance(value, (int, float)) or isinstance(value, bool) or not isfinite(value) or value <= 0:
             problems.append("invalid_" + field)
-    if not isinstance(signal.quote_timestamp, datetime) or not isinstance(now, datetime) or signal.quote_timestamp.tzinfo is None or now.tzinfo is None:
+    if (not isinstance(signal.quote_timestamp, datetime) or not isinstance(now, datetime)
+            or signal.quote_timestamp.tzinfo is None or now.tzinfo is None):
         problems.append("missing_quote_timezone")
     else:
         age = (now - signal.quote_timestamp).total_seconds()
