@@ -29,7 +29,9 @@ def already_delivered(state_file: str | Path, key: str) -> bool:
     except (OSError, ValueError, TypeError):
         # Corrupted state must not cause duplicate alerts.
         return True
-    return isinstance(data, dict) and key in data.get("delivered", [])
+    if not isinstance(data, dict) or not isinstance(data.get("delivered"), list):
+        return True
+    return key in data["delivered"]
 
 
 def record_confirmed_delivery(state_file: str | Path, key: str) -> None:
