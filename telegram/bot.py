@@ -90,17 +90,8 @@ def telegram_diagnostic() -> bool:
     return True
 
 def telegram_menu() -> dict:
-    """Menu Telegram minimale: i tre comandi richiesti dall'utente."""
-    return {
-        "keyboard": [
-            [{"text": "🚀 AGGRESSIVE 212"}],
-            [{"text": "🛡 SOFT 212"}],
-            [{"text": "🔗 COLLEGAMENTO INVEST TRADING212"}],
-        ],
-        "resize_keyboard": True,
-        "is_persistent": True,
-        "one_time_keyboard": False,
-    }
+    """Remove legacy reply keyboard; commands remain accessible by typing."""
+    return {"remove_keyboard": True}
 
 def send_telegram(message: str) -> bool:
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
@@ -383,17 +374,9 @@ def _command_response(command: str) -> Optional[str]:
     argument = " ".join(parts[1:]).strip()
 
     if command_name in {"/start", "/help", "/menu"}:
-        return (
-            "🚀 GAGARIN — MENU SEMPLICE\n"
-            "🧪 PAPER/DEMO — nessun ordine reale.\n\n"
-            "🚀 AGGRESSIVE 212 — profilo aggressivo\n"
-            "🛡 SOFT 212 — profilo prudente\n"
-            "🔗 COLLEGAMENTO INVEST TRADING212 — verifica sola lettura\n\n"
-            "Monitor posizione: /monitora ORO LONG ENTRY SL TP1 [TP2] [TP3]\n"
-            "2700/2680/2740 nell'esempio sono valori fittizi: controlla prima /analisi oro.\n"
-            "/posizioni — elenco monitorate | /smetti ORO — disattiva monitor.\n"
-            "Gli avvisi automatici arrivano solo su nuovi segnali rilevanti o cambi di rischio/target; nessun messaggio di stato ripetitivo."
-        )
+        return ("GAGARIN — SOLO SEGNALI AZIONARI\\n"
+                "Nessun ordine automatico.\\n"
+                "Le vecchie funzioni commodity e Trading 212 non sono operative nel nuovo motore.")
 
     if command_name in {"/aggressivo212", "/aggressive212"}:
         try:
