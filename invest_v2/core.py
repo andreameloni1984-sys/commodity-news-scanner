@@ -58,9 +58,9 @@ def validate(signal: Signal, *, now: datetime | None = None, max_age_seconds: in
         valid_source = False
     if not valid_source:
         problems.append("invalid_source_url")
-    if not isinstance(signal.rationale, str) or not signal.rationale.strip():
+    if (not isinstance(signal.rationale, str) or not signal.rationale.strip()\n            or len(signal.rationale) > 1200\n            or any(ord(ch) < 32 and ch not in "\\t" for ch in signal.rationale)):
         problems.append("missing_rationale")
-    if not isinstance(signal.event_id, str) or not signal.event_id.strip():
+    if (not isinstance(signal.event_id, str) or not signal.event_id.strip()\n            or len(signal.event_id) > 200\n            or any(ord(ch) < 32 for ch in signal.event_id)):
         problems.append("missing_event_id")
     return not problems, tuple(problems)
 
