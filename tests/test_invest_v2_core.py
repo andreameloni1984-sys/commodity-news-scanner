@@ -3,13 +3,13 @@ from datetime import datetime, timedelta, timezone
 from invest_v2.core import Signal, validate, format_telegram
 
 NOW = datetime(2026, 11, 17, 12, 0, tzinfo=timezone.utc)
-BASE = Signal("NVDA", "STOCK", "INVEST_DEMO", "BUY", 100.0, NOW, 100.0, 98.0, 104.0,
+BASE = Signal("NVDA", "STOCK", "SIGNALS_ONLY", "BUY", 100.0, NOW, 100.0, 98.0, 104.0,
               "https://example.com/verified-release", "Earnings catalyst", "event-1")
 
 
 def test_valid_signal():
     assert validate(BASE, now=NOW)[0]
-    assert "NESSUN ORDINE INVIATO" in format_telegram(BASE, now=NOW)
+    assert "NESSUN ORDINE AUTOMATICO" in format_telegram(BASE, now=NOW)
 
 
 def test_reject_forex_and_short():
