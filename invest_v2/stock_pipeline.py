@@ -14,7 +14,7 @@ def build_buy(event: NewsEvent, bars: list[Bar], *, now: datetime) -> Signal | N
     """Require a fresh positive verified stock catalyst AND technical confirmation."""
     if not isinstance(now, datetime) or now.tzinfo is None:
         return None
-    if (not isinstance(event, NewsEvent) or not event.verified
+    if (not isinstance(event, NewsEvent) or event.verified is not True
             or event.sentiment != "POSITIVE" or event.asset_class != "STOCK"
             or not isinstance(event.headline, str) or not event.headline.strip()
             or not isinstance(event.event_id, str) or not event.event_id.strip()
