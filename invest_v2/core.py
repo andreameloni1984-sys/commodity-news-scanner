@@ -30,6 +30,8 @@ def validate(signal: Signal, *, now: datetime | None = None, max_age_seconds: in
         problems.append("missing_symbol")
     if signal.asset_class not in ("STOCK", "ETF"):
         problems.append("not_stock_or_etf")
+    if signal.account != "SIGNALS_ONLY":
+        problems.append("broker_account_not_allowed")
     if signal.side != "BUY":
         problems.append("not_buy")
     for field in ("quote_price", "entry", "stop_loss", "take_profit"):
