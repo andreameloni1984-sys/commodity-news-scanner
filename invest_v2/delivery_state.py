@@ -43,7 +43,8 @@ def record_confirmed_delivery(state_file: str | Path, key: str) -> None:
         data = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         data = {}
-    if not isinstance(data, dict) or not isinstance(data.get("delivered", []), list):
+    if (not isinstance(data, dict) or not isinstance(data.get("delivered", []), list)
+            or any(not isinstance(item, str) for item in data.get("delivered", []))):
         raise ValueError("invalid delivery state")
     entries = list(dict.fromkeys(data.get("delivered", []) + [key]))[-5000:]
     payload = json.dumps({"delivered": entries}, ensure_ascii=False)
