@@ -351,42 +351,14 @@ def main() -> None:
 
     print("🟢 Telegram webhook: ACTIVE", flush=True)
 
-    commands_ok, commands_data = _api("setMyCommands", {"commands": [
-        {"command": "analisi", "description": "Analisi intraday dei 13 strumenti"},
-        {"command": "classifica", "description": "Classifica delle opportunità LONG/SHORT"},
-        {"command": "segnali", "description": "Ultimi segnali e direzioni"},
-        {"command": "monitora", "description": "Registra una posizione per avvisi di rischio"},
-        {"command": "posizioni", "description": "Elenca le posizioni monitorate"},
-        {"command": "smetti", "description": "Disattiva il monitor di una posizione"},
+    # The old Render webhook remains available for command handling, but it must
+    # not start the commodity scanner or send a welcome on every restart.
+    commands_ok, _ = _api("setMyCommands", {"commands": [
+        {"command": "start", "description": "Informazioni sul servizio"},
+        {"command": "help", "description": "Informazioni sul servizio"},
     ]})
     print(f"Telegram commands menu | configured={'YES' if commands_ok else 'NO'}", flush=True)
-
-    threading.Thread(
-        target=news_monitor_loop,
-        args=(send_telegram, lambda: _run_analysis(on_demand=False)),
-        name="gagarin-news-monitor",
-        daemon=True,
-    ).start()
-    print("Gagarin NEWS monitor | interval=60s | PAPER/DEMO | event-triggered analysis", flush=True)
-
-    threading.Thread(
-        target=position_monitor_loop,
-        name="gagarin-position-monitor",
-        daemon=True,
-    ).start()
-
-    if TELEGRAM_CHAT_ID:
-        welcome_sent = _reply(
-            TELEGRAM_CHAT_ID,
-            "🚀 GAGARIN ONLINE\n🧪 PAPER ONLY — nessun ordine reale.\n\nPaniere: 13 strumenti. Scansione intraday ogni 5 minuti.\nComandi: /analisi /classifica /segnali",
-        )
-        print(
-            "Telegram startup welcome | "
-            f"chat_configured=YES | delivered={'YES' if welcome_sent else 'NO'}",
-            flush=True,
-        )
-    else:
-        print("Telegram startup welcome | chat_configured=NO", flush=True)
+    print("Legacy commodity monitor DISABLED; no startup Telegram messages", flush=True)
 
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", flush=True)
 
