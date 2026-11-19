@@ -18,7 +18,7 @@ class NewsEvent:
 
 
 def assess(event: NewsEvent, *, quote_price: float, quote_timestamp: datetime,
-           now: datetime, atr: float, account: str = "INVEST_DEMO") -> Signal | None:
+           now: datetime, atr: float, account: str = "SIGNALS_ONLY") -> Signal | None:
     """Build research BUY plan only when positive verified event is fresh.
 
     Verification and mapping are upstream responsibilities; no LLM inference here.
