@@ -18,6 +18,8 @@ def build_buy(event: NewsEvent, bars: list[Bar], *, now: datetime) -> Signal | N
             or event.sentiment != "POSITIVE" or event.asset_class != "STOCK"
             or not isinstance(event.headline, str) or not event.headline.strip()
             or not isinstance(event.event_id, str) or not event.event_id.strip()
+            or not isinstance(event.symbol, str) or not event.symbol.strip()
+            or not isinstance(event.source_url, str) or not event.source_url.strip()
             or not isinstance(event.published_at, datetime)
             or event.published_at.tzinfo is None
             or not 0 <= (now - event.published_at).total_seconds() <= 1800):
