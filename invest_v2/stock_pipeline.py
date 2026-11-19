@@ -27,7 +27,9 @@ def build_buy(event: NewsEvent, bars: list[Bar], *, now: datetime) -> Signal | N
     if (not isinstance(bars, list) or len(bars) < 21
             or any(not isinstance(bar, Bar) or not isinstance(bar.closed_at, datetime)
                    or bar.closed_at.tzinfo is None for bar in bars[-21:])
-            or bars[-1].closed_at < event.published_at):
+            or bars[-1].closed_at < event.published_at
+            # A completed 1m candle must start after the news release.
+            or (bars[-1].closed_at - event.published_at).total_seconds() < 60):
         return None
     technical = scan(event.symbol, "STOCK", bars, bars[-1].closed_at,
                      source_url=event.source_url, now=now, account="SIGNALS_ONLY")
