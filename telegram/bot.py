@@ -376,7 +376,7 @@ def _command_response(command: str) -> Optional[str]:
     if command_name in {"/start", "/help", "/menu"}:
         return ("GAGARIN — SOLO SEGNALI AZIONARI\\n"
                 "Nessun ordine automatico.\\n"
-                "Le vecchie funzioni commodity e Trading 212 non sono operative nel nuovo motore.")
+                "Il nuovo scanner azionario non è ancora collegato al monitor operativo.")
 
     if command_name in {"/aggressivo212", "/aggressive212"}:
         try:
