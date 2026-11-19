@@ -15,7 +15,7 @@ class Bar:
 
 
 def scan(symbol: str, asset_class: str, bars: list[Bar], quote_timestamp: datetime,
-         *, source_url: str, now: datetime, account: str = "INVEST_DEMO") -> Signal | None:
+         *, source_url: str, now: datetime, account: str = "SIGNALS_ONLY") -> Signal | None:
     """BUY only on positive 5-bar momentum, volume expansion and recent breakout.
 
     Input bars must be completed, chronological and no older than 5 minutes.
