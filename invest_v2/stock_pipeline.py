@@ -24,10 +24,9 @@ def build_buy(event: NewsEvent, bars: list[Bar], *, now: datetime) -> Signal | N
             or event.published_at.tzinfo is None
             or not 0 <= (now - event.published_at).total_seconds() <= 1800):
         return None
-    if (not isinstance(bars, list) or not bars
-            or not isinstance(bars[-1], Bar)
-            or not isinstance(bars[-1].closed_at, datetime)
-            or bars[-1].closed_at.tzinfo is None
+    if (not isinstance(bars, list) or len(bars) < 21
+            or any(not isinstance(bar, Bar) or not isinstance(bar.closed_at, datetime)
+                   or bar.closed_at.tzinfo is None for bar in bars[-21:])
             or bars[-1].closed_at < event.published_at):
         return None
     technical = scan(event.symbol, "STOCK", bars, bars[-1].closed_at,
