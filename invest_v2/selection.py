@@ -1,7 +1,7 @@
-"""Pure INVEST Demo day-trading universe filter; no brokerage or network access.
+"""Pure stock-only day-trading universe filter; no brokerage or network access.
 
 Inputs must come from independently verified market data and instrument listings.
-A candidate is NOT proof that Trading 212 offers the instrument.
+A candidate requires independently verified market data.
 """
 from dataclasses import dataclass
 from datetime import datetime
@@ -13,7 +13,7 @@ from re import fullmatch
 class Instrument:
     symbol: str
     asset_class: str
-    invest_demo_available: bool
+    signal_eligible: bool
     price: float
     average_daily_dollar_volume: float
     spread_percent: float
@@ -37,7 +37,7 @@ def select_instruments(items: list[Instrument], *, now: datetime,
         if not isinstance(item, Instrument):
             continue
         if (not isinstance(item.symbol, str) or not fullmatch(r'[A-Z0-9][A-Z0-9.\-]{0,19}', item.symbol) or item.asset_class not in ("STOCK", "ETF")
-                or item.invest_demo_available is not True
+                or item.signal_eligible is not True
                 or not isinstance(item.quote_timestamp, datetime) or item.quote_timestamp.tzinfo is None):
             continue
         values = (item.price, item.average_daily_dollar_volume,
