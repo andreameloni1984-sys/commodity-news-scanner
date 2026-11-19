@@ -29,7 +29,7 @@ def scan(symbol: str, asset_class: str, bars: list[Bar], quote_timestamp: dateti
         return None
     if any(a.closed_at >= b.closed_at for a,b in zip(tail,tail[1:])):
         return None
-    if not 0 <= (now-tail[-1].closed_at).total_seconds() <= 300:
+    if not 0 <= (now-tail[-1].closed_at).total_seconds() <= 60:
         return None
     recent = tail[-1]
     # Do not mix a fresh quote timestamp with an older completed bar.
