@@ -63,8 +63,9 @@ def fetch_completed_bars(symbol: str, *, now: datetime, timeout: int = 10) -> li
     if len(bars) < 21:
         raise ValueError("insufficient completed bars")
     bars = bars[-21:]
-    if any(a.closed_at >= b.closed_at for a, b in zip(bars, bars[1:])):
-        raise ValueError("unordered bars")
+    if any(not 0 < (b.closed_at - a.closed_at).total_seconds() <= 120
+           for a, b in zip(bars, bars[1:])):
+        raise ValueError("unordered or discontinuous 1m bars")
     if not 0 <= (now - bars[-1].closed_at).total_seconds() <= 300:
         raise ValueError("stale completed bar")
     return bars
