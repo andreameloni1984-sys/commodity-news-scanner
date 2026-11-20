@@ -28,7 +28,9 @@ jobs:
       - name: Restore PRAVDA journal
         uses: actions/cache/restore@v4
         with:
-          path: .gagarin-pravda.sqlite
+          path: |
+            .gagarin-pravda.sqlite
+            .gagarin-pravda-sim.sqlite
           key: gagarin-v3-journal-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
             gagarin-v3-journal-
@@ -47,5 +49,7 @@ jobs:
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: .gagarin-pravda.sqlite
+          path: |
+            .gagarin-pravda.sqlite
+            .gagarin-pravda-sim.sqlite
           key: gagarin-v3-journal-${{ github.run_id }}-${{ github.run_attempt }}
