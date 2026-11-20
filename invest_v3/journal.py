@@ -16,10 +16,21 @@ class Journal:
                 latest TEXT, first_signal TEXT, entry_signal TEXT, notified TEXT,
                 observations TEXT NOT NULL DEFAULT '{}', outcome TEXT
             );
+            CREATE TABLE IF NOT EXISTS macro_releases (
+                series TEXT NOT NULL, published TEXT NOT NULL, payload TEXT NOT NULL,
+                PRIMARY KEY (series, published)
+            );
             CREATE TABLE IF NOT EXISTS errors (
                 at TEXT NOT NULL, component TEXT NOT NULL, reason TEXT NOT NULL
             );
         """)
+
+    def record_macro(self, releases):
+        with self.db:
+            self.db.executemany("""
+                INSERT INTO macro_releases VALUES (?,?,?)
+                ON CONFLICT(series,published) DO UPDATE SET payload=excluded.payload
+            """, [(row["series"], row["published"], json.dumps(row)) for row in releases])
 
     def add(self, key, event, expires):
         with self.db:

@@ -1,8 +1,11 @@
 from datetime import datetime, timedelta, timezone
 import json
+from io import BytesIO
+from urllib.parse import parse_qs
 
 import pytest
 
+from invest_v2 import gagarin_runner
 from invest_v2.gagarin import Bar
 from invest_v3 import runner
 from invest_v3.demo import Demo
@@ -77,7 +80,18 @@ def test_worker_deduplicates_and_journals_simulated_signal(monkeypatch, tmp_path
 
     journal = Journal(tmp_path / "pravda.sqlite")
     messages = []
-    worker = runner.Worker(DemoFeed(), Market(), journal, lambda m: messages.append(m) or True, "test", [])
+    def telegram_response(request, timeout):
+        form = parse_qs(request.data.decode())
+        assert form["chat_id"] == ["test-chat"]
+        messages.append(form["text"][0])
+        return BytesIO(b'{"ok":true,"result":{"message_id":42}}')
+
+    monkeypatch.setattr(gagarin_runner, "urlopen", telegram_response)
+
+    def publish(text):
+        return runner.send_telegram(text, token="test-token", chat_id="test-chat")
+
+    worker = runner.Worker(DemoFeed(), Market(), journal, publish, "test", [])
     assert worker.poll()
     assert len(messages) == 1
     assert "STATO: ENTRARE" in messages[0]
@@ -86,6 +100,7 @@ def test_worker_deduplicates_and_journals_simulated_signal(monkeypatch, tmp_path
         clock[0] = NOW + timedelta(minutes=offset)
         assert worker.poll()
     assert len(messages) == 1
+    assert journal.db.execute("SELECT notified FROM candidates").fetchone()[0] is not None
     report = journal.report()
     assert report["directional_samples_60m"] == 1
     assert report["directional_accuracy_60m"] == 1

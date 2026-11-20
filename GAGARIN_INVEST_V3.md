@@ -10,12 +10,13 @@ minuti durante la seduta XNYS. La durata massima del candidato è di due ore
 dalla pubblicazione. Attese dopo errori e richieste aggregate limitano le
 chiamate alle API.
 
-Le euristiche attuali riconoscono revisioni della guidance, decisioni
-regolatorie esplicite e rischio di insolvenza. I filing SEC 8-K Item 1.03
-sono classificati separatamente. Federal Reserve, BLS, BEA e FDA vengono
-letti, ma la generazione di un segnale richiede evidenza direzionale e
-un'associazione univoca a uno strumento. Il motore non deduce il segno di
-una sorpresa macro dal titolo di un comunicato. Treasury e Casa Bianca
+Le euristiche riconoscono trimestrali, guidance, contratti, acquisizioni,
+decisioni FDA e comunicazioni SEC 8-K. Assegnano una direzione solo in
+presenza di un'indicazione esplicita e di un emittente univoco. Per
+esempio, una trimestrale senza confronto, un accordo non quantificato o
+una notizia con indicazioni opposte vengono esclusi. Un'acquisizione
+riceve una direzione soltanto per il ticker indicato come target e in
+presenza di un premio esplicito. Treasury e Casa Bianca
 richiedono un feed verificato. Reuters e Bloomberg richiedono una licenza
 e un endpoint autorizzato. Per feed HTTPS aggiuntivi impostare
 `GAGARIN_EXTRA_FEEDS` con un array JSON di oggetti con campi `source`, `url`
@@ -31,17 +32,41 @@ categoria e direzione. SHORT è una tesi analitica e resta PREPARARE
 anche con conferma tecnica. Le vendite allo scoperto non sono disponibili
 nel perimetro operativo del worker.
 
+## Dati macro USA
+
+BLS fornisce CPI mensile destagionalizzato, payroll e disoccupazione. BEA
+fornisce il PIL reale trimestrale annualizzato e Federal Reserve
+fornisce gli estremi del target ufficiale sui fed funds. Il report
+distingue dato effettivo, sorpresa e revisioni documentate. Le revisioni
+payroll indicano il mese rettificato, il dato precedente e quello rivisto.
+Se aumenta un indicatore o viene rivisto un valore il motore registra il
+movimento, senza inferire LONG o SHORT su un titolo.
+
+I comunicati ufficiali forniscono gli effettivi. Per il consenso è
+facoltativo passare `--macro-expectations /percorso/attese.json`, con un
+array di record con campi `series`, `period`, `unit`, `value`, `source`
+(URL HTTPS), `as_of` (ISO 8601 con fuso). Per GDP serve anche `edition`
+(esempio `advance estimate`). Usare i codici, periodi e unità visibili
+in `--scan`. Sono confrontate soltanto attese rilevate prima della
+pubblicazione e con la stessa serie, periodo, unità e, se applicabile,
+edizione. Una sorpresa non disponibile rimane vuota.
+
 ## Esecuzione
 
 Configurare `GAGARIN_DEMO_KEY`, `GAGARIN_DEMO_SECRET`,
 `GAGARIN_ALPACA_KEY` e `GAGARIN_ALPACA_SECRET` tramite il gestore di
-secret del processo. Configurare `GAGARIN_SEC_USER_AGENT` con nome
+secret del processo. La chiave Trading 212 va creata nell'account
+INVEST **Demo** con permessi di lettura del catalogo strumenti, dei dati
+conto e delle posizioni. Il feed Alpaca richiede credenziali abilitate
+ai dati azionari USA. Configurare `GAGARIN_SEC_USER_AGENT` con nome
 dell'organizzazione e recapito. Il feed Alpaca predefinito è IEX.
 `GAGARIN_ALPACA_FEED=sip` richiede i relativi permessi.
 
 ```sh
 python -m pip install -r requirements-gagarin.txt
 python -m invest_v3.runner --check-demo
+python -m invest_v3.runner --check-market
+python -m invest_v3.runner --scan > scansione.json
 python -m invest_v3.runner --once
 python -m invest_v3.runner
 python -m invest_v3.runner --report
@@ -49,7 +74,13 @@ python -m invest_v3.runner --report
 
 Il preflight controlla i permessi di lettura su strumenti, saldo e posizioni
 senza registrare i dati del conto. Il client usa solo GET su host Demo e
-rifiuta i redirect. Il modulo ordini rifiuta ogni invio. Nessun workflow
+rifiuta i redirect. Il preflight Alpaca usa una sonda di mercato
+e mostra l'età dell'ultima barra. A mercato chiuso verifica l'accesso
+allo storico della seduta conclusa. Per convalidare dati operativi deve
+risultare `fresco` durante la seduta XNYS.
+`--scan` genera un report di sola lettura, con fonti, timestamp, ticker,
+direzioni e motivi delle esclusioni. Se mancano i secret prosegue con
+le sole fonti pubbliche e segnala il limite nel report. Il modulo ordini rifiuta ogni invio. Nessun workflow
 avvia il worker.
 
 La modalità predefinita stampa i messaggi simulati. Per Telegram effettivo

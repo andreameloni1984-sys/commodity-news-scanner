@@ -10,23 +10,31 @@ HORIZONS = (5, 15, 30, 60)
 
 
 def assess(event, bars, now):
+    return evaluate(event, bars, now)[0]
+
+
+def evaluate(event, bars, now):
+    if event.direction not in ("LONG", "SHORT"):
+        return None, "impatto direzionale ambiguo"
     bars = [bar for bar in bars if bar.closed_at <= now]
-    if not bars or now - bars[-1].closed_at > 2 * MINUTE:
-        return None
+    if not bars:
+        return None, "barre concluse assenti"
+    if now - bars[-1].closed_at > 2 * MINUTE:
+        return None, "ultima barra scaduta (oltre 120 secondi)"
     if any(not all(isfinite(value) and value > 0 for value in
                    (b.close, b.high, b.low, b.volume)) or not b.low <= b.close <= b.high
            for b in bars):
-        return None
+        return None, "prezzi o volumi non validi"
     if any(a.closed_at >= b.closed_at for a, b in zip(bars, bars[1:])):
-        return None
+        return None, "barre duplicate o fuori sequenza"
     last = bars[-1]
     if last.closed_at <= event.published:
-        return None
+        return None, "nessuna barra successiva alla notizia"
     prior = next((b for b in reversed(bars) if b.closed_at <= event.published), None)
     if prior is not None and event.published - prior.closed_at > 2 * MINUTE:
         prior = None
     if sum(b.close * b.volume for b in bars[-5:]) < 100_000:
-        return None
+        return None, "controvalore stimato insufficiente"
     result = {
         "state": "PREPARARE", "phase": "anticipato", "price": last.close,
         "quote_at": last.closed_at.isoformat(), "move": None,
@@ -36,13 +44,13 @@ def assess(event, bars, now):
         result["move"] = last.close / prior.close - 1
     if len(bars) < 21 or any(b.closed_at - a.closed_at != MINUTE
                              for a, b in zip(bars[-21:-1], bars[-20:])):
-        return result
+        return result, None
     closes = [b.close for b in bars]
     baseline = bars[-21:-1]
     atr = sum(max(b.high - b.low, abs(b.high - a.close), abs(b.low - a.close))
               for a, b in zip(bars[-15:-1], bars[-14:])) / 14
     if atr <= 0:
-        return result
+        return result, None
 
     sign = 1 if event.direction == "LONG" else -1
     volume = last.volume / (sum(b.volume for b in baseline) / len(baseline))
@@ -62,31 +70,31 @@ def assess(event, bars, now):
     if prior:
         if sign * (last.close - prior.close) >= 3 * atr:
             result.update(state="SCARTARE", phase="tardivo", reason="Movimento già esteso oltre 3 ATR")
-            return result
+            return result, None
 
     boundary = max(b.high for b in baseline) if sign > 0 else min(b.low for b in baseline)
     breakout = sign * (last.close - boundary) > 0
     pullback = sign * (closes[-2] - ema20) <= 0 < sign * (last.close - ema20)
     if prior is None or volume < 1.5 or min(sign * momentum5, sign * momentum15) <= 0:
-        return result
+        return result, None
     if not (breakout or pullback):
-        return result
+        return result, None
 
     risk = max(1.5 * atr, sign * (last.close - (boundary if breakout else ema20)) + 0.25 * atr)
     if risk > 3 * atr:
-        return result
+        return result, None
     precision = 2 if last.close >= 1 else 4
     entry = round(last.close, precision)
     stop = round(entry - sign * risk, precision)
     risk = abs(entry - stop)
     targets = [round(entry + sign * multiple * risk, precision) for multiple in (1, 2, 3)]
     if risk <= 0 or min(entry, stop, *targets) <= 0:
-        return result
+        return result, None
     setup = "Breakout" if breakout else "Pullback su EMA20"
     result.update(state="ENTRARE" if sign > 0 else "PREPARARE", phase="confermato",
                   reason=f"{event.category}. {setup}. Volume relativo {volume:.1f}×",
                   levels=[entry, stop, *targets], heuristic_score=event.impact + min(volume, 5))
-    return result
+    return result, None
 
 
 def message(event, name, signal, now):
