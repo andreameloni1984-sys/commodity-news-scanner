@@ -25,7 +25,7 @@ def _candidate(item=ITEM, event=EVENT, quote_timestamp=NOW):
 
 def test_news_selection_levels_telegram_delivery_and_dedup():
     signal = _candidate()
-    assert signal and signal.side == "BUY" and signal.account == "INVEST_DEMO"
+    assert signal and signal.side == "BUY" and signal.account == "SIGNALS_ONLY"
     assert signal.stop_loss < signal.entry < signal.take_profit
     messages, sent = [], set()
     def fake_sender(message):
@@ -34,7 +34,7 @@ def test_news_selection_levels_telegram_delivery_and_dedup():
     assert deliver(signal, now=NOW, sent_ids=sent, sender=fake_sender, enabled=True)
     assert not deliver(signal, now=NOW, sent_ids=sent, sender=fake_sender, enabled=True)
     assert len(messages) == 1
-    assert "INVEST DEMO" in messages[0] and "NESSUN ORDINE INVIATO" in messages[0]
+    assert "SOLO SEGNALAZIONE" in messages[0] and "NESSUN ORDINE AUTOMATICO" in messages[0]
     assert "SL:" in messages[0] and "TP:" in messages[0]
 
 
@@ -42,7 +42,7 @@ def test_news_rejects_unverified_stale_forex_and_unavailable():
     assert _candidate(event=replace(EVENT, verified=False)) is None
     assert _candidate(quote_timestamp=NOW-timedelta(seconds=90)) is None
     assert _candidate(item=replace(ITEM, asset_class="FOREX")) is None
-    assert _candidate(item=replace(ITEM, invest_demo_available=False)) is None
+    assert _candidate(item=replace(ITEM, signal_eligible=False)) is None
     assert _candidate(event=replace(EVENT, asset_class="CFD")) is None
 
 
@@ -87,7 +87,7 @@ def test_join_rejects_wrong_ticker_asset_class_and_duplicate():
 
 
 def test_join_cannot_bypass_invest_selection_filter():
-    assert assess_selected(EVENT, [replace(ITEM, invest_demo_available=False)], now=NOW, atr=1.5) is None
+    assert assess_selected(EVENT, [replace(ITEM, signal_eligible=False)], now=NOW, atr=1.5) is None
     assert assess_selected(EVENT, [replace(ITEM, quote_timestamp=NOW-timedelta(seconds=90))], now=NOW, atr=1.5) is None
     assert assess_selected(EVENT, [replace(ITEM, spread_percent=3)], now=NOW, atr=1.5) is None
     assert assess_selected(EVENT, [replace(ITEM, average_daily_dollar_volume=100)], now=NOW, atr=1.5) is None

@@ -7,7 +7,7 @@ BASE = Instrument("AAA", "STOCK", True, 100, 10_000_000, 0.1, NOW, 2, 3)
 
 def test_select_only_liquid_fresh_invest_demo_buy_candidates():
     items = [BASE, replace(BASE, symbol="EUR/USD", asset_class="FOREX"),
-             replace(BASE, symbol="CFD", invest_demo_available=False),
+             replace(BASE, symbol="CFD", signal_eligible=False),
              replace(BASE, symbol="OLD", quote_timestamp=NOW-timedelta(minutes=2)),
              replace(BASE, symbol="WIDE", spread_percent=2),
              replace(BASE, symbol="ILLIQUID", average_daily_dollar_volume=100),
@@ -33,7 +33,7 @@ def test_reject_forex_disguised_as_stock_and_malformed_tickers():
 
 def test_availability_must_be_explicit_true_boolean():
     for value in ("false", "yes", 1, None, False):
-        assert select_instruments([replace(BASE, invest_demo_available=value)], now=NOW) == []
+        assert select_instruments([replace(BASE, signal_eligible=value)], now=NOW) == []
     assert select_instruments([BASE], now=NOW) == [BASE]
 
 

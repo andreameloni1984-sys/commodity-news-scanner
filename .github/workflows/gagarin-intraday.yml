@@ -1,0 +1,57 @@
+name: Gagarin USA intraday
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '2-57/5 13-20 * * 1-5'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gagarin-intraday-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    if: vars.GAGARIN_SCAN_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -r requirements-gagarin.txt
+      - name: Check US session
+        id: session
+        run: |
+          ready=$(python -m invest_v2.gagarin_runner --check-session)
+          echo "ready=$ready" >> "$GITHUB_OUTPUT"
+          echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v4
+        if: steps.session.outputs.ready == 'true' && vars.GAGARIN_TELEGRAM_ENABLED == 'true'
+        id: state
+        with:
+          path: .gagarin-delivery.json
+          key: gagarin-v1-${{ github.ref }}-${{ steps.session.outputs.day }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: gagarin-v1-${{ github.ref }}-${{ steps.session.outputs.day }}-
+      - name: Check restored delivery state
+        if: steps.state.outcome == 'success'
+        id: restored
+        run: echo "hash=${{ hashFiles('.gagarin-delivery.json') }}" >> "$GITHUB_OUTPUT"
+      - name: Scan and optionally notify
+        if: steps.session.outputs.ready == 'true'
+        env:
+          GAGARIN_ALPACA_KEY: ${{ secrets.GAGARIN_ALPACA_KEY }}
+          GAGARIN_ALPACA_SECRET: ${{ secrets.GAGARIN_ALPACA_SECRET }}
+          GAGARIN_ALPACA_FEED: ${{ vars.GAGARIN_ALPACA_FEED }}
+          GAGARIN_INVEST_SYMBOLS: ${{ vars.GAGARIN_INVEST_SYMBOLS }}
+          GAGARIN_TELEGRAM_ENABLED: ${{ vars.GAGARIN_TELEGRAM_ENABLED }}
+          GAGARIN_TELEGRAM_TOKEN: ${{ secrets.GAGARIN_TELEGRAM_TOKEN }}
+          GAGARIN_TELEGRAM_CHAT_ID: ${{ secrets.GAGARIN_TELEGRAM_CHAT_ID }}
+        run: python -m invest_v2.gagarin_runner
+      - uses: actions/cache/save@v4
+        if: always() && steps.state.outcome == 'success' && hashFiles('.gagarin-delivery.json') != '' && hashFiles('.gagarin-delivery.json') != steps.restored.outputs.hash
+        with:
+          path: .gagarin-delivery.json
+          key: ${{ steps.state.outputs.cache-primary-key }}

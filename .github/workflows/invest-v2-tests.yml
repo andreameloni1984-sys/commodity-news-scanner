@@ -8,7 +8,9 @@ on:
     paths:
       - 'invest_v2/**'
       - 'tests/**'
+      - 'requirements-gagarin.txt'
       - '.github/workflows/invest-v2-tests.yml'
+      - '.github/workflows/gagarin-intraday.yml'
 permissions:
   contents: read
 jobs:
@@ -19,12 +21,5 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Lightweight INVEST v2 syntax and import smoke check
-        run: |
-          python -m compileall -q invest_v2
-          python - <<'PY'
-          import invest_v2.research_runner
-          import invest_v2.delivery_state
-          import invest_v2.sec_ticker
-          print('INVEST v2 imports OK; no network, orders or Telegram calls')
-          PY
+      - run: python -m pip install pytest -r requirements-gagarin.txt
+      - run: python -m pytest -q
