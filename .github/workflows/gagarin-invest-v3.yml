@@ -1,0 +1,51 @@
+name: Gagarin INVEST v3 (paper)
+
+on:
+  schedule:
+    - cron: '3-58/5 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gagarin-invest-v3-main
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    if: github.ref == 'refs/heads/main' && vars.GAGARIN_INVEST_V3_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: requirements-gagarin.txt
+      - run: python -m pip install -r requirements-gagarin.txt
+      - name: Restore PRAVDA journal
+        uses: actions/cache/restore@v4
+        with:
+          path: .gagarin-pravda.sqlite
+          key: gagarin-v3-journal-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            gagarin-v3-journal-
+      - name: Scan catalysts and monitor paper setups
+        env:
+          GAGARIN_DEMO_KEY: ${{ secrets.GAGARIN_DEMO_KEY }}
+          GAGARIN_DEMO_SECRET: ${{ secrets.GAGARIN_DEMO_SECRET }}
+          GAGARIN_ALPACA_KEY: ${{ secrets.GAGARIN_ALPACA_KEY }}
+          GAGARIN_ALPACA_SECRET: ${{ secrets.GAGARIN_ALPACA_SECRET }}
+          GAGARIN_SEC_USER_AGENT: ${{ secrets.GAGARIN_SEC_USER_AGENT }}
+          GAGARIN_TELEGRAM_ENABLED: ${{ vars.GAGARIN_INVEST_V3_TELEGRAM_ENABLED }}
+          GAGARIN_TELEGRAM_TOKEN: ${{ secrets.GAGARIN_TELEGRAM_TOKEN }}
+          GAGARIN_TELEGRAM_CHAT_ID: ${{ secrets.GAGARIN_TELEGRAM_CHAT_ID }}
+        run: python -m invest_v3.runner --once
+      - name: Save PRAVDA journal
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .gagarin-pravda.sqlite
+          key: gagarin-v3-journal-${{ github.run_id }}-${{ github.run_attempt }}
