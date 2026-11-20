@@ -1,51 +1,31 @@
-"""Alpaca market data and Nasdaq Trader US listing metadata."""
+"""Alpaca completed US equity bars."""
 from __future__ import annotations
 
-import csv
 import json
 from datetime import datetime, timedelta
-from re import fullmatch
+from math import isfinite
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from .gagarin import Bar
 
 ALPACA = "https://data.alpaca.markets"
-NASDAQ = "https://www.nasdaqtrader.com/dynamic/SymDir/"
-SYMBOL = r"[A-Z][A-Z0-9.\-]{0,19}"
+
+
+class NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
 
 
 def _read(url: str, headers: dict[str, str]) -> bytes:
-    with urlopen(Request(url, headers=headers), timeout=15) as response:
+    with build_opener(NoRedirect()).open(Request(url, headers=headers), timeout=15) as response:
         return response.read()
-
-
-def listed_instruments() -> dict[str, str]:
-    instruments = {}
-    for filename, symbol_column in (("nasdaqlisted.txt", "Symbol"),
-                                    ("otherlisted.txt", "ACT Symbol")):
-        content = _read(NASDAQ + filename, {"User-Agent": "Gagarin/1.0"})
-        rows = csv.DictReader(content.decode("utf-8-sig").splitlines(), delimiter="|")
-        if not {symbol_column, "Test Issue", "ETF", "Security Name"} <= set(rows.fieldnames or ()):
-            raise ValueError("invalid Nasdaq Trader directory")
-        for row in rows:
-            symbol = row.get(symbol_column) or ""
-            name = (row.get("Security Name") or "").upper()
-            if row.get("Test Issue") != "N" or not fullmatch(SYMBOL, symbol):
-                continue
-            if row.get("ETF") == "Y":
-                instruments[symbol] = "ETF"
-            elif row.get("ETF") == "N" and any(label in name for label in
-                    ("COMMON STOCK", "COMMON SHARES", "ORDINARY SHARES", "DEPOSITARY SHARES")):
-                if "PREFERRED" not in name and "PREFERENCE" not in name:
-                    instruments[symbol] = "STOCK"
-    if not instruments:
-        raise ValueError("empty Nasdaq Trader directory")
-    return instruments
 
 
 class AlpacaData:
     def __init__(self, key: str, secret: str, feed: str):
+        if not key or not secret:
+            raise ValueError("Secret Alpaca mancanti")
         if feed not in ("iex", "sip"):
             raise ValueError("GAGARIN_ALPACA_FEED must be iex or sip")
         self.headers = {"APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret}
@@ -53,12 +33,6 @@ class AlpacaData:
 
     def _get(self, path: str, **params):
         return json.loads(_read(f"{ALPACA}{path}?{urlencode(params)}", self.headers))
-
-    def active_symbols(self) -> set[str]:
-        actives = self._get("/v1beta1/screener/stocks/most-actives", by="volume", top=50)
-        movers = self._get("/v1beta1/screener/stocks/movers", top=25)
-        return {row["symbol"] for row in
-                (*actives["most_actives"], *movers["gainers"], *movers["losers"])}
 
     def bars(self, symbols: list[str], *, start: datetime, end: datetime) -> dict[str, list[Bar]]:
         if not symbols:
@@ -78,8 +52,13 @@ class AlpacaData:
                         continue
                     closed = opened + timedelta(minutes=1)
                     if start <= opened and closed <= end:
-                        bars.append(Bar(float(row["c"]), float(row["h"]), float(row["l"]),
-                                        float(row["v"]), closed))
+                        close, high, low, volume = (float(row[key]) for key in ("c", "h", "l", "v"))
+                        if not all(isfinite(value) and value > 0 for value in (close, high, low, volume)):
+                            continue
+                        if not low <= close <= high:
+                            continue
+                        vwap = float(row["vw"]) if row.get("vw") is not None else None
+                        bars.append(Bar(close, high, low, volume, closed, vwap))
                 except (KeyError, ValueError, TypeError, OverflowError):
                     continue
             result[symbol] = bars

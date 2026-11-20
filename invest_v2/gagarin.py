@@ -12,6 +12,7 @@ class Bar:
     low: float
     volume: float
     closed_at: datetime
+    vwap: float | None = None
 
 
 def scan(symbol: str, asset_class: str, bars: list[Bar], quote_timestamp: datetime,
