@@ -18,6 +18,7 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 from telegram.bot import _api, _command_response, _reply, telegram_diagnostic, _run_analysis, get_last_results, telegram_menu, send_telegram
+from telegram.signals import format_signal_board
 from telegram.news_monitor import news_monitor_loop
 from config import TELEGRAM_CHAT_ID
 from soyuz_gagarin.adapter import evaluate_states
@@ -79,6 +80,18 @@ def position_monitor_loop() -> None:
         try:
             states = _run_analysis(on_demand=False)
             if states:
+                # Publish a fresh ranked selection on every five-minute scan.
+                # The board distinguishes confirmed paper signals from directional WATCH/WAIT context.
+                try:
+                    board = format_signal_board(states)
+                    delivered = send_telegram(board)
+                    print(
+                        f"GAGARIN FIVE-MINUTE SELECTION | delivered={'YES' if delivered else 'NO'} | instruments={len(states)}",
+                        flush=True,
+                    )
+                except Exception as board_exc:
+                    print(f"GAGARIN FIVE-MINUTE SELECTION ERROR | {type(board_exc).__name__}: {board_exc}", flush=True)
+
                 # Energy complex shock alert (once per unique event)
                 try:
                     energy = stamp_energy(states)

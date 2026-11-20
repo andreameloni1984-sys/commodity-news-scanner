@@ -1,0 +1,90 @@
+{
+  "confirmed_at": "2026-11-09",
+  "confirmation": "user selected the current repository universe",
+  "mode": "PAPER_ONLY",
+  "trading212_dependency": false,
+  "scan_interval_minutes": 5,
+  "assets": [
+    {
+      "category": "metals",
+      "name": "Gold",
+      "symbol": "XAU/USD"
+    },
+    {
+      "category": "metals",
+      "name": "Silver",
+      "symbol": "XAG/USD"
+    },
+    {
+      "category": "metals",
+      "name": "Copper",
+      "symbol": "COPPER/USD"
+    },
+    {
+      "category": "energy",
+      "name": "WTI",
+      "symbol": "WTI/USD"
+    },
+    {
+      "category": "energy",
+      "name": "Brent",
+      "symbol": "BRENT/USD"
+    },
+    {
+      "category": "agriculture",
+      "name": "Wheat",
+      "symbol": "WHEAT/USD"
+    },
+    {
+      "category": "agriculture",
+      "name": "Corn",
+      "symbol": "CORN/USD"
+    },
+    {
+      "category": "agriculture",
+      "name": "Soybean",
+      "symbol": "SOYBEAN/USD"
+    },
+    {
+      "category": "forex",
+      "name": "EUR/USD",
+      "symbol": "EUR/USD"
+    },
+    {
+      "category": "indices",
+      "name": "DAX",
+      "symbol": "DAX"
+    },
+    {
+      "category": "indices",
+      "name": "S&P 500",
+      "symbol": "SP500"
+    },
+    {
+      "category": "equities",
+      "name": "NVIDIA",
+      "symbol": "NVDA"
+    },
+    {
+      "category": "equities",
+      "name": "Tesla",
+      "symbol": "TSLA"
+    }
+  ],
+  "benchmark": {
+    "horizons_minutes": [
+      15,
+      60,
+      240
+    ],
+    "metrics": [
+      "directional_accuracy",
+      "MFE",
+      "MAE",
+      "target_hit_rate",
+      "stop_hit_rate"
+    ],
+    "require_timestamp_utc": true,
+    "never_infer_missing_prices": true
+  }
+}
