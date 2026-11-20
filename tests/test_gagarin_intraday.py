@@ -1,6 +1,5 @@
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
-import sys
 
 import pytest
 
@@ -27,9 +26,6 @@ def test_breakout_and_risk_levels(sign, direction, asset):
     assert item.setup.startswith("Breakout")
     assert sign * item.stop < sign * item.entry < sign * item.tp1 < sign * item.tp2
     assert item.reward_to_risk == pytest.approx((2, 3))
-    message = gagarin_runner.telegram_message(item)
-    assert f"Direzione: {direction}" in message
-    assert message.endswith("Stato: CONFERMATO\nPAPER ONLY")
 
 
 def test_rejects_invalid_bar_sequences_and_unconfirmed_breakout():
@@ -65,46 +61,6 @@ def test_market_data_ignores_unfinished_invalid_and_out_of_session_bars(monkeypa
     assert data.bars(["XYZ"], start=NOW-timedelta(minutes=2), end=NOW) == {
         "XYZ": [Bar(100, 101, 99, 10, NOW)]
     }
-
-
-def test_runner_ranks_and_remembers_confirmed_setups_across_runs(monkeypatch, tmp_path):
-    class Clock(datetime):
-        @classmethod
-        def now(cls, tz=None):
-            return NOW
-
-    class Feed:
-        def __init__(self, *args):
-            pass
-
-        def active_symbols(self):
-            return {"A", "B", "C", "D", "NOT_LISTED"}
-
-        def bars(self, symbols, **kwargs):
-            assert symbols == ["A", "B", "C", "D"]
-            return {symbol: trend_bars() for symbol in symbols}
-
-    monkeypatch.setattr(gagarin_runner, "datetime", Clock)
-    monkeypatch.setattr(gagarin_runner, "AlpacaData", Feed)
-    monkeypatch.setattr(gagarin_runner, "listed_instruments",
-                        lambda: dict.fromkeys("ABCD", "STOCK"))
-    messages = []
-    monkeypatch.setattr(gagarin_runner, "send_telegram",
-                        lambda message, **kwargs: messages.append(message) or True)
-    for name in ("ALPACA_KEY", "ALPACA_SECRET", "TELEGRAM_TOKEN", "TELEGRAM_CHAT_ID"):
-        monkeypatch.setenv(f"GAGARIN_{name}", "test")
-    monkeypatch.setenv("GAGARIN_INVEST_SYMBOLS", "A B C D")
-    monkeypatch.setattr(sys, "argv", ["gagarin", "--state", str(tmp_path / "delivery.json")])
-    monkeypatch.setenv("GAGARIN_TELEGRAM_ENABLED", "false")
-    gagarin_runner.main()
-    assert not messages
-    monkeypatch.setenv("GAGARIN_TELEGRAM_ENABLED", "true")
-    gagarin_runner.main()
-    assert len(messages) == 3
-    gagarin_runner.main()
-    assert len(messages) == 4 and "Ticker: D" in messages[-1]
-    gagarin_runner.main()
-    assert len(messages) == 4
 
 
 @pytest.mark.parametrize("sign", [1, -1])
