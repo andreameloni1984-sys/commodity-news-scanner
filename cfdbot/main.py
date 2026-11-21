@@ -37,10 +37,15 @@ def _config() -> tuple[float | None, float]:
     return num("ACCOUNT_SIZE"), num("RISK_PCT") or 1.0
 
 
+# EUR/USD escluso di default: nel backtest di 10 anni perde in tutte le varianti di stop/target
+# (da -4R a -8R). Si può riattivare con CFD_INSTRUMENTS=oro,wti,sp500,nasdaq,eurusd.
+DEFAULT_INSTRUMENTS = ("oro", "wti", "sp500", "nasdaq")
+
+
 def enabled_instruments() -> list[Instrument]:
     raw = os.getenv("CFD_INSTRUMENTS", "").strip()
     if not raw:
-        return list(INSTRUMENTS)
+        return [BY_KEY[k] for k in DEFAULT_INSTRUMENTS]
     return [BY_KEY[k.strip()] for k in raw.split(",") if k.strip() in BY_KEY]
 
 
