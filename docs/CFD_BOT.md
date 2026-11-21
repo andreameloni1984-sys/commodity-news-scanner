@@ -11,7 +11,7 @@ Bot che manda su **Telegram** segnali swing (1–5 giorni) per CFD su **Trading 
 | Petrolio WTI | Oil (WTI) | CL=F |
 | S&P 500 | US 500 | ^GSPC |
 | Nasdaq 100 | US 100 | ^NDX |
-| EUR/USD | EUR/USD | EURUSD=X |
+| EUR/USD (escluso di default) | EUR/USD | EURUSD=X |
 
 ## Strategia
 
@@ -42,7 +42,7 @@ Nel repository: **Settings → Secrets and variables → Actions**
 
 - Secrets: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
 - Variables (facoltative): `ACCOUNT_SIZE` (es. `10000`, in euro), `RISK_PCT` (default `1`),
-  `CFD_INSTRUMENTS` (es. `oro,wti,sp500,nasdaq` per escludere EUR/USD)
+  `CFD_INSTRUMENTS` (default `oro,wti,sp500,nasdaq`; aggiungi `eurusd` per riattivare EUR/USD)
 
 Senza i due secret il workflow gira in **anteprima**: scrive i messaggi nel log e non invia nulla.
 
@@ -85,3 +85,12 @@ e aggiunge due righe al messaggio:
 Il segnale tecnico non cambia. Il verdetto viene salvato nella posizione (`sputnik.trump`, `sputnik.money`)
 per verificare dopo 2-3 mesi se i segnali "contro Trump" rendono davvero meno (fase 2).
 URL del contesto configurabile con `SPUTNIK_CONTEXT_URL`.
+
+## Ricerca (non attiva)
+
+- `python -m cfdbot.research_stops` — confronto su 10 anni tra stop/target ATR (attuale), stop strutturale,
+  conferma con candele giapponesi e target sui livelli. Risultato: l'ATR attuale resta il migliore (+36R);
+  le figure delle candele non aggiungono valore; EUR/USD negativo in tutte le varianti → escluso di default.
+- `python -m cfdbot.daytrade --backtest` — segnale del giorno (10:00 DAX/EUR-USD, 15:00 oro/WTI/Nasdaq/S&P),
+  chiusura entro sera: nel complesso in pari dopo i costi (−3R su 3.850 giorni), positivo solo sull'oro.
+  Non programmato.

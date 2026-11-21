@@ -126,3 +126,11 @@ def test_signal_message_includes_sputnik_context(monkeypatch):
     msg = next(t for t in sent if "NUOVO SEGNALE" in t)
     assert "a favore del LONG" in msg and "Paulson" in msg
     assert st["open"]["oro"]["sputnik"]["trump"] == "favore"
+
+
+def test_eurusd_excluded_by_default(monkeypatch):
+    monkeypatch.delenv("CFD_INSTRUMENTS", raising=False)
+    keys = [i.key for i in main.enabled_instruments()]
+    assert keys == ["oro", "wti", "sp500", "nasdaq"]
+    monkeypatch.setenv("CFD_INSTRUMENTS", "oro,eurusd")
+    assert [i.key for i in main.enabled_instruments()] == ["oro", "eurusd"]
