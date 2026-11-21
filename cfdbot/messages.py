@@ -35,6 +35,8 @@ def new_signal(inst: Instrument, pos: dict) -> str:
         *sizing_lines(pos),
         "",
         "Perché: " + "; ".join(pos["reasons"]),
+        *([""] + pos["sputnik"]["lines"] + ["(contesto informativo da Sputnik: il segnale tecnico non cambia)"]
+          if pos.get("sputnik", {}).get("lines") else []),
         "",
         "Se il prezzo su Trading 212 è diverso, mantieni le stesse distanze di stop e take profit.",
         FOOTER,

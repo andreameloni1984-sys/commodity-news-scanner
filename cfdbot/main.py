@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 from . import messages, notify, strategy
+from . import sputnik_context
 from . import state as state_mod
 from .data import Bars, DataError, completed_daily, fetch
 from .instruments import BY_KEY, INSTRUMENTS, Instrument
@@ -115,7 +116,8 @@ def trend_row(inst: Instrument, daily: Bars, now: datetime) -> str:
 
 
 def run(now: datetime | None = None, dry_run: bool = False, fetcher: Fetcher = fetch,
-        sender: Callable[[str], bool] = notify.send, st: dict | None = None) -> dict:
+        sender: Callable[[str], bool] = notify.send, st: dict | None = None,
+        context_fetcher: Callable[[], dict | None] | None = None) -> dict:
     now = now or datetime.now(timezone.utc)
     st = st if st is not None else state_mod.load()
     out: list[str] = []
@@ -130,6 +132,7 @@ def run(now: datetime | None = None, dry_run: bool = False, fetcher: Fetcher = f
         log.warning("Cambio EUR/USD non disponibile: %s", exc)
 
     rows = []
+    sputnik_ctx: dict | None = None   # scaricato solo se serve (quando c'è un nuovo segnale)
     for inst in enabled_instruments():
         try:
             daily = fetcher(inst.yahoo, range_="2y", interval="1d")
@@ -163,6 +166,9 @@ def run(now: datetime | None = None, dry_run: bool = False, fetcher: Fetcher = f
             continue  # riprova quando il mercato riapre
         st["last_eval"][inst.key] = bar_id
         if sig:
+            if sputnik_ctx is None:
+                sputnik_ctx = (context_fetcher or sputnik_context.fetch)() or {}
+            sig["sputnik"] = sputnik_context.annotate(inst.key, sig["direction"], sputnik_ctx or None, now)
             st["open"][inst.key] = sig
             emit(messages.new_signal(inst, sig))
 

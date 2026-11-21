@@ -72,3 +72,16 @@ Ingresso all'apertura del giorno dopo, costi di spread e overnight inclusi, stop
 Risultati simili nelle due metà del periodo. Il vantaggio è **modesto** e i risultati passati non garantiscono quelli futuri.
 
 > ⚠️ Segnali automatici a scopo informativo, non consulenza finanziaria. I CFD sono a leva e si possono perdere soldi rapidamente.
+
+## Contesto da Sputnik (fase 1: solo informazione)
+
+Quando nasce un segnale, il bot legge `sputnik_context.json` pubblicato da Sputnik (repo `trump-trucker`)
+e aggiunge due righe al messaggio:
+
+- **🇺🇸 Trump (24h)**: se le notizie delle ultime 24 ore spingono lo strumento nella stessa direzione del
+  segnale (✅ a favore), in direzione opposta (⚠️ contro: valuta di saltare o dimezzare), misto o neutro;
+- **💰 Miliardari**: acquisti/vendite (Form 4) o posizioni (13F) nei settori collegati.
+
+Il segnale tecnico non cambia. Il verdetto viene salvato nella posizione (`sputnik.trump`, `sputnik.money`)
+per verificare dopo 2-3 mesi se i segnali "contro Trump" rendono davvero meno (fase 2).
+URL del contesto configurabile con `SPUTNIK_CONTEXT_URL`.

@@ -14,6 +14,7 @@ def env(monkeypatch):
     monkeypatch.setenv("CFD_INSTRUMENTS", "oro")
     monkeypatch.setenv("ACCOUNT_SIZE", "10000")
     monkeypatch.setenv("RISK_PCT", "1")
+    monkeypatch.setattr("cfdbot.sputnik_context.fetch", lambda url=None: None)
 
 
 def make_fetcher(daily: Bars, hourly: Bars | None = None):
@@ -110,3 +111,18 @@ def test_state_roundtrip(tmp_path):
 
 def test_instruments_have_t212_names():
     assert BY_KEY["sp500"].t212 == "US 500"
+
+
+def test_signal_message_includes_sputnik_context(monkeypatch):
+    daily = bars_from(uptrend_then_breakout())
+    now = day_after(daily)
+    daily.last_price_time = now - timedelta(minutes=10)
+    ctx = {"trump": [{"title": "Trump announces new tariffs", "published": (now - timedelta(hours=2)).isoformat(),
+                      "bias": [{"instrument": "GOLD", "bias": "LONG_BIAS", "reason": "dazi: domanda di beni rifugio"}]}],
+           "money": [{"kind": "13F", "who": "John Paulson · Paulson & Co", "themes": ["METALS"], "filed": "2026-11-16"}]}
+    sent = []
+    st = main.run(now=now, fetcher=make_fetcher(daily), sender=lambda t: sent.append(t) or True,
+                  st=state.empty(), context_fetcher=lambda: ctx)
+    msg = next(t for t in sent if "NUOVO SEGNALE" in t)
+    assert "a favore del LONG" in msg and "Paulson" in msg
+    assert st["open"]["oro"]["sputnik"]["trump"] == "favore"
