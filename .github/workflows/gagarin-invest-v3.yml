@@ -1,0 +1,86 @@
+name: Gagarin INVEST v3 (paper)
+
+on:
+  schedule:
+    # Every 5 minutes, 13:00-20:55 UTC Mon-Fri: covers the NYSE session in EST and EDT.
+    # The worker exits without external calls when XNYS is closed.
+    - cron: '*/5 13-20 * * 1-5'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/gagarin-invest-v3.yml'
+      - 'invest_v2/**'
+      - 'invest_v3/**'
+      - 'requirements-gagarin.txt'
+      - 'tests/test_gagarin*.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gagarin-invest-v3-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  simulation:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: requirements-gagarin.txt
+      - run: python -m pip install -r requirements-gagarin.txt 'pytest>=8,<9'
+      - run: >-
+          python -m pytest -q tests/test_gagarin_intraday.py
+          tests/test_gagarin_v3.py tests/test_gagarin_v3_verification.py
+
+  scan:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.GAGARIN_INVEST_V3_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      GAGARIN_TELEGRAM_ENABLED: ${{ vars.GAGARIN_INVEST_V3_TELEGRAM_ENABLED }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: requirements-gagarin.txt
+      - run: python -m pip install -r requirements-gagarin.txt
+      - name: Restore PRAVDA journal
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .gagarin-pravda.sqlite
+            .gagarin-pravda-sim.sqlite
+          key: gagarin-v3-journal-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            gagarin-v3-journal-
+      - name: News -> selection -> analysis -> Telegram -> PRAVDA
+        env:
+          GAGARIN_DEMO_KEY: ${{ secrets.GAGARIN_DEMO_KEY }}
+          GAGARIN_DEMO_SECRET: ${{ secrets.GAGARIN_DEMO_SECRET }}
+          GAGARIN_ALPACA_KEY: ${{ secrets.GAGARIN_ALPACA_KEY }}
+          GAGARIN_ALPACA_SECRET: ${{ secrets.GAGARIN_ALPACA_SECRET }}
+          GAGARIN_SEC_USER_AGENT: ${{ secrets.GAGARIN_SEC_USER_AGENT }}
+          GAGARIN_TELEGRAM_TOKEN: ${{ secrets.GAGARIN_TELEGRAM_TOKEN }}
+          GAGARIN_TELEGRAM_CHAT_ID: ${{ secrets.GAGARIN_TELEGRAM_CHAT_ID }}
+        run: python -m invest_v3.runner --once
+      - name: PRAVDA summary
+        if: always()
+        shell: bash
+        run: |
+          { echo '```json'; python -m invest_v3.runner --report; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Save PRAVDA journal
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .gagarin-pravda.sqlite
+            .gagarin-pravda-sim.sqlite
+          key: gagarin-v3-journal-${{ github.run_id }}-${{ github.run_attempt }}
