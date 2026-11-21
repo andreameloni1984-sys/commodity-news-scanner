@@ -1,0 +1,46 @@
+name: Gagarin CFD Bot - segnali Telegram
+on:
+  schedule:
+    - cron: "17 * * * *"   # ogni ora (UTC)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gagarin-cfd-bot
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      STATE_PATH: data/cfd_state.json
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      ACCOUNT_SIZE: ${{ vars.ACCOUNT_SIZE }}
+      RISK_PCT: ${{ vars.RISK_PCT }}
+      CFD_INSTRUMENTS: ${{ vars.CFD_INSTRUMENTS }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Ripristina stato (posizioni aperte e storico)
+        uses: actions/cache/restore@v4
+        with:
+          path: data/cfd_state.json
+          key: gagarin-cfd-state-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            gagarin-cfd-state-v1-
+      - run: pip install -r requirements.txt
+      - name: Controllo mercati e invio segnali
+        run: python -m cfdbot.main
+      - name: Salva stato
+        if: always() && hashFiles('data/cfd_state.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: data/cfd_state.json
+          key: gagarin-cfd-state-v1-${{ github.run_id }}-${{ github.run_attempt }}
