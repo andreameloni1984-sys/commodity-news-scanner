@@ -9,130 +9,144 @@ import re
 import time
 from pathlib import Path
 
+from concurrent.futures import ThreadPoolExecutor
+
+import exchange_calendars
+
 from invest_v2.gagarin_runner import send_telegram, session_open
 from invest_v2.us_market_data import AlpacaData
 
 from .demo import Demo
-from .engine import evaluate, message
+from .engine import HORIZONS, RANK, evaluate, message
 from .journal import Journal
-from .news import Event, FEEDS, PRIMARY, feed_items, fetch, reviews, sec_directory
+from .news import CATALYST_FEEDS, Event, FEEDS, feed_items, fetch, reviews, sec_directory
 from .scan import (EXPECTED_ERRORS, build_rows, check_market, error_label,
                    expectations_from, macro_releases)
+
+
+UNIVERSE_TTL = timedelta(hours=24)
+SIGNAL_WINDOW = timedelta(hours=1)
+CANDIDATE_LIFETIME = timedelta(hours=2, minutes=15)  # signal window + 60 min PRAVDA follow-up
+MAX_CANDIDATES = 12
+MAX_MESSAGES = 3
+DEFAULT_USER_AGENT = "Gagarin/3 (https://github.com/andreameloni1984-sys/commodity-news-scanner)"
 
 
 def utcnow():
     return datetime.now(timezone.utc)
 
 
-def read_sources(now, directory, user_agent, extra_feeds, backoff, *, collect_macro=False):
-    sources = [(source, url, None) for source, url in FEEDS.items()] + extra_feeds
-    reviewed, statuses, macro_sources = [], {}, {}
-    for source, url, configured in sorted(sources, key=lambda row: row[0] not in PRIMARY):
-        if backoff.get(url, now) > now:
-            continue
+def news_cutoff(now, opened):
+    """60 minutes, or since the previous close during the first session hour.
+
+    Most earnings and guidance releases come out pre-market or after the close:
+    they are evaluated in the first hour of the next session instead of being lost.
+    """
+    if opened is not None and now - opened <= timedelta(hours=1):
+        return exchange_calendars.get_calendar("XNYS").previous_close(opened).to_pydatetime()
+    return now - timedelta(hours=1)
+
+
+def read_sources(now, directory, user_agent, sources, *, cutoff=None):
+    """Fetch all feeds in parallel. Returns (reviewed, statuses, raw items per source)."""
+    def load(row):
+        source, url, configured = row
         try:
             data = fetch(url, user_agent)
             atom = source == "SEC EDGAR"
-            items = list(reviews(data, source=source, now=utcnow(), directory=directory,
-                                 configured_symbol=configured, atom=atom))
-            reviewed.extend(items)
-            statuses[url] = {"source": source, "items": len(items)}
-            if collect_macro and source in ("BEA", "Federal Reserve"):
-                macro_sources.setdefault(source, []).extend(feed_items(data, atom=atom))
+            items = list(reviews(data, source=source, now=now, directory=directory,
+                                 configured_symbol=configured, atom=atom, cutoff=cutoff))
+            raw = list(feed_items(data, atom=atom)) if source in ("BEA", "Federal Reserve") else []
+            return source, url, items, raw, None
         except EXPECTED_ERRORS as exc:
-            backoff[url] = now + timedelta(minutes=5)
-            statuses[url] = {"source": source, "error": error_label(exc)}
-    return reviewed, statuses, macro_sources
+            return source, url, [], [], error_label(exc)
+
+    reviewed, statuses, raw_sources = [], {}, {}
+    with ThreadPoolExecutor(max_workers=max(1, len(sources))) as pool:
+        for source, url, items, raw, error in pool.map(load, sources):
+            reviewed.extend(items)
+            statuses[url] = {"source": source, "error": error} if error else {"source": source, "items": len(items)}
+            if raw:
+                raw_sources.setdefault(source, []).extend(raw)
+    return reviewed, statuses, raw_sources
+
+
+def event_key(event):
+    published = event.published.astimezone(timezone.utc).isoformat()
+    headline = re.sub(r"[^a-z0-9]+", " ", event.title.lower()).strip()
+    return hashlib.sha256(f"{event.symbol}|{published[:10]}|{headline}".encode()).hexdigest()
+
+
+def window_start(event, opened):
+    """The 60-minute signal window starts at publication or at the session open."""
+    return max(event.published, opened)
 
 
 class Worker:
-    def __init__(self, demo, market, journal, publish, user_agent, extra_feeds, expectations=None):
+    def __init__(self, demo, market, journal, publish, user_agent, extra_feeds):
         self.demo, self.market, self.journal = demo, market, journal
         self.publish, self.user_agent = publish, user_agent
-        self.extra_feeds = extra_feeds
-        self.expectations = expectations
-        self.macro_checked = None
+        self.sources = [(name, FEEDS[name], None) for name in CATALYST_FEEDS] + extra_feeds
         self.universe = {}
-        self.directory = {}
-        self.directory_refresh = None
-        self.refreshed = None
-        self.catalog_retry_at = None
-        self.last_checked = {}
-        self.backoff = {}
-        self.market_retry_at = None
+        self.stats = {}
 
-    def discover(self, now):
-        if self.catalog_retry_at and now < self.catalog_retry_at:
-            raise ValueError("Catalogo in attesa di retry")
-        if self.refreshed is None or now - self.refreshed >= timedelta(hours=6):
-            universe = self.demo.universe()
-            if not universe:
-                raise ValueError("Nessuno strumento Demo compatibile con il feed USA")
-            self.universe = universe
-            self.refreshed = now
-        if self.directory_refresh is None or now >= self.directory_refresh:
-            try:
-                self.directory = sec_directory(self.user_agent)
-                self.directory_refresh = now + timedelta(hours=6)
-            except EXPECTED_ERRORS as exc:
-                self.directory_refresh = now + timedelta(minutes=5)
-                self.journal.error(now, "SEC ticker directory", error_label(exc))
+    def cached(self, name, now, max_age, loader):
+        """Persistent cache; a failed refresh falls back to the stale copy."""
+        value, fresh = self.journal.cached(name, now, max_age)
+        if fresh:
+            return value
+        try:
+            value = loader()
+            self.journal.store(name, now, value)
+        except EXPECTED_ERRORS as exc:
+            self.journal.error(now, name, error_label(exc))
+            if value is None:
+                raise
+        return value
 
-        macro_due = self.macro_checked is None or now - self.macro_checked >= timedelta(minutes=15)
-        reviewed, statuses, macro_sources = read_sources(now, self.directory, self.user_agent,
-                                                        self.extra_feeds, self.backoff, collect_macro=macro_due)
+    def discover(self, now, opened):
+        self.universe = self.cached("universe", now, UNIVERSE_TTL, self.demo.universe)
+        if not self.universe:
+            raise ValueError("Nessuno strumento Demo compatibile con il feed USA")
+        try:
+            directory = {int(cik): symbol for cik, symbol in
+                         self.cached("sec_directory", now, UNIVERSE_TTL,
+                                     lambda: sec_directory(self.user_agent)).items()}
+        except EXPECTED_ERRORS:
+            directory = {}
+        reviewed, statuses, _ = read_sources(now, directory, self.user_agent, self.sources,
+                                             cutoff=news_cutoff(now, opened))
         for status in statuses.values():
             if "error" in status:
                 self.journal.error(now, status["source"], status["error"])
-        if macro_due:
-            self.macro_checked = now
-            try:
-                expectations = expectations_from(self.expectations)
-            except EXPECTED_ERRORS as exc:
-                self.journal.error(now, "attese macro", error_label(exc))
-                expectations = []
-            releases, macro_statuses = macro_releases(fetch, self.user_agent, macro_sources, expectations)
-            self.journal.record_macro(releases)
-            for source, status in macro_statuses.items():
-                if status != "letto":
-                    self.journal.error(now, source, status)
+        added = 0
         for event, reason in reviewed:
             if reason or event.symbol not in self.universe:
                 continue
             payload = asdict(event)
             payload["published"] = event.published.astimezone(timezone.utc).isoformat()
             payload["detected"] = event.detected.isoformat()
-            headline = re.sub(r"[^a-z0-9]+", " ", event.title.lower()).strip()
-            key = hashlib.sha256(f"{event.symbol}|{payload['published'][:10]}|{headline}".encode()).hexdigest()
-            self.journal.add(key, payload, event.published.astimezone(timezone.utc) + timedelta(hours=2))
+            self.journal.add(event_key(event), payload,
+                             window_start(event, opened) + CANDIDATE_LIFETIME)
+            added += 1
+        self.stats.update(notizie=len(reviewed), catalizzatori=added)
 
-    def monitor(self, now):
-        opened = session_open(now)
-        if opened is None or (self.market_retry_at and now < self.market_retry_at):
-            return
-        self.last_checked = {key: at for key, at in self.last_checked.items()
-                             if now - at < timedelta(hours=2)}
+    def monitor(self, now, opened):
         due = []
-        for row in self.journal.active(now, 80):
-            key, raw, latest, first, entry, _, observations, outcome, _ = row
-            event = json.loads(raw)
-            if event["symbol"] not in self.universe:
-                continue
-            if latest and json.loads(latest)["state"] == "SCARTARE" and not first:
-                continue
-            if len(json.loads(observations)) == 4 and (not entry or outcome):
-                continue
-            if key in self.last_checked and now - self.last_checked[key] < timedelta(minutes=5):
-                continue
+        for row in self.journal.active(now, 200):
+            first, entry, observations, outcome = row[3], row[4], json.loads(row[6]), row[7]
+            published = datetime.fromisoformat(json.loads(row[1])["published"])
+            if not first and now - max(published, opened) > SIGNAL_WINDOW:
+                continue  # never confirmed within its window
+            if len(observations) == len(HORIZONS) and (not entry or outcome):
+                continue  # PRAVDA tracking complete
             due.append(row)
-            if len(due) == 12:
+            if len(due) == MAX_CANDIDATES:
                 break
         symbols = sorted({json.loads(row[1])["symbol"] for row in due})
-        series = self.market.bars(symbols, start=opened,
-                                  end=now) if symbols else {}
+        series = self.market.bars(symbols, start=opened, end=now) if symbols else {}
         ranked = []
-        for key, raw, latest, first, entry, notified, observations, outcome, _ in due:
-            self.last_checked[key] = now
+        for key, raw, _, first, entry, notified, observations, outcome in due:
             values = json.loads(raw)
             for field in ("published", "detected"):
                 values[field] = datetime.fromisoformat(values[field])
@@ -140,51 +154,46 @@ class Worker:
             bars = series.get(event.symbol, [])
             self.journal.follow(key, bars, json.loads(first or "null"), json.loads(entry or "null"),
                                 json.loads(observations), json.loads(outcome or "null"), now)
-            if latest and json.loads(latest)["state"] == "SCARTARE":
+            if now - window_start(event, opened) > SIGNAL_WINDOW:
                 continue
-            checked_at = utcnow()
-            if session_open(checked_at) != opened or checked_at - event.published > timedelta(hours=1):
-                continue
-            signal, reason = evaluate(event, bars, checked_at)
+            signal, reason = evaluate(event, bars, now)
             if signal is None:
-                self.journal.error(now, event.symbol, reason)
+                self.journal.record(key, {"reason": reason, "at": now.isoformat()})
                 continue
-            signal["signaled_at"] = checked_at.isoformat()
-            signal["historical"] = json.loads(latest)["historical"] if latest else self.journal.comparable(key, event)
-            previous = json.loads(notified or "null")
-            if entry and signal["state"] == "PREPARARE":
-                continue
+            signal["signaled_at"] = now.isoformat()
             self.journal.record(key, signal)
-            changed = previous is None or (previous["state"], previous["phase"]) != (signal["state"], signal["phase"])
-            if changed and (signal["state"] != "SCARTARE" or previous):
+            previous = json.loads(notified or "null") or {}
+            if RANK[signal["state"]] > RANK[previous.get("state")]:
                 ranked.append((event, key, signal))
-        for event, key, signal in sorted(ranked, key=lambda row: -row[2]["heuristic_score"])[:3]:
-            delivered_at = utcnow()
-            if session_open(delivered_at) != opened or delivered_at - datetime.fromisoformat(signal["quote_at"]) > timedelta(minutes=2):
-                continue
-            if self.publish(message(event, self.universe[event.symbol][1], signal, delivered_at)):
-                self.journal.record(key, signal, notify=True)
+        sent = 0
+        for event, key, signal in sorted(ranked, key=lambda row: -row[2]["heuristic_score"])[:MAX_MESSAGES]:
+            if self.publish(message(event, self.universe[event.symbol][1], signal, utcnow())):
+                self.journal.notified(key, signal)
+                sent += 1
             else:
-                self.journal.error(delivered_at, "Telegram", "Consegna non confermata")
+                self.journal.error(now, "Telegram", "Consegna non confermata")
+        self.stats.update(candidati=len(due), segnali=sent)
 
     def poll(self):
+        """One cycle: news -> selection -> analysis -> Telegram -> PRAVDA."""
+        started = time.monotonic()
         now = utcnow()
-        if self.catalog_retry_at and now < self.catalog_retry_at:
-            return False
+        opened = session_open(now)
+        self.stats = {}
+        if opened is None:
+            print("Gagarin: seduta XNYS chiusa, nessuna chiamata esterna", flush=True)
+            return True
+        ok = True
         try:
-            self.discover(now)
+            self.discover(now, opened)
+            self.monitor(now, opened)
         except EXPECTED_ERRORS as exc:
-            self.catalog_retry_at = now + timedelta(minutes=5)
-            self.journal.error(now, "catalogo Demo", error_label(exc))
-            print("Gagarin: catalogo Demo non disponibile", flush=True)
-            return False
-        try:
-            self.monitor(utcnow())
-        except EXPECTED_ERRORS as exc:
-            self.market_retry_at = now + timedelta(minutes=5)
-            self.journal.error(now, "dati mercato", error_label(exc))
-            return False
-        return True
+            self.journal.error(now, "ciclo", error_label(exc))
+            self.stats["errore"] = str(exc) if isinstance(exc, ValueError) else error_label(exc)
+            ok = False
+        self.stats["secondi"] = round(time.monotonic() - started, 2)
+        print("Gagarin: " + json.dumps(self.stats, ensure_ascii=False), flush=True)
+        return ok
 
 
 def configured_demo():
@@ -225,9 +234,11 @@ def scan_report(user_agent, extra, expectations):
     except EXPECTED_ERRORS as exc:
         directory = {}
         report["sec_directory"] = {"errore": error_label(exc)}
-    reviewed, report["feeds"], sources = read_sources(now, directory, user_agent, extra, {}, collect_macro=True)
+    opened = session_open(now)
+    feeds = [(source, url, None) for source, url in FEEDS.items()] + extra
+    reviewed, report["feeds"], sources = read_sources(now, directory, user_agent, feeds,
+                                                      cutoff=news_cutoff(now, opened))
     report["macro"], report["macro_sources"] = macro_releases(fetch, user_agent, sources, expectations)
-    opened = session_open(utcnow())
     report["seduta_xnys"] = "aperta" if opened else "chiusa"
     rows = build_rows(reviewed, universe=universe, market=market, opened=opened, clock=utcnow)
     report["news"] = rows
@@ -251,12 +262,12 @@ def main():
     args = parser.parse_args()
     simulated = os.getenv("GAGARIN_TELEGRAM_ENABLED") != "true"
     journal_path = args.journal or Path(".gagarin-pravda-sim.sqlite" if simulated else ".gagarin-pravda.sqlite")
+    user_agent = os.getenv("GAGARIN_SEC_USER_AGENT") or DEFAULT_USER_AGENT
     if args.report:
-        print(json.dumps(Journal(journal_path).report(), indent=2))
+        print(json.dumps(Journal(journal_path).report(), ensure_ascii=False, indent=2))
         return
     if args.scan:
-        report = scan_report(os.getenv("GAGARIN_SEC_USER_AGENT") or "Gagarin/3 (https://github.com/andreameloni1984-sys/commodity-news-scanner)",
-                             extra_feeds(), expectations_from(args.macro_expectations))
+        report = scan_report(user_agent, extra_feeds(), expectations_from(args.macro_expectations))
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return
     if args.check_market:
@@ -290,14 +301,13 @@ def main():
             print(text, flush=True)
             return True
     else:
-        token, chat = os.environ["GAGARIN_TELEGRAM_TOKEN"], os.environ["GAGARIN_TELEGRAM_CHAT_ID"]
+        token, chat = os.getenv("GAGARIN_TELEGRAM_TOKEN"), os.getenv("GAGARIN_TELEGRAM_CHAT_ID")
         if not token or not chat:
-            raise ValueError("Secret Telegram mancanti")
+            parser.exit(1, "Secret Telegram mancanti\n")
 
         def publish(text):
             return send_telegram(text, token=token, chat_id=chat)
-    worker = Worker(demo, market, Journal(journal_path), publish, os.environ["GAGARIN_SEC_USER_AGENT"],
-                    extra_feeds(), args.macro_expectations)
+    worker = Worker(demo, market, Journal(journal_path), publish, user_agent, extra_feeds())
     while True:
         success = worker.poll()
         if args.once:

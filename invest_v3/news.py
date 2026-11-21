@@ -1,6 +1,6 @@
 """Timestamped RSS/Atom intake and conservative catalyst classification."""
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from email.utils import parsedate_to_datetime
 from html import unescape
 import json
@@ -21,6 +21,8 @@ FEEDS = {
     "GlobeNewswire": "https://www.globenewswire.com/RssFeed/subjectcode/01-Earnings%20Releases/feedTitle/Earnings%20Releases",
     "PR Newswire": "https://www.prnewswire.com/rss/news-releases-list.rss",
 }
+# Feeds that can yield a ticker-linked catalyst. Macro and FDA feeds never name a ticker.
+CATALYST_FEEDS = ("SEC EDGAR", "GlobeNewswire", "PR Newswire")
 PRIMARY = {"SEC EDGAR", "Federal Reserve", "BLS", "BEA", "Treasury", "Casa Bianca", "FDA"}
 TICKER = r"\((?:NASDAQ|NYSE(?: ARCA| AMERICAN)?|AMEX)\s*:\s*([A-Z][A-Z0-9.-]{0,19})\)"
 RULES = (
@@ -103,7 +105,9 @@ def feed_items(data, *, atom=False):
         yield title, url, published, re.sub(r"<[^>]+>", " ", unescape(summary))
 
 
-def reviews(data, *, source, now, directory, configured_symbol=None, atom=False):
+def reviews(data, *, source, now, directory, configured_symbol=None, atom=False, cutoff=None):
+    """Yield (event, exclusion reason). Items published before cutoff are stale."""
+    cutoff = cutoff or now - timedelta(hours=1)
     for title, url, published, summary in feed_items(data, atom=atom):
         symbol = configured_symbol
         if source == "SEC EDGAR":
@@ -116,10 +120,9 @@ def reviews(data, *, source, now, directory, configured_symbol=None, atom=False)
         category, direction, impact = classify(source, title, summary, symbol)
         event = Event(source, url, title, published, now, symbol, category, direction, impact)
         reason = None
-        age = (now - published).total_seconds()
-        if age < 0:
+        if published > now:
             reason = "pubblicazione futura"
-        elif age > 3600:
+        elif published < cutoff:
             reason = "pubblicazione oltre 60 minuti"
         elif source in MACRO_SOURCES:
             reason = "comunicato macro, nessuna direzione automatica per titolo"

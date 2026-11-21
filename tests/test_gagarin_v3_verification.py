@@ -82,7 +82,7 @@ def test_scan_explains_missing_catalog_ambiguous_macro_and_stale_bars():
     assert not macro[0].direction and "nessuna direzione" in macro[1]
     event = detected[0][0]
     assert evaluate(event, [], NOW)[1] == "barre concluse assenti"
-    assert evaluate(event, [Bar(100, 101, 99, 4000, NOW - timedelta(minutes=3))], NOW)[1].startswith("ultima barra scaduta")
+    assert evaluate(event, [Bar(100, 101, 99, 4000, NOW - timedelta(minutes=4))], NOW)[1].startswith("ultima barra scaduta")
 
 
 def test_closed_market_preflight_distinguishes_history_from_freshness():

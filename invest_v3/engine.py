@@ -1,4 +1,4 @@
-"""Catalyst-first session analysis and paper setup levels."""
+"""Catalyst-first paper setup: light price confirmation and indicative levels."""
 from datetime import datetime, timedelta
 from math import isfinite
 from zoneinfo import ZoneInfo
@@ -6,7 +6,9 @@ from zoneinfo import ZoneInfo
 from invest_v2.gagarin import _ema
 
 MINUTE = timedelta(minutes=1)
+MAX_QUOTE_AGE = 3 * MINUTE
 HORIZONS = (5, 15, 30, 60)
+RANK = {None: 0, "PREPARARE": 1, "ENTRARE": 2}
 
 
 def assess(event, bars, now):
@@ -14,13 +16,14 @@ def assess(event, bars, now):
 
 
 def evaluate(event, bars, now):
+    """Return (signal, None) or (None, reason). Never invents levels."""
     if event.direction not in ("LONG", "SHORT"):
         return None, "impatto direzionale ambiguo"
     bars = [bar for bar in bars if bar.closed_at <= now]
     if not bars:
         return None, "barre concluse assenti"
-    if now - bars[-1].closed_at > 2 * MINUTE:
-        return None, "ultima barra scaduta (oltre 120 secondi)"
+    if now - bars[-1].closed_at > MAX_QUOTE_AGE:
+        return None, "ultima barra scaduta (oltre 180 secondi)"
     if any(not all(isfinite(value) and value > 0 for value in
                    (b.close, b.high, b.low, b.volume)) or not b.low <= b.close <= b.high
            for b in bars):
@@ -30,98 +33,74 @@ def evaluate(event, bars, now):
     last = bars[-1]
     if last.closed_at <= event.published:
         return None, "nessuna barra successiva alla notizia"
-    prior = next((b for b in reversed(bars) if b.closed_at <= event.published), None)
-    if prior is not None and event.published - prior.closed_at > 2 * MINUTE:
-        prior = None
     if sum(b.close * b.volume for b in bars[-5:]) < 100_000:
         return None, "controvalore stimato insufficiente"
-    result = {
-        "state": "PREPARARE", "phase": "anticipato", "price": last.close,
-        "quote_at": last.closed_at.isoformat(), "move": None,
-        "reason": event.category, "heuristic_score": event.impact, "levels": None,
+    # Reference: last bar before the news; pre-market news uses the first session bar.
+    ref = next((b for b in reversed(bars) if b.closed_at <= event.published), bars[0])
+    sign = 1 if event.direction == "LONG" else -1
+    move = last.close / ref.close - 1
+    if ref is last or sign * move <= 0:
+        return None, "il prezzo non conferma ancora la direzione"
+    signal = {
+        "state": "PREPARARE", "price": last.close, "quote_at": last.closed_at.isoformat(),
+        "move": move, "reason": event.category, "heuristic_score": float(event.impact),
+        "levels": None,
     }
-    if prior is not None:
-        result["move"] = last.close / prior.close - 1
-    if len(bars) < 21 or any(b.closed_at - a.closed_at != MINUTE
-                             for a, b in zip(bars[-21:-1], bars[-20:])):
-        return result, None
+    if len(bars) < 15:
+        return signal, None  # direction confirmed, too few bars for ATR: no levels
+
     closes = [b.close for b in bars]
-    baseline = bars[-21:-1]
     atr = sum(max(b.high - b.low, abs(b.high - a.close), abs(b.low - a.close))
               for a, b in zip(bars[-15:-1], bars[-14:])) / 14
     if atr <= 0:
-        return result, None
-
-    sign = 1 if event.direction == "LONG" else -1
-    volume = last.volume / (sum(b.volume for b in baseline) / len(baseline))
+        return signal, None
+    if sign * (last.close - ref.close) > 3 * atr:
+        return None, "movimento già esteso oltre 3 ATR"
     ema20 = _ema(closes, 20)
-    momentum5, momentum15 = last.close - closes[-6], last.close - closes[-16]
-    changes = [b - a for a, b in zip(closes[-15:-1], closes[-14:])]
-    movement = sum(map(abs, changes))
-    rsi = 100 * sum(max(x, 0) for x in changes) / movement if movement else 50
-    has_vwap = all(b.vwap is not None and isfinite(b.vwap) and b.vwap > 0 for b in bars)
-    vwap = sum(b.vwap * b.volume for b in bars) / sum(b.volume for b in bars) if has_vwap else None
-    result["technical"] = {
-        "ema20": ema20, "ema50": _ema(closes, 50) if len(closes) >= 50 else None,
-        "ema200": _ema(closes, 200) if len(closes) >= 200 else None,
-        "atr14": atr, "rsi14": rsi, "vwap": vwap, "relative_volume": volume,
-        "momentum5": momentum5, "momentum15": momentum15,
-    }
-    if prior:
-        if sign * (last.close - prior.close) >= 3 * atr:
-            result.update(state="SCARTARE", phase="tardivo", reason="Movimento già esteso oltre 3 ATR")
-            return result, None
-
-    boundary = max(b.high for b in baseline) if sign > 0 else min(b.low for b in baseline)
-    breakout = sign * (last.close - boundary) > 0
-    pullback = sign * (closes[-2] - ema20) <= 0 < sign * (last.close - ema20)
-    if prior is None or volume < 1.5 or min(sign * momentum5, sign * momentum15) <= 0:
-        return result, None
-    if not (breakout or pullback):
-        return result, None
-
-    risk = max(1.5 * atr, sign * (last.close - (boundary if breakout else ema20)) + 0.25 * atr)
-    if risk > 3 * atr:
-        return result, None
+    baseline = bars[-21:-1]
+    volume = last.volume / (sum(b.volume for b in baseline) / len(baseline))
+    trend = sign * (last.close - ema20) > 0
+    risk = min(max(1.5 * atr, sign * (last.close - ema20) + 0.25 * atr), 3 * atr)
     precision = 2 if last.close >= 1 else 4
     entry = round(last.close, precision)
     stop = round(entry - sign * risk, precision)
-    risk = abs(entry - stop)
-    targets = [round(entry + sign * multiple * risk, precision) for multiple in (1, 2, 3)]
-    if risk <= 0 or min(entry, stop, *targets) <= 0:
-        return result, None
-    setup = "Breakout" if breakout else "Pullback su EMA20"
-    result.update(state="ENTRARE" if sign > 0 else "PREPARARE", phase="confermato",
-                  reason=f"{event.category}. {setup}. Volume relativo {volume:.1f}×",
-                  levels=[entry, stop, *targets], heuristic_score=event.impact + min(volume, 5))
-    return result, None
+    target = round(entry + sign * 2 * abs(entry - stop), precision)
+    if entry == stop or min(entry, stop, target) <= 0:
+        return signal, None
+    signal.update(
+        state="ENTRARE" if sign > 0 and trend else "PREPARARE", levels=[entry, stop, target],
+        heuristic_score=event.impact + trend + min(volume, 3),
+        technical={"atr14": atr, "ema20": ema20, "relative_volume": volume, "trend": trend},
+    )
+    return signal, None
+
+
+def rome(value):
+    if isinstance(value, str):
+        value = datetime.fromisoformat(value)
+    return value.astimezone(ZoneInfo("Europe/Rome"))
 
 
 def message(event, name, signal, now):
+    levels = signal["levels"]
+    if levels:
+        entry, stop, target = levels
+        quote = rome(signal["quote_at"]).strftime("%H:%M")
+        price_lines = [f"ENTRY: {entry} (quotazione {quote})", f"STOP LOSS: {stop}",
+                       f"TAKE PROFIT: {target}"]
+    else:
+        price_lines = ["ENTRY: n.d. (dati insufficienti)", "STOP LOSS: n.d.", "TAKE PROFIT: n.d."]
     lines = [
-        "🚀 GAGARIN — INVEST", "", f"TITOLO: {name} ({event.symbol})",
-        f"DIREZIONE: {event.direction}", f"STATO: {signal['state']} · {signal['phase']}",
+        "🚀 GAGARIN INVEST", "",
+        f"STRUMENTO: {event.symbol} — {name}",
+        f"DIREZIONE: {event.direction}",
+        f"STATO: {signal['state']}",
+        *price_lines,
+        f"NOTIZIA: {event.category} — {event.title[:220]}",
+        f"FONTE: {event.url}",
+        f"ORARIO: {rome(now).strftime('%d/%m/%Y %H:%M')} (ora italiana)",
     ]
-    if signal["levels"]:
-        lines.extend(f"{label}: {value}" for label, value in
-                     zip(("ENTRY", "STOP LOSS", "TP1", "TP2", "TP3"), signal["levels"]))
-        lines.append("R/R: 1:1 / 1:2 / 1:3")
-    sample = signal.get("historical")
-    if sample:
-        lines.append(f"PRECEDENTI PRAVDA: {sample['samples']} · movimento medio a 60 min {sample['mean_return_60m']:+.2%}")
-    if signal["move"] is not None:
-        lines.append(f"MOVIMENTO DALLA NOTIZIA: {signal['move']:+.2%}")
     if event.direction == "SHORT":
-        lines.append("SHORT analitico · Apertura di una posizione corta indisponibile")
-    lines.extend([
-        f"NOTIZIA: {event.title[:350]}", f"FONTE: {event.source} · {event.url}",
-        f"MOTIVO: {signal['reason']}", f"PUNTEGGIO EURISTICO: {signal['heuristic_score']:.1f}",
-        f"DATI: {datetime_rome(signal['quote_at'])}",
-        f"ORARIO: {now.astimezone(ZoneInfo('Europe/Rome')).isoformat(timespec='seconds')}",
-        "SIMULAZIONE INTERNA",
-    ])
+        lines.append("NOTA: SHORT solo previsione analitica, non eseguibile su INVEST")
+    lines += ["", "PAPER ONLY"]
     return "\n".join(lines)
-
-
-def datetime_rome(iso):
-    return datetime.fromisoformat(iso).astimezone(ZoneInfo("Europe/Rome")).isoformat(timespec="seconds")
