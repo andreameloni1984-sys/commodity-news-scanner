@@ -16,6 +16,7 @@ class Journal:
                 latest TEXT, first_signal TEXT, entry_signal TEXT, notified TEXT,
                 observations TEXT NOT NULL DEFAULT '{}', outcome TEXT
             );
+            CREATE INDEX IF NOT EXISTS candidates_expires ON candidates(expires);
             CREATE TABLE IF NOT EXISTS macro_releases (
                 series TEXT NOT NULL, published TEXT NOT NULL, payload TEXT NOT NULL,
                 PRIMARY KEY (series, published)
@@ -41,14 +42,15 @@ class Journal:
         with self.db:
             self.db.execute("INSERT INTO errors VALUES (?,?,?)", (now.isoformat(), component, reason))
 
-    def active(self, now, limit):
+    def active(self, now, limit=-1):
         return self.db.execute("""
             SELECT id,event,latest,first_signal,entry_signal,notified,observations,outcome,expires
             FROM candidates WHERE expires >= ?
-            ORDER BY (first_signal IS NOT NULL) DESC,
+            ORDER BY (latest IS NULL AND expires >= ?) DESC,
+                     (first_signal IS NOT NULL) DESC,
                      json_extract(event, '$.impact') DESC,
                      json_extract(event, '$.published') DESC, id LIMIT ?
-        """, (now.isoformat(), limit)).fetchall()
+        """, (now.isoformat(), (now + timedelta(hours=1)).isoformat(), limit)).fetchall()
 
     def record(self, key, signal, *, notify=False):
         payload = json.dumps(signal)
@@ -79,8 +81,10 @@ class Journal:
             entry_price, stop, tp1, _, _ = entry["levels"]
             entry_time = datetime.fromisoformat(entry["signaled_at"])
             until = entry_time + timedelta(hours=1)
+            first_full_close = entry_time + timedelta(minutes=1)
+            last_eligible_close = min(now, until + timedelta(minutes=1))
             for bar in bars:
-                if not entry_time < bar.closed_at <= until + timedelta(minutes=1):
+                if not first_full_close <= bar.closed_at <= last_eligible_close:
                     continue
                 # OHLC cannot resolve intrabar order. Stop takes priority.
                 if bar.low <= stop:
@@ -131,7 +135,11 @@ class Journal:
             equity *= 1 + change
             peak = max(peak, equity)
             drawdown = max(drawdown, 1 - equity / peak)
+        confirmed = self.db.execute("SELECT count(*) FROM candidates WHERE notified IS NOT NULL").fetchone()[0]
+        unconfirmed = self.db.execute("SELECT count(*) FROM errors WHERE component='Telegram'").fetchone()[0]
         return {
+            "candidates_with_confirmed_delivery": confirmed,
+            "telegram_unconfirmed_attempts": unconfirmed,
             "directional_samples_60m": len(directions),
             "directional_accuracy_60m": mean(directions) if directions else None,
             "false_signal_rate_60m": 1 - mean(directions) if directions else None,
