@@ -2,7 +2,9 @@ name: Gagarin INVEST v3 (paper)
 
 on:
   schedule:
-    - cron: '3-58/5 * * 1-5'
+    # Every 5 minutes, 13:00-20:55 UTC Mon-Fri: covers the NYSE session in EST and EDT.
+    # The worker exits without external calls when XNYS is closed.
+    - cron: '*/5 13-20 * * 1-5'
   workflow_dispatch:
 
 permissions:
@@ -17,6 +19,8 @@ jobs:
     if: github.ref == 'refs/heads/main' && vars.GAGARIN_INVEST_V3_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 4
+    env:
+      GAGARIN_TELEGRAM_ENABLED: ${{ vars.GAGARIN_INVEST_V3_TELEGRAM_ENABLED }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -34,17 +38,20 @@ jobs:
           key: gagarin-v3-journal-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
             gagarin-v3-journal-
-      - name: Scan catalysts and monitor paper setups
+      - name: News -> selection -> analysis -> Telegram -> PRAVDA
         env:
           GAGARIN_DEMO_KEY: ${{ secrets.GAGARIN_DEMO_KEY }}
           GAGARIN_DEMO_SECRET: ${{ secrets.GAGARIN_DEMO_SECRET }}
           GAGARIN_ALPACA_KEY: ${{ secrets.GAGARIN_ALPACA_KEY }}
           GAGARIN_ALPACA_SECRET: ${{ secrets.GAGARIN_ALPACA_SECRET }}
           GAGARIN_SEC_USER_AGENT: ${{ secrets.GAGARIN_SEC_USER_AGENT }}
-          GAGARIN_TELEGRAM_ENABLED: ${{ vars.GAGARIN_INVEST_V3_TELEGRAM_ENABLED }}
-          GAGARIN_TELEGRAM_TOKEN: ${{ secrets.GAGARIN_TELEGRAM_TOKEN }}
-          GAGARIN_TELEGRAM_CHAT_ID: ${{ secrets.GAGARIN_TELEGRAM_CHAT_ID }}
+          GAGARIN_TELEGRAM_TOKEN: ${{ secrets.GAGARIN_TELEGRAM_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
+          GAGARIN_TELEGRAM_CHAT_ID: ${{ secrets.GAGARIN_TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID }}
         run: python -m invest_v3.runner --once
+      - name: PRAVDA summary
+        if: always()
+        run: |
+          { echo '```json'; python -m invest_v3.runner --report; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - name: Save PRAVDA journal
         if: always()
         uses: actions/cache/save@v4

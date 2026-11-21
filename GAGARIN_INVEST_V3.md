@@ -1,14 +1,21 @@
 # Gagarin INVEST v3
 
-Il worker controlla i feed ogni minuto. Cerca catalizzatori appena pubblicati,
-risolve il ticker tramite CIK SEC, ticker di borsa dichiarato oppure feed IR
-associato a un emittente e verifica la presenza nel catalogo INVEST Demo.
-L'analisi intraday copre azioni ed ETF USA in USD compatibili con Alpaca.
-L'universo si aggiorna ogni sei ore. Il monitoraggio analizza fino a 12
-candidati per ciclo e ricontrolla ciascun candidato al massimo ogni cinque
-minuti durante la seduta XNYS. La durata massima del candidato è di due ore
-dalla pubblicazione. Attese dopo errori e richieste aggregate limitano le
-chiamate alle API.
+Percorso di ogni ciclo: notizia → selezione → analisi → Telegram → PRAVDA.
+
+- Il workflow parte ogni 5 minuti tra le 13:00 e le 20:55 UTC, dal lunedì al
+  venerdì. A seduta XNYS chiusa il worker esce senza chiamate esterne.
+- Feed letti in parallelo: SEC EDGAR 8-K, GlobeNewswire, PR Newswire, più
+  `GAGARIN_EXTRA_FEEDS`. I feed macro (BLS, BEA, Fed) e FDA non indicano un
+  ticker e restano nel solo report `--scan`.
+- Catalogo Trading 212 INVEST Demo e directory SEC sono salvati in PRAVDA e
+  aggiornati ogni 24 ore. Se l'aggiornamento fallisce si usa la copia
+  precedente.
+- Sono analizzati solo i ticker citati da una notizia valida e presenti nel
+  catalogo, al massimo 12 per ciclo, con una sola richiesta Alpaca.
+- Freschezza: notizie degli ultimi 60 minuti. Nella prima ora di seduta
+  valgono anche quelle pubblicate dalla chiusura precedente, cioè
+  trimestrali e guidance pre-market o after-hours. La finestra del segnale
+  parte dalla pubblicazione o dall'apertura.
 
 Le euristiche riconoscono trimestrali, guidance, contratti, acquisizioni,
 decisioni FDA e comunicazioni SEC 8-K. Assegnano una direzione solo in
@@ -22,15 +29,20 @@ e un endpoint autorizzato. Per feed HTTPS aggiuntivi impostare
 `GAGARIN_EXTRA_FEEDS` con un array JSON di oggetti con campi `source`, `url`
 e `symbol` facoltativo per feed di un singolo emittente.
 
-PREPARARE identifica una tesi con dati freschi e volume in dollari minimo.
-Breakout o recupero EMA20, volume relativo e momentum possono confermare
-il setup. Oltre tre ATR di movimento favorevole dalla pubblicazione, il
-setup è tardivo. Prezzi e livelli sono indicativi e usano barre concluse,
-con età massima di due minuti. Il punteggio è euristico. I precedenti
-PRAVDA mostrano conteggio e reazione media osservata a 60 minuti per
-categoria e direzione. SHORT è una tesi analitica e resta PREPARARE
-anche con conferma tecnica. Le vendite allo scoperto non sono disponibili
-nel perimetro operativo del worker.
+Conferma tecnica leggera. Servono un'ultima barra conclusa da non più di
+3 minuti, un controvalore minimo e un prezzo che dalla notizia si muove nella
+direzione prevista. Con almeno 15 barre, anche non contigue come capita
+con IEX, si calcolano livelli indicativi:
+STOP a 1,5–3 ATR oppure sotto la EMA20, TAKE PROFIT a 2R. Un movimento
+oltre 3 ATR è tardivo e scartato. ENTRARE richiede direzione LONG con prezzo
+oltre la EMA20. Negli altri casi lo stato è PREPARARE. Senza dati
+sufficienti i livelli sono indicati come `n.d.`, senza stime. SHORT resta una
+previsione analitica: su INVEST non si vende allo scoperto.
+
+Telegram riceve un messaggio solo al primo PREPARARE o al passaggio a
+ENTRARE, al massimo 3 per ciclo, nel formato `🚀 GAGARIN INVEST`, con
+STRUMENTO, DIREZIONE, STATO, ENTRY, STOP LOSS, TAKE PROFIT, NOTIZIA, FONTE,
+ORARIO italiano e `PAPER ONLY`.
 
 ## Dati macro USA
 
@@ -80,8 +92,7 @@ allo storico della seduta conclusa. Per convalidare dati operativi deve
 risultare `fresco` durante la seduta XNYS.
 `--scan` genera un report di sola lettura, con fonti, timestamp, ticker,
 direzioni e motivi delle esclusioni. Se mancano i secret prosegue con
-le sole fonti pubbliche e segnala il limite nel report. Il modulo ordini rifiuta ogni invio. Nessun workflow
-avvia il worker.
+le sole fonti pubbliche e segnala il limite nel report. Il modulo ordini rifiuta ogni invio.
 
 La modalità predefinita stampa i messaggi simulati. Per Telegram effettivo
 servono i secret `GAGARIN_TELEGRAM_TOKEN` e `GAGARIN_TELEGRAM_CHAT_ID`
@@ -90,11 +101,19 @@ usano database distinti per default. Usare un processo per database, su
 storage persistente. Il worker riprova le consegne non confermate quando
 il setup è ancora valido.
 
-PRAVDA registra rilevazione, segnale, dati, livelli, errori e osservazioni
-a 5, 15, 30 e 60 minuti quando il feed fornisce le barre corrispondenti.
-La simulazione apre alla chiusura di riferimento e termina su stop, TP1 o
-scadenza a 60 minuti, senza commissioni né slippage. Se stop e TP1 sono
-toccati nella stessa barra prevale lo stop. Il drawdown è calcolato sulle
-chiusure simulate concatenate e non rappresenta un portafoglio. Campioni
-mancanti restano esclusi dai denominatori. Nessuna regola viene aggiornata
-automaticamente.
+In GitHub Actions il workflow `gagarin-invest-v3.yml` gira solo su `main` e
+richiede la variabile di repository `GAGARIN_INVEST_V3_ENABLED=true`. Per
+Telegram reale serve anche `GAGARIN_INVEST_V3_TELEGRAM_ENABLED=true`. Il
+workflow usa i secret `GAGARIN_TELEGRAM_*` oppure, se mancano,
+`TELEGRAM_BOT_TOKEN` e `TELEGRAM_CHAT_ID`. Il journal PRAVDA persiste
+nella cache di Actions.
+
+PRAVDA usa come riferimento il primo segnale consegnato. Registra il
+prezzo dopo 5, 15, 30 e 60 minuti, con una tolleranza di 5 minuti, e assegna
+l'esito corretto o errato rispetto alla direzione. Registra anche il ritardo
+tra notizia e segnale e l'accuratezza per orizzonte. I campioni mancanti,
+per esempio dopo la chiusura, sono esclusi dai denominatori. I segnali
+ENTRARE hanno una simulazione di 60 minuti su STOP o TP, senza commissioni
+né slippage. Se STOP e TP cadono nella stessa barra prevale lo STOP.
+`--report` stampa il riepilogo, che il workflow allega a ogni esecuzione
+nel Summary. Nessuna regola si aggiorna automaticamente.

@@ -88,9 +88,7 @@ def build_rows(reviewed, *, universe, market, opened, clock):
         rows.append(row)
         if reason:
             continue
-        if clock() - event.published > timedelta(hours=1):
-            row["exclusion"] = "pubblicazione oltre 60 minuti"
-        elif universe is None:
+        if universe is None:
             row["exclusion"] = "catalogo INVEST Demo non verificabile"
         elif event.symbol not in universe:
             row["exclusion"] = "ticker non presente nel catalogo INVEST Demo compatibile"

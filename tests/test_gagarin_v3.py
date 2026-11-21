@@ -10,7 +10,7 @@ from invest_v2.gagarin import Bar
 from invest_v3 import runner
 from invest_v3.demo import Demo
 from invest_v3.demo_orders import submit
-from invest_v3.engine import assess
+from invest_v3.engine import assess, message
 from invest_v3.journal import Journal
 from invest_v3.news import Event, events
 
@@ -58,16 +58,26 @@ def test_demo_transport_is_read_only_and_filters_catalog(monkeypatch):
         submit()
 
 
-def test_worker_deduplicates_and_journals_simulated_signal(monkeypatch, tmp_path):
-    clock = [NOW]
+class DemoFeed:
+    calls = 0
+
+    def universe(self):
+        DemoFeed.calls += 1
+        return {"EXM": ("STOCK", "Example", "EXM_US_EQ"), "OTHER": ("ETF", "Other", "OTHER_US_EQ")}
+
+
+def offline(monkeypatch, clock, feed=FEED):
     monkeypatch.setattr(runner, "utcnow", lambda: clock[0])
     monkeypatch.setattr(runner, "sec_directory", lambda ua: {})
     monkeypatch.setattr(runner, "FEEDS", {"IR": "https://example.com/feed"})
-    monkeypatch.setattr(runner, "fetch", lambda url, ua: FEED)
+    monkeypatch.setattr(runner, "CATALYST_FEEDS", ("IR",))
+    monkeypatch.setattr(runner, "fetch", lambda url, ua: feed)
 
-    class DemoFeed:
-        def universe(self):
-            return {"EXM": ("STOCK", "Example", "EXM_US_EQ"), "OTHER": ("ETF", "Other", "OTHER_US_EQ")}
+
+def test_worker_news_to_telegram_to_pravda(monkeypatch, tmp_path):
+    clock = [NOW]
+    offline(monkeypatch, clock)
+    DemoFeed.calls = 0
 
     class Market:
         def bars(self, symbols, *, start, end):
@@ -80,6 +90,7 @@ def test_worker_deduplicates_and_journals_simulated_signal(monkeypatch, tmp_path
 
     journal = Journal(tmp_path / "pravda.sqlite")
     messages = []
+
     def telegram_response(request, timeout):
         form = parse_qs(request.data.decode())
         assert form["chat_id"] == ["test-chat"]
@@ -94,27 +105,72 @@ def test_worker_deduplicates_and_journals_simulated_signal(monkeypatch, tmp_path
     worker = runner.Worker(DemoFeed(), Market(), journal, publish, "test", [])
     assert worker.poll()
     assert len(messages) == 1
-    assert "STATO: ENTRARE" in messages[0]
-    assert "TP3:" in messages[0]
+    text = messages[0]
+    for line in ("🚀 GAGARIN INVEST", "STRUMENTO: EXM — Example", "DIREZIONE: LONG", "STATO: ENTRARE",
+                 "ENTRY: 100.75", "STOP LOSS:", "TAKE PROFIT:", "NOTIZIA: Guidance", 
+                 "FONTE: https://example.com/ir/guidance", "ORARIO: 20/11/2026 16:05", "PAPER ONLY"):
+        assert line in text
     for offset in (5, 15, 30, 60):
         clock[0] = NOW + timedelta(minutes=offset)
         assert worker.poll()
-    assert len(messages) == 1
-    assert journal.db.execute("SELECT notified FROM candidates").fetchone()[0] is not None
+    assert len(messages) == 1  # no repeats, no downgrade messages
+    assert DemoFeed.calls == 1  # catalog cached across cycles
     report = journal.report()
-    assert report["directional_samples_60m"] == 1
-    assert report["directional_accuracy_60m"] == 1
-    assert report["closed_simulations"] == 1
+    assert report["segnali"] == 1
+    assert all(report["accuratezza"][h]["percentuale"] == 100.0 for h in ("5", "15", "30", "60"))
+    assert report["ritardo_medio_notizia_segnale_secondi"] == 60
+    assert report["simulazioni_chiuse"] == 1
+    assert report["ultimi_segnali"][0]["esito"]["60"] == "corretto"
 
 
-def test_freshness_early_and_short_execution():
+def test_closed_session_makes_no_external_calls(monkeypatch, tmp_path):
+    clock = [NOW.replace(hour=23)]
+    monkeypatch.setattr(runner, "utcnow", lambda: clock[0])
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("external call")
+
+    monkeypatch.setattr(runner, "fetch", forbidden)
+    demo = type("D", (), {"universe": forbidden})()
+    market = type("M", (), {"bars": forbidden})()
+    assert runner.Worker(demo, market, Journal(tmp_path / "j.sqlite"), forbidden, "test", []).poll()
+
+
+def test_premarket_catalyst_is_evaluated_in_first_session_hour(monkeypatch, tmp_path):
+    opened = datetime(2026, 11, 20, 14, 30, tzinfo=timezone.utc)
+    now = opened + timedelta(minutes=20)
+    feed = FEED.replace(b"15:04:00", b"12:00:00")  # 07:00 ET earnings-style release
+    clock = [now]
+    offline(monkeypatch, clock, feed)
+
+    class Market:
+        def bars(self, symbols, *, start, end):
+            assert start == opened
+            # IEX-like gaps: one bar every other minute, uptrend after the open.
+            return {"EXM": [Bar(100 + i * 0.05, 100.1 + i * 0.05, 99.9 + i * 0.05, 3000,
+                                opened + timedelta(minutes=i)) for i in range(1, 21, 2)]
+                    + [Bar(101.2, 101.3, 100.9, 6000, now)]}
+
+    sent = []
+    worker = runner.Worker(DemoFeed(), Market(), Journal(tmp_path / "j.sqlite"),
+                           lambda text: sent.append(text) or True, "test", [])
+    assert runner.news_cutoff(now, opened) < datetime(2026, 11, 20, 12, tzinfo=timezone.utc)
+    assert worker.poll()
+    assert len(sent) == 1 and "DIREZIONE: LONG" in sent[0]
+
+
+def test_levels_short_and_staleness():
     event = Event("IR", "https://example.com/ir", "Cut guidance", NOW - timedelta(minutes=1),
-                  NOW, "EXM", "Guidance ridotta", "SHORT", 4)
+                  NOW, "EXM", "Guidance", "SHORT", 4)
     bars = bars_at(NOW, -1)
     early = assess(event, bars[-4:], NOW)
     assert (early["state"], early["levels"]) == ("PREPARARE", None)
     confirmed = assess(event, bars, NOW)
-    assert (confirmed["state"], confirmed["phase"]) == ("PREPARARE", "confermato")
-    assert confirmed["levels"][1] > confirmed["levels"][0] > confirmed["levels"][-1]
-    assert assess(event, bars, NOW + timedelta(minutes=3)) is None
+    assert confirmed["state"] == "PREPARARE"  # SHORT is never an order
+    entry, stop, target = confirmed["levels"]
+    assert stop > entry > target
+    assert "SHORT solo previsione analitica" in message(event, "Example", confirmed, NOW)
+    assert assess(event, bars, NOW + timedelta(minutes=4)) is None
+    against = assess(event, bars_at(NOW, 1), NOW)
+    assert against is None
     assert not list(events(FEED, source="IR", now=NOW + timedelta(hours=2), directory={}))
