@@ -47,8 +47,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      GAGARIN_DEMO_KEY: ${{ secrets.GAGARIN_DEMO_KEY }}
-      GAGARIN_DEMO_SECRET: ${{ secrets.GAGARIN_DEMO_SECRET }}
+      GAGARIN_DEMO_KEY: ${{ secrets.GAGARIN_DEMO_KEY || secrets.TRADING212_DEMO_API_KEY }}
+      GAGARIN_DEMO_SECRET: ${{ secrets.GAGARIN_DEMO_SECRET || secrets.TRADING212_DEMO_API_SECRET }}
       GAGARIN_ALPACA_KEY: ${{ secrets.GAGARIN_ALPACA_KEY }}
       GAGARIN_ALPACA_SECRET: ${{ secrets.GAGARIN_ALPACA_SECRET }}
       GAGARIN_SEC_USER_AGENT: ${{ secrets.GAGARIN_SEC_USER_AGENT }}
@@ -125,8 +125,8 @@ jobs:
             gagarin-v3-journal-
       - name: News -> selection -> analysis -> Telegram -> PRAVDA
         env:
-          GAGARIN_DEMO_KEY: ${{ secrets.GAGARIN_DEMO_KEY }}
-          GAGARIN_DEMO_SECRET: ${{ secrets.GAGARIN_DEMO_SECRET }}
+          GAGARIN_DEMO_KEY: ${{ secrets.GAGARIN_DEMO_KEY || secrets.TRADING212_DEMO_API_KEY }}
+          GAGARIN_DEMO_SECRET: ${{ secrets.GAGARIN_DEMO_SECRET || secrets.TRADING212_DEMO_API_SECRET }}
           GAGARIN_ALPACA_KEY: ${{ secrets.GAGARIN_ALPACA_KEY }}
           GAGARIN_ALPACA_SECRET: ${{ secrets.GAGARIN_ALPACA_SECRET }}
           GAGARIN_SEC_USER_AGENT: ${{ secrets.GAGARIN_SEC_USER_AGENT }}

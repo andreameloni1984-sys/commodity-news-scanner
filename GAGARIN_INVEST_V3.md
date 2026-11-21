@@ -111,7 +111,9 @@ scansione di `gagarin-invest-v3.yml` gira solo su `main` e
 richiede la variabile di repository `GAGARIN_INVEST_V3_ENABLED=true`. Per
 Telegram reale serve anche `GAGARIN_INVEST_V3_TELEGRAM_ENABLED=true`. Il
 workflow usa i secret `GAGARIN_TELEGRAM_*` oppure, se mancano, quelli
-esistenti `TELEGRAM_BOT_TOKEN` e `TELEGRAM_CHAT_ID`. Il journal PRAVDA persiste
+esistenti `TELEGRAM_BOT_TOKEN` e `TELEGRAM_CHAT_ID`; per Trading 212
+`GAGARIN_DEMO_*` oppure `TRADING212_DEMO_API_KEY` e `TRADING212_DEMO_API_SECRET`.
+Il journal PRAVDA persiste
 nella cache di Actions.
 
 PRAVDA usa come riferimento il primo segnale consegnato. Registra il
