@@ -12,7 +12,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
-from . import messages, notify, strategy
+from . import messages, notify, report_card, strategy
 from . import sputnik_context
 from . import state as state_mod
 from .data import Bars, DataError, completed_daily, fetch
@@ -144,6 +144,8 @@ def run(now: datetime | None = None, dry_run: bool = False, fetcher: Fetcher = f
         except DataError as exc:
             log.warning("%s: %s", inst.name, exc)
             rows.append(f"{inst.name}: dati non disponibili")
+            errors = st.setdefault("errors", {})
+            errors["dati mancanti"] = errors.get("dati mancanti", 0) + 1
             continue
         rows.append(trend_row(inst, daily, now))
 
@@ -185,6 +187,10 @@ def run(now: datetime | None = None, dry_run: bool = False, fetcher: Fetcher = f
         emit(messages.daily_summary(rows, open_lines, stats(st)))
         st["last_summary"] = today
 
+    if report_card.due(st, now):
+        emit(report_card.build(st, now))
+        report_card.mark_sent(st, now)
+
     queue = st["outbox"] + out
     st["outbox"] = []
     for text in queue:
@@ -192,6 +198,8 @@ def run(now: datetime | None = None, dry_run: bool = False, fetcher: Fetcher = f
             print("\n" + "=" * 60 + "\n" + text)
         elif not sender(text):
             st["outbox"].append(text)
+            errors = st.setdefault("errors", {})
+            errors["invii Telegram falliti"] = errors.get("invii Telegram falliti", 0) + 1
     if st["outbox"]:
         log.warning("%d messaggi non inviati, riprovo al prossimo giro", len(st["outbox"]))
     return st
