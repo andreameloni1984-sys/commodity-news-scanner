@@ -1,0 +1,19 @@
+name: Gagarin CFD Bot Tests
+on:
+  push:
+    paths: ["cfdbot/**", "tests/test_cfdbot_*.py", "tests/cfd_helpers.py", ".github/workflows/cfd-bot*.yml"]
+  pull_request:
+    paths: ["cfdbot/**", "tests/test_cfdbot_*.py", "tests/cfd_helpers.py"]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install requests pytest
+      - run: python -m pytest -q tests/test_cfdbot_strategy.py tests/test_cfdbot_backtest.py tests/test_cfdbot_bot.py
