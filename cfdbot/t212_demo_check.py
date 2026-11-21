@@ -40,14 +40,36 @@ def _get(path: str, headers: dict) -> tuple[int, object]:
         return 0, type(e).__name__
 
 
+def split_credentials(key: str, secret: str) -> tuple[str, str, str]:
+    """Gestisce chiave e segreto incollati insieme nello stesso secret (su due righe o con ':')."""
+    key, secret = key.strip(), secret.strip()
+    note = ""
+    parts = [p.strip() for p in key.replace("\r", "\n").split("\n") if p.strip()]
+    if len(parts) >= 2:
+        note = "il secret della chiave contiene più righe: uso la prima come chiave e la seconda come segreto"
+        key = parts[0]
+        secret = secret or parts[1]
+    elif not secret and ":" in key:
+        note = "il secret della chiave contiene 'chiave:segreto': li separo"
+        key, secret = (x.strip() for x in key.split(":", 1))
+    key = "".join(key.split())
+    secret = "".join(secret.split())
+    return key, secret, note
+
+
+def describe(value: str) -> str:
+    return f"{len(value)} caratteri" if value else "assente"
+
+
 def run() -> tuple[bool, str]:
-    key = os.getenv("T212_API_KEY", "").strip()
-    secret = os.getenv("T212_API_SECRET", "").strip()
+    raw_key = os.getenv("T212_API_KEY", "")
+    raw_secret = os.getenv("T212_API_SECRET", "")
     source = os.getenv("T212_KEY_SOURCE", "non trovato")
+    key, secret, note = split_credentials(raw_key, raw_secret)
     if not key:
         return False, ("🧪 TEST TRADING 212 DEMO — ❌ chiavi non trovate\n"
                        "Nessun secret T212_API_KEY / GAGARIN_DEMO_KEY / TRADING212_DEMO_API_KEY nel repository.")
-    last = ""
+    attempts = []
     for label, headers in _headers(key, secret):
         status, cash = _get("/equity/account/cash", headers)
         if status == 200 and isinstance(cash, dict):
@@ -57,6 +79,7 @@ def run() -> tuple[bool, str]:
             lines = [
                 "🧪 TEST TRADING 212 DEMO — ✅ collegamento riuscito",
                 f"Chiavi lette da: {source} · autenticazione: {label}",
+                *( [f"Nota: {note}"] if note else [] ),
                 "",
                 f"Valore totale: {cash.get('total', 'n.d.')} {currency}",
                 f"Liquidità disponibile: {cash.get('free', 'n.d.')} {currency}",
@@ -69,10 +92,16 @@ def run() -> tuple[bool, str]:
                     lines.append(f"• {p.get('ticker')} · quantità {p.get('quantity')} · P/L {p.get('ppl')}")
             lines += ["", "Test in sola lettura: nessun ordine inserito. Conto DEMO, nessun denaro reale."]
             return True, "\n".join(lines)
-        last = f"{label}: HTTP {status}" if status else f"{label}: errore di rete ({cash})"
-    hint = ("La chiave è stata rifiutata: controlla che sia del conto DEMO (non reale), che abbia i permessi "
-            "di lettura account/portafoglio e che non sia limitata a indirizzi IP specifici.")
-    return False, f"🧪 TEST TRADING 212 DEMO — ❌ accesso rifiutato\nChiavi lette da: {source}\nEsito: {last}\n{hint}"
+        attempts.append(f"{label}: HTTP {status}" if status else f"{label}: errore ({cash})")
+    hint = ("Controlla che la chiave sia del conto DEMO (non reale), che abbia i permessi di lettura "
+            "account/portafoglio e che non sia limitata a indirizzi IP specifici.")
+    return False, "\n".join([
+        "🧪 TEST TRADING 212 DEMO — ❌ accesso rifiutato",
+        f"Chiavi lette da: {source} · chiave {describe(key)} · segreto {describe(secret)}",
+        *( [f"Nota: {note}"] if note else [] ),
+        "Tentativi: " + "; ".join(attempts),
+        hint,
+    ])
 
 
 def main() -> int:
