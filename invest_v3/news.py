@@ -21,7 +21,6 @@ FEEDS = {
     "GlobeNewswire": "https://www.globenewswire.com/RssFeed/subjectcode/01-Earnings%20Releases/feedTitle/Earnings%20Releases",
     "PR Newswire": "https://www.prnewswire.com/rss/news-releases-list.rss",
 }
-PRIMARY = {"SEC EDGAR", "Federal Reserve", "BLS", "BEA", "Treasury", "Casa Bianca", "FDA"}
 TICKER = r"\((?:NASDAQ|NYSE(?: ARCA| AMERICAN)?|AMEX)\s*:\s*([A-Z][A-Z0-9.-]{0,19})\)"
 RULES = (
     ("Guidance", "LONG", 4, r"\b(?:raises?|raised|increases?) (?:its )?(?:full[ -]year |annual |quarterly )?(?:(?:revenue|earnings|EPS) )?(?:guidance|outlook)\b"),
@@ -103,8 +102,12 @@ def feed_items(data, *, atom=False):
         yield title, url, published, re.sub(r"<[^>]+>", " ", unescape(summary))
 
 
-def reviews(data, *, source, now, directory, configured_symbol=None, atom=False):
+def reviews(data, *, source, now, directory, configured_symbol=None, atom=False,
+            include_excluded=True):
     for title, url, published, summary in feed_items(data, atom=atom):
+        age = (now - published).total_seconds()
+        if not include_excluded and (not 0 <= age <= 3600 or source in MACRO_SOURCES):
+            continue
         symbol = configured_symbol
         if source == "SEC EDGAR":
             cik = re.search(r"\((\d{10})\)\s*\(Filer\)", title, re.I)
@@ -116,7 +119,6 @@ def reviews(data, *, source, now, directory, configured_symbol=None, atom=False)
         category, direction, impact = classify(source, title, summary, symbol)
         event = Event(source, url, title, published, now, symbol, category, direction, impact)
         reason = None
-        age = (now - published).total_seconds()
         if age < 0:
             reason = "pubblicazione futura"
         elif age > 3600:
@@ -129,7 +131,8 @@ def reviews(data, *, source, now, directory, configured_symbol=None, atom=False)
             reason = "emittente/ticker non univoco o mancante"
         elif not direction:
             reason = "impatto direzionale ambiguo o confronto mancante"
-        yield event, reason
+        if include_excluded or reason is None:
+            yield event, reason
 
 
 def classify(source, title, summary, symbol):
@@ -156,4 +159,4 @@ def classify(source, title, summary, symbol):
 
 
 def events(data, **kwargs):
-    return (event for event, reason in reviews(data, **kwargs) if reason is None)
+    return (event for event, _ in reviews(data, include_excluded=False, **kwargs))

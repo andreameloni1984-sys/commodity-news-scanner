@@ -1,5 +1,6 @@
 """Gagarin INVEST Demo worker. Run one process per PRAVDA database."""
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 import hashlib
@@ -13,9 +14,9 @@ from invest_v2.gagarin_runner import send_telegram, session_open
 from invest_v2.us_market_data import AlpacaData
 
 from .demo import Demo
-from .engine import evaluate, message
+from .engine import HORIZONS, evaluate, message
 from .journal import Journal
-from .news import Event, FEEDS, PRIMARY, feed_items, fetch, reviews, sec_directory
+from .news import Event, FEEDS, feed_items, fetch, reviews, sec_directory
 from .scan import (EXPECTED_ERRORS, build_rows, check_market, error_label,
                    expectations_from, macro_releases)
 
@@ -24,24 +25,37 @@ def utcnow():
     return datetime.now(timezone.utc)
 
 
-def read_sources(now, directory, user_agent, extra_feeds, backoff, *, collect_macro=False):
+def read_sources(now, directory, user_agent, extra_feeds, backoff, *,
+                 collect_macro=False, include_excluded=True):
     sources = [(source, url, None) for source, url in FEEDS.items()] + extra_feeds
+    sources = [row for row in sources if backoff.get(row[1], now) <= now]
     reviewed, statuses, macro_sources = [], {}, {}
-    for source, url, configured in sorted(sources, key=lambda row: row[0] not in PRIMARY):
-        if backoff.get(url, now) > now:
-            continue
-        try:
-            data = fetch(url, user_agent)
-            atom = source == "SEC EDGAR"
-            items = list(reviews(data, source=source, now=utcnow(), directory=directory,
-                                 configured_symbol=configured, atom=atom))
+
+    def read_source(row):
+        source, url, configured = row
+        data = fetch(url, user_agent)
+        atom = source == "SEC EDGAR"
+        items = list(reviews(data, source=source, now=utcnow(), directory=directory,
+                             configured_symbol=configured, atom=atom,
+                             include_excluded=include_excluded))
+        macro = []
+        if collect_macro and source in ("BEA", "Federal Reserve"):
+            macro = list(feed_items(data, atom=atom))
+        return items, macro
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        pending = [(row, executor.submit(read_source, row)) for row in sources]
+        for (source, url, _), task in pending:
+            try:
+                items, macro = task.result()
+            except EXPECTED_ERRORS as exc:
+                backoff[url] = now + timedelta(minutes=5)
+                statuses[url] = {"source": source, "error": error_label(exc)}
+                continue
             reviewed.extend(items)
             statuses[url] = {"source": source, "items": len(items)}
-            if collect_macro and source in ("BEA", "Federal Reserve"):
-                macro_sources.setdefault(source, []).extend(feed_items(data, atom=atom))
-        except EXPECTED_ERRORS as exc:
-            backoff[url] = now + timedelta(minutes=5)
-            statuses[url] = {"source": source, "error": error_label(exc)}
+            if macro:
+                macro_sources.setdefault(source, []).extend(macro)
     return reviewed, statuses, macro_sources
 
 
@@ -62,8 +76,6 @@ class Worker:
         self.market_retry_at = None
 
     def discover(self, now):
-        if self.catalog_retry_at and now < self.catalog_retry_at:
-            raise ValueError("Catalogo in attesa di retry")
         if self.refreshed is None or now - self.refreshed >= timedelta(hours=6):
             universe = self.demo.universe()
             if not universe:
@@ -80,24 +92,13 @@ class Worker:
 
         macro_due = self.macro_checked is None or now - self.macro_checked >= timedelta(minutes=15)
         reviewed, statuses, macro_sources = read_sources(now, self.directory, self.user_agent,
-                                                        self.extra_feeds, self.backoff, collect_macro=macro_due)
+                                                        self.extra_feeds, self.backoff, collect_macro=macro_due,
+                                                        include_excluded=False)
         for status in statuses.values():
             if "error" in status:
                 self.journal.error(now, status["source"], status["error"])
-        if macro_due:
-            self.macro_checked = now
-            try:
-                expectations = expectations_from(self.expectations)
-            except EXPECTED_ERRORS as exc:
-                self.journal.error(now, "attese macro", error_label(exc))
-                expectations = []
-            releases, macro_statuses = macro_releases(fetch, self.user_agent, macro_sources, expectations)
-            self.journal.record_macro(releases)
-            for source, status in macro_statuses.items():
-                if status != "letto":
-                    self.journal.error(now, source, status)
-        for event, reason in reviewed:
-            if reason or event.symbol not in self.universe:
+        for event, _ in reviewed:
+            if event.symbol not in self.universe:
                 continue
             payload = asdict(event)
             payload["published"] = event.published.astimezone(timezone.utc).isoformat()
@@ -106,41 +107,63 @@ class Worker:
             key = hashlib.sha256(f"{event.symbol}|{payload['published'][:10]}|{headline}".encode()).hexdigest()
             self.journal.add(key, payload, event.published.astimezone(timezone.utc) + timedelta(hours=2))
 
+        return macro_sources if macro_due else None
+
+    def record_macro(self, now, macro_sources):
+        if macro_sources is None:
+            return
+        self.macro_checked = now
+        try:
+            expectations = expectations_from(self.expectations)
+        except EXPECTED_ERRORS as exc:
+            self.journal.error(now, "attese macro", error_label(exc))
+            expectations = []
+        releases, macro_statuses = macro_releases(fetch, self.user_agent, macro_sources, expectations)
+        self.journal.record_macro(releases)
+        for source, status in macro_statuses.items():
+            if status != "letto":
+                self.journal.error(now, source, status)
+
     def monitor(self, now):
         opened = session_open(now)
         if opened is None or (self.market_retry_at and now < self.market_retry_at):
             return
         self.last_checked = {key: at for key, at in self.last_checked.items()
                              if now - at < timedelta(hours=2)}
-        due = []
-        for row in self.journal.active(now, 80):
-            key, raw, latest, first, entry, _, observations, outcome, _ = row
+        due, symbols = [], set()
+        for row in self.journal.active(now):
+            key, raw, latest, first, entry, notified, observations, outcome, _ = row
             event = json.loads(raw)
-            if event["symbol"] not in self.universe:
+            symbol = event["symbol"]
+            if symbol not in self.universe:
                 continue
-            if latest and json.loads(latest)["state"] == "SCARTARE" and not first:
+            state = json.loads(latest or "null")
+            previous = json.loads(notified or "null")
+            terminal = state and state["state"] == "SCARTARE"
+            pending_terminal = terminal and previous and previous["state"] != "SCARTARE"
+            follow = first and (len(json.loads(observations)) < len(HORIZONS) or (entry and not outcome))
+            fresh = now - datetime.fromisoformat(event["published"]) <= timedelta(hours=1)
+            if not follow and (not fresh or (terminal and not pending_terminal)):
                 continue
-            if len(json.loads(observations)) == 4 and (not entry or outcome):
+            if key in self.last_checked and now - self.last_checked[key] < timedelta(minutes=5) and not pending_terminal:
                 continue
-            if key in self.last_checked and now - self.last_checked[key] < timedelta(minutes=5):
+            if symbol not in symbols and len(symbols) == 12:
                 continue
-            due.append(row)
-            if len(due) == 12:
-                break
-        symbols = sorted({json.loads(row[1])["symbol"] for row in due})
-        series = self.market.bars(symbols, start=opened,
+            due.append((row, event, state, previous))
+            symbols.add(symbol)
+        series = self.market.bars(sorted(symbols), start=opened,
                                   end=now) if symbols else {}
         ranked = []
-        for key, raw, latest, first, entry, notified, observations, outcome, _ in due:
+        for row, values, latest, previous in due:
+            key, _, _, first, entry, _, observations, outcome, _ = row
             self.last_checked[key] = now
-            values = json.loads(raw)
             for field in ("published", "detected"):
                 values[field] = datetime.fromisoformat(values[field])
             event = Event(**values)
             bars = series.get(event.symbol, [])
             self.journal.follow(key, bars, json.loads(first or "null"), json.loads(entry or "null"),
                                 json.loads(observations), json.loads(outcome or "null"), now)
-            if latest and json.loads(latest)["state"] == "SCARTARE":
+            if latest and latest["state"] == "SCARTARE" and (not previous or previous["state"] == "SCARTARE"):
                 continue
             checked_at = utcnow()
             if session_open(checked_at) != opened or checked_at - event.published > timedelta(hours=1):
@@ -150,8 +173,9 @@ class Worker:
                 self.journal.error(now, event.symbol, reason)
                 continue
             signal["signaled_at"] = checked_at.isoformat()
-            signal["historical"] = json.loads(latest)["historical"] if latest else self.journal.comparable(key, event)
-            previous = json.loads(notified or "null")
+            signal["historical"] = latest["historical"] if latest else self.journal.comparable(key, event)
+            if latest and latest["state"] == "SCARTARE" and signal["state"] != "SCARTARE":
+                continue
             if entry and signal["state"] == "PREPARARE":
                 continue
             self.journal.record(key, signal)
@@ -172,7 +196,7 @@ class Worker:
         if self.catalog_retry_at and now < self.catalog_retry_at:
             return False
         try:
-            self.discover(now)
+            macro_sources = self.discover(now)
         except EXPECTED_ERRORS as exc:
             self.catalog_retry_at = now + timedelta(minutes=5)
             self.journal.error(now, "catalogo Demo", error_label(exc))
@@ -184,6 +208,8 @@ class Worker:
             self.market_retry_at = now + timedelta(minutes=5)
             self.journal.error(now, "dati mercato", error_label(exc))
             return False
+        finally:
+            self.record_macro(now, macro_sources)
         return True
 
 

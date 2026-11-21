@@ -1,12 +1,15 @@
 # Gagarin INVEST v3
 
-Il worker controlla i feed ogni minuto. Cerca catalizzatori appena pubblicati,
+Il worker controlla i feed in parallelo a ogni ciclo. Scarta le notizie fuori
+finestra prima della classificazione, cerca catalizzatori appena pubblicati,
 risolve il ticker tramite CIK SEC, ticker di borsa dichiarato oppure feed IR
 associato a un emittente e verifica la presenza nel catalogo INVEST Demo.
 L'analisi intraday copre azioni ed ETF USA in USD compatibili con Alpaca.
-L'universo si aggiorna ogni sei ore. Il monitoraggio analizza fino a 12
-candidati per ciclo e ricontrolla ciascun candidato al massimo ogni cinque
-minuti durante la seduta XNYS. La durata massima del candidato è di due ore
+L'universo si aggiorna ogni sei ore in un processo continuo. Il monitoraggio
+dà precedenza ai nuovi catalizzatori, richiede le barre per un massimo di 12
+ticker distinti per ciclo e riusa le barre per le notizie sullo stesso ticker.
+Durante la seduta XNYS ricontrolla i setup ogni cinque minuti, con un nuovo
+tentativo al ciclo successivo per un avviso SCARTARE ancora valido. La durata massima del candidato è di due ore
 dalla pubblicazione. Attese dopo errori e richieste aggregate limitano le
 chiamate alle API.
 
@@ -80,20 +83,31 @@ allo storico della seduta conclusa. Per convalidare dati operativi deve
 risultare `fresco` durante la seduta XNYS.
 `--scan` genera un report di sola lettura, con fonti, timestamp, ticker,
 direzioni e motivi delle esclusioni. Se mancano i secret prosegue con
-le sole fonti pubbliche e segnala il limite nel report. Il modulo ordini rifiuta ogni invio. Nessun workflow
-avvia il worker.
+le sole fonti pubbliche e segnala il limite nel report. Le letture macro del
+worker seguono l'analisi e la consegna dei segnali. Il modulo ordini rifiuta
+ogni invio.
+
+Per eseguire il workflow GitHub Actions su `main`, impostare la variabile
+`GAGARIN_INVEST_V3_ENABLED=true` dopo che il codice è presente su quel ramo.
+Il workflow usa `GAGARIN_INVEST_V3_TELEGRAM_ENABLED` per abilitare Telegram
+e ripristina PRAVDA dalla cache di Actions. Per uno storico durevole,
+avviare il processo continuo con `--journal` su storage persistente.
 
 La modalità predefinita stampa i messaggi simulati. Per Telegram effettivo
 servono i secret `GAGARIN_TELEGRAM_TOKEN` e `GAGARIN_TELEGRAM_CHAT_ID`
 e l'impostazione esplicita `GAGARIN_TELEGRAM_ENABLED=true`. Le due modalità
 usano database distinti per default. Usare un processo per database, su
 storage persistente. Il worker riprova le consegne non confermate quando
-il setup è ancora valido.
+il setup è ancora valido. `--report` espone il numero di candidati con
+almeno una consegna confermata e il numero di tentativi Telegram senza
+conferma. Nel journal di simulazione la stampa su standard output conta
+come consegna confermata.
 
 PRAVDA registra rilevazione, segnale, dati, livelli, errori e osservazioni
 a 5, 15, 30 e 60 minuti quando il feed fornisce le barre corrispondenti.
 La simulazione apre alla chiusura di riferimento e termina su stop, TP1 o
-scadenza a 60 minuti, senza commissioni né slippage. Se stop e TP1 sono
+scadenza a 60 minuti, senza commissioni né slippage. Per stop e TP1
+considera soltanto barre interamente successive all'entrata. Se stop e TP1 sono
 toccati nella stessa barra prevale lo stop. Il drawdown è calcolato sulle
 chiusure simulate concatenate e non rappresenta un portafoglio. Campioni
 mancanti restano esclusi dai denominatori. Nessuna regola viene aggiornata
