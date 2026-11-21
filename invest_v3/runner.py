@@ -10,6 +10,10 @@ import re
 import time
 from pathlib import Path
 
+from urllib.error import HTTPError
+from urllib.parse import urlencode
+from urllib.request import urlopen
+
 import exchange_calendars
 
 from invest_v2.gagarin_runner import send_telegram, session_open
@@ -225,6 +229,31 @@ class Worker:
         return ok
 
 
+def telegram_credentials():
+    return os.getenv("GAGARIN_TELEGRAM_TOKEN"), os.getenv("GAGARIN_TELEGRAM_CHAT_ID")
+
+
+def check_telegram(token, chat):
+    """Read-only Telegram check: bot token valid and chat reachable. Sends no message."""
+    if not token or not chat:
+        raise ValueError("Secret Telegram mancanti")
+    result = {}
+    for method, params in (("getMe", {}), ("getChat", {"chat_id": chat})):
+        try:
+            with urlopen(f"https://api.telegram.org/bot{token}/{method}?{urlencode(params)}",
+                         timeout=10) as response:
+                reply = json.load(response)
+        except HTTPError as exc:
+            raise RuntimeError(f"Telegram {method}: HTTP {exc.code}") from None
+        except (OSError, ValueError):
+            # The URL contains the token: never print the original exception.
+            raise RuntimeError(f"Telegram {method}: errore di rete") from None
+        if reply.get("ok") is not True:
+            raise RuntimeError(f"Telegram {method}: risposta non valida")
+        result[method] = reply["result"].get("username") or reply["result"].get("type")
+    return {"bot": result["getMe"], "chat": result["getChat"]}
+
+
 def configured_demo():
     return Demo(os.getenv("GAGARIN_DEMO_KEY"), os.getenv("GAGARIN_DEMO_SECRET"))
 
@@ -285,6 +314,8 @@ def main():
     mode.add_argument("--once", action="store_true")
     mode.add_argument("--check-demo", action="store_true")
     mode.add_argument("--check-market", action="store_true")
+    mode.add_argument("--check-telegram", action="store_true",
+                      help="verifica token e chat Telegram senza inviare messaggi")
     mode.add_argument("--scan", action="store_true", help="report di scansione JSON, senza consegne")
     parser.add_argument("--macro-expectations", type=Path)
     mode.add_argument("--report", action="store_true")
@@ -298,6 +329,12 @@ def main():
     if args.scan:
         report = scan_report(user_agent, extra_feeds(), expectations_from(args.macro_expectations))
         print(json.dumps(report, ensure_ascii=False, indent=2))
+        return
+    if args.check_telegram:
+        try:
+            print(json.dumps(check_telegram(*telegram_credentials())))
+        except EXPECTED_ERRORS as exc:
+            parser.exit(1, f"{exc}\n")
         return
     if args.check_market:
         try:
@@ -333,7 +370,7 @@ def main():
             print(text, flush=True)
             return True
     else:
-        token, chat = os.getenv("GAGARIN_TELEGRAM_TOKEN"), os.getenv("GAGARIN_TELEGRAM_CHAT_ID")
+        token, chat = telegram_credentials()
         if not token or not chat:
             parser.exit(1, "Secret Telegram mancanti\n")
 

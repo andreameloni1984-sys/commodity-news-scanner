@@ -259,3 +259,20 @@ def test_pravda_ignores_bar_opened_before_paper_entry(tmp_path):
     ], entry, entry, {}, None, NOW + timedelta(minutes=2))
     outcome = journal.db.execute("SELECT outcome FROM candidates").fetchone()[0]
     assert json.loads(outcome)["reason"] == "TP"
+
+
+def test_telegram_preflight_is_read_only(monkeypatch):
+    called = []
+
+    def opened(url, timeout):
+        assert isinstance(url, str)  # GET only, no POST body
+        method = url.split("/")[-1].split("?")[0]
+        called.append(method)
+        result = {"getMe": {"username": "gagarin_bot"}, "getChat": {"type": "private"}}[method]
+        return BytesIO(json.dumps({"ok": True, "result": result}).encode())
+
+    monkeypatch.setattr(runner, "urlopen", opened)
+    assert runner.check_telegram("token", "chat") == {"bot": "gagarin_bot", "chat": "private"}
+    assert called == ["getMe", "getChat"]
+    with pytest.raises(ValueError):
+        runner.check_telegram("", "chat")

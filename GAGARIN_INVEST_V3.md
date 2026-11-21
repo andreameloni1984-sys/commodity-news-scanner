@@ -102,11 +102,16 @@ usano database distinti per default. Usare un processo per database, su
 storage persistente. Il worker riprova le consegne non confermate quando
 il setup è ancora valido.
 
-In GitHub Actions le PR eseguono i test con trasporti simulati. La
+In GitHub Actions le PR eseguono i test con trasporti simulati e il job
+`preflight`, in sola lettura con i secret reali: GET su Trading 212 Demo, barre
+Alpaca, `getMe`/`getChat` Telegram (nessun messaggio) e scansione delle
+notizie pubbliche. Si avvia anche manualmente (`workflow_dispatch`) e
+`--check-telegram` esegue lo stesso controllo in locale. La
 scansione di `gagarin-invest-v3.yml` gira solo su `main` e
 richiede la variabile di repository `GAGARIN_INVEST_V3_ENABLED=true`. Per
 Telegram reale serve anche `GAGARIN_INVEST_V3_TELEGRAM_ENABLED=true`. Il
-workflow usa i secret dedicati `GAGARIN_TELEGRAM_*`. Il journal PRAVDA persiste
+workflow usa i secret `GAGARIN_TELEGRAM_*` oppure, se mancano, quelli
+esistenti `TELEGRAM_BOT_TOKEN` e `TELEGRAM_CHAT_ID`. Il journal PRAVDA persiste
 nella cache di Actions.
 
 PRAVDA usa come riferimento il primo segnale consegnato. Registra il

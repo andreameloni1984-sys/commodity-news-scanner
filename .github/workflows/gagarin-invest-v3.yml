@@ -38,6 +38,68 @@ jobs:
           python -m pytest -q tests/test_gagarin_intraday.py
           tests/test_gagarin_v3.py tests/test_gagarin_v3_verification.py
 
+  # Read-only checks with the real secrets: Trading 212 Demo GET, Alpaca bars,
+  # Telegram getMe/getChat (no message sent) and a public news scan. Never orders.
+  preflight:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GAGARIN_DEMO_KEY: ${{ secrets.GAGARIN_DEMO_KEY }}
+      GAGARIN_DEMO_SECRET: ${{ secrets.GAGARIN_DEMO_SECRET }}
+      GAGARIN_ALPACA_KEY: ${{ secrets.GAGARIN_ALPACA_KEY }}
+      GAGARIN_ALPACA_SECRET: ${{ secrets.GAGARIN_ALPACA_SECRET }}
+      GAGARIN_SEC_USER_AGENT: ${{ secrets.GAGARIN_SEC_USER_AGENT }}
+      GAGARIN_TELEGRAM_TOKEN: ${{ secrets.GAGARIN_TELEGRAM_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
+      GAGARIN_TELEGRAM_CHAT_ID: ${{ secrets.GAGARIN_TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: requirements-gagarin.txt
+      - run: python -m pip install -r requirements-gagarin.txt
+      - id: demo
+        continue-on-error: true
+        run: python -m invest_v3.runner --check-demo
+      - id: market
+        continue-on-error: true
+        run: python -m invest_v3.runner --check-market
+      - id: telegram
+        continue-on-error: true
+        run: python -m invest_v3.runner --check-telegram
+      - id: scan
+        continue-on-error: true
+        shell: bash
+        run: |
+          start=$(date +%s.%N)
+          python -m invest_v3.runner --scan > scan.json
+          python - "$start" <<'PY'
+          import json, sys, time
+          r = json.load(open("scan.json"))
+          feeds = {v["source"]: v.get("items", v.get("error")) for v in r["feeds"].values()}
+          print(json.dumps({"secondi": round(time.time() - float(sys.argv[1]), 2),
+                            "seduta": r["seduta_xnys"], "notizie": r["notizie_lette"],
+                            "ticker": r["ticker_selezionati"], "segnali": r["segnali"],
+                            "feed": feeds, "demo": r["trading_212_demo"], "alpaca": r["alpaca"]},
+                           ensure_ascii=False, indent=1))
+          PY
+      - name: Preflight summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '| Verifica | Esito |'
+            echo '|---|---|'
+            echo '| Trading 212 Demo (sola lettura) | ${{ steps.demo.outcome }} |'
+            echo '| Alpaca barre | ${{ steps.market.outcome }} |'
+            echo '| Telegram getMe/getChat | ${{ steps.telegram.outcome }} |'
+            echo '| Scansione notizie pubbliche | ${{ steps.scan.outcome }} |'
+          } >> "$GITHUB_STEP_SUMMARY"
+
   scan:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.GAGARIN_INVEST_V3_ENABLED == 'true'
     runs-on: ubuntu-latest
@@ -68,8 +130,8 @@ jobs:
           GAGARIN_ALPACA_KEY: ${{ secrets.GAGARIN_ALPACA_KEY }}
           GAGARIN_ALPACA_SECRET: ${{ secrets.GAGARIN_ALPACA_SECRET }}
           GAGARIN_SEC_USER_AGENT: ${{ secrets.GAGARIN_SEC_USER_AGENT }}
-          GAGARIN_TELEGRAM_TOKEN: ${{ secrets.GAGARIN_TELEGRAM_TOKEN }}
-          GAGARIN_TELEGRAM_CHAT_ID: ${{ secrets.GAGARIN_TELEGRAM_CHAT_ID }}
+          GAGARIN_TELEGRAM_TOKEN: ${{ secrets.GAGARIN_TELEGRAM_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
+          GAGARIN_TELEGRAM_CHAT_ID: ${{ secrets.GAGARIN_TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID }}
         run: python -m invest_v3.runner --once
       - name: PRAVDA summary
         if: always()
