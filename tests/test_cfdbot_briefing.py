@@ -1,0 +1,57 @@
+from datetime import datetime, timedelta, timezone
+
+from cfdbot import briefing
+
+from .cfd_helpers import bars_from
+
+# Martedì 24/11/2026 08:40 ora di Roma
+NOW = datetime(2026, 11, 24, 7, 40, tzinfo=timezone.utc)
+CPI = {"title": "CPI m/m", "country": "USD", "date": "2026-11-24T08:30:00-05:00", "impact": "High",
+       "forecast": "0.3%", "previous": "0.2%"}
+OIL = {"title": "Crude Oil Inventories", "country": "USD", "date": "2026-11-24T10:30:00-05:00", "impact": "Medium",
+       "forecast": "-1.2M", "previous": "2.1M"}
+NOISE = [{"title": "Low thing", "country": "USD", "date": "2026-11-24T09:00:00-05:00", "impact": "Low"},
+         {"title": "ECB talk", "country": "EUR", "date": "2026-11-24T09:00:00-05:00", "impact": "High"}]
+
+
+def fetcher(symbol, range_="2y", interval="1d"):
+    return bars_from([100 * 1.002 ** i for i in range(300)])
+
+
+CTX = {"trump": [{"title": "Trump announces tariffs", "bias": [{"instrument": "GOLD", "bias": "LONG_BIAS"}]}]}
+
+
+def test_morning_brief_once_with_events_and_trump():
+    sent = []
+    st = briefing.run(NOW, fetcher=fetcher, calendar_fetcher=lambda: [CPI, OIL] + NOISE,
+                      context_fetcher=lambda: CTX, send=lambda t: sent.append(t) or True, st={})
+    brief = next(t for t in sent if "BOLLETTINO" in t)
+    assert "martedì 24/11" in brief
+    assert "14:30 CPI m/m" in brief and "16:30 Crude Oil Inventories" in brief
+    assert "Low thing" not in brief and "ECB" not in brief
+    assert "Trump announces tariffs (GOLD ⬆️)" in brief
+    assert "Zone pericolose: 14:15–14:45, 16:15–16:45" in brief
+    sent.clear()
+    briefing.run(NOW + timedelta(minutes=15), fetcher=fetcher, calendar_fetcher=lambda: [CPI],
+                 context_fetcher=lambda: CTX, send=lambda t: sent.append(t) or True, st=st)
+    assert not any("BOLLETTINO" in t for t in sent)
+
+
+def test_danger_alert_once_before_event():
+    st = {"brief_date": "2026-11-24"}
+    sent = []
+    before = datetime(2026, 11, 24, 13, 0, tzinfo=timezone.utc)  # 14:00 a Roma, CPI alle 14:30
+    briefing.run(before, fetcher=fetcher, calendar_fetcher=lambda: [CPI, OIL], send=lambda t: sent.append(t) or True, st=st)
+    assert len(sent) == 1 and "ZONA PERICOLOSA" in sent[0] and "tra 30 minuti" in sent[0]
+    assert "Oro" in sent[0] and "14:15 alle 14:45" in sent[0]
+    briefing.run(before + timedelta(minutes=15), fetcher=fetcher, calendar_fetcher=lambda: [CPI, OIL],
+                 send=lambda t: sent.append(t) or True, st=st)
+    assert len(sent) == 1
+
+
+def test_oil_data_affects_only_oil_and_weekend_is_quiet():
+    assert briefing.affected("Crude Oil Inventories") == ("wti",)
+    sent = []
+    saturday = datetime(2026, 11, 28, 8, 0, tzinfo=timezone.utc)
+    briefing.run(saturday, fetcher=fetcher, calendar_fetcher=lambda: [CPI], send=lambda t: sent.append(t) or True, st={})
+    assert sent == []

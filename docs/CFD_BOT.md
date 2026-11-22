@@ -94,3 +94,17 @@ URL del contesto configurabile con `SPUTNIK_CONTEXT_URL`.
 - `python -m cfdbot.daytrade --backtest` — segnale del giorno (10:00 DAX/EUR-USD, 15:00 oro/WTI/Nasdaq/S&P),
   chiusura entro sera: nel complesso in pari dopo i costi (−3R su 3.850 giorni), positivo solo sull'oro.
   Non programmato.
+
+## Bollettino del giorno e zone pericolose (solo informativo)
+
+`cfdbot/briefing.py` + `.github/workflows/cfd-briefing.yml` (ogni 15 minuti, giorni feriali):
+
+- **dalle 8:30** (Roma), una volta al giorno: trend tecnico di oro, petrolio, S&P 500 e Nasdaq, dati USA
+  ad alto impatto di oggi con ora italiana, previsione e dato precedente (calendario settimanale ForexFactory,
+  lo stesso usato da Stella Rossa per il consenso), notizie di Trump delle ultime 24 ore (Sputnik),
+  posizioni CFD aperte dal bot;
+- **circa 30 minuti prima** di ogni dato ad alto impatto (o delle scorte di petrolio EIA): avviso
+  "zona pericolosa" con gli strumenti coinvolti e la finestra da evitare (15 minuti prima e dopo).
+
+Nessuna direzione combinata: arriverà quando il pagellino avrà misurato quanto vale ogni fattore.
+Spegnimento: variabile `GAGARIN_BRIEFING=0`.
