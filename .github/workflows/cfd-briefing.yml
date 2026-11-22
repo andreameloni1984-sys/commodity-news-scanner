@@ -1,0 +1,46 @@
+name: Gagarin - bollettino del giorno e zone pericolose
+on:
+  schedule:
+    - cron: "*/15 6-21 * * 1-5"   # ogni 15 minuti nei giorni feriali (UTC)
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: gagarin-briefing
+  cancel-in-progress: false
+jobs:
+  brief:
+    if: github.ref == 'refs/heads/main' && (vars.GAGARIN_BRIEFING || '1') != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      STATE_PATH: data/cfd_state.json
+      BRIEF_STATE_PATH: data/brief_state.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install requests
+      - name: Leggi le posizioni del bot CFD (sola lettura)
+        uses: actions/cache/restore@v4
+        with:
+          path: data/cfd_state.json
+          key: gagarin-cfd-state-v1-briefing-${{ github.run_id }}
+          restore-keys: gagarin-cfd-state-v1-
+      - name: Ripristina i messaggi già inviati
+        uses: actions/cache/restore@v4
+        with:
+          path: data/brief_state.json
+          key: gagarin-brief-v1-${{ github.run_id }}
+          restore-keys: gagarin-brief-v1-
+      - name: Bollettino e avvisi
+        run: python -m cfdbot.briefing
+      - name: Salva i messaggi già inviati
+        if: always() && hashFiles('data/brief_state.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: data/brief_state.json
+          key: gagarin-brief-v1-${{ github.run_id }}
