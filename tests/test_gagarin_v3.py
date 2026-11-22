@@ -268,11 +268,16 @@ def test_telegram_preflight_is_read_only(monkeypatch):
         assert isinstance(url, str)  # GET only, no POST body
         method = url.split("/")[-1].split("?")[0]
         called.append(method)
-        result = {"getMe": {"username": "gagarin_bot"}, "getChat": {"type": "private"}}[method]
+        result = {"getMe": {"id": 1, "username": "gagarin_bot"}, "getChat": {"id": 42, "type": "private"}}[method]
         return BytesIO(json.dumps({"ok": True, "result": result}).encode())
 
     monkeypatch.setattr(runner, "urlopen", opened)
-    assert runner.check_telegram("token", "chat") == {"bot": "gagarin_bot", "chat": "private"}
+    token = "1:" + "A" * 35
+    assert runner.check_telegram(token, "42") == {"bot": "gagarin_bot", "chat_type": "private"}
     assert called == ["getMe", "getChat"]
-    with pytest.raises(ValueError):
-        runner.check_telegram("", "chat")
+    for bad_token, bad_chat in (("", "42"), ("1:short", "42"), (token, "1"), (token, "chat id")):
+        with pytest.raises(ValueError):
+            runner.check_telegram(bad_token, bad_chat)
+    monkeypatch.setenv("GAGARIN_TELEGRAM_TOKEN", token + "\n")
+    monkeypatch.setenv("GAGARIN_TELEGRAM_CHAT_ID", " 42 ")
+    assert runner.telegram_credentials() == (token, "42")

@@ -229,14 +229,25 @@ class Worker:
         return ok
 
 
+def secret(name):
+    """Secrets pasted into GitHub often carry a trailing newline or spaces."""
+    return (os.getenv(name) or "").strip()
+
+
 def telegram_credentials():
-    return os.getenv("GAGARIN_TELEGRAM_TOKEN"), os.getenv("GAGARIN_TELEGRAM_CHAT_ID")
+    return secret("GAGARIN_TELEGRAM_TOKEN"), secret("GAGARIN_TELEGRAM_CHAT_ID")
 
 
 def check_telegram(token, chat):
     """Read-only Telegram check: bot token valid and chat reachable. Sends no message."""
     if not token or not chat:
         raise ValueError("Secret Telegram mancanti")
+    if not re.fullmatch(r"\d+:[A-Za-z0-9_-]{30,}", token):
+        raise ValueError("Token Telegram non valido: atteso il formato 123456789:ABC... di BotFather")
+    if not re.fullmatch(r"-?\d+|@\w+", chat):
+        raise ValueError("TELEGRAM_CHAT_ID non valido: atteso un numero (es. 123456789)")
+    if chat == token.split(":")[0]:
+        raise ValueError("TELEGRAM_CHAT_ID è l'ID del bot: serve l'ID della tua chat")
     result = {}
     for method, params in (("getMe", {}), ("getChat", {"chat_id": chat})):
         try:
@@ -250,16 +261,18 @@ def check_telegram(token, chat):
             raise RuntimeError(f"Telegram {method}: errore di rete") from None
         if reply.get("ok") is not True:
             raise RuntimeError(f"Telegram {method}: risposta non valida")
-        result[method] = reply["result"].get("username") or reply["result"].get("type")
-    return {"bot": result["getMe"], "chat": result["getChat"]}
+        result[method] = reply["result"]
+    if result["getChat"].get("id") == result["getMe"].get("id"):
+        raise ValueError("TELEGRAM_CHAT_ID è l'ID del bot: serve l'ID della tua chat")
+    return {"bot": result["getMe"].get("username"), "chat_type": result["getChat"].get("type")}
 
 
 def configured_demo():
-    return Demo(os.getenv("GAGARIN_DEMO_KEY"), os.getenv("GAGARIN_DEMO_SECRET"))
+    return Demo(secret("GAGARIN_DEMO_KEY"), secret("GAGARIN_DEMO_SECRET"))
 
 
 def configured_market():
-    return AlpacaData(os.getenv("GAGARIN_ALPACA_KEY"), os.getenv("GAGARIN_ALPACA_SECRET"),
+    return AlpacaData(secret("GAGARIN_ALPACA_KEY"), secret("GAGARIN_ALPACA_SECRET"),
                       os.getenv("GAGARIN_ALPACA_FEED") or "iex")
 
 
