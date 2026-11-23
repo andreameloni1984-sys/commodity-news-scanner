@@ -59,10 +59,11 @@ def stats(st: dict) -> dict:
 def size_position(entry: float, stop: float, eurusd: float | None) -> dict:
     account, risk_pct = _config()
     if not account or not eurusd:
-        return {"risk_pct": risk_pct, "risk_eur": None, "units": None}
+        return {"risk_pct": risk_pct, "risk_eur": None, "units": None, "unit_risk_eur": None}
     risk_eur = account * risk_pct / 100
     per_unit_eur = abs(entry - stop) / eurusd   # tutti gli strumenti sono quotati in USD
-    return {"risk_pct": risk_pct, "risk_eur": round(risk_eur, 2), "units": round(risk_eur / per_unit_eur, 4)}
+    return {"risk_pct": risk_pct, "risk_eur": round(risk_eur, 2), "units": round(risk_eur / per_unit_eur, 4),
+            "unit_risk_eur": round(per_unit_eur, 2)}
 
 
 def manage_open(inst: Instrument, pos: dict, daily: Bars, hourly: Bars | None, now: datetime) -> dict | None:
