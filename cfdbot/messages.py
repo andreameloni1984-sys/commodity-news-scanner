@@ -77,3 +77,40 @@ def daily_summary(rows: list[str], open_lines: list[str], stats: dict) -> str:
         lines += ["", f"Storico: {stats['n']} operazioni · vincenti {stats['win']:.0%} · totale {stats['total']:+.1f}R"]
     lines += ["", "Il bot controlla i mercati ogni ora e scrive solo quando c'è un segnale o una chiusura."]
     return "\n".join(lines)
+
+
+def rebound_signal(inst: Instrument, pos: dict) -> str:
+    from .rebound import FOOTER as REBOUND_FOOTER, MAX_DAYS
+    d = inst.decimals
+    return "\n".join([
+        f"🔄 SEGNALE RIMBALZO — {inst.name}",
+        f"🟢 LONG (compra) · CFD Trading 212: {inst.t212}",
+        "",
+        f"Ingresso: {f(pos['entry'], d)}",
+        f"Stop di sicurezza: {f(pos['stop'], d)}  (distanza {f(pos['stop_dist'], d)})",
+        "Uscita: quando l'indice rimbalza (chiusura sopra la media a 5 giorni o vicino al massimo "
+        f"della giornata) — te lo scrivo io. Al massimo {MAX_DAYS} giorni di borsa.",
+        "",
+        *sizing_lines(pos),
+        "",
+        "Perché: " + "; ".join(pos["reasons"]),
+        "",
+        REBOUND_FOOTER,
+    ])
+
+
+def rebound_closed(inst: Instrument, pos: dict, history: list[dict]) -> str:
+    d = inst.decimals
+    icon = {"rimbalzo": "✅ CHIUDI: RIMBALZO ARRIVATO", "stop": "❌ STOP DI SICUREZZA TOCCATO",
+            "tempo": "⏱️ CHIUDI: SCADUTI 5 GIORNI"}[pos["exit_reason"]]
+    n = len(history)
+    wins = sum(1 for c in history if c["r"] > 0)
+    total = sum(c["r"] for c in history)
+    lines = [
+        f"🔄 {icon} — {inst.name} LONG (rimbalzo)",
+        f"Ingresso {f(pos['entry'], d)} → uscita {f(pos['exit'], d)} · risultato {pos['r']:+.2f}R",
+    ]
+    if pos["exit_reason"] != "stop":
+        lines.append("Chiudi la posizione su Trading 212.")
+    lines.append(f"Storico rimbalzi: {n} operazioni · vincenti {wins}/{n} · totale {total:+.1f}R")
+    return "\n".join(lines)

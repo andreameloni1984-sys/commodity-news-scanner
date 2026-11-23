@@ -12,7 +12,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
-from . import messages, notify, report_card, strategy
+from . import messages, notify, rebound, report_card, strategy
 from . import sputnik_context
 from . import state as state_mod
 from .data import Bars, DataError, completed_daily, fetch
@@ -149,6 +149,19 @@ def run(now: datetime | None = None, dry_run: bool = False, fetcher: Fetcher = f
             errors["dati mancanti"] = errors.get("dati mancanti", 0) + 1
             continue
         rows.append(trend_row(inst, daily, now))
+
+        if inst.key in rebound.KEYS and os.getenv("CFD_REBOUND", "1").strip() != "0":
+            rb = st.setdefault("rebound", {})
+            for part, empty in (("open", {}), ("closed", []), ("last_eval", {})):
+                rb.setdefault(part, empty)
+            rb_hourly = None
+            if inst.key in rb["open"]:
+                try:
+                    rb_hourly = fetcher(inst.yahoo, range_="1mo", interval="1h")
+                except DataError:
+                    rb_hourly = None
+            rebound.process(inst, daily, rb_hourly, now, rb,
+                            lambda entry, stop: size_position(entry, stop, eurusd), emit)
 
         pos = st["open"].get(inst.key)
         if pos:
