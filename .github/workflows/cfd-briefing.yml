@@ -1,7 +1,8 @@
 name: Gagarin - bollettino del giorno e zone pericolose
 on:
   schedule:
-    - cron: "*/15 6-21 * * 1-5"   # ogni 15 minuti nei giorni feriali (UTC)
+    # Riserva oraria: la sveglia Cloudflare lo avvia ogni 5 minuti nei giorni feriali.
+    - cron: "8 6-21 * * 1-5"
   workflow_dispatch:
 permissions:
   contents: read
