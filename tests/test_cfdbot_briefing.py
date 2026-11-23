@@ -29,7 +29,7 @@ def test_morning_brief_once_with_events_and_trump():
     assert "martedì 24/11" in brief
     assert "14:30 CPI m/m" in brief and "16:30 Crude Oil Inventories" in brief
     assert "Low thing" not in brief and "ECB" not in brief
-    assert "Trump announces tariffs (GOLD ⬆️)" in brief
+    assert "• Trump announces tariffs\n   → Oro ⬆️" in brief
     assert "Zone pericolose: 14:15–14:45, 16:15–16:45" in brief
     sent.clear()
     briefing.run(NOW + timedelta(minutes=15), fetcher=fetcher, calendar_fetcher=lambda: [CPI],
@@ -55,3 +55,29 @@ def test_oil_data_affects_only_oil_and_weekend_is_quiet():
     saturday = datetime(2026, 11, 28, 8, 0, tzinfo=timezone.utc)
     briefing.run(saturday, fetcher=fetcher, calendar_fetcher=lambda: [CPI], send=lambda t: sent.append(t) or True, st={})
     assert sent == []
+
+
+def test_trump_lines_skip_empty_posts_tag_topics_and_cut_on_sentence():
+    now = datetime(2026, 11, 23, 7, 30, tzinfo=timezone.utc)
+    ctx = {"trump": [
+        {"title": "Quote post from November 23, 2026", "published": "2026-11-23T05:08:30+00:00", "bias": []},
+        {"title": "It is incredible what happened in Minnesota, they own it and almost all are on some form of "
+                  "welfare and nobody does anything about it, which is a disgrace for the once great State. MAKE AMERIC",
+         "published": "2026-11-22T21:53:08+00:00", "bias": []},
+        {"title": "Isn’t it interesting that Oil prices have dropped precipitously after the Midterm Elections? "
+                  "I said that was going to happen.", "published": "2026-11-22T21:49:11+00:00", "bias": []},
+        {"title": "Tariffs on gold imports", "published": "2026-11-22T20:00:00+00:00",
+         "bias": [{"instrument": "GOLD", "bias": "LONG_BIAS"}]},
+        {"title": "Old post about oil", "published": "2026-11-20T20:00:00+00:00", "bias": []},
+    ]}
+    lines = briefing.trump_lines(ctx, now)
+    text = "\n".join(lines)
+    assert "Quote post" not in text and "Old post" not in text
+    assert lines[0].startswith("• Isn’t it interesting that Oil") and "→ Petrolio WTI" in lines[0]
+    assert "→ Oro ⬆️" in lines[1]
+    assert "MAKE AMERIC" not in text and lines[2].endswith("great State.")
+
+
+def test_short_text_cuts_on_word_when_no_sentence_end():
+    out = briefing.short_text("word " * 80)
+    assert out.endswith("…") and len(out) <= briefing.MAX_TRUMP_CHARS + 1
