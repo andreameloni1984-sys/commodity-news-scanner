@@ -9,6 +9,7 @@
   (da Sputnik) e le posizioni CFD aperte del bot.
 * Zona pericolosa: 30 minuti prima di ogni dato USA ad alto impatto, un avviso con gli
   strumenti coinvolti e la finestra da evitare (15 minuti prima e dopo).
+* Avviso leggero 🟡: 15 minuti prima dei dati USA di importanza media (PMI, fiducia, case…).
 
 Nessuna direzione combinata e nessuna probabilità: solo i fatti ordinati. La previsione
 combinata arriverà quando il pagellino avrà misurato quanto vale ogni fattore.
@@ -37,6 +38,8 @@ CALENDAR_URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
 BRIEF_AT = time(8, 30)
 WARN_BEFORE = timedelta(minutes=30)
 AVOID = timedelta(minutes=15)
+WARN_MEDIUM = timedelta(minutes=15)
+AVOID_MEDIUM = timedelta(minutes=5)
 BRIEF_KEYS = ("oro", "wti", "sp500", "nasdaq")
 
 # Quali strumenti muove ciascun tipo di dato
@@ -51,11 +54,19 @@ def affected(title: str) -> tuple[str, ...]:
     return ALL_INDICES_GOLD + ("wti",) if any(w in t for w in ("fomc", "federal funds", "fed chair")) else ALL_INDICES_GOLD
 
 
+def is_major(event: dict) -> bool:
+    """Dati che aprono una zona pericolosa: alto impatto, più le scorte di petrolio."""
+    title = str(event.get("title", "")).lower()
+    return event.get("impact") == "High" or any(w in title for w in OIL_WORDS)
+
+
 def is_relevant(event: dict) -> bool:
     if event.get("country") != "USD":
         return False
-    title = str(event.get("title", "")).lower()
-    return event.get("impact") == "High" or any(w in title for w in OIL_WORDS)
+    if is_major(event):
+        return True
+    # Importanza media (PMI, fiducia, case, ordini): avviso leggero. I discorsi no: troppo vaghi.
+    return event.get("impact") == "Medium" and "speaks" not in str(event.get("title", "")).lower()
 
 
 def fetch_calendar() -> list[dict]:
@@ -93,7 +104,9 @@ def _event_line(t: datetime, e: dict) -> str:
     if e.get("previous"):
         extra.append(f"precedente {e['previous']}")
     names = ", ".join(BY_KEY[k].name for k in affected(e["title"]))
-    return (f"• {t.astimezone(ROME):%H:%M} {e['title']}" + (f" ({', '.join(extra)})" if extra else "")
+    mark = "🔴" if is_major(e) else "🟡"
+    level = "" if is_major(e) else " [importanza media]"
+    return (f"• {mark} {t.astimezone(ROME):%H:%M} {e['title']}{level}" + (f" ({', '.join(extra)})" if extra else "")
             + f" → {names}")
 
 
@@ -192,8 +205,12 @@ def morning_brief(now: datetime, calendar: list[dict], fetcher: Callable, ctx: d
     lines += ["", "📅 Dati USA importanti oggi (ora italiana)"]
     if events:
         lines += [_event_line(t, e) for t, e in events]
-        windows = ", ".join(f"{(t - AVOID).astimezone(ROME):%H:%M}–{(t + AVOID).astimezone(ROME):%H:%M}" for t, _ in events)
-        lines.append(f"⚠️ Zone pericolose: {windows}. Meglio non aprire CFD sugli strumenti coinvolti.")
+        windows = ", ".join(f"{(t - AVOID).astimezone(ROME):%H:%M}–{(t + AVOID).astimezone(ROME):%H:%M}"
+                            for t, e in events if is_major(e))
+        if windows:
+            lines.append(f"⚠️ Zone pericolose: {windows}. Meglio non aprire CFD sugli strumenti coinvolti.")
+        if any(not is_major(e) for _, e in events):
+            lines.append("🟡 Dati di importanza media: possibili scatti per qualche minuto, ti avviso 15 minuti prima.")
     else:
         lines.append("• nessun dato ad alto impatto" + ("" if calendar else " (calendario non disponibile)"))
     lines += ["", "🇺🇸 Trump nelle ultime 24 ore (Sputnik)"] + trump_lines(ctx, now)
@@ -205,15 +222,39 @@ def morning_brief(now: datetime, calendar: list[dict], fetcher: Callable, ctx: d
     return "\n".join(lines)
 
 
-def danger_alert(t: datetime, e: dict, now: datetime) -> str:
-    names = ", ".join(BY_KEY[k].name for k in affected(e["title"]))
+def _titles(es: list[dict]) -> str:
+    parts = []
+    for e in es:
+        extra = f" (previsto {e['forecast']}, precedente {e.get('previous') or 'n.d.'})" if e.get("forecast") else ""
+        parts.append(f"{e['title']}{extra}")
+    return " · ".join(parts)
+
+
+def _names(es: list[dict]) -> str:
+    keys = []
+    for e in es:
+        keys += [k for k in affected(e["title"]) if k not in keys]
+    return ", ".join(BY_KEY[k].name for k in keys)
+
+
+def danger_alert(t: datetime, es, now: datetime) -> str:
+    es = es if isinstance(es, list) else [es]
     minutes = max(1, round((t - now).total_seconds() / 60))
-    extra = f" · previsto {e['forecast']}, precedente {e.get('previous') or 'n.d.'}" if e.get("forecast") else ""
     return "\n".join([
-        f"⚠️ ZONA PERICOLOSA — tra {minutes} minuti: {e['title']} ({t.astimezone(ROME):%H:%M}){extra}",
-        f"Strumenti coinvolti: {names}.",
+        f"⚠️ ZONA PERICOLOSA — tra {minutes} minuti ({t.astimezone(ROME):%H:%M}): {_titles(es)}",
+        f"Strumenti coinvolti: {_names(es)}.",
         f"Evita di aprire CFD dalle {(t - AVOID).astimezone(ROME):%H:%M} alle {(t + AVOID).astimezone(ROME):%H:%M}: "
         "movimenti bruschi e spread più larghi.",
+    ])
+
+
+def medium_alert(t: datetime, es, now: datetime) -> str:
+    es = es if isinstance(es, list) else [es]
+    minutes = max(1, round((t - now).total_seconds() / 60))
+    return "\n".join([
+        f"🟡 ATTENZIONE — tra {minutes} minuti ({t.astimezone(ROME):%H:%M}): {_titles(es)}",
+        f"Dati di importanza media: possibili scatti su {_names(es)} "
+        f"dalle {(t - AVOID_MEDIUM).astimezone(ROME):%H:%M} alle {(t + AVOID_MEDIUM).astimezone(ROME):%H:%M}.",
     ])
 
 
@@ -233,11 +274,15 @@ def run(now: datetime | None = None, fetcher: Callable = fetch, calendar_fetcher
         out.append(morning_brief(now, calendar, fetcher, ctx, cfd_state or {}))
         st["brief_date"] = today
     warned = st.setdefault("warned", {})
+    groups: dict[tuple[datetime, bool], list[dict]] = {}
     for t, e in todays_events(calendar, now):
         key = f"{t.isoformat()}|{e['title']}"
-        if key not in warned and timedelta(0) < t - now <= WARN_BEFORE + timedelta(minutes=10):
-            out.append(danger_alert(t, e, now))
+        lead = WARN_BEFORE if is_major(e) else WARN_MEDIUM
+        if key not in warned and timedelta(0) < t - now <= lead + timedelta(minutes=10):
+            groups.setdefault((t, is_major(e)), []).append(e)
             warned[key] = now.isoformat()
+    for (t, major), es in sorted(groups.items(), key=lambda g: (g[0][0], not g[0][1])):
+        out.append(danger_alert(t, es, now) if major else medium_alert(t, es, now))
     st["warned"] = {k: v for k, v in warned.items() if v >= (now - timedelta(days=3)).isoformat()}
     for text in out:
         if dry_run:
