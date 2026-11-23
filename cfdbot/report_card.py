@@ -49,6 +49,14 @@ def build(st: dict, now: datetime) -> str:
         for v in ("favore", "contro", "misto", "neutro", "n.d."):
             if v in verdicts:
                 lines.append(f"• Trump {v}: {_line(verdicts[v])}")
+    rb = st.get("rebound") or {}
+    rb_closed = rb.get("closed") or []
+    if rb_closed or rb.get("open"):
+        rb_week = [c for c in rb_closed
+                   if datetime.fromisoformat(c.get("closed_at", "1970-01-01T00:00:00+00:00")) >= week_ago]
+        lines += ["", "🔄 Rimbalzo indici (in osservazione)",
+                  "Ultimi 7 giorni: " + _line(rb_week), "Da quando è attivo: " + _line(rb_closed),
+                  f"Aperte: {len(rb.get('open') or {})} · atteso dal test: ~67% vincenti"]
     open_now = st.get("open", {})
     lines += ["", f"Posizioni ancora aperte: {len(open_now)}"]
     errors = st.get("errors", {})
