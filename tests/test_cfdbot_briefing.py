@@ -81,3 +81,36 @@ def test_trump_lines_skip_empty_posts_tag_topics_and_cut_on_sentence():
 def test_short_text_cuts_on_word_when_no_sentence_end():
     out = briefing.short_text("word " * 80)
     assert out.endswith("…") and len(out) <= briefing.MAX_TRUMP_CHARS + 1
+
+
+PMI = {"title": "Flash Manufacturing PMI", "country": "USD", "date": "2026-11-24T09:45:00-05:00",
+       "impact": "Medium", "forecast": "54.5", "previous": "56.0"}
+SPEECH = {"title": "FOMC Member Williams Speaks", "country": "USD", "date": "2026-11-24T16:00:00-05:00",
+          "impact": "Medium"}
+
+
+def test_medium_events_in_brief_and_light_alert_15_minutes_before():
+    sent = []
+    st = briefing.run(NOW, fetcher=fetcher, calendar_fetcher=lambda: [CPI, PMI, SPEECH],
+                      context_fetcher=lambda: CTX, send=lambda t: sent.append(t) or True, st={})
+    brief = next(t for t in sent if "BOLLETTINO" in t)
+    assert "🟡 15:45 Flash Manufacturing PMI [importanza media]" in brief and "Williams" not in brief
+    assert "Zone pericolose: 14:15–14:45." in brief and "🟡 Dati di importanza media" in brief
+    sent.clear()
+    at = datetime(2026, 11, 24, 14, 30, tzinfo=timezone.utc)      # 15:30 a Roma
+    briefing.run(at, fetcher=fetcher, calendar_fetcher=lambda: [CPI, PMI], context_fetcher=lambda: CTX,
+                 send=lambda t: sent.append(t) or True, st=st)
+    assert len(sent) == 1 and sent[0].startswith("🟡 ATTENZIONE — tra 15 minuti (15:45): Flash Manufacturing PMI (previsto 54.5")
+    assert "dalle 15:40 alle 15:50" in sent[0]
+    sent.clear()
+    briefing.run(at + timedelta(minutes=5), fetcher=fetcher, calendar_fetcher=lambda: [CPI, PMI],
+                 context_fetcher=lambda: CTX, send=lambda t: sent.append(t) or True, st=st)
+    assert sent == []
+
+
+def test_medium_alert_not_sent_too_early():
+    sent = []
+    early = datetime(2026, 11, 24, 14, 0, tzinfo=timezone.utc)     # 45 minuti prima
+    briefing.run(early, fetcher=fetcher, calendar_fetcher=lambda: [PMI], context_fetcher=lambda: CTX,
+                 send=lambda t: sent.append(t) or True, st={"brief_date": "2026-11-24"})
+    assert sent == []
