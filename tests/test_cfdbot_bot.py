@@ -36,7 +36,7 @@ def test_new_signal_sent_once_with_sizing():
     sent = []
     st = main.run(now=now, fetcher=make_fetcher(daily), sender=lambda t: sent.append(t) or True, st=state.empty())
     signals = [t for t in sent if "NUOVO SEGNALE" in t]
-    assert len(signals) == 1 and "LONG" in signals[0] and "100 €" in signals[0]
+    assert len(signals) == 1 and "LONG" in signals[0] and "100,00 €" in signals[0]
     pos = st["open"]["oro"]
     assert pos["stop"] < pos["entry"] < pos["target"]
     assert pos["units"] == pytest.approx(100 / (pos["entry"] - pos["stop"]) * 1.10, rel=1e-2)
@@ -134,3 +134,25 @@ def test_eurusd_excluded_by_default(monkeypatch):
     assert keys == ["oro", "wti", "sp500", "nasdaq"]
     monkeypatch.setenv("CFD_INSTRUMENTS", "oro,eurusd")
     assert [i.key for i in main.enabled_instruments()] == ["oro", "eurusd"]
+
+
+def test_small_account_sizing_shows_four_decimals_and_warning(monkeypatch):
+    from cfdbot.main import size_position
+    from cfdbot.messages import sizing_lines
+    monkeypatch.setenv("ACCOUNT_SIZE", "100")
+    monkeypatch.setenv("RISK_PCT", "2")
+    pos = size_position(3572.60, 3724.33, 1.09)
+    lines = sizing_lines(pos)
+    assert "= 2,00 €" in lines[0]
+    assert "0,0144 unità" in lines[1]
+    assert lines[2].startswith("⚠️ Quantità molto piccola")
+    assert "139,20 €" in lines[2]          # 1 unità di oro: 151,73 $ / 1,09
+
+
+def test_large_account_sizing_has_no_warning(monkeypatch):
+    from cfdbot.main import size_position
+    from cfdbot.messages import sizing_lines
+    monkeypatch.setenv("ACCOUNT_SIZE", "100000")
+    monkeypatch.delenv("RISK_PCT", raising=False)
+    lines = sizing_lines(size_position(3572.60, 3724.33, 1.09))
+    assert len(lines) == 2 and "7,1838 unità" in lines[1]

@@ -10,14 +10,26 @@ def f(x: float, d: int) -> str:
     return f"{x:,.{d}f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+# Sotto questa quantità Trading 212 potrebbe non accettare l'ordine (il minimo varia per strumento).
+SMALL_UNITS = 0.1
+
+
 def sizing_lines(pos: dict) -> list[str]:
     if not pos.get("risk_eur"):
         return ["Rischio: imposta ACCOUNT_SIZE per avere la dimensione della posizione calcolata."]
-    return [
-        f"Rischio: {pos['risk_pct']:g}% del conto = {f(pos['risk_eur'], 0)} €",
-        f"Quantità indicativa: {f(pos['units'], 2)} unità del sottostante "
-        f"(verifica su Trading 212 che la perdita allo stop sia circa {f(pos['risk_eur'], 0)} €)",
+    units, risk = pos["units"], pos["risk_eur"]
+    lines = [
+        f"Rischio: {pos['risk_pct']:g}% del conto = {f(risk, 2)} €",
+        f"Quantità indicativa: {f(units, 4)} unità del sottostante "
+        f"(verifica su Trading 212 che la perdita allo stop sia circa {f(risk, 2)} €)",
     ]
+    unit_risk = pos.get("unit_risk_eur")
+    if unit_risk and units < SMALL_UNITS:
+        lines.append(
+            f"⚠️ Quantità molto piccola: se Trading 212 non la accetta, il rischio sale. "
+            f"Ogni 0,01 unità perde circa {f(unit_risk / 100, 2)} € allo stop: "
+            f"con la quantità minima ammessa, rischio = quantità × {f(unit_risk, 2)} €.")
+    return lines
 
 
 def new_signal(inst: Instrument, pos: dict) -> str:
