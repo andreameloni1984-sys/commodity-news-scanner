@@ -19,6 +19,7 @@ import argparse
 import json
 import logging
 import os
+import re
 from datetime import datetime, time, timedelta, timezone
 from typing import Callable
 from zoneinfo import ZoneInfo
@@ -120,14 +121,64 @@ def technical_line(key: str, fetcher: Callable, now: datetime) -> str:
     return f"• {inst.name}: {label}, {pos}"
 
 
+EMPTY_POST = re.compile(r"^(quote post|repost|post|video|photo)( from .*)?$", re.I)
+# Parole che collegano un post agli strumenti seguiti (oltre alle indicazioni di Sputnik)
+TOPIC_WORDS = {
+    "wti": ("oil", "crude", "gasoline", "opec", "drill", "petroleum", "energy prices"),
+    "oro": ("gold",),
+    "sp500": ("stock market", "stock markets", "stocks", "the market", "dow", "s&p", "trillion dollars", "wall street"),
+    "nasdaq": ("nasdaq", "tech stocks"),
+}
+MAX_TRUMP_CHARS = 220
+
+
+def short_text(text: str, limit: int = MAX_TRUMP_CHARS) -> str:
+    """Testo fino all'ultima frase completa (o all'ultima parola intera) entro il limite."""
+    text = " ".join(text.split())
+    clipped = len(text) > limit or (len(text) >= 190 and text[-1] not in ".!?\"”")
+    if not clipped:
+        return text
+    cut = text[:limit]
+    end = max(cut.rfind(". "), cut.rfind("! "), cut.rfind("? "))
+    if end >= 60:
+        return cut[:end + 1]
+    return cut.rsplit(" ", 1)[0].rstrip(",;:") + "…"
+
+
+def post_instruments(item: dict) -> dict[str, str]:
+    """Strumenti CFD toccati dal post → freccia di Sputnik ("⬆️"/"⬇️") o "" se solo per argomento."""
+    found: dict[str, str] = {}
+    for b in item.get("bias") or []:
+        up = "LONG" in str(b.get("bias", "")).upper()
+        for key, factor in sputnik_context.INSTRUMENT_MAP.get(str(b.get("instrument", "")).upper(), {}).items():
+            found[key] = "⬆️" if up == (factor > 0) else "⬇️"
+    text = str(item.get("title", "")).lower()
+    for key, words in TOPIC_WORDS.items():
+        if key not in found and any(re.search(rf"\b{re.escape(w)}\b", text) for w in words):
+            found[key] = ""
+    return found
+
+
 def trump_lines(ctx: dict | None, now: datetime) -> list[str]:
     if not ctx:
         return ["• notizie Sputnik non disponibili"]
+    posts = []
+    for item in ctx.get("trump") or []:
+        title = str(item.get("title", "")).strip()
+        if not title or EMPTY_POST.match(title):
+            continue
+        try:
+            published = datetime.fromisoformat(str(item.get("published")))
+            if now - published > timedelta(hours=24):
+                continue
+        except ValueError:
+            pass
+        posts.append((post_instruments(item), item))
+    posts.sort(key=lambda p: not p[0])   # prima i post che toccano i nostri strumenti
     lines = []
-    for item in (ctx.get("trump") or [])[:4]:
-        biases = [f"{b['instrument']} {'⬆️' if 'LONG' in str(b.get('bias', '')).upper() else '⬇️'}"
-                  for b in item.get("bias") or []]
-        lines.append(f"• {item.get('title', '')[:120]}" + (f" ({', '.join(biases)})" if biases else ""))
+    for keys, item in posts[:4]:
+        tags = ", ".join(f"{BY_KEY[k].name} {arrow}".strip() for k, arrow in keys.items() if k in BY_KEY)
+        lines.append(f"• {short_text(item['title'])}" + (f"\n   → {tags}" if tags else ""))
     return lines or ["• nessun post rilevante nelle ultime 24 ore"]
 
 
