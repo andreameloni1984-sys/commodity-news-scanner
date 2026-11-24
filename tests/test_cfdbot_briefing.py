@@ -114,3 +114,14 @@ def test_medium_alert_not_sent_too_early():
     briefing.run(early, fetcher=fetcher, calendar_fetcher=lambda: [PMI], context_fetcher=lambda: CTX,
                  send=lambda t: sent.append(t) or True, st={"brief_date": "2026-11-24"})
     assert sent == []
+
+
+def test_macro_lines_dollar_yields_and_opec():
+    def f(symbol, **_):
+        closes = [100.0] * 20 + [102.0] if symbol == "DX-Y.NYB" else [4.5] * 20 + [4.8]
+        return bars_from(closes)
+    opec = {"title": "OPEC-JMMC Meetings", "country": "ALL", "date": "2026-11-26T08:00:00-05:00", "impact": "Medium"}
+    lines = briefing.macro_lines(f, [opec], NOW)
+    assert lines[0].startswith("• Dollaro (indice DXY): 102,0, +2,0% in una settimana → pressione sull'oro")
+    assert "+30 punti base in una settimana → pressione su oro e Nasdaq" in lines[1]
+    assert lines[2].startswith("• 🛢️ OPEC-JMMC Meetings: gio 26/11 14:00")
