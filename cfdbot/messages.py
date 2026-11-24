@@ -14,15 +14,24 @@ def f(x: float, d: int) -> str:
 SMALL_UNITS = 0.1
 
 
+# Leva massima dei CFD per i clienti al dettaglio in Europa (ESMA): margine = valore / leva
+LEVERAGE = {"oro": 20, "wti": 10, "sp500": 20, "nasdaq": 20, "eurusd": 30}
+
+
 def sizing_lines(pos: dict) -> list[str]:
     if not pos.get("risk_eur"):
         return ["Rischio: imposta ACCOUNT_SIZE per avere la dimensione della posizione calcolata."]
     units, risk = pos["units"], pos["risk_eur"]
-    lines = [
-        f"Rischio: {pos['risk_pct']:g}% del conto = {f(risk, 2)} €",
-        f"Quantità indicativa: {f(units, 4)} unità del sottostante "
-        f"(verifica su Trading 212 che la perdita allo stop sia circa {f(risk, 2)} €)",
-    ]
+    lines = []
+    notional = pos.get("notional_eur")
+    if notional:
+        margin = notional / LEVERAGE.get(pos.get("key", ""), 20)
+        lines.append(f"💶 Quanto investi: posizione da circa {f(notional, 2)} € "
+                     f"(Trading 212 blocca circa {f(margin, 2)} € di margine)")
+    lines.append(f"❌ Se va male (stop): perdi circa {f(risk, 2)} € ({pos['risk_pct']:g}% del conto)")
+    if pos.get("target_dist") and pos.get("stop_dist"):
+        lines.append(f"✅ Se va bene (target): guadagni circa {f(risk * pos['target_dist'] / pos['stop_dist'], 2)} €")
+    lines.append(f"🔢 Quantità da inserire su Trading 212: {f(units, 4)}")
     unit_risk = pos.get("unit_risk_eur")
     if unit_risk and units < SMALL_UNITS:
         lines.append(
