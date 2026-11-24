@@ -12,7 +12,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
-from . import indicators, messages, notify, rebound, report_card, strategy
+from . import indicators, messages, notify, rebound, report_card, strategy, vol_alert
 from . import sputnik_context
 from . import state as state_mod
 from .data import Bars, DataError, completed_daily, fetch
@@ -163,6 +163,7 @@ def run(now: datetime | None = None, dry_run: bool = False, fetcher: Fetcher = f
         log.warning("Cambio EUR/USD non disponibile: %s", exc)
 
     rows = []
+    dailies: dict[str, Bars] = {}
     sputnik_ctx: dict | None = None   # scaricato solo se serve (quando c'è un nuovo segnale)
     for inst in enabled_instruments():
         try:
@@ -175,6 +176,7 @@ def run(now: datetime | None = None, dry_run: bool = False, fetcher: Fetcher = f
             continue
         rows.append(trend_row(inst, daily, now))
         check_big_move(inst, daily, now, st, emit)
+        dailies[inst.key] = daily
 
         if inst.key in rebound.KEYS and os.getenv("CFD_REBOUND", "1").strip() != "0":
             rb = st.setdefault("rebound", {})
@@ -226,6 +228,12 @@ def run(now: datetime | None = None, dry_run: bool = False, fetcher: Fetcher = f
                       for k, p in st["open"].items() if k in BY_KEY]
         emit(messages.daily_summary(rows, open_lines, stats(st)))
         st["last_summary"] = today
+
+    if vol_alert.due(st, now) and dailies:
+        text = vol_alert.build(dailies, now, fetcher)
+        if text:
+            emit(text)
+        vol_alert.mark_sent(st, now)
 
     if report_card.due(st, now):
         emit(report_card.build(st, now))
