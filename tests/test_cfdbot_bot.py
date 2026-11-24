@@ -136,17 +136,18 @@ def test_eurusd_excluded_by_default(monkeypatch):
     assert [i.key for i in main.enabled_instruments()] == ["oro", "eurusd"]
 
 
-def test_small_account_sizing_shows_four_decimals_and_warning(monkeypatch):
+def test_small_account_sizing_in_euro_with_warning(monkeypatch):
     from cfdbot.main import size_position
     from cfdbot.messages import sizing_lines
     monkeypatch.setenv("ACCOUNT_SIZE", "100")
     monkeypatch.setenv("RISK_PCT", "2")
-    pos = size_position(3572.60, 3724.33, 1.09)
-    lines = sizing_lines(pos)
-    assert "= 2,00 €" in lines[0]
-    assert "0,0144 unità" in lines[1]
-    assert lines[2].startswith("⚠️ Quantità molto piccola")
-    assert "139,20 €" in lines[2]          # 1 unità di oro: 151,73 $ / 1,09
+    pos = {**size_position(3572.60, 3724.33, 1.09), "key": "oro", "stop_dist": 151.73, "target_dist": 303.46}
+    text = "\n".join(sizing_lines(pos))
+    assert "💶 Quanto investi: posizione da circa 47,09 € (Trading 212 blocca circa 2,35 € di margine)" in text
+    assert "❌ Se va male (stop): perdi circa 2,00 € (2% del conto)" in text
+    assert "✅ Se va bene (target): guadagni circa 4,00 €" in text
+    assert "🔢 Quantità da inserire su Trading 212: 0,0144" in text
+    assert "⚠️ Quantità molto piccola" in text
 
 
 def test_large_account_sizing_has_no_warning(monkeypatch):
@@ -154,8 +155,8 @@ def test_large_account_sizing_has_no_warning(monkeypatch):
     from cfdbot.messages import sizing_lines
     monkeypatch.setenv("ACCOUNT_SIZE", "100000")
     monkeypatch.delenv("RISK_PCT", raising=False)
-    lines = sizing_lines(size_position(3572.60, 3724.33, 1.09))
-    assert len(lines) == 2 and "7,1838 unità" in lines[1]
+    lines = sizing_lines({**size_position(3572.60, 3724.33, 1.09), "key": "oro"})
+    assert "7,1838" in lines[-1] and not any("⚠️" in l for l in lines)
 
 
 def test_big_move_alert_once_per_day_and_mentions_open_position():
