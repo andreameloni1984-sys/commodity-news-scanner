@@ -12,7 +12,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
-from . import messages, notify, rebound, report_card, strategy
+from . import indicators, messages, notify, rebound, report_card, strategy
 from . import sputnik_context
 from . import state as state_mod
 from .data import Bars, DataError, completed_daily, fetch
@@ -115,6 +115,31 @@ def new_signal(inst: Instrument, daily: Bars, now: datetime, eurusd: float | Non
     return pos, "segnale"
 
 
+BIG_MOVE_ATR = 2.5   # movimento del giorno oltre 2,5 volte l'ATR: avviso informativo
+
+
+def check_big_move(inst: Instrument, daily: Bars, now: datetime, st: dict, emit: Callable[[str], None]) -> None:
+    """Avvisa una volta al giorno per strumento se il prezzo si muove in modo eccezionale."""
+    bars = completed_daily(daily, now)
+    price = daily.last_price
+    if (len(bars) < 20 or price is None or daily.last_price_time is None
+            or now - daily.last_price_time > MAX_PRICE_AGE):
+        return
+    atr = indicators.atr(bars.high, bars.low, bars.close)
+    prev = bars.close[-1]
+    if not atr or prev <= 0:
+        return
+    move = price - prev
+    ratio = abs(move) / atr
+    today = now.strftime("%Y-%m-%d")
+    seen = st.setdefault("big_moves", {})
+    if ratio < BIG_MOVE_ATR or seen.get(inst.key) == today:
+        return
+    seen[inst.key] = today
+    pos = st["open"].get(inst.key)
+    emit(messages.big_move(inst, move, prev, price, ratio, pos["direction"] if pos else None))
+
+
 def trend_row(inst: Instrument, daily: Bars, now: datetime) -> str:
     t = strategy.trend(completed_daily(daily, now))
     label = {1: "🟢 rialzista", -1: "🔴 ribassista", 0: "⚪ laterale"}[t]
@@ -149,6 +174,7 @@ def run(now: datetime | None = None, dry_run: bool = False, fetcher: Fetcher = f
             errors["dati mancanti"] = errors.get("dati mancanti", 0) + 1
             continue
         rows.append(trend_row(inst, daily, now))
+        check_big_move(inst, daily, now, st, emit)
 
         if inst.key in rebound.KEYS and os.getenv("CFD_REBOUND", "1").strip() != "0":
             rb = st.setdefault("rebound", {})

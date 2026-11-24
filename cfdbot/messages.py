@@ -75,7 +75,7 @@ def daily_summary(rows: list[str], open_lines: list[str], stats: dict) -> str:
     lines += ["", "Trend degli strumenti:"] + rows
     if stats["n"]:
         lines += ["", f"Storico: {stats['n']} operazioni · vincenti {stats['win']:.0%} · totale {stats['total']:+.1f}R"]
-    lines += ["", "Il bot controlla i mercati ogni ora e scrive solo quando c'è un segnale o una chiusura."]
+    lines += ["", "Il bot controlla i mercati ogni 15 minuti e scrive quando c'è un segnale, una chiusura o un movimento eccezionale."]
     return "\n".join(lines)
 
 
@@ -113,4 +113,21 @@ def rebound_closed(inst: Instrument, pos: dict, history: list[dict]) -> str:
     if pos["exit_reason"] != "stop":
         lines.append("Chiudi la posizione su Trading 212.")
     lines.append(f"Storico rimbalzi: {n} operazioni · vincenti {wins}/{n} · totale {total:+.1f}R")
+    return "\n".join(lines)
+
+
+def big_move(inst: Instrument, move: float, prev_close: float, price: float, ratio: float, open_dir: str | None) -> str:
+    d = inst.decimals
+    arrow = "📈" if move > 0 else "📉"
+    lines = [
+        f"🌋 MOVIMENTO FORTE — {inst.name} {arrow} {'+' if move > 0 else ''}{f(move / prev_close * 100, 1)}% oggi",
+        f"Da {f(prev_close, d)} a {f(price, d)}: circa {f(ratio, 1)} volte un giorno normale.",
+        "Nessun segnale da seguire: è solo un'informazione.",
+    ]
+    if open_dir:
+        against = (move > 0) != (open_dir == "LONG")
+        lines.append(f"Hai un {open_dir} aperto su questo strumento: "
+                     + ("il movimento è CONTRO di te, controlla lo stop." if against else "il movimento è a tuo favore."))
+    else:
+        lines.append("Se hai posizioni aperte su questo strumento, controlla gli stop.")
     return "\n".join(lines)

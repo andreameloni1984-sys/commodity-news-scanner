@@ -156,3 +156,28 @@ def test_large_account_sizing_has_no_warning(monkeypatch):
     monkeypatch.delenv("RISK_PCT", raising=False)
     lines = sizing_lines(size_position(3572.60, 3724.33, 1.09))
     assert len(lines) == 2 and "7,1838 unità" in lines[1]
+
+
+def test_big_move_alert_once_per_day_and_mentions_open_position():
+    closes = [100.0 + (i % 2) * 0.5 for i in range(60)]
+    daily = bars_from(closes, spread=0.005)
+    now = day_after(daily, hours=15)
+    daily.last_price, daily.last_price_time = 104.0, now - timedelta(minutes=5)   # +4% con ATR ~1
+    st = state.empty()
+    st["open"]["oro"] = {"direction": "SHORT"}
+    out = []
+    main.check_big_move(BY_KEY["oro"], daily, now, st, out.append)
+    assert len(out) == 1 and out[0].startswith("🌋 MOVIMENTO FORTE — Oro 📈 +3,5% oggi")
+    assert "CONTRO di te" in out[0]
+    main.check_big_move(BY_KEY["oro"], daily, now + timedelta(hours=1), st, out.append)
+    assert len(out) == 1
+
+
+def test_normal_day_no_big_move_alert():
+    closes = [100.0 + (i % 2) * 0.5 for i in range(60)]
+    daily = bars_from(closes, spread=0.005)
+    now = day_after(daily, hours=15)
+    daily.last_price, daily.last_price_time = 100.8, now - timedelta(minutes=5)
+    out = []
+    main.check_big_move(BY_KEY["oro"], daily, now, state.empty(), out.append)
+    assert out == []
