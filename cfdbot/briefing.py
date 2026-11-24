@@ -195,6 +195,36 @@ def trump_lines(ctx: dict | None, now: datetime) -> list[str]:
     return lines or ["• nessun post rilevante nelle ultime 24 ore"]
 
 
+def macro_lines(fetcher: Callable, calendar: list[dict], now: datetime) -> list[str]:
+    """Dollaro, rendimento del decennale USA e riunioni OPEC+ della settimana (solo informazione)."""
+    lines = []
+    try:
+        dxy = fetcher("DX-Y.NYB", range_="1mo", interval="1d")
+        last, week = dxy.last_price or dxy.close[-1], dxy.close[-6]
+        chg = (last / week - 1) * 100
+        note = (" → pressione sull'oro" if chg >= 1 else " → sostegno all'oro" if chg <= -1 else "")
+        lines.append(f"• Dollaro (indice DXY): {last:.1f}, {chg:+.1f}% in una settimana{note}".replace(".", ","))
+    except (DataError, IndexError, TypeError):
+        lines.append("• Dollaro: dato non disponibile")
+    try:
+        tnx = fetcher("^TNX", range_="1mo", interval="1d")
+        last, week = tnx.last_price or tnx.close[-1], tnx.close[-6]
+        bp = (last - week) * 100
+        note = (" → pressione su oro e Nasdaq" if bp >= 15 else " → sostegno a oro e Nasdaq" if bp <= -15 else "")
+        lines.append(f"• Rendimento titoli di Stato USA a 10 anni: {last:.2f}%, {bp:+.0f} punti base in una settimana{note}"
+                     .replace(".", ","))
+    except (DataError, IndexError, TypeError):
+        lines.append("• Tassi USA: dato non disponibile")
+    for e in calendar:
+        if "opec" in str(e.get("title", "")).lower():
+            t = _when(e)
+            if t and timedelta(0) <= t - now <= timedelta(days=7):
+                days = ("lun", "mar", "mer", "gio", "ven", "sab", "dom")
+                lines.append(f"• 🛢️ {e['title']}: {days[t.astimezone(ROME).weekday()]} {t.astimezone(ROME):%d/%m %H:%M} "
+                             "→ possibile scossone sul petrolio")
+    return lines
+
+
 def morning_brief(now: datetime, calendar: list[dict], fetcher: Callable, ctx: dict | None, st: dict) -> str:
     local = now.astimezone(ROME)
     days = ("lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica")
@@ -213,6 +243,7 @@ def morning_brief(now: datetime, calendar: list[dict], fetcher: Callable, ctx: d
             lines.append("🟡 Dati di importanza media: possibili scatti per qualche minuto, ti avviso 15 minuti prima.")
     else:
         lines.append("• nessun dato ad alto impatto" + ("" if calendar else " (calendario non disponibile)"))
+    lines += ["", "💵 Dollaro, tassi e petrolio (variabili che muovono oro e indici)"] + macro_lines(fetcher, calendar, now)
     lines += ["", "🇺🇸 Trump nelle ultime 24 ore (Sputnik)"] + trump_lines(ctx, now)
     open_pos = st.get("open") or {}
     lines += ["", "📂 Posizioni CFD aperte dal bot: " + (", ".join(
