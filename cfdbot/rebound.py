@@ -118,9 +118,12 @@ def process(inst: Instrument, daily: Bars, hourly: Bars | None, now: datetime, r
     if price - bars.close[-1] > MAX_CHASE_ATR * atr:
         return   # è già rimbalzato: niente ingresso
     stop = price - STOP_ATR * atr
+    # Obiettivo indicativo: la media a 5 giorni, dove scatta di solito l'uscita (almeno mezzo ATR).
+    target = max(ind.sma(bars.close, 5) or 0, price + 0.5 * atr)
     pos = {
         "key": inst.key, "direction": "LONG", "kind": "rimbalzo", "entry": round(price, inst.decimals),
         "stop": round(stop, inst.decimals), "stop_dist": round(price - stop, inst.decimals), "atr": atr,
+        "target": round(target, inst.decimals), "target_dist": round(target - price, inst.decimals),
         "reasons": reasons, "opened_at": now.isoformat(), **sizing(price, stop),
     }
     rb["open"][inst.key] = pos
