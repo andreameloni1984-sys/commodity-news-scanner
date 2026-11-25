@@ -97,6 +97,8 @@ def rebound_signal(inst: Instrument, pos: dict) -> str:
         "",
         f"Ingresso: {f(pos['entry'], d)}",
         f"Stop di sicurezza: {f(pos['stop'], d)}  (distanza {f(pos['stop_dist'], d)})",
+        *([f"Take profit indicativo: {f(pos['target'], d)}  (distanza {f(pos['target_dist'], d)}, "
+           "media a 5 giorni: di solito il rimbalzo arriva lì)"] if pos.get("target") else []),
         "Uscita: quando l'indice rimbalza (chiusura sopra la media a 5 giorni o vicino al massimo "
         f"della giornata) — te lo scrivo io. Al massimo {MAX_DAYS} giorni di borsa.",
         "",

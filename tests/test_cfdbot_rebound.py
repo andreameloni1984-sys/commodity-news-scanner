@@ -40,6 +40,8 @@ def test_three_down_days_in_uptrend_opens_long_once():
     assert len(out) == 1 and out[0].startswith("🔄 SEGNALE RIMBALZO — S&P 500")
     pos = rb["open"]["sp500"]
     assert pos["stop"] < pos["entry"] and "3 chiusure in calo di fila" in pos["reasons"]
+    assert pos["target"] > pos["entry"] and pos["target_dist"] >= 0.5 * pos["atr"] - 0.01
+    assert "Take profit indicativo" in out[0]
     assert run(bars, now + timedelta(hours=1), rb) == []
 
 
