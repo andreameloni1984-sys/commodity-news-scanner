@@ -49,6 +49,11 @@ def build(st: dict, now: datetime) -> str:
         for v in ("favore", "contro", "misto", "neutro", "n.d."):
             if v in verdicts:
                 lines.append(f"• Trump {v}: {_line(verdicts[v])}")
+    both = [c for c in closed if "r_tp1" in c]
+    if both:
+        lines += ["", "Take profit 1 (prudente) contro take profit 2 (del bot), sugli stessi segnali:",
+                  f"• TP1: totale {sum(c['r_tp1'] for c in both):+.1f}R · "
+                  f"TP2: totale {sum(c['r'] for c in both):+.1f}R ({len(both)} segnali)"]
     rb = st.get("rebound") or {}
     rb_closed = rb.get("closed") or []
     if rb_closed or rb.get("open"):

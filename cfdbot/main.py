@@ -72,13 +72,17 @@ def manage_open(inst: Instrument, pos: dict, daily: Bars, hourly: Bars | None, n
     entry_t = datetime.fromisoformat(pos["opened_at"])
     s = 1 if pos["direction"] == "LONG" else -1
     exit_price = reason = None
+    tp1 = None   # cosa è successo prima per il take profit 1: "target1" o "stop"
     if hourly:
         for t, hi, lo in zip(hourly.time, hourly.high, hourly.low):
             if t < entry_t - timedelta(hours=1):
                 continue
             if (lo <= pos["stop"]) if s > 0 else (hi >= pos["stop"]):
                 exit_price, reason = pos["stop"], "stop"
+                tp1 = tp1 or "stop"
                 break
+            if pos.get("target1") and tp1 is None and ((hi >= pos["target1"]) if s > 0 else (lo <= pos["target1"])):
+                tp1 = "target1"
             if (hi >= pos["target"]) if s > 0 else (lo <= pos["target"]):
                 exit_price, reason = pos["target"], "target"
                 break
@@ -88,8 +92,13 @@ def manage_open(inst: Instrument, pos: dict, daily: Bars, hourly: Bars | None, n
             exit_price, reason = daily.last_price, "tempo"
     if reason is None:
         return None
-    r = (exit_price - pos["entry"]) * s / abs(pos["entry"] - pos["stop"])
-    return {**pos, "exit": exit_price, "exit_reason": reason, "r": round(r, 2), "closed_at": now.isoformat()}
+    risk = abs(pos["entry"] - pos["stop"])
+    r = (exit_price - pos["entry"]) * s / risk
+    done = {**pos, "exit": exit_price, "exit_reason": reason, "r": round(r, 2), "closed_at": now.isoformat()}
+    if pos.get("target1"):
+        # risultato se si fosse usciti al take profit 1 (stessi stop e scadenza)
+        done["r_tp1"] = round(pos["target1_dist"] / risk if tp1 == "target1" else r, 2)
+    return done
 
 
 def new_signal(inst: Instrument, daily: Bars, now: datetime, eurusd: float | None) -> tuple[dict | None, str]:
@@ -106,6 +115,7 @@ def new_signal(inst: Instrument, daily: Bars, now: datetime, eurusd: float | Non
     stop, target = strategy.levels(setup.direction, price, setup.atr)
     if (price - stop) * s <= 0:
         return None, "livelli non validi"
+    target1 = strategy.swing_target(bars, setup.direction, price, setup.atr)
     pos = {
         "key": inst.key, "direction": setup.direction, "kind": setup.kind,
         "entry": round(price, inst.decimals), "stop": round(stop, inst.decimals), "target": round(target, inst.decimals),
@@ -113,6 +123,8 @@ def new_signal(inst: Instrument, daily: Bars, now: datetime, eurusd: float | Non
         "atr": setup.atr, "reasons": setup.reasons, "opened_at": now.isoformat(),
         **size_position(price, stop, eurusd),
     }
+    if target1 is not None:
+        pos.update({"target1": round(target1, inst.decimals), "target1_dist": round(abs(target1 - price), inst.decimals)})
     return pos, "segnale"
 
 

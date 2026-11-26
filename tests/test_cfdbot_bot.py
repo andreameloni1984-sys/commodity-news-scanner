@@ -182,3 +182,35 @@ def test_normal_day_no_big_move_alert():
     out = []
     main.check_big_move(BY_KEY["oro"], daily, now, state.empty(), out.append)
     assert out == []
+
+
+def test_swing_target_only_when_beyond_entry():
+    from cfdbot import strategy
+    bars = bars_from([100.0] * 30 + [110.0])   # massimo a 20 giorni ~110,55
+    assert strategy.swing_target(bars, "LONG", 105.0, 2.0) == pytest.approx(110.55)
+    assert strategy.swing_target(bars, "LONG", 110.5, 2.0) is None          # già superato (rottura)
+    assert strategy.swing_target(bars, "SHORT", 105.0, 2.0) == pytest.approx(99.5)
+
+
+def test_signal_message_shows_two_take_profits():
+    from cfdbot.messages import new_signal
+    pos = {**open_position(opened=bars_from([1.0]).time[0]), "direction": "SHORT", "entry": 100.0, "stop": 103.0,
+           "target": 94.0, "target1": 97.0, "target1_dist": 3.0, "risk_eur": 4.0, "risk_pct": 2, "units": 1.0}
+    text = new_signal(BY_KEY["oro"], pos)
+    assert "Take profit 1 (prudente, minimo degli ultimi 20 giorni): 97" in text and "guadagni circa 4,00 €" in text
+    assert "Take profit 2 (del bot, 3 ATR): 94" in text and "guadagni circa 8,00 €" in text
+    pos.pop("target1")
+    assert "usa il take profit 2" in new_signal(BY_KEY["oro"], pos)
+
+
+def test_tp1_result_is_recorded_for_comparison():
+    from cfdbot import report_card
+    daily = bars_from([100.0] * 250)
+    opened = daily.time[-1]
+    hourly = bars_from([102, 104, 96], start=opened + timedelta(hours=1), step=timedelta(hours=1), spread=0)
+    st = state.empty()
+    st["open"]["oro"] = {**open_position(opened=opened), "target1": 103.5, "target1_dist": 3.5}
+    st = main.run(now=opened + timedelta(hours=5), fetcher=make_fetcher(daily, hourly), sender=lambda t: True, st=st)
+    c = st["closed"][0]
+    assert c["exit_reason"] == "stop" and c["r"] == -1.0 and c["r_tp1"] == pytest.approx(3.5 / 3, abs=0.01)
+    assert "TP1: totale +1.2R · TP2: totale -1.0R" in report_card.build(st, opened + timedelta(days=1))

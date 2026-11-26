@@ -41,6 +41,22 @@ def sizing_lines(pos: dict) -> list[str]:
     return lines
 
 
+def _take_profit_lines(pos: dict, d: int) -> list[str]:
+    edge = "minimo" if pos["direction"] == "SHORT" else "massimo"
+    gain = lambda dist: (f" → guadagni circa {f(pos['risk_eur'] * dist / pos['stop_dist'], 2)} €"
+                         if pos.get("risk_eur") and pos.get("stop_dist") else "")
+    if pos.get("target1"):
+        tp1 = (f"🎯 Take profit 1 (prudente, {edge} degli ultimi 20 giorni): {f(pos['target1'], d)}  "
+               f"(distanza {f(pos['target1_dist'], d)}){gain(pos['target1_dist'])}")
+    else:
+        tp1 = (f"🎯 Take profit 1 (prudente): nessun {edge} recente oltre il prezzo, "
+               "il mercato l'ha appena superato — usa il take profit 2")
+    return [tp1,
+            f"🚀 Take profit 2 (del bot, 3 ATR): {f(pos['target'], d)}  "
+            f"(distanza {f(pos['target_dist'], d)}){gain(pos['target_dist'])}",
+            "Scegli tu: il 1 si tocca più spesso, il 2 nel test di 10 anni ha reso di più."]
+
+
 def new_signal(inst: Instrument, pos: dict) -> str:
     d = inst.decimals
     arrow = "🟢 LONG (compra)" if pos["direction"] == "LONG" else "🔴 SHORT (vendi)"
@@ -50,8 +66,8 @@ def new_signal(inst: Instrument, pos: dict) -> str:
         "",
         f"Ingresso: {f(pos['entry'], d)}",
         f"Stop loss: {f(pos['stop'], d)}  (distanza {f(pos['stop_dist'], d)})",
-        f"Take profit: {f(pos['target'], d)}  (distanza {f(pos['target_dist'], d)})",
-        "Rischio/rendimento 1:2 · durata massima 5 giorni di borsa",
+        *_take_profit_lines(pos, d),
+        "Durata massima 5 giorni di borsa",
         "",
         *sizing_lines(pos),
         "",
