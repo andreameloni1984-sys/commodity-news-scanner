@@ -68,6 +68,26 @@ def evaluate(bars: Bars) -> Setup | None:
     return None
 
 
+SWING_DAYS = 20
+SWING_MIN_ATR = 0.5
+
+
+def swing_target(bars: Bars, direction: str, entry: float, atr: float) -> float | None:
+    """Take profit "da trader": minimo (SHORT) o massimo (LONG) degli ultimi 20 giorni.
+
+    None se quel livello non è almeno mezzo ATR oltre l'ingresso (es. nelle rotture,
+    dove il prezzo l'ha già superato). Test 10 anni: +36R contro +44R del take profit
+    a 3 ATR, ma serie negativa peggiore più corta (−10,8R contro −13,9R).
+    """
+    if len(bars) < SWING_DAYS or not atr:
+        return None
+    if direction == "LONG":
+        level = max(bars.high[-SWING_DAYS:])
+        return level if level - entry >= SWING_MIN_ATR * atr else None
+    level = min(bars.low[-SWING_DAYS:])
+    return level if entry - level >= SWING_MIN_ATR * atr else None
+
+
 def levels(direction: str, entry: float, atr: float) -> tuple[float, float]:
     s = 1 if direction == "LONG" else -1
     return entry - s * STOP_ATR * atr, entry + s * TARGET_ATR * atr
