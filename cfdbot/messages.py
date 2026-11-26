@@ -52,9 +52,9 @@ def _take_profit_lines(pos: dict, d: int) -> list[str]:
         tp1 = (f"🎯 Take profit 1 (prudente): nessun {edge} recente oltre il prezzo, "
                "il mercato l'ha appena superato — usa il take profit 2")
     return [tp1,
-            f"🚀 Take profit 2 (del bot, 3 ATR): {f(pos['target'], d)}  "
+            f"🚀 Take profit 2 (del bot, 2 ATR): {f(pos['target'], d)}  "
             f"(distanza {f(pos['target_dist'], d)}){gain(pos['target_dist'])}",
-            "Scegli tu: il 1 si tocca più spesso, il 2 nel test di 10 anni ha reso di più."]
+            "Scegli tu: il 1 è più vicino e si tocca più spesso, il 2 è quello che segue il bot."]
 
 
 def new_signal(inst: Instrument, pos: dict) -> str:

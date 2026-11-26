@@ -10,7 +10,10 @@ from . import indicators as ind
 from .data import Bars
 
 STOP_ATR = 1.5      # stop loss a 1,5 ATR
-TARGET_ATR = 3.0    # take profit a 3 ATR (rapporto rischio/rendimento 1:2)
+# Take profit a 2 ATR. Test 10 anni su 16 metodi di uscita (ATR, supporti, Fibonacci, pivot,
+# uscite parziali, trailing, Turtle): risultati simili; 2 ATR viene toccato il 19% delle volte
+# (3 ATR solo il 6%) con lo stesso guadagno (+41R contro +43R) e serie negative più corte.
+TARGET_ATR = 2.0
 MAX_DAYS = 5        # uscita a tempo dopo 5 giorni di borsa
 MIN_BARS = 210
 
@@ -76,8 +79,8 @@ def swing_target(bars: Bars, direction: str, entry: float, atr: float) -> float 
     """Take profit "da trader": minimo (SHORT) o massimo (LONG) degli ultimi 20 giorni.
 
     None se quel livello non è almeno mezzo ATR oltre l'ingresso (es. nelle rotture,
-    dove il prezzo l'ha già superato). Test 10 anni: +36R contro +44R del take profit
-    a 3 ATR, ma serie negativa peggiore più corta (−10,8R contro −13,9R).
+    dove il prezzo l'ha già superato). Test 10 anni: +33-36R, serie negativa peggiore
+    intorno a −11/−13R.
     """
     if len(bars) < SWING_DAYS or not atr:
         return None

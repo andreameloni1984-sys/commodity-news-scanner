@@ -21,6 +21,6 @@ def test_no_signal_without_trend_or_history():
 
 def test_levels_risk_reward():
     stop, target = strategy.levels("LONG", 100, 2)
-    assert stop == 97 and target == 106
+    assert stop == 97 and target == 104
     stop, target = strategy.levels("SHORT", 100, 2)
-    assert stop == 103 and target == 94
+    assert stop == 103 and target == 96

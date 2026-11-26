@@ -67,8 +67,19 @@ def size_position(entry: float, stop: float, eurusd: float | None) -> dict:
             "unit_risk_eur": round(per_unit_eur, 2), "notional_eur": round(units * entry / eurusd, 2)}
 
 
+def _update_target(inst: Instrument, pos: dict) -> None:
+    """Posizioni aperte con il vecchio take profit a 3 ATR: passano a 2 ATR come i nuovi segnali."""
+    atr = pos.get("atr")
+    if not atr or abs(pos.get("target_dist", 0) - 3 * atr) > 0.01 * atr:
+        return
+    s = 1 if pos["direction"] == "LONG" else -1
+    pos["target"] = round(pos["entry"] + s * strategy.TARGET_ATR * atr, inst.decimals)
+    pos["target_dist"] = round(strategy.TARGET_ATR * atr, inst.decimals)
+
+
 def manage_open(inst: Instrument, pos: dict, daily: Bars, hourly: Bars | None, now: datetime) -> dict | None:
     """Restituisce la posizione chiusa (con exit/r) oppure None se resta aperta."""
+    _update_target(inst, pos)
     entry_t = datetime.fromisoformat(pos["opened_at"])
     s = 1 if pos["direction"] == "LONG" else -1
     exit_price = reason = None
@@ -116,6 +127,8 @@ def new_signal(inst: Instrument, daily: Bars, now: datetime, eurusd: float | Non
     if (price - stop) * s <= 0:
         return None, "livelli non validi"
     target1 = strategy.swing_target(bars, setup.direction, price, setup.atr)
+    if target1 is not None and abs(target1 - price) >= abs(target - price):
+        target1 = None   # più lontano del take profit del bot: sarebbe un doppione
     pos = {
         "key": inst.key, "direction": setup.direction, "kind": setup.kind,
         "entry": round(price, inst.decimals), "stop": round(stop, inst.decimals), "target": round(target, inst.decimals),

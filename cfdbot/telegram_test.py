@@ -9,7 +9,7 @@ import logging
 import sys
 from datetime import datetime, timezone
 
-from . import messages, notify
+from . import messages, notify, strategy
 from .data import DataError, fetch
 from .instruments import BY_KEY, INSTRUMENTS
 from .main import size_position, trend_row
@@ -28,10 +28,14 @@ def build(now: datetime | None = None) -> str:
     except DataError:
         eurusd = None
     gold = BY_KEY["oro"]
-    example = {"direction": "SHORT", "entry": 3515.40, "stop": 3667.13, "target": 3211.94,
-               "stop_dist": 151.73, "target_dist": 303.46,
+    # Il segnale oro SHORT di lunedì 23/11 ricalcolato con le regole attuali (ATR 101,15).
+    entry, atr = 3572.60, 101.153
+    stop, target = strategy.levels("SHORT", entry, atr)
+    example = {"direction": "SHORT", "entry": entry, "stop": round(stop, 2), "target": round(target, 2),
+               "stop_dist": round(stop - entry, 2), "target_dist": round(entry - target, 2),
+               "target1": 3502.90, "target1_dist": round(entry - 3502.90, 2),
                "reasons": ["Trend ribassista (prezzo < SMA50 < SMA200)", "Chiusura sotto il minimo a 20 giorni"],
-               **size_position(3515.40, 3667.13, eurusd)}
+               **size_position(entry, stop, eurusd)}
     return "\n".join([
         "🧪 MESSAGGIO DI TEST — Gagarin CFD Bot",
         "Se leggi questo messaggio, il collegamento Telegram funziona.",
@@ -39,7 +43,7 @@ def build(now: datetime | None = None) -> str:
         "Trend attuali (prezzi reali):",
         *rows,
         "",
-        "Ecco come apparirà un segnale (ESEMPIO, non operare):",
+        "Il segnale oro SHORT di lunedì con il nuovo take profit a 2 ATR (ESEMPIO per reimpostare i livelli):",
         "",
         messages.new_signal(gold, example),
     ])
