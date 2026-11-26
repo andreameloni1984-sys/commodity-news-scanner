@@ -198,7 +198,7 @@ def test_signal_message_shows_two_take_profits():
            "target": 94.0, "target1": 97.0, "target1_dist": 3.0, "risk_eur": 4.0, "risk_pct": 2, "units": 1.0}
     text = new_signal(BY_KEY["oro"], pos)
     assert "Take profit 1 (prudente, minimo degli ultimi 20 giorni): 97" in text and "guadagni circa 4,00 €" in text
-    assert "Take profit 2 (del bot, 3 ATR): 94" in text and "guadagni circa 8,00 €" in text
+    assert "Take profit 2 (del bot, 2 ATR): 94" in text and "guadagni circa 8,00 €" in text
     pos.pop("target1")
     assert "usa il take profit 2" in new_signal(BY_KEY["oro"], pos)
 
@@ -214,3 +214,13 @@ def test_tp1_result_is_recorded_for_comparison():
     c = st["closed"][0]
     assert c["exit_reason"] == "stop" and c["r"] == -1.0 and c["r_tp1"] == pytest.approx(3.5 / 3, abs=0.01)
     assert "TP1: totale +1.2R · TP2: totale -1.0R" in report_card.build(st, opened + timedelta(days=1))
+
+
+def test_open_position_with_old_3atr_target_moves_to_2atr():
+    daily = bars_from([100.0] * 250)
+    opened = daily.time[-1]
+    hourly = bars_from([100, 101], start=opened + timedelta(hours=1), step=timedelta(hours=1), spread=0)
+    st = state.empty()
+    st["open"]["oro"] = {**open_position(entry=100.0, stop=97.0, target=106.0, opened=opened), "atr": 2.0}
+    st = main.run(now=opened + timedelta(hours=3), fetcher=make_fetcher(daily, hourly), sender=lambda t: True, st=st)
+    assert st["open"]["oro"]["target"] == 104.0 and st["open"]["oro"]["target_dist"] == 4.0
