@@ -7,7 +7,7 @@ FOOTER = "Segnale automatico, non è una consulenza finanziaria. Ordine da inser
 
 
 FOOTER_CRYPTO = ("🔬 IN OSSERVAZIONE: misurata a parte nel pagellino.\n"
-                 "Ordine da inserire a mano nella sezione Cripto di Trading 212 (vietati gli ordini automatici).")
+                 "Ordine da inserire a mano su Trading 212.")
 
 
 def f(x: float, d: int) -> str:
@@ -184,29 +184,43 @@ def _pct(x: float) -> str:
 def crypto_signal(coin, pos: dict) -> str:
     d = coin.decimals
     e = pos["entry"]
-    lines = [f"🪙 SEGNALE CRIPTO — {coin.name} (sezione Cripto di Trading 212, solo acquisto)",
-             f"🟢 COMPRA · {coin.t212}", ""]
-    if pos.get("amount_eur"):
-        lines.append(f"💶 Compra circa {f(pos['amount_eur'], 2)} € di {coin.name}"
-                     + (" (95% del conto: il massimo ammesso)" if pos.get("capped") else ""))
+    long_ = pos["direction"] == "LONG"
+    up, down = ("+", "−") if long_ else ("−", "+")
+    edge = "massimo" if long_ else "minimo"
+    if long_:
+        lines = [f"🪙 SEGNALE CRIPTO — {coin.name} (sezione Cripto di Trading 212, solo acquisto)",
+                 f"🟢 COMPRA · {coin.t212}", ""]
+        if pos.get("amount_eur"):
+            lines.append(f"💶 Compra circa {f(pos['amount_eur'], 2)} € di {coin.name}"
+                         + (" (95% del conto: il massimo ammesso)" if pos.get("capped") else ""))
+    else:
+        lines = [f"🪙 SEGNALE CRIPTO CFD — {coin.name} (sezione CFD di Trading 212)",
+                 f"🔴 SHORT (vendi) · CFD {coin.t212} · leva 1:2", ""]
+        if pos.get("notional_eur"):
+            lines.append(f"💶 Posizione da circa {f(pos['notional_eur'], 2)} € "
+                         f"(Trading 212 blocca circa {f(pos['margin_eur'], 2)} € di margine)")
     lines += [f"Prezzo d'ingresso: {f(e, d)} $",
-              f"🛑 Stop: {f(pos['stop'], d)} $ (−{_pct(pos['stop_dist'] / e)})"]
+              f"🛑 Stop: {f(pos['stop'], d)} $ ({down}{_pct(pos['stop_dist'] / e)})"]
     gain = lambda dist: (f" → guadagni circa {f(pos['risk_eur'] * dist / pos['stop_dist'], 2)} €"
                          if pos.get("risk_eur") else "")
     if pos.get("target1"):
-        lines.append(f"🎯 Take profit 1 (prudente, massimo dei 20 giorni): {f(pos['target1'], d)} $ "
-                     f"(+{_pct(pos['target1_dist'] / e)}){gain(pos['target1_dist'])}")
+        lines.append(f"🎯 Take profit 1 (prudente, {edge} dei 20 giorni): {f(pos['target1'], d)} $ "
+                     f"({up}{_pct(pos['target1_dist'] / e)}){gain(pos['target1_dist'])}")
     lines.append(f"🚀 Take profit 2 (del bot, 2 ATR): {f(pos['target'], d)} $ "
-                 f"(+{_pct(pos['target_dist'] / e)}){gain(pos['target_dist'])}")
+                 f"({up}{_pct(pos['target_dist'] / e)}){gain(pos['target_dist'])}")
     if pos.get("risk_eur"):
         lines.append(f"❌ Se scatta lo stop perdi circa {f(pos['risk_eur'], 2)} € ({pos['risk_pct']:g}% del conto)")
     else:
-        lines.append("Imposta ACCOUNT_SIZE per avere la cifra in euro da comprare.")
+        lines.append("Imposta ACCOUNT_SIZE per avere la cifra in euro.")
+    if not long_ and pos.get("units"):
+        lines.append(f"🔢 Quantità da inserire: {f(pos['units'], 4)}")
     lines += ["⏱️ Durata massima 5 giorni (anche nel weekend: le cripto non chiudono mai)", "",
-              "Perché: " + "; ".join(pos["reasons"]), "",
-              "Se lo stop non si può impostare su Trading 212, quando lo tocca ti scrivo: vendi subito a mano.",
-              "Se il prezzo è diverso, mantieni le stesse percentuali di stop e take profit.",
-              FOOTER_CRYPTO]
+              "Perché: " + "; ".join(pos["reasons"]), ""]
+    if long_:
+        lines.append("Se lo stop non si può impostare su Trading 212, quando lo tocca ti scrivo: vendi subito a mano.")
+    else:
+        lines.append("Inserisci stop e take profit sul CFD. Costo per notte: controlla «Informazioni» su Trading 212.")
+    lines += ["Se il prezzo è diverso, mantieni le stesse percentuali di stop e take profit.", FOOTER_CRYPTO]
     return "\n".join(lines)
 
 
@@ -214,20 +228,23 @@ def crypto_target1(coin, pos: dict) -> str:
     gain = (f" con circa +{f(pos['risk_eur'] * pos['target1_dist'] / pos['stop_dist'], 2)} €"
             if pos.get("risk_eur") else "")
     return "\n".join([
-        f"🎯 CRIPTO — TAKE PROFIT 1 RAGGIUNTO — {coin.name}",
+        f"🎯 CRIPTO — TAKE PROFIT 1 RAGGIUNTO — {coin.name} {pos['direction']}",
         f"Il prezzo ha toccato {f(pos['target1'], coin.decimals)} $.",
-        f"Se l'avevi scelto come obiettivo, vendi ora{gain}.",
+        (f"Se l'avevi scelto come obiettivo, vendi ora{gain}." if pos["direction"] == "LONG"
+         else f"Se l'avevi impostato sul CFD, la posizione si è chiusa{gain}."),
         f"Il bot continua verso il take profit 2 ({f(pos['target'], coin.decimals)} $), "
         f"stop a {f(pos['stop'], coin.decimals)} $.",
     ])
 
 
 def crypto_closed(coin, pos: dict, history: list[dict]) -> str:
-    head = {"target": "✅ TAKE PROFIT 2 RAGGIUNTO", "stop": "❌ STOP TOCCATO: VENDI SUBITO se non è già venduto",
-            "tempo": "⏱️ VENDI: SCADUTI 5 GIORNI"}[pos["exit_reason"]]
+    long_ = pos.get("direction", "LONG") == "LONG"
+    head = {"target": "✅ TAKE PROFIT 2 RAGGIUNTO",
+            "stop": "❌ STOP TOCCATO: VENDI SUBITO se non è già venduto" if long_ else "❌ STOP TOCCATO",
+            "tempo": "⏱️ VENDI: SCADUTI 5 GIORNI" if long_ else "⏱️ CHIUDI IL CFD: SCADUTI 5 GIORNI"}[pos["exit_reason"]]
     total = sum(c["r"] for c in history)
     wins = sum(1 for c in history if c["r"] > 0)
-    lines = [f"🪙 {head} — {coin.name}",
+    lines = [f"🪙 {head} — {coin.name} {pos.get('direction', 'LONG')}",
              f"Ingresso {f(pos['entry'], coin.decimals)} $ → uscita {f(pos['exit'], coin.decimals)} $ "
              f"· {pos['r']:+.2f}R".replace(".", ",")]
     if pos.get("risk_eur"):

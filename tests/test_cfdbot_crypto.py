@@ -34,13 +34,35 @@ def test_size_is_capped_at_95_percent():
     assert s["amount_eur"] == 95.0 and s["capped"] and s["risk_eur"] == 0.48
 
 
-def test_short_setups_are_ignored():
-    closes = list(reversed(uptrend_then_breakout()))
-    daily = bars_from(closes)
+def downtrend_then_breakdown(n=260):
+    closes = [100 * 0.998 ** i for i in range(n - 25)]
+    low = closes[-1]
+    closes += [low * (1 + 0.002 * (i % 5)) for i in range(24)]
+    closes.append(low * 0.97)
+    return closes
+
+
+def test_short_setup_is_a_cfd_signal_with_quantity_and_margin():
+    daily = bars_from(downtrend_then_breakdown())
     now = daily.time[-1] + timedelta(days=1, hours=1)
-    daily.last_price_time = now
-    sig, why = crypto.entry_signal(BTC, daily, now)
-    assert sig is None and why in {"nessun setup", "segnale SHORT (non usabile nella sezione Cripto)"}
+    daily.last_price_time = now - timedelta(minutes=5)
+    st, out = state.empty(), []
+    crypto.process(now, fetcher_for(daily), st, 1.0, 100.0, 2.0, out.append)
+    pos = st["crypto"]["open"]["btc"]
+    assert pos["direction"] == "SHORT" and pos["stop"] > pos["entry"] > pos["target"]
+    assert pos["risk_eur"] == 2.0 and abs(pos["margin_eur"] - pos["notional_eur"] / 2) < 0.01
+    assert "SEGNALE CRIPTO CFD" in out[0] and "🔴 SHORT" in out[0] and "Quantità da inserire" in out[0]
+
+
+def test_short_stop_closes():
+    daily = bars_from([100.0] * 250)
+    opened = daily.time[-1]
+    hourly = bars_from([101, 104], start=opened + timedelta(hours=1), step=timedelta(hours=1), spread=0)
+    st, out = state.empty(), []
+    st["crypto"]["open"]["btc"] = {"key": "btc", "direction": "SHORT", "entry": 100.0, "stop": 103.0, "target": 96.0,
+                                  "stop_dist": 3.0, "target_dist": 4.0, "opened_at": opened.isoformat(), "reasons": []}
+    crypto.process(opened + timedelta(hours=3), fetcher_for(daily, hourly), st, 1.0, None, 2.0, out.append)
+    assert st["crypto"]["closed"][0]["r"] == -1.0 and "STOP TOCCATO" in out[0]
 
 
 def test_stop_closes_and_report_shows_section():
