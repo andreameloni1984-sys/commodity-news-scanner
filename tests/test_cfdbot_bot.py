@@ -224,3 +224,59 @@ def test_open_position_with_old_3atr_target_moves_to_2atr():
     st["open"]["oro"] = {**open_position(entry=100.0, stop=97.0, target=106.0, opened=opened), "atr": 2.0}
     st = main.run(now=opened + timedelta(hours=3), fetcher=make_fetcher(daily, hourly), sender=lambda t: True, st=st)
     assert st["open"]["oro"]["target"] == 104.0 and st["open"]["oro"]["target_dist"] == 4.0
+
+
+def test_target1_hit_sends_one_notice_and_position_stays_open():
+    daily = bars_from([100.0] * 250)
+    opened = daily.time[-1]
+    hourly = bars_from([101, 103.8, 102], start=opened + timedelta(hours=1), step=timedelta(hours=1), spread=0)
+    st = state.empty()
+    st["open"]["oro"] = {**open_position(opened=opened), "target1": 103.5, "target1_dist": 3.5, "risk_eur": 4.0}
+    sent = []
+    now = opened + timedelta(hours=4)
+    st = main.run(now=now, fetcher=make_fetcher(daily, hourly), sender=lambda t: sent.append(t) or True, st=st)
+    notes = [t for t in sent if "TAKE PROFIT 1 RAGGIUNTO" in t]
+    assert len(notes) == 1 and "+4,67 €" in notes[0] and "oro" in st["open"]
+    sent.clear()
+    main.run(now=now + timedelta(minutes=15), fetcher=make_fetcher(daily, hourly),
+             sender=lambda t: sent.append(t) or True, st=st)
+    assert not [t for t in sent if "TAKE PROFIT 1" in t]
+
+
+def test_old_target1_touch_is_not_announced():
+    daily = bars_from([100.0] * 250)
+    opened = daily.time[-1]
+    hourly = bars_from([103.8, 102], start=opened + timedelta(hours=1), step=timedelta(hours=1), spread=0)
+    st = state.empty()
+    st["open"]["oro"] = {**open_position(opened=opened), "target1": 103.5, "target1_dist": 3.5}
+    sent = []
+    main.run(now=opened + timedelta(hours=10), fetcher=make_fetcher(daily, hourly),
+             sender=lambda t: sent.append(t) or True, st=st)
+    assert not [t for t in sent if "TAKE PROFIT 1" in t]
+
+
+def test_fetch_alternates_hosts_and_falls_back_to_copy(tmp_path, monkeypatch):
+    import requests
+    from cfdbot import data
+    monkeypatch.setenv("BARS_CACHE_DIR", str(tmp_path))
+    payload = {"chart": {"result": [{"timestamp": [1700000000], "meta": {"regularMarketPrice": 10.0},
+                                     "indicators": {"quote": [{"open": [9.0], "high": [11.0], "low": [8.0], "close": [10.0]}]}}]}}
+
+    class Resp:
+        def __init__(self, code): self.status_code = code
+        def raise_for_status(self):
+            if self.status_code != 200:
+                err = requests.HTTPError("429"); err.response = self; raise err
+        def json(self): return payload
+
+    hosts = []
+    class Session:
+        def __init__(self, codes): self.codes = list(codes)
+        def get(self, url, **kw):
+            hosts.append(url.split("//")[1].split(".")[0]); return Resp(self.codes.pop(0))
+
+    waits = []
+    bars = data.fetch("GC=F", session=Session([429, 200]), sleep=waits.append)
+    assert bars.close == [10.0] and hosts == ["query1", "query2"] and waits == [3]
+    copy = data.fetch("GC=F", session=Session([429] * 4), sleep=lambda s: None)
+    assert copy.close == [10.0]
