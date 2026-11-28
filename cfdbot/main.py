@@ -12,7 +12,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
-from . import indicators, messages, notify, rebound, report_card, strategy, vol_alert
+from . import crypto, indicators, messages, notify, rebound, report_card, strategy, vol_alert
 from . import sputnik_context
 from . import state as state_mod
 from .data import Bars, DataError, completed_daily, fetch
@@ -272,6 +272,10 @@ def run(now: datetime | None = None, dry_run: bool = False, fetcher: Fetcher = f
                       for k, p in st["open"].items() if k in BY_KEY]
         emit(messages.daily_summary(rows, open_lines, stats(st)))
         st["last_summary"] = today
+
+    if os.getenv("CFD_CRYPTO", "1").strip() != "0":
+        account, risk_pct = _config()
+        crypto.process(now, fetcher, st, eurusd, account, risk_pct, emit)
 
     if vol_alert.due(st, now) and dailies:
         text = vol_alert.build(dailies, now, fetcher)

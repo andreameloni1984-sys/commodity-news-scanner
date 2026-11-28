@@ -62,6 +62,14 @@ def build(st: dict, now: datetime) -> str:
         lines += ["", "🔄 Rimbalzo indici (in osservazione)",
                   "Ultimi 7 giorni: " + _line(rb_week), "Da quando è attivo: " + _line(rb_closed),
                   f"Aperte: {len(rb.get('open') or {})} · atteso dal test: ~67% vincenti"]
+    cr = st.get("crypto") or {}
+    cr_closed = cr.get("closed") or []
+    if cr_closed or cr.get("open"):
+        cr_week = [c for c in cr_closed
+                   if datetime.fromisoformat(c.get("closed_at", "1970-01-01T00:00:00+00:00")) >= week_ago]
+        lines += ["", "🪙 Cripto (Bitcoin ed Ethereum, solo acquisto — in osservazione)",
+                  "Ultimi 7 giorni: " + _line(cr_week), "Da quando è attivo: " + _line(cr_closed),
+                  f"Aperte: {len(cr.get('open') or {})} · atteso dal test: ~57% vincenti, ~+0,2R a operazione"]
     open_now = st.get("open", {})
     lines += ["", f"Posizioni ancora aperte: {len(open_now)}"]
     errors = st.get("errors", {})

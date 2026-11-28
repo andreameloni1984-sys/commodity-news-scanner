@@ -10,7 +10,8 @@ DEFAULT_PATH = Path(os.getenv("STATE_PATH", "data/cfd_state.json"))
 
 def empty() -> dict:
     return {"open": {}, "closed": [], "last_eval": {}, "outbox": [], "last_summary": "",
-            "rebound": {"open": {}, "closed": [], "last_eval": {}}}
+            "rebound": {"open": {}, "closed": [], "last_eval": {}},
+            "crypto": {"open": {}, "closed": [], "last_eval": {}}}
 
 
 def load(path: Path = DEFAULT_PATH) -> dict:
