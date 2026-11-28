@@ -17,6 +17,7 @@ jobs:
     timeout-minutes: 8
     env:
       STATE_PATH: data/cfd_state.json
+      BARS_CACHE_DIR: data/bars
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       ACCOUNT_SIZE: ${{ vars.ACCOUNT_SIZE }}
@@ -35,6 +36,13 @@ jobs:
           key: gagarin-cfd-state-v1-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
             gagarin-cfd-state-v1-
+      - name: Ripristina l'ultima copia dei prezzi (riserva se Yahoo non risponde)
+        uses: actions/cache/restore@v4
+        with:
+          path: data/bars
+          key: gagarin-cfd-bars-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            gagarin-cfd-bars-v1-
       - run: pip install -r requirements.txt
       - name: Controllo mercati e invio segnali
         run: python -m cfdbot.main
@@ -44,3 +52,9 @@ jobs:
         with:
           path: data/cfd_state.json
           key: gagarin-cfd-state-v1-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Salva la copia dei prezzi
+        if: always() && hashFiles('data/bars/*.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: data/bars
+          key: gagarin-cfd-bars-v1-${{ github.run_id }}-${{ github.run_attempt }}

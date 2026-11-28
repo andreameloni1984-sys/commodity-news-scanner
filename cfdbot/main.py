@@ -67,19 +67,30 @@ def size_position(entry: float, stop: float, eurusd: float | None) -> dict:
             "unit_risk_eur": round(per_unit_eur, 2), "notional_eur": round(units * entry / eurusd, 2)}
 
 
-def _update_target(inst: Instrument, pos: dict) -> None:
-    """Posizioni aperte con il vecchio take profit a 3 ATR: passano a 2 ATR come i nuovi segnali."""
+def _update_target(inst: Instrument, pos: dict, daily: Bars | None = None) -> None:
+    """Posizioni aperte prima delle regole attuali: take profit 2 a 2 ATR e take profit 1 calcolato."""
     atr = pos.get("atr")
-    if not atr or abs(pos.get("target_dist", 0) - 3 * atr) > 0.01 * atr:
+    if not atr:
         return
     s = 1 if pos["direction"] == "LONG" else -1
-    pos["target"] = round(pos["entry"] + s * strategy.TARGET_ATR * atr, inst.decimals)
-    pos["target_dist"] = round(strategy.TARGET_ATR * atr, inst.decimals)
+    if abs(pos.get("target_dist", 0) - 3 * atr) <= 0.01 * atr:
+        pos["target"] = round(pos["entry"] + s * strategy.TARGET_ATR * atr, inst.decimals)
+        pos["target_dist"] = round(strategy.TARGET_ATR * atr, inst.decimals)
+    if "target1" not in pos and "tp1_checked" not in pos and daily is not None:
+        pos["tp1_checked"] = True
+        opened = datetime.fromisoformat(pos["opened_at"]).date()
+        n = sum(1 for t in daily.time if t.date() < opened)
+        t1 = strategy.swing_target(daily.upto(n), pos["direction"], pos["entry"], atr) if n else None
+        if t1 is not None and abs(t1 - pos["entry"]) < pos["target_dist"]:
+            pos["target1"] = round(t1, inst.decimals)
+            pos["target1_dist"] = round(abs(t1 - pos["entry"]), inst.decimals)
 
 
 def manage_open(inst: Instrument, pos: dict, daily: Bars, hourly: Bars | None, now: datetime) -> dict | None:
-    """Restituisce la posizione chiusa (con exit/r) oppure None se resta aperta."""
-    _update_target(inst, pos)
+    """Restituisce la posizione chiusa (con exit/r) oppure None se resta aperta.
+
+    Se il prezzo tocca per la prima volta il take profit 1 segna pos["tp1_hit_at"]."""
+    _update_target(inst, pos, daily)
     entry_t = datetime.fromisoformat(pos["opened_at"])
     s = 1 if pos["direction"] == "LONG" else -1
     exit_price = reason = None
@@ -94,6 +105,7 @@ def manage_open(inst: Instrument, pos: dict, daily: Bars, hourly: Bars | None, n
                 break
             if pos.get("target1") and tp1 is None and ((hi >= pos["target1"]) if s > 0 else (lo <= pos["target1"])):
                 tp1 = "target1"
+                pos.setdefault("tp1_hit_at", t.isoformat())
             if (hi >= pos["target"]) if s > 0 else (lo <= pos["target"]):
                 exit_price, reason = pos["target"], "target"
                 break
@@ -224,7 +236,13 @@ def run(now: datetime | None = None, dry_run: bool = False, fetcher: Fetcher = f
             except DataError:
                 hourly = None
             done = manage_open(inst, pos, daily, hourly, now)
+            if pos.get("tp1_hit_at") and not pos.get("tp1_notified"):
+                pos["tp1_notified"] = True
+                # niente avvisi su tocchi vecchi (es. posizioni aperte prima del take profit 1)
+                if now - datetime.fromisoformat(pos["tp1_hit_at"]) <= timedelta(hours=3):
+                    emit(messages.target1_hit(inst, pos))
             if done:
+                done["tp1_notified"] = pos.get("tp1_notified", False)
                 st["open"].pop(inst.key)
                 st["closed"].append(done)
                 emit(messages.closed(inst, done, stats(st)))

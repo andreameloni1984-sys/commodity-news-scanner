@@ -81,6 +81,19 @@ def new_signal(inst: Instrument, pos: dict) -> str:
     return "\n".join(lines)
 
 
+def target1_hit(inst: Instrument, pos: dict) -> str:
+    d = inst.decimals
+    gain = (f" con circa +{f(pos['risk_eur'] * pos['target1_dist'] / pos['stop_dist'], 2)} €"
+            if pos.get("risk_eur") and pos.get("stop_dist") else "")
+    return "\n".join([
+        f"🎯 TAKE PROFIT 1 RAGGIUNTO — {inst.name} {pos['direction']}",
+        f"Il prezzo ha toccato {f(pos['target1'], d)} (minimo/massimo dei 20 giorni).",
+        f"Se l'avevi impostato come take profit, la posizione si è chiusa{gain}.",
+        f"Il bot continua verso il take profit 2 ({f(pos['target'], d)}) con lo stop a {f(pos['stop'], d)}.",
+        "Solo informativo: le regole non cambiano.",
+    ])
+
+
 def closed(inst: Instrument, pos: dict, stats: dict) -> str:
     d = inst.decimals
     icon = {"target": "✅ TAKE PROFIT RAGGIUNTO", "stop": "❌ STOP LOSS TOCCATO", "tempo": "⏱️ CHIUDI: SCADUTI 5 GIORNI"}[pos["exit_reason"]]
